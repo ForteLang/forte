@@ -112,6 +112,7 @@ The audio callback never allocates, locks, or makes syscalls:
 | Project key signature (new in v6) | ✅ root + scale, drives piano-roll scale highlighting |
 | Tracks: instrument / audio / effect | ✅ |
 | Per-track device chains, bypass | ✅ |
+| **The Grid (Poly Grid)** — a modular node-graph synth (NoteIn / Osc / LFO / ADSR / SVF / Gain / Mix / Out) with a draggable graph editor: move nodes, wire ports, tweak per-node params, add/delete modules | ✅ |
 | **Sampler instrument** — pitched, looping playback of shared sample buffers with ADSR; built-in Kick/Snare/Hat one-shots plus WAV loading | ✅ |
 | **Audio clips on the Arranger** — samples placed on the timeline, drawn as waveforms, drag/resize/delete | ✅ |
 | Built-in synth + 5 insert effects | ✅ all DSP written from scratch |
@@ -125,9 +126,10 @@ panel model.
 
 ### Known scope boundaries
 
-Live audio recording, VST/CLAP plugin hosting, The Grid, comping and clip
-aliases are **not** implemented. Effects are lightweight original DSP, not
-Bitwig's. These are deliberate boundaries, not bugs.
+Live audio recording, VST/CLAP plugin hosting, comping and clip aliases are
+**not** implemented. The Grid covers the core module set, not Bitwig's full
+library. Effects are lightweight original DSP, not Bitwig's. These are
+deliberate boundaries, not bugs.
 
 ## Testing hooks
 

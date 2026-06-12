@@ -7,6 +7,32 @@ use dawcore::engine::Engine;
 use dawcore::model::Project;
 use dawcore::sync::full_sync;
 
+#[test]
+fn grid_synth_makes_sound() {
+    // The demo's Bass track is a Poly Grid (NoteIn->Osc->SVF->Gain*ADSR->Out).
+    let sr = 48_000.0;
+    let (mut engine, mut handle) = Engine::new(sr);
+    let project = Project::demo();
+    let bass = project.tracks.iter().find(|t| t.name == "Bass").unwrap();
+    assert_eq!(bass.devices[0].kind, dawcore::model::DeviceKind::PolyGrid);
+    assert!(bass.devices[0].grid.is_some(), "grid device has no graph");
+    let bass_id = bass.id;
+
+    full_sync(&mut handle, &project);
+    handle.send(Command::SetLaunchQuant(0.0));
+    handle.send(Command::Play);
+    handle.send(Command::LaunchClip { track: bass_id, scene: 0 });
+
+    let mut bl = vec![0.0f32; 512];
+    let mut br = vec![0.0f32; 512];
+    let mut peak = 0.0f32;
+    for _ in 0..400 {
+        engine.process(&mut bl, &mut br, 512);
+        peak = peak.max(handle.shared.track_peak(bass_id));
+    }
+    assert!(peak > 0.001, "grid synth produced no sound (peak={peak})");
+}
+
 fn render_project(seconds: f32, sr: f32) -> (Vec<f32>, Vec<f32>) {
     let (mut engine, mut handle) = Engine::new(sr);
     let project = Project::demo();

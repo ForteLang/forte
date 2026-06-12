@@ -34,6 +34,8 @@ pub enum Command {
     SetParam { track: usize, device: usize, param: usize, value: f32 },
     SetDeviceEnabled { track: usize, device: usize, value: bool },
     SetModulator { track: usize, mod_index: usize, rate: f32, shape: u8 },
+    /// Set a single Grid node parameter (hot path; topology edits use AddTrack).
+    SetGridParam { track: usize, device: usize, node: usize, param: usize, value: f32 },
 
     // ---- structural (heap built on UI thread) ----
     AddTrack { slot: usize, track: Box<EngineTrack> },

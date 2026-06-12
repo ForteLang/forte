@@ -9,8 +9,9 @@ use std::collections::HashSet;
 use dawcore::command::Command;
 use dawcore::engine::{build_automation, build_clip, build_device, build_mods, build_track};
 use dawcore::model::{
-    note_name, AutomationPoint, Clip, Device, DeviceKind, ModKind, ModRoute, Modulator, Note,
-    Project, Scale, Track, TrackKind, MAX_TRACKS, NOTE_NAMES, TRACK_COLORS,
+    note_name, AutomationPoint, Clip, Device, DeviceKind, GridConn, GridModule, GridModuleKind,
+    ModKind, ModRoute, Modulator, Note, Project, Scale, Track, TrackKind, MAX_TRACKS, NOTE_NAMES,
+    TRACK_COLORS,
 };
 
 use crate::audio::{self, Audio};
@@ -73,6 +74,12 @@ pub struct DawApp {
     /// Dragged automation point: (track idx, point idx).
     auto_drag: Option<(usize, usize)>,
 
+    // The Grid editor
+    grid_edit: Option<(usize, usize)>, // (track, device) of the open Poly Grid
+    grid_node_drag: Option<usize>,     // node being moved
+    grid_wire_drag: Option<(usize, usize)>, // dragging a wire from (node, out port)
+    grid_pan: egui::Vec2,
+
     // file & history
     metronome: bool,
     file_win: bool,
@@ -128,6 +135,13 @@ impl DawApp {
         if std::env::var("BITWIG_AUTO").is_ok() {
             auto_open_init.insert(3); // Lead's volume lane (has demo automation)
         }
+        // Open the Grid editor on the Bass (Poly Grid) track for headless capture.
+        let (grid_edit, sel_track) = if std::env::var("BITWIG_GRID").is_ok() {
+            let bi = project.tracks.iter().position(|t| t.name == "Bass").unwrap_or(0);
+            (Some((bi, 0usize)), bi)
+        } else {
+            (None, 0usize)
+        };
 
         let mut app = DawApp {
             audio,
@@ -135,7 +149,7 @@ impl DawApp {
             audio_error,
             project,
             view,
-            selected_track: 0,
+            selected_track: sel_track,
             selected_device: 0,
             editing,
             note_drag: None,
@@ -146,6 +160,10 @@ impl DawApp {
             beats_per_px: 1.0 / 24.0, // 24 px per beat
             auto_open: auto_open_init,
             auto_drag: None,
+            grid_edit,
+            grid_node_drag: None,
+            grid_wire_drag: None,
+            grid_pan: egui::Vec2::ZERO,
             metronome: false,
             file_win: false,
             file_path: "project.bitwig.json".into(),
@@ -378,6 +396,9 @@ impl eframe::App for DawApp {
         if self.file_win {
             self.file_window(ctx);
         }
+        if self.grid_edit.is_some() {
+            self.grid_window(ctx);
+        }
 
         self.flush();
     }
@@ -429,6 +450,317 @@ impl DawApp {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// The Grid editor
+// ---------------------------------------------------------------------------
+
+const GN_W: f32 = 116.0;
+const GN_TITLE_H: f32 = 20.0;
+const GN_PORT_DY: f32 = 16.0;
+
+impl DawApp {
+    /// Geometry for an output/input port: returns its centre on the canvas.
+    fn grid_port_pos(origin: Pos2, m: &GridModule, port: usize, is_out: bool) -> Pos2 {
+        let n = if is_out { m.kind.outputs().len() } else { m.kind.inputs().len() };
+        let body_h = GN_TITLE_H + n.max(1) as f32 * GN_PORT_DY + 6.0;
+        let _ = body_h;
+        let x = if is_out { origin.x + m.pos.0 + GN_W } else { origin.x + m.pos.0 };
+        let y = origin.y + m.pos.1 + GN_TITLE_H + port as f32 * GN_PORT_DY + GN_PORT_DY * 0.5;
+        Pos2::new(x, y)
+    }
+
+    fn grid_window(&mut self, ctx: &egui::Context) {
+        let Some((ti, di)) = self.grid_edit else { return };
+        if ti >= self.project.tracks.len()
+            || di >= self.project.tracks[ti].devices.len()
+            || self.project.tracks[ti].devices[di].grid.is_none()
+        {
+            self.grid_edit = None;
+            return;
+        }
+
+        let mut open = true;
+        let track_name = self.project.tracks[ti].name.clone();
+        egui::Window::new(format!("The Grid — {track_name}"))
+            .open(&mut open)
+            .default_size([720.0, 420.0])
+            .default_pos([180.0, 90.0])
+            .show(ctx, |ui| {
+                // palette
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Add:").size(10.0).color(theme::TEXT_FAINT));
+                    for k in GridModuleKind::PALETTE {
+                        if ui.button(k.label()).clicked() {
+                            self.grid_add_module(ti, di, k);
+                        }
+                    }
+                    ui.separator();
+                    ui.label(egui::RichText::new("drag node = move · drag out→in = wire · right-click = delete").size(9.0).color(theme::TEXT_FAINT));
+                });
+                ui.separator();
+                self.grid_canvas(ui, ti, di);
+            });
+        if !open {
+            self.grid_edit = None;
+        }
+    }
+
+    fn grid_add_module(&mut self, ti: usize, di: usize, kind: GridModuleKind) {
+        self.push_undo();
+        if let Some(g) = self.project.tracks[ti].devices[di].grid.as_mut() {
+            g.modules.push(GridModule { kind, pos: (40.0, 220.0), params: kind.defaults() });
+        }
+        self.sync_track(ti);
+    }
+
+    fn grid_canvas(&mut self, ui: &mut egui::Ui, ti: usize, di: usize) {
+        let avail = ui.available_size();
+        let (rect, resp) = ui.allocate_exact_size(avail, Sense::click_and_drag());
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, Rounding::same(4.0), Color32::from_gray(0x14));
+        // dot grid
+        let mut gx = rect.left();
+        while gx < rect.right() {
+            let mut gy = rect.top();
+            while gy < rect.bottom() {
+                painter.circle_filled(Pos2::new(gx, gy), 0.7, Color32::from_gray(0x24));
+                gy += 24.0;
+            }
+            gx += 24.0;
+        }
+        let origin = rect.left_top() + self.grid_pan + egui::vec2(8.0, 8.0);
+
+        let modules = self.project.tracks[ti].devices[di].grid.as_ref().unwrap().modules.clone();
+        let conns = self.project.tracks[ti].devices[di].grid.as_ref().unwrap().conns.clone();
+
+        // wires
+        for c in &conns {
+            if c.from.0 >= modules.len() || c.to.0 >= modules.len() {
+                continue;
+            }
+            let a = Self::grid_port_pos(origin, &modules[c.from.0], c.from.1, true);
+            let b = Self::grid_port_pos(origin, &modules[c.to.0], c.to.1, false);
+            grid_wire(&painter, a, b, theme::ACCENT);
+        }
+        // wire being dragged
+        if let Some((nf, pf)) = self.grid_wire_drag {
+            if nf < modules.len() {
+                let a = Self::grid_port_pos(origin, &modules[nf], pf, true);
+                if let Some(p) = resp.interact_pointer_pos() {
+                    grid_wire(&painter, a, p, theme::PLAY);
+                }
+            }
+        }
+
+        let pointer = resp.interact_pointer_pos();
+
+        // draw nodes + collect port hits
+        let mut hover_in: Option<(usize, usize)> = None;
+        for (ni, m) in modules.iter().enumerate() {
+            let n_in = m.kind.inputs().len();
+            let n_out = m.kind.outputs().len();
+            let rows = n_in.max(n_out).max(1);
+            let body_h = GN_TITLE_H + rows as f32 * GN_PORT_DY + 6.0;
+            let node_rect = Rect::from_min_size(
+                origin + egui::vec2(m.pos.0, m.pos.1),
+                Vec2::new(GN_W, body_h),
+            );
+            let is_instrument_io = matches!(m.kind, GridModuleKind::NoteIn | GridModuleKind::Out);
+            let title_col = if is_instrument_io { theme::ACCENT_DIM } else { theme::PANEL_RAISED };
+            painter.rect_filled(node_rect, Rounding::same(5.0), theme::PANEL_ALT);
+            painter.rect_filled(
+                Rect::from_min_size(node_rect.left_top(), Vec2::new(GN_W, GN_TITLE_H)),
+                Rounding::same(5.0),
+                title_col,
+            );
+            painter.rect_stroke(node_rect, Rounding::same(5.0), Stroke::new(1.0, theme::BORDER));
+            painter.text(node_rect.left_top() + egui::vec2(7.0, 10.0), Align2::LEFT_CENTER, m.kind.label(), FontId::proportional(11.0), theme::TEXT);
+
+            // input ports (left) + labels
+            for p in 0..n_in {
+                let pp = Self::grid_port_pos(origin, m, p, false);
+                painter.circle_filled(pp, 4.0, theme::TEXT_DIM);
+                painter.text(pp + egui::vec2(8.0, 0.0), Align2::LEFT_CENTER, m.kind.inputs()[p], FontId::proportional(8.0), theme::TEXT_FAINT);
+                if let Some(ptr) = pointer {
+                    if pp.distance(ptr) < 9.0 {
+                        hover_in = Some((ni, p));
+                    }
+                }
+            }
+            // output ports (right) + labels
+            for p in 0..n_out {
+                let pp = Self::grid_port_pos(origin, m, p, true);
+                painter.circle_filled(pp, 4.0, theme::ACCENT);
+                painter.text(pp - egui::vec2(8.0, 0.0), Align2::RIGHT_CENTER, m.kind.outputs()[p], FontId::proportional(8.0), theme::TEXT_FAINT);
+            }
+
+        }
+
+        // node param mini-knobs drawn as a compact row beneath the title
+        for (ni, m) in modules.iter().enumerate() {
+            let params = m.kind.params();
+            if params.is_empty() {
+                continue;
+            }
+            let base = origin + egui::vec2(m.pos.0, m.pos.1);
+            let rows = m.kind.inputs().len().max(m.kind.outputs().len()).max(1);
+            let py = base.y + GN_TITLE_H + rows as f32 * GN_PORT_DY + 2.0;
+            for (pi, plabel) in params.iter().enumerate() {
+                let cx = base.x + 14.0 + pi as f32 * 26.0;
+                let knob_rect = Rect::from_center_size(Pos2::new(cx, py + 10.0), Vec2::splat(20.0));
+                let mut v = m.params.get(pi).copied().unwrap_or(0.0);
+                let kresp = ui.interact(knob_rect, ui.id().with(("gk", ti, di, ni, pi)), Sense::drag());
+                if kresp.dragged() {
+                    v = (v - kresp.drag_delta().y * 0.01).clamp(0.0, 1.0);
+                    self.project.tracks[ti].devices[di].grid.as_mut().unwrap().modules[ni].params[pi] = v;
+                    self.cmds.push(Command::SetGridParam { track: self.project.tracks[ti].id, device: di, node: ni, param: pi, value: v });
+                }
+                painter.circle_filled(knob_rect.center(), 9.0, Color32::from_gray(0x2c));
+                let ang = (-135.0 + v * 270.0).to_radians();
+                let dir = Vec2::new(ang.sin(), -ang.cos());
+                painter.line_segment([knob_rect.center(), knob_rect.center() + dir * 8.0], Stroke::new(1.5, theme::ACCENT));
+                painter.text(Pos2::new(cx, py + 22.0), Align2::CENTER_CENTER, *plabel, FontId::proportional(7.0), theme::TEXT_FAINT);
+            }
+        }
+
+        // ---- interactions ----
+        if resp.drag_started() {
+            if let Some(ptr) = pointer {
+                // start a wire from an output port?
+                let mut started = false;
+                for (ni, m) in modules.iter().enumerate() {
+                    for p in 0..m.kind.outputs().len() {
+                        if Self::grid_port_pos(origin, m, p, true).distance(ptr) < 9.0 {
+                            self.grid_wire_drag = Some((ni, p));
+                            started = true;
+                        }
+                    }
+                }
+                // else pick a node body to move
+                if !started {
+                    for (ni, m) in modules.iter().enumerate() {
+                        let rows = m.kind.inputs().len().max(m.kind.outputs().len()).max(1);
+                        let body_h = GN_TITLE_H + rows as f32 * GN_PORT_DY + 6.0;
+                        let nr = Rect::from_min_size(origin + egui::vec2(m.pos.0, m.pos.1), Vec2::new(GN_W, body_h));
+                        if nr.contains(ptr) {
+                            self.grid_node_drag = Some(ni);
+                            self.push_undo();
+                        }
+                    }
+                }
+            }
+        }
+        if resp.dragged() {
+            if let Some(ni) = self.grid_node_drag {
+                let d = resp.drag_delta();
+                let g = self.project.tracks[ti].devices[di].grid.as_mut().unwrap();
+                g.modules[ni].pos.0 = (g.modules[ni].pos.0 + d.x).max(0.0);
+                g.modules[ni].pos.1 = (g.modules[ni].pos.1 + d.y).max(0.0);
+            }
+        }
+        if resp.drag_stopped() {
+            if let Some((nf, pf)) = self.grid_wire_drag.take() {
+                if let Some((nt, pt)) = hover_in {
+                    if nt != nf {
+                        self.grid_connect(ti, di, (nf, pf), (nt, pt));
+                    }
+                }
+            }
+            if self.grid_node_drag.take().is_some() {
+                self.sync_track(ti); // positions are cosmetic, but keep engine in step
+            }
+        }
+        // right-click delete: node or wire
+        if resp.secondary_clicked() {
+            if let Some(ptr) = pointer {
+                // delete a node under the pointer
+                let mut deleted = false;
+                for (ni, m) in modules.iter().enumerate() {
+                    if matches!(m.kind, GridModuleKind::NoteIn | GridModuleKind::Out) {
+                        continue; // keep the fixed I/O nodes
+                    }
+                    let rows = m.kind.inputs().len().max(m.kind.outputs().len()).max(1);
+                    let body_h = GN_TITLE_H + rows as f32 * GN_PORT_DY + 6.0;
+                    let nr = Rect::from_min_size(origin + egui::vec2(m.pos.0, m.pos.1), Vec2::new(GN_W, body_h));
+                    if nr.contains(ptr) {
+                        self.grid_remove_module(ti, di, ni);
+                        deleted = true;
+                        break;
+                    }
+                }
+                // else delete a wire near the pointer
+                if !deleted {
+                    for (ci, c) in conns.iter().enumerate() {
+                        if c.from.0 >= modules.len() || c.to.0 >= modules.len() {
+                            continue;
+                        }
+                        let a = Self::grid_port_pos(origin, &modules[c.from.0], c.from.1, true);
+                        let b = Self::grid_port_pos(origin, &modules[c.to.0], c.to.1, false);
+                        if dist_to_segment(ptr, a, b) < 6.0 {
+                            self.push_undo();
+                            self.project.tracks[ti].devices[di].grid.as_mut().unwrap().conns.remove(ci);
+                            self.sync_track(ti);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn grid_connect(&mut self, ti: usize, di: usize, from: (usize, usize), to: (usize, usize)) {
+        self.push_undo();
+        let g = self.project.tracks[ti].devices[di].grid.as_mut().unwrap();
+        // one source per input port: replace any existing wire into that port
+        g.conns.retain(|c| c.to != to);
+        g.conns.push(GridConn { from, to });
+        self.sync_track(ti);
+    }
+
+    fn grid_remove_module(&mut self, ti: usize, di: usize, node: usize) {
+        self.push_undo();
+        let g = self.project.tracks[ti].devices[di].grid.as_mut().unwrap();
+        g.modules.remove(node);
+        // drop wires touching it and renumber higher indices
+        g.conns.retain(|c| c.from.0 != node && c.to.0 != node);
+        for c in &mut g.conns {
+            if c.from.0 > node { c.from.0 -= 1; }
+            if c.to.0 > node { c.to.0 -= 1; }
+        }
+        self.sync_track(ti);
+    }
+}
+
+fn grid_wire(painter: &egui::Painter, a: Pos2, b: Pos2, color: Color32) {
+    // simple cubic bezier with horizontal tangents
+    let dx = (b.x - a.x).abs().max(30.0) * 0.5;
+    let c1 = Pos2::new(a.x + dx, a.y);
+    let c2 = Pos2::new(b.x - dx, b.y);
+    let mut prev = a;
+    let steps = 18;
+    for i in 1..=steps {
+        let t = i as f32 / steps as f32;
+        let mt = 1.0 - t;
+        let p = Pos2::new(
+            mt * mt * mt * a.x + 3.0 * mt * mt * t * c1.x + 3.0 * mt * t * t * c2.x + t * t * t * b.x,
+            mt * mt * mt * a.y + 3.0 * mt * mt * t * c1.y + 3.0 * mt * t * t * c2.y + t * t * t * b.y,
+        );
+        painter.line_segment([prev, p], Stroke::new(2.0, color));
+        prev = p;
+    }
+}
+
+fn dist_to_segment(p: Pos2, a: Pos2, b: Pos2) -> f32 {
+    let ab = b - a;
+    let t = if ab.length_sq() < 1e-6 {
+        0.0
+    } else {
+        (((p - a).dot(ab)) / ab.length_sq()).clamp(0.0, 1.0)
+    };
+    let proj = a + ab * t;
+    p.distance(proj)
 }
 
 // ---------------------------------------------------------------------------
@@ -1711,6 +2043,18 @@ impl DawApp {
                             self.sync_track(ti);
                             self.status = Some("Loaded sample from File path".into());
                         }
+                    });
+                }
+
+                // Poly Grid: open the modular graph editor
+                if kind == DeviceKind::PolyGrid {
+                    let n_nodes = self.project.tracks[ti].devices[di]
+                        .grid.as_ref().map(|g| g.modules.len()).unwrap_or(0);
+                    ui.horizontal(|ui| {
+                        if ui.button("✎ Open Grid Editor").clicked() {
+                            self.grid_edit = Some((ti, di));
+                        }
+                        ui.label(egui::RichText::new(format!("{n_nodes} modules")).size(10.0).color(theme::TEXT_FAINT));
                     });
                 }
 

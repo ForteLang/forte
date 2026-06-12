@@ -19,6 +19,7 @@ pub enum TrackKind {
 pub enum DeviceKind {
     Polymer,
     Sampler,
+    PolyGrid,
     Filter,
     Delay,
     Reverb,
@@ -31,6 +32,7 @@ impl DeviceKind {
         match self {
             DeviceKind::Polymer => "Polymer",
             DeviceKind::Sampler => "Sampler",
+            DeviceKind::PolyGrid => "Poly Grid",
             DeviceKind::Filter => "Filter+",
             DeviceKind::Delay => "Delay-4",
             DeviceKind::Reverb => "Reverb",
@@ -40,7 +42,7 @@ impl DeviceKind {
     }
 
     pub fn is_instrument(self) -> bool {
-        matches!(self, DeviceKind::Polymer | DeviceKind::Sampler)
+        matches!(self, DeviceKind::Polymer | DeviceKind::Sampler | DeviceKind::PolyGrid)
     }
 
     /// Parameter labels in engine order. The GUI renders a knob per entry.
@@ -51,6 +53,7 @@ impl DeviceKind {
                 "Detune", "Sub", "FiltEnv",
             ],
             DeviceKind::Sampler => &["Gain", "Attack", "Decay", "Sustain", "Release", "Pitch"],
+            DeviceKind::PolyGrid => &[],
             DeviceKind::Filter => &["Type", "Cutoff", "Reso"],
             DeviceKind::Delay => &["Time", "Fdbk", "Mix"],
             DeviceKind::Reverb => &["Size", "Decay", "Mix"],
@@ -67,6 +70,7 @@ impl DeviceKind {
             }
             // Pitch 0.5 == centre (no transpose); ±24 semitones across the range.
             DeviceKind::Sampler => vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5],
+            DeviceKind::PolyGrid => Vec::new(),
             DeviceKind::Filter => vec![0.0, 0.6, 0.2],
             DeviceKind::Delay => vec![0.3, 0.35, 0.3],
             DeviceKind::Reverb => vec![0.5, 0.5, 0.25],
@@ -113,6 +117,135 @@ impl SampleSource {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The Grid — Bitwig's modular environment. A Poly Grid device hosts a node
+// graph; the engine compiles it into a per-voice interpreter.
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GridModuleKind {
+    NoteIn, // pitch / gate / velocity source
+    Osc,
+    Lfo,
+    Adsr,
+    Filter,
+    Gain,
+    Mix,
+    Out,
+}
+
+impl GridModuleKind {
+    pub const PALETTE: [GridModuleKind; 6] = [
+        GridModuleKind::Osc, GridModuleKind::Lfo, GridModuleKind::Adsr,
+        GridModuleKind::Filter, GridModuleKind::Gain, GridModuleKind::Mix,
+    ];
+    pub fn label(self) -> &'static str {
+        match self {
+            GridModuleKind::NoteIn => "Note In",
+            GridModuleKind::Osc => "Osc",
+            GridModuleKind::Lfo => "LFO",
+            GridModuleKind::Adsr => "ADSR",
+            GridModuleKind::Filter => "SVF",
+            GridModuleKind::Gain => "Gain",
+            GridModuleKind::Mix => "Mix",
+            GridModuleKind::Out => "Audio Out",
+        }
+    }
+    pub fn inputs(self) -> &'static [&'static str] {
+        match self {
+            GridModuleKind::NoteIn => &[],
+            GridModuleKind::Osc => &["Pitch"],
+            GridModuleKind::Lfo => &[],
+            GridModuleKind::Adsr => &["Gate"],
+            GridModuleKind::Filter => &["In", "Cutoff"],
+            GridModuleKind::Gain => &["In", "Mod"],
+            GridModuleKind::Mix => &["A", "B"],
+            GridModuleKind::Out => &["In"],
+        }
+    }
+    pub fn outputs(self) -> &'static [&'static str] {
+        match self {
+            GridModuleKind::NoteIn => &["Pitch", "Gate", "Vel"],
+            GridModuleKind::Osc => &["Out"],
+            GridModuleKind::Lfo => &["Out"],
+            GridModuleKind::Adsr => &["Env"],
+            GridModuleKind::Filter => &["Out"],
+            GridModuleKind::Gain => &["Out"],
+            GridModuleKind::Mix => &["Out"],
+            GridModuleKind::Out => &[],
+        }
+    }
+    pub fn params(self) -> &'static [&'static str] {
+        match self {
+            GridModuleKind::Osc => &["Shape"],
+            GridModuleKind::Lfo => &["Rate", "Shape"],
+            GridModuleKind::Adsr => &["A", "D", "S", "R"],
+            GridModuleKind::Filter => &["Cutoff", "Reso"],
+            GridModuleKind::Gain => &["Level"],
+            _ => &[],
+        }
+    }
+    pub fn defaults(self) -> Vec<f32> {
+        match self {
+            GridModuleKind::Osc => vec![0.25], // saw
+            GridModuleKind::Lfo => vec![0.3, 0.0],
+            GridModuleKind::Adsr => vec![0.05, 0.3, 0.6, 0.25],
+            GridModuleKind::Filter => vec![0.65, 0.2],
+            GridModuleKind::Gain => vec![0.8],
+            _ => Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct GridModule {
+    pub kind: GridModuleKind,
+    pub pos: (f32, f32), // canvas position (UI only)
+    pub params: Vec<f32>,
+}
+
+/// A wire: (from module, output port) → (to module, input port).
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct GridConn {
+    pub from: (usize, usize),
+    pub to: (usize, usize),
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct GridGraph {
+    pub modules: Vec<GridModule>,
+    pub conns: Vec<GridConn>,
+}
+
+impl GridGraph {
+    /// The default patch: NoteIn → Osc → SVF → Gain(×ADSR) → Out.
+    pub fn default_patch() -> Self {
+        let m = |kind: GridModuleKind, x: f32, y: f32| GridModule {
+            kind,
+            pos: (x, y),
+            params: kind.defaults(),
+        };
+        GridGraph {
+            modules: vec![
+                m(GridModuleKind::NoteIn, 20.0, 60.0),  // 0
+                m(GridModuleKind::Osc, 170.0, 30.0),    // 1
+                m(GridModuleKind::Filter, 320.0, 30.0), // 2
+                m(GridModuleKind::Adsr, 170.0, 140.0),  // 3
+                m(GridModuleKind::Gain, 470.0, 60.0),   // 4
+                m(GridModuleKind::Out, 620.0, 70.0),    // 5
+            ],
+            conns: vec![
+                GridConn { from: (0, 0), to: (1, 0) }, // pitch → osc
+                GridConn { from: (0, 1), to: (3, 0) }, // gate → adsr
+                GridConn { from: (1, 0), to: (2, 0) }, // osc → filter
+                GridConn { from: (2, 0), to: (4, 0) }, // filter → gain
+                GridConn { from: (3, 0), to: (4, 1) }, // env → gain mod
+                GridConn { from: (4, 0), to: (5, 0) }, // gain → out
+            ],
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Device {
     pub kind: DeviceKind,
@@ -123,6 +256,9 @@ pub struct Device {
     /// Sample loaded into a Sampler device (ignored by other device kinds).
     #[serde(default)]
     pub sample: SampleSource,
+    /// Node graph for a Poly Grid device.
+    #[serde(default)]
+    pub grid: Option<GridGraph>,
 }
 
 impl Device {
@@ -133,12 +269,19 @@ impl Device {
             params: kind.defaults(),
             modulators: Vec::new(),
             sample: SampleSource::None,
+            grid: None,
         }
     }
 
     pub fn sampler(source: SampleSource) -> Self {
         let mut d = Device::new(DeviceKind::Sampler);
         d.sample = source;
+        d
+    }
+
+    pub fn poly_grid() -> Self {
+        let mut d = Device::new(DeviceKind::PolyGrid);
+        d.grid = Some(GridGraph::default_patch());
         d
     }
 }
@@ -486,9 +629,9 @@ impl Project {
         }
         snare.clips[0] = Some(sclip);
 
-        // Bass
+        // Bass — built in The Grid (Poly Grid) to showcase the modular engine.
         let mut bass = Track::new(p.alloc_id(), "Bass", TrackKind::Instrument, TRACK_COLORS[5]);
-        bass.devices[0].params[1] = 0.45;
+        bass.devices[0] = Device::poly_grid();
         let mut bclip = Clip::new("Bass A", TRACK_COLORS[5]);
         for &(pitch, start) in &[(36, 0.0), (36, 1.0), (43, 2.0), (41, 3.0)] {
             bclip.notes.push(Note { pitch, start, length: 0.9, velocity: 100 });

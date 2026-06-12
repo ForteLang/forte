@@ -14,6 +14,7 @@ use ringbuf::{HeapCons, HeapProd, HeapRb};
 use crate::command::{Command, Garbage};
 use crate::dsp::effects::{Drive, Eq3, FdnReverb, StereoDelay};
 use crate::dsp::filter::{FilterMode, Svf};
+use crate::dsp::grid::GridSynth;
 use crate::dsp::oscillator::Waveform;
 use crate::dsp::sampler::{Sample, Sampler};
 use crate::dsp::synth::PolySynth;
@@ -102,6 +103,7 @@ pub struct EngineClip {
 enum Dsp {
     Synth(PolySynth),
     Sampler(Sampler),
+    Grid(GridSynth),
     Filter { l: Svf, r: Svf, mode: FilterMode },
     Delay(StereoDelay),
     Reverb(FdnReverb),
@@ -204,6 +206,8 @@ fn build_dsp(kind: DeviceKind, sr: f32) -> Dsp {
     match kind {
         DeviceKind::Polymer => Dsp::Synth(PolySynth::new(sr)),
         DeviceKind::Sampler => Dsp::Sampler(Sampler::new(sr)),
+        // Replaced below with a compiled graph when the device carries one.
+        DeviceKind::PolyGrid => Dsp::Synth(PolySynth::new(sr)),
         DeviceKind::Filter => Dsp::Filter { l: Svf::new(sr), r: Svf::new(sr), mode: FilterMode::Lowpass },
         DeviceKind::Delay => Dsp::Delay(StereoDelay::new(sr)),
         DeviceKind::Reverb => Dsp::Reverb(FdnReverb::new(sr)),
@@ -216,6 +220,11 @@ pub fn build_device(dev: &Device, sr: f32) -> Box<EngineDevice> {
     let mut dsp = build_dsp(dev.kind, sr);
     if let Dsp::Sampler(s) = &mut dsp {
         s.sample = resolve_sample(&dev.sample);
+    }
+    if dev.kind == DeviceKind::PolyGrid {
+        if let Some(graph) = &dev.grid {
+            dsp = Dsp::Grid(GridSynth::compile(graph, sr));
+        }
     }
     Box::new(EngineDevice {
         kind: dev.kind,
@@ -585,6 +594,15 @@ impl Engine {
                     }
                 }
             }
+            Command::SetGridParam { track, device, node, param, value } => {
+                if let Some(t) = self.track_mut(track) {
+                    if let Some(d) = t.devices.get_mut(device) {
+                        if let Dsp::Grid(g) = &mut d.dsp {
+                            g.set_param(node, param, value);
+                        }
+                    }
+                }
+            }
             Command::AddTrack { slot, track } => {
                 if slot < MAX_TRACKS {
                     if let Some(old) = self.tracks[slot].take() {
@@ -879,6 +897,7 @@ impl EngineTrack {
             .map(|d| match &d.dsp {
                 Dsp::Synth(s) => s.active_voices(),
                 Dsp::Sampler(s) => s.active_voices(),
+                Dsp::Grid(g) => g.active_voices(),
                 _ => 0,
             })
             .sum()
@@ -889,6 +908,7 @@ impl EngineTrack {
             match &mut d.dsp {
                 Dsp::Synth(s) => s.all_notes_off(),
                 Dsp::Sampler(s) => s.all_notes_off(),
+                Dsp::Grid(g) => g.all_notes_off(),
                 _ => {}
             }
         }
@@ -1026,6 +1046,7 @@ impl EngineTrack {
                     match &mut d.dsp {
                         Dsp::Synth(s) => mono += s.next(),
                         Dsp::Sampler(s) => mono += s.next(),
+                        Dsp::Grid(g) => mono += g.next(),
                         _ => {}
                     }
                 }
@@ -1039,7 +1060,7 @@ impl EngineTrack {
                     continue;
                 }
                 match &mut d.dsp {
-                    Dsp::Synth(_) | Dsp::Sampler(_) => {}
+                    Dsp::Synth(_) | Dsp::Sampler(_) | Dsp::Grid(_) => {}
                     Dsp::Filter { l: fl, r: fr, mode } => {
                         l = fl.process(l, *mode);
                         r = fr.process(r, *mode);
@@ -1086,6 +1107,13 @@ impl EngineTrack {
                         s.note_on(pitch, velocity);
                     } else {
                         s.note_off(pitch);
+                    }
+                }
+                Dsp::Grid(g) => {
+                    if on {
+                        g.note_on(pitch, velocity);
+                    } else {
+                        g.note_off(pitch);
                     }
                 }
                 _ => {}
@@ -1163,6 +1191,8 @@ impl EngineDevice {
                 s.release = 0.001 + p[4] * p[4] * 2.5;
                 s.transpose = (p[5] - 0.5) * 48.0; // ±24 semitones
             }
+            // Grid node params are set via SetGridParam, not the flat param bag.
+            Dsp::Grid(_) => {}
             Dsp::Filter { l, r, mode } => {
                 *mode = FilterMode::from_index(p[0] as u8);
                 let c = map_cutoff(p[1]);
