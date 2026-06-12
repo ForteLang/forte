@@ -102,7 +102,12 @@ The audio callback never allocates, locks, or makes syscalls:
 | **Cue markers** along the timeline | ✅ |
 | **Launch quantization** (Off · 1/4 · 1/2 · 1 Bar · 2 Bars; default 1 Bar) | ✅ |
 | Hybrid Clip Launcher + scenes; launcher clips override the arrangement per track | ✅ |
+| **Automation lanes** — per-track volume automation with Bitwig 6's per-point **hold** behaviour; click to add, drag to move, double-click toggles hold | ✅ |
 | **Unified modulation system** — LFO / Steps / Random / Macro modulators, click-to-route, drag a knob to set bipolar depth, modulation rings | ✅ |
+| **Send/Return buses** — effect tracks act as returns fed by post-fader sends, with per-channel send sliders in the mixer | ✅ |
+| **Project save/load** (JSON via serde) with Ctrl+S, plus **Undo/Redo** (Ctrl+Z / Ctrl+Y, 64 levels) | ✅ |
+| **WAV export** — offline bounce of the arrangement through the same engine | ✅ |
+| **Metronome** with accented downbeats | ✅ |
 | Refreshed dark v6 UI, rounded corners | ✅ |
 | Project key signature (new in v6) | ✅ root + scale, drives piano-roll scale highlighting |
 | Tracks: instrument / audio / effect | ✅ |
@@ -118,9 +123,9 @@ panel model.
 
 ### Known scope boundaries
 
-Audio recording/sampler, VST/CLAP plugin hosting, The Grid, automation lanes,
-comping and clip aliases are **not** implemented. Effects are lightweight
-original DSP, not Bitwig's. These are deliberate boundaries, not bugs.
+Audio recording/sampler, VST/CLAP plugin hosting, The Grid, comping and clip
+aliases are **not** implemented. Effects are lightweight original DSP, not
+Bitwig's. These are deliberate boundaries, not bugs.
 
 ## Testing hooks
 

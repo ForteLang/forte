@@ -9,6 +9,7 @@
 //! - [`engine`]   the audio-thread engine: scheduler, mixer, modulators
 //! - [`sync`]     helpers to mirror model edits into the engine
 
+pub mod bounce;
 pub mod command;
 pub mod dsp;
 pub mod engine;

@@ -145,6 +145,14 @@ pub struct EngineArrClip {
     notes: Vec<EngineNote>,
 }
 
+/// One automation point mirrored on the audio thread.
+#[derive(Clone, Copy)]
+pub struct EngineAutoPoint {
+    pub beat: f64,
+    pub value: f32,
+    pub hold: bool,
+}
+
 pub struct EngineTrack {
     devices: Vec<EngineDevice>,
     mods: Vec<EngineMod>,
@@ -152,6 +160,11 @@ pub struct EngineTrack {
     pan: f32,
     mute: bool,
     solo: bool,
+    is_effect: bool,
+    /// Post-fader sends: (destination slot, level).
+    sends: Vec<(usize, f32)>,
+    /// Volume automation, sorted by beat. Overrides `gain` while playing.
+    automation: Vec<EngineAutoPoint>,
     active_scene: i32,
     /// Quantized launch request awaiting the next quant boundary.
     pending_scene: Option<i32>,
@@ -264,6 +277,9 @@ pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
         pan: track.pan,
         mute: track.mute,
         solo: track.solo,
+        is_effect: track.kind == crate::model::TrackKind::Effect,
+        sends: track.sends.clone(),
+        automation: build_automation(track),
         active_scene: -1,
         pending_scene: None,
         clips,
@@ -272,6 +288,35 @@ pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
         events: Vec::with_capacity(512),
     };
     Box::new(et)
+}
+
+pub fn build_automation(track: &Track) -> Vec<EngineAutoPoint> {
+    let mut pts: Vec<EngineAutoPoint> = track
+        .volume_automation
+        .iter()
+        .map(|p| EngineAutoPoint { beat: p.beat, value: p.value, hold: p.hold })
+        .collect();
+    pts.sort_by(|a, b| a.beat.partial_cmp(&b.beat).unwrap_or(std::cmp::Ordering::Equal));
+    pts
+}
+
+/// Piecewise evaluation honouring Bitwig 6's per-point `hold` behaviour.
+fn eval_auto(points: &[EngineAutoPoint], beat: f64) -> Option<f32> {
+    let first = points.first()?;
+    if beat <= first.beat {
+        return Some(first.value);
+    }
+    for w in points.windows(2) {
+        let (a, b) = (&w[0], &w[1]);
+        if beat < b.beat {
+            if a.hold || (b.beat - a.beat) < 1e-9 {
+                return Some(a.value);
+            }
+            let t = ((beat - a.beat) / (b.beat - a.beat)) as f32;
+            return Some(a.value + (b.value - a.value) * t);
+        }
+    }
+    points.last().map(|p| p.value)
 }
 
 // ---------------------------------------------------------------------------
@@ -294,8 +339,20 @@ pub struct Engine {
     loop_end: f64,
     launch_quant: f64,
 
+    // metronome click synth
+    metronome: bool,
+    beats_per_bar: f64,
+    click_env: f32,
+    click_phase: f32,
+    click_freq: f32,
+    last_click_beat: i64,
+
     scratch_l: Vec<f32>,
     scratch_r: Vec<f32>,
+    /// Per-slot send buses feeding effect tracks (pre-allocated, audio thread
+    /// never resizes them).
+    send_l: Vec<Vec<f32>>,
+    send_r: Vec<Vec<f32>>,
 }
 
 impl Engine {
@@ -324,8 +381,16 @@ impl Engine {
             loop_start: 0.0,
             loop_end: 32.0,
             launch_quant: 4.0,
+            metronome: false,
+            beats_per_bar: 4.0,
+            click_env: 0.0,
+            click_phase: 0.0,
+            click_freq: 880.0,
+            last_click_beat: -1,
             scratch_l: vec![0.0; MAX_BLOCK],
             scratch_r: vec![0.0; MAX_BLOCK],
+            send_l: (0..MAX_TRACKS).map(|_| vec![0.0; MAX_BLOCK]).collect(),
+            send_r: (0..MAX_TRACKS).map(|_| vec![0.0; MAX_BLOCK]).collect(),
         };
 
         let handle = EngineHandle { cmd: cmd_prod, garbage: garbage_cons, shared, sample_rate };
@@ -353,6 +418,7 @@ impl Engine {
             }
             Command::Stop => {
                 self.playing = false;
+                self.last_click_beat = -1;
                 self.position_beats = if self.loop_enabled { self.loop_start } else { 0.0 };
                 for t in self.tracks.iter_mut().flatten() {
                     t.pending_offs.clear();
@@ -371,6 +437,20 @@ impl Engine {
                 self.loop_end = end.max(start + 0.25);
             }
             Command::SetLaunchQuant(q) => self.launch_quant = q.max(0.0),
+            Command::SetMetronome(on) => self.metronome = on,
+            Command::SetSends { track, mut sends } => {
+                if let Some(t) = self.track_mut(track) {
+                    // swap contents so the displaced Vec rides the same Box back
+                    std::mem::swap(&mut t.sends, &mut *sends);
+                }
+                self.recycle(Garbage::Sends(sends));
+            }
+            Command::SetAutomation { track, mut points } => {
+                if let Some(t) = self.track_mut(track) {
+                    std::mem::swap(&mut t.automation, &mut *points);
+                }
+                self.recycle(Garbage::Auto(points));
+            }
             Command::LaunchClip { track, scene } => {
                 let immediate = self.launch_quant <= 0.0 || !self.playing;
                 if let Some(t) = self.track_mut(track) {
@@ -570,8 +650,24 @@ impl Engine {
 
         let mut master_peak = 0.0f32;
 
+        // which slots are effect (return) tracks — guards stale sends
+        let mut is_fx = [false; MAX_TRACKS];
+        for (slot, t) in self.tracks.iter().enumerate() {
+            if let Some(t) = t {
+                is_fx[slot] = t.is_effect;
+                if t.is_effect {
+                    self.send_l[slot][..frames].fill(0.0);
+                    self.send_r[slot][..frames].fill(0.0);
+                }
+            }
+        }
+
+        // ---- pass 1: source tracks (instrument/audio) -----------------------
         for slot in 0..self.tracks.len() {
             let Some(track) = self.tracks[slot].as_deref_mut() else { continue };
+            if track.is_effect {
+                continue;
+            }
 
             // advance modulators (block rate) and bake effective params
             track.update_modulators(block_seconds);
@@ -580,9 +676,64 @@ impl Engine {
             track.schedule(self.playing, block_start, sched_end, spb, frames);
 
             // render this track into scratch
-            track.render(self.sample_rate, &mut self.scratch_l, &mut self.scratch_r, frames);
+            track.render(None, &mut self.scratch_l, &mut self.scratch_r, frames);
+
+            // volume automation overrides the fader while the transport runs
+            let vol = if self.playing {
+                eval_auto(&track.automation, block_start).unwrap_or(track.gain)
+            } else {
+                track.gain
+            };
 
             // mix into master with gain / pan / mute / solo
+            let audible = track.solo || (!track.mute && !(any_solo && !track.solo));
+            let g = if audible { vol * vol } else { 0.0 };
+            let theta = (track.pan + 1.0) * 0.5 * std::f32::consts::FRAC_PI_2;
+            let (pl, pr) = (theta.cos(), theta.sin());
+
+            let mut tpeak = 0.0f32;
+            for i in 0..frames {
+                let l = self.scratch_l[i] * g * pl;
+                let r = self.scratch_r[i] * g * pr;
+                out_l[i] += l;
+                out_r[i] += r;
+                tpeak = tpeak.max(l.abs()).max(r.abs());
+            }
+
+            // post-fader sends into effect-track buses
+            for &(dest, level) in &track.sends {
+                if dest < MAX_TRACKS && is_fx[dest] && level > 0.0001 {
+                    let dl = &mut self.send_l[dest];
+                    let dr = &mut self.send_r[dest];
+                    for i in 0..frames {
+                        dl[i] += self.scratch_l[i] * g * pl * level;
+                        dr[i] += self.scratch_r[i] * g * pr * level;
+                    }
+                }
+            }
+
+            self.shared.track_peak[slot].store(tpeak.to_bits(), Ordering::Relaxed);
+            self.shared.active_scene[slot].store(
+                if self.playing { track.active_scene } else { -1 },
+                Ordering::Relaxed,
+            );
+        }
+
+        // ---- pass 2: effect (return) tracks ---------------------------------
+        for slot in 0..self.tracks.len() {
+            if !is_fx[slot] {
+                continue;
+            }
+            let Some(track) = self.tracks[slot].as_deref_mut() else { continue };
+
+            track.update_modulators(block_seconds);
+            track.render(
+                Some((&self.send_l[slot], &self.send_r[slot])),
+                &mut self.scratch_l,
+                &mut self.scratch_r,
+                frames,
+            );
+
             let audible = track.solo || (!track.mute && !(any_solo && !track.solo));
             let g = if audible { track.gain * track.gain } else { 0.0 };
             let theta = (track.pan + 1.0) * 0.5 * std::f32::consts::FRAC_PI_2;
@@ -596,16 +747,29 @@ impl Engine {
                 out_r[i] += r;
                 tpeak = tpeak.max(l.abs()).max(r.abs());
             }
-
             self.shared.track_peak[slot].store(tpeak.to_bits(), Ordering::Relaxed);
-            self.shared.active_scene[slot].store(
-                if self.playing { track.active_scene } else { -1 },
-                Ordering::Relaxed,
-            );
         }
 
-        // master soft limiter + peak meter
+        // master: metronome click, soft limiter, peak meter
         for i in 0..frames {
+            if self.playing && self.metronome {
+                let b = block_start + i as f64 * dt_beats;
+                let fb = b.floor() as i64;
+                if fb != self.last_click_beat && fb >= 0 {
+                    self.last_click_beat = fb;
+                    let downbeat = (fb as f64).rem_euclid(self.beats_per_bar) == 0.0;
+                    self.click_freq = if downbeat { 1318.5 } else { 880.0 };
+                    self.click_phase = 0.0;
+                    self.click_env = 1.0;
+                }
+            }
+            if self.click_env > 0.0005 {
+                self.click_phase += self.click_freq / self.sample_rate;
+                let s = (self.click_phase * std::f32::consts::TAU).sin() * self.click_env * 0.2;
+                out_l[i] += s;
+                out_r[i] += s;
+                self.click_env *= 0.998;
+            }
             out_l[i] = out_l[i].clamp(-1.5, 1.5).tanh();
             out_r[i] = out_r[i].clamp(-1.5, 1.5).tanh();
             master_peak = master_peak.max(out_l[i].abs()).max(out_r[i].abs());
@@ -766,7 +930,15 @@ impl EngineTrack {
         self.events.sort_unstable_by_key(|e| e.sample);
     }
 
-    fn render(&mut self, _sr: f32, buf_l: &mut [f32], buf_r: &mut [f32], frames: usize) {
+    /// Render one block. `input` feeds effect (return) tracks from their send
+    /// bus; source tracks start from their own instrument.
+    fn render(
+        &mut self,
+        input: Option<(&[f32], &[f32])>,
+        buf_l: &mut [f32],
+        buf_r: &mut [f32],
+        frames: usize,
+    ) {
         let mut ev_idx = 0;
         for i in 0..frames {
             // fire any events scheduled at this sample
@@ -785,14 +957,18 @@ impl EngineTrack {
                 ev_idx += 1;
             }
 
-            // instrument
-            let mut mono = 0.0;
-            for d in &mut self.devices {
-                if let Dsp::Synth(s) = &mut d.dsp {
-                    mono += s.next();
+            // source: instrument voices, or the send bus for return tracks
+            let (mut l, mut r) = if let Some((in_l, in_r)) = input {
+                (in_l[i], in_r[i])
+            } else {
+                let mut mono = 0.0;
+                for d in &mut self.devices {
+                    if let Dsp::Synth(s) = &mut d.dsp {
+                        mono += s.next();
+                    }
                 }
-            }
-            let (mut l, mut r) = (mono, mono);
+                (mono, mono)
+            };
 
             // effect chain
             for d in &mut self.devices {

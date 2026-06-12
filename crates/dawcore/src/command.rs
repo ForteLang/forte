@@ -6,7 +6,7 @@
 //! audio thread swaps them in, the displaced objects are shipped back through
 //! the garbage channel to be dropped by the UI thread.
 
-use crate::engine::{EngineClip, EngineDevice, EngineTrack};
+use crate::engine::{EngineAutoPoint, EngineClip, EngineDevice, EngineTrack};
 
 pub enum Command {
     // ---- transport ----
@@ -15,6 +15,7 @@ pub enum Command {
     SetTempo(f64),
     SetLoop { enabled: bool, start: f64, end: f64 },
     SetLaunchQuant(f64),
+    SetMetronome(bool),
 
     // ---- launcher / live ----
     LaunchClip { track: usize, scene: usize },
@@ -41,6 +42,10 @@ pub enum Command {
     AddDevice { track: usize, device: Box<EngineDevice> },
     RemoveDevice { track: usize, device: usize },
     SetModRoutes { track: usize, modulators: Box<crate::engine::EngineMods> },
+    /// Replace a track's post-fader send levels (dest slot, level).
+    SetSends { track: usize, sends: Box<Vec<(usize, f32)>> },
+    /// Replace a track's volume-automation lane (sorted by beat).
+    SetAutomation { track: usize, points: Box<Vec<EngineAutoPoint>> },
 }
 
 /// Displaced heap objects returned to the UI thread for dropping.
@@ -49,4 +54,6 @@ pub enum Garbage {
     Clip(Box<EngineClip>),
     Device(Box<EngineDevice>),
     Mods(Box<crate::engine::EngineMods>),
+    Sends(Box<Vec<(usize, f32)>>),
+    Auto(Box<Vec<EngineAutoPoint>>),
 }

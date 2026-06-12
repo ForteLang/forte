@@ -3,17 +3,19 @@
 //! [`crate::command::Command`]s. Keeping the two separate means the audio
 //! thread never walks these (heap-heavy, lock-taking) structures.
 
+use serde::{Deserialize, Serialize};
+
 pub const MAX_TRACKS: usize = 64;
 pub const SCENE_COUNT: usize = 8;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TrackKind {
     Instrument,
     Audio,
     Effect,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeviceKind {
     Polymer,
     Filter,
@@ -78,7 +80,7 @@ impl DeviceKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Device {
     pub kind: DeviceKind,
     pub enabled: bool,
@@ -96,7 +98,7 @@ impl Device {
 /// A unipolar/bipolar modulator. Bitwig's "unified modulation system": each
 /// modulator outputs a signal routed to one or more parameters with a bipolar
 /// amount. We model the most common types.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModKind {
     Lfo,
     Steps,
@@ -125,7 +127,7 @@ impl ModKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Modulator {
     pub kind: ModKind,
     pub rate: f32,        // 0..1 -> Hz (LFO/Steps/Random)
@@ -148,13 +150,13 @@ impl Modulator {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct ModRoute {
     pub param: usize,
     pub amount: f32, // bipolar -1..1
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Note {
     pub pitch: u8,
     pub start: f64,  // beats from clip start
@@ -162,7 +164,7 @@ pub struct Note {
     pub velocity: u8,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Clip {
     pub name: String,
     pub color: [u8; 3],
@@ -178,14 +180,23 @@ impl Clip {
 
 /// A clip placed on the Arranger Timeline at an absolute position. Its content
 /// (`clip.length` beats) loops within the placed `duration`, as in Bitwig.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ArrangerClip {
     pub clip: Clip,
     pub start: f64,    // beats on the timeline
     pub duration: f64, // placed length in beats
 }
 
-#[derive(Clone)]
+/// One point on an automation lane. `hold` is Bitwig 6's point behaviour:
+/// the value stays flat until the next point instead of ramping linearly.
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct AutomationPoint {
+    pub beat: f64,
+    pub value: f32, // 0..1
+    pub hold: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Track {
     /// Stable engine slot id (0..MAX_TRACKS). Decoupled from display order.
     pub id: usize,
@@ -200,6 +211,12 @@ pub struct Track {
     pub devices: Vec<Device>,
     pub clips: Vec<Option<Clip>>, // one slot per scene (Clip Launcher)
     pub arranger: Vec<ArrangerClip>, // clips on the Arranger Timeline
+    /// Volume automation on the timeline (overrides the fader while playing).
+    #[serde(default)]
+    pub volume_automation: Vec<AutomationPoint>,
+    /// Post-fader sends: (destination effect-track id, level 0..1).
+    #[serde(default)]
+    pub sends: Vec<(usize, f32)>,
 }
 
 impl Track {
@@ -221,11 +238,13 @@ impl Track {
             devices,
             clips: vec![None; SCENE_COUNT],
             arranger: Vec::new(),
+            volume_automation: Vec::new(),
+            sends: Vec::new(),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Scale {
     Major,
     Minor,
@@ -275,7 +294,7 @@ impl Scale {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct KeySignature {
     pub root: u8, // 0..11
     pub scale: Scale,
@@ -288,19 +307,19 @@ pub fn note_name(pitch: u8) -> String {
     format!("{}{}", NOTE_NAMES[(pitch % 12) as usize], pitch as i32 / 12 - 1)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Scene {
     pub name: String,
 }
 
 /// A cue marker storing a play position along the Arranger Timeline.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct CueMarker {
     pub name: String,
     pub position: f64, // beats
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Project {
     pub tracks: Vec<Track>,
     pub scenes: Vec<Scene>,
@@ -322,6 +341,14 @@ impl Project {
         let id = self.next_id;
         self.next_id += 1;
         id
+    }
+
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(self).unwrap_or_default()
+    }
+
+    pub fn from_json(s: &str) -> Result<Self, String> {
+        serde_json::from_str(s).map_err(|e| e.to_string())
     }
 }
 
@@ -426,6 +453,21 @@ impl Project {
         }
         lead.clips[1] = Some(lclip);
 
+        // FX return track (effect track fed by post-fader sends).
+        let mut fx = Track::new(p.alloc_id(), "FX Return", TrackKind::Effect, TRACK_COLORS[8]);
+        let mut rev = Device::new(DeviceKind::Reverb);
+        rev.params = vec![0.7, 0.7, 0.85];
+        fx.devices.push(rev);
+        lead.sends.push((fx.id, 0.45));
+        keys.sends.push((fx.id, 0.3));
+
+        // Volume automation demo: fade the lead in over bars 5-8 (v6 hold+ramp).
+        lead.volume_automation = vec![
+            AutomationPoint { beat: 0.0, value: 0.25, hold: true },
+            AutomationPoint { beat: 16.0, value: 0.25, hold: false },
+            AutomationPoint { beat: 24.0, value: 0.85, hold: false },
+        ];
+
         // Lay the launcher clips out on the Arranger Timeline as a simple song.
         if let Some(c) = drums.clips[0].clone() {
             drums.arranger.push(ArrangerClip { clip: c, start: 0.0, duration: 32.0 });
@@ -440,7 +482,7 @@ impl Project {
             lead.arranger.push(ArrangerClip { clip: c, start: 16.0, duration: 16.0 });
         }
 
-        p.tracks = vec![drums, bass, keys, lead];
+        p.tracks = vec![drums, bass, keys, lead, fx];
         p
     }
 }

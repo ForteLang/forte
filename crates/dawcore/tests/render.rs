@@ -122,6 +122,101 @@ fn loop_wraps_playhead() {
 }
 
 #[test]
+fn automation_mutes_everything() {
+    // Hold-at-zero volume automation on every track must silence the mix.
+    let sr = 48_000.0;
+    let (mut engine, mut handle) = Engine::new(sr);
+    let mut project = Project::demo();
+    for t in &mut project.tracks {
+        t.volume_automation = vec![dawcore::model::AutomationPoint {
+            beat: 0.0,
+            value: 0.0,
+            hold: true,
+        }];
+    }
+    full_sync(&mut handle, &project);
+    handle.send(Command::SetLaunchQuant(0.0));
+    handle.send(Command::Play);
+    handle.send(Command::LaunchScene(0));
+
+    let mut bl = vec![0.0f32; 512];
+    let mut br = vec![0.0f32; 512];
+    let mut total = Vec::new();
+    for _ in 0..200 {
+        engine.process(&mut bl, &mut br, 512);
+        total.extend_from_slice(&bl);
+    }
+    assert!(rms(&total) < 1e-5, "automation at 0 still audible (rms={})", rms(&total));
+}
+
+#[test]
+fn sends_feed_effect_track() {
+    // The demo routes Lead -> FX Return (reverb) via a post-fader send. While
+    // the Lead clip plays, the FX track's peak meter must rise above zero.
+    let sr = 48_000.0;
+    let (mut engine, mut handle) = Engine::new(sr);
+    let project = Project::demo();
+    let fx_slot = project
+        .tracks
+        .iter()
+        .find(|t| t.kind == dawcore::model::TrackKind::Effect)
+        .map(|t| t.id)
+        .expect("demo has an effect track");
+    let lead_slot = project.tracks.iter().find(|t| t.name == "Lead").unwrap().id;
+
+    full_sync(&mut handle, &project);
+    handle.send(Command::SetLaunchQuant(0.0));
+    handle.send(Command::Play);
+    handle.send(Command::LaunchClip { track: lead_slot, scene: 1 });
+
+    let mut bl = vec![0.0f32; 512];
+    let mut br = vec![0.0f32; 512];
+    let mut fx_peak = 0.0f32;
+    for _ in 0..400 {
+        engine.process(&mut bl, &mut br, 512);
+        fx_peak = fx_peak.max(handle.shared.track_peak(fx_slot));
+    }
+    assert!(fx_peak > 0.0005, "effect return never received send signal (peak={fx_peak})");
+}
+
+#[test]
+fn project_json_roundtrip() {
+    let p = Project::demo();
+    let json = p.to_json();
+    assert!(!json.is_empty());
+    let q = Project::from_json(&json).expect("parse back");
+    assert_eq!(p.tracks.len(), q.tracks.len());
+    assert_eq!(p.scenes.len(), q.scenes.len());
+    let notes = |pr: &Project| -> usize {
+        pr.tracks
+            .iter()
+            .flat_map(|t| t.clips.iter())
+            .filter_map(|c| c.as_ref())
+            .map(|c| c.notes.len())
+            .sum()
+    };
+    assert_eq!(notes(&p), notes(&q));
+    assert_eq!(p.tracks[3].sends.len(), q.tracks[3].sends.len());
+    assert_eq!(p.tracks[3].volume_automation.len(), q.tracks[3].volume_automation.len());
+}
+
+#[test]
+fn bounce_writes_wav() {
+    let project = Project::demo();
+    let path = std::env::temp_dir().join("bitwig_clone_bounce_test.wav");
+    let secs = dawcore::bounce::render_wav(&project, &path, 4.0).expect("bounce");
+    assert!(secs > 1.0);
+    let meta = std::fs::metadata(&path).expect("wav written");
+    assert!(meta.len() > 100_000, "wav suspiciously small: {} bytes", meta.len());
+    // and it should decode with real audio in it
+    let mut reader = hound::WavReader::open(&path).expect("readable wav");
+    let samples: Vec<i16> = reader.samples::<i16>().map(|s| s.unwrap()).collect();
+    let energy: f64 = samples.iter().map(|&s| (s as f64 / 32768.0).powi(2)).sum::<f64>() / samples.len() as f64;
+    assert!(energy.sqrt() > 0.001, "bounced wav is silent");
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
 fn silent_when_stopped() {
     let sr = 48_000.0;
     let (mut engine, mut handle) = Engine::new(sr);

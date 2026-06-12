@@ -4,11 +4,13 @@
 use eframe::egui;
 use egui::{Align2, Color32, FontId, Pos2, Rect, Rounding, Sense, Stroke, Vec2};
 
+use std::collections::HashSet;
+
 use dawcore::command::Command;
-use dawcore::engine::{build_clip, build_device, build_mods, build_track};
+use dawcore::engine::{build_automation, build_clip, build_device, build_mods, build_track};
 use dawcore::model::{
-    note_name, Clip, Device, DeviceKind, ModKind, ModRoute, Modulator, Note, Project, Scale, Track,
-    TrackKind, NOTE_NAMES, TRACK_COLORS,
+    note_name, AutomationPoint, Clip, Device, DeviceKind, ModKind, ModRoute, Modulator, Note,
+    Project, Scale, Track, TrackKind, MAX_TRACKS, NOTE_NAMES, TRACK_COLORS,
 };
 
 use crate::audio::{self, Audio};
@@ -65,6 +67,19 @@ pub struct DawApp {
     loop_anchor: Option<f64>,
     beats_per_px: f32, // arranger zoom (beats per pixel)
 
+    /// Tracks whose automation sub-lane is expanded in the Arranger.
+    auto_open: HashSet<usize>,
+    /// Dragged automation point: (track idx, point idx).
+    auto_drag: Option<(usize, usize)>,
+
+    // file & history
+    metronome: bool,
+    file_win: bool,
+    file_path: String,
+    status: Option<String>,
+    undo_stack: Vec<Project>,
+    redo_stack: Vec<Project>,
+
     /// Commands accumulated during a frame, flushed to the engine at the end.
     cmds: Vec<Command>,
 }
@@ -110,6 +125,10 @@ impl DawApp {
             _ => View::Arrange,
         };
         let editing = std::env::var("BITWIG_EDIT").ok().map(|_| (2usize, 0usize));
+        let mut auto_open_init = HashSet::new();
+        if std::env::var("BITWIG_AUTO").is_ok() {
+            auto_open_init.insert(3); // Lead's volume lane (has demo automation)
+        }
 
         let mut app = DawApp {
             audio,
@@ -126,6 +145,14 @@ impl DawApp {
             arr_drag: None,
             loop_anchor: None,
             beats_per_px: 1.0 / 24.0, // 24 px per beat
+            auto_open: auto_open_init,
+            auto_drag: None,
+            metronome: false,
+            file_win: false,
+            file_path: "project.bitwig.json".into(),
+            status: None,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
             cmds: Vec::new(),
         };
         app.initial_sync();
@@ -161,6 +188,106 @@ impl DawApp {
             start: self.project.loop_start,
             end: self.project.loop_end,
         });
+    }
+
+    fn sync_automation(&mut self, ti: usize) {
+        if let Some(t) = self.project.tracks.get_mut(ti) {
+            t.volume_automation
+                .sort_by(|a, b| a.beat.partial_cmp(&b.beat).unwrap_or(std::cmp::Ordering::Equal));
+            let id = t.id;
+            let pts = build_automation(t);
+            self.cmds.push(Command::SetAutomation { track: id, points: Box::new(pts) });
+        }
+    }
+
+    fn sync_sends(&mut self, ti: usize) {
+        if let Some(t) = self.project.tracks.get(ti) {
+            self.cmds.push(Command::SetSends { track: t.id, sends: Box::new(t.sends.clone()) });
+        }
+    }
+
+    // ---- undo / redo -------------------------------------------------------
+
+    fn push_undo(&mut self) {
+        self.undo_stack.push(self.project.clone());
+        if self.undo_stack.len() > 64 {
+            self.undo_stack.remove(0);
+        }
+        self.redo_stack.clear();
+    }
+
+    fn undo(&mut self) {
+        if let Some(prev) = self.undo_stack.pop() {
+            self.redo_stack.push(self.project.clone());
+            self.apply_project(prev);
+            self.status = Some("Undo".into());
+        }
+    }
+
+    fn redo(&mut self) {
+        if let Some(next) = self.redo_stack.pop() {
+            self.undo_stack.push(self.project.clone());
+            self.apply_project(next);
+            self.status = Some("Redo".into());
+        }
+    }
+
+    /// Replace the project and rebuild the whole engine graph.
+    fn apply_project(&mut self, p: Project) {
+        self.project = p;
+        self.editing = None;
+        self.assign_mod = None;
+        if self.selected_track >= self.project.tracks.len() {
+            self.selected_track = self.project.tracks.len().saturating_sub(1);
+        }
+        self.selected_device = 0;
+        self.resync_all();
+    }
+
+    fn resync_all(&mut self) {
+        for slot in 0..MAX_TRACKS {
+            self.cmds.push(Command::RemoveTrack { slot });
+        }
+        let sr = self.sample_rate;
+        self.cmds.push(Command::SetTempo(self.project.tempo));
+        self.cmds.push(Command::SetLaunchQuant(self.project.launch_quant));
+        self.cmds.push(Command::SetMetronome(self.metronome));
+        self.push_loop();
+        for t in &self.project.tracks {
+            self.cmds.push(Command::AddTrack { slot: t.id, track: build_track(t, sr) });
+        }
+    }
+
+    // ---- file operations ---------------------------------------------------
+
+    fn save_project(&mut self) {
+        let json = self.project.to_json();
+        match std::fs::write(&self.file_path, json) {
+            Ok(()) => self.status = Some(format!("Saved {}", self.file_path)),
+            Err(e) => self.status = Some(format!("Save failed: {e}")),
+        }
+    }
+
+    fn open_project(&mut self) {
+        match std::fs::read_to_string(&self.file_path) {
+            Ok(s) => match Project::from_json(&s) {
+                Ok(p) => {
+                    self.push_undo();
+                    self.apply_project(p);
+                    self.status = Some(format!("Opened {}", self.file_path));
+                }
+                Err(e) => self.status = Some(format!("Parse failed: {e}")),
+            },
+            Err(e) => self.status = Some(format!("Open failed: {e}")),
+        }
+    }
+
+    fn export_wav(&mut self) {
+        let path = std::path::Path::new(&self.file_path).with_extension("wav");
+        match dawcore::bounce::render_wav(&self.project, &path, 8.0) {
+            Ok(secs) => self.status = Some(format!("Exported {} ({secs:.1}s)", path.display())),
+            Err(e) => self.status = Some(format!("Export failed: {e}")),
+        }
     }
 
     fn flush(&mut self) {
@@ -229,7 +356,7 @@ impl eframe::App for DawApp {
 
         let editing = self.editing.is_some();
         egui::TopBottomPanel::bottom("bottom")
-            .exact_height(if editing { 280.0 } else { 220.0 })
+            .exact_height(if editing { 280.0 } else { 256.0 })
             .resizable(true)
             .show(ctx, |ui| {
                 if editing {
@@ -245,6 +372,10 @@ impl eframe::App for DawApp {
             View::Mix => self.mixer(ui),
         });
 
+        if self.file_win {
+            self.file_window(ctx);
+        }
+
         self.flush();
     }
 }
@@ -258,7 +389,20 @@ impl DawApp {
         let events = ctx.input(|i| i.events.clone());
         let track_id = self.project.tracks.get(self.selected_track).map(|t| t.id);
         for ev in events {
-            if let egui::Event::Key { key, pressed, repeat, .. } = ev {
+            if let egui::Event::Key { key, pressed, repeat, modifiers, .. } = ev {
+                // global shortcuts
+                if modifiers.command || modifiers.ctrl {
+                    if pressed && !repeat {
+                        match key {
+                            egui::Key::Z if modifiers.shift => self.redo(),
+                            egui::Key::Z => self.undo(),
+                            egui::Key::Y => self.redo(),
+                            egui::Key::S => self.save_project(),
+                            _ => {}
+                        }
+                    }
+                    continue;
+                }
                 if key == egui::Key::Space && pressed && !repeat {
                     // avoid stealing space from text fields
                     if !ctx.wants_keyboard_input() {
@@ -285,6 +429,56 @@ impl DawApp {
 }
 
 // ---------------------------------------------------------------------------
+// File window
+// ---------------------------------------------------------------------------
+
+impl DawApp {
+    fn file_window(&mut self, ctx: &egui::Context) {
+        let mut open = self.file_win;
+        egui::Window::new("Project File")
+            .open(&mut open)
+            .resizable(false)
+            .default_pos([260.0, 60.0])
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Path");
+                    ui.add(egui::TextEdit::singleline(&mut self.file_path).desired_width(280.0));
+                });
+                ui.horizontal(|ui| {
+                    if ui.button("💾 Save (Ctrl+S)").clicked() {
+                        self.save_project();
+                    }
+                    if ui.button("📂 Open").clicked() {
+                        self.open_project();
+                    }
+                    if ui.button("🔊 Export WAV").clicked() {
+                        self.status = Some("Rendering…".into());
+                        self.export_wav();
+                    }
+                });
+                ui.horizontal(|ui| {
+                    if ui.button("↶ Undo (Ctrl+Z)").clicked() {
+                        self.undo();
+                    }
+                    if ui.button("↷ Redo (Ctrl+Y)").clicked() {
+                        self.redo();
+                    }
+                    ui.label(
+                        egui::RichText::new(format!("history: {}", self.undo_stack.len()))
+                            .size(10.0)
+                            .color(theme::TEXT_FAINT),
+                    );
+                });
+                if let Some(s) = &self.status {
+                    ui.separator();
+                    ui.label(egui::RichText::new(s).size(11.0).color(theme::ACCENT));
+                }
+            });
+        self.file_win = open;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Transport bar
 // ---------------------------------------------------------------------------
 
@@ -296,6 +490,9 @@ impl DawApp {
             ui.painter().rect_filled(r, Rounding::same(3.0), theme::ACCENT);
             ui.label(egui::RichText::new("BITWIG").strong().color(theme::ACCENT));
             ui.label(egui::RichText::new("Studio 6").color(theme::TEXT_DIM));
+            if ui.selectable_label(self.file_win, "File").clicked() {
+                self.file_win = !self.file_win;
+            }
             ui.separator();
 
             let playing = self.playing();
@@ -310,6 +507,11 @@ impl DawApp {
             if ui.add(transport_btn("⟲", theme::ACCENT, self.project.loop_enabled)).clicked() {
                 self.project.loop_enabled = !self.project.loop_enabled;
                 self.push_loop();
+            }
+            // metronome click
+            if ui.add(transport_btn("♪", theme::PLAY, self.metronome)).clicked() {
+                self.metronome = !self.metronome;
+                self.cmds.push(Command::SetMetronome(self.metronome));
             }
             ui.separator();
 
@@ -475,6 +677,7 @@ impl DawApp {
             });
             let id = track.id;
             if ui.button("Delete Track").clicked() {
+                self.push_undo();
                 self.cmds.push(Command::RemoveTrack { slot: id });
                 self.project.tracks.retain(|t| t.id != id);
                 if self.selected_track >= self.project.tracks.len() && self.selected_track > 0 {
@@ -530,6 +733,7 @@ impl DawApp {
     }
 
     fn add_track(&mut self, kind: TrackKind) {
+        self.push_undo();
         let id = self.project.alloc_id();
         let color = TRACK_COLORS[self.project.tracks.len() % TRACK_COLORS.len()];
         let name = format!("Track {}", self.project.tracks.len() + 1);
@@ -541,6 +745,7 @@ impl DawApp {
     }
 
     fn add_device(&mut self, kind: DeviceKind) {
+        self.push_undo();
         let sr = self.sample_rate;
         if let Some(track) = self.project.tracks.get_mut(self.selected_track) {
             let dev = Device::new(kind);
@@ -578,6 +783,7 @@ fn browser_item(label: &str, dot: Color32) -> impl egui::Widget + '_ {
 const ARR_HEADER_W: f32 = 140.0;
 const ARR_RULER_H: f32 = 26.0;
 const ARR_LANE_H: f32 = 58.0;
+const ARR_AUTO_H: f32 = 46.0;
 
 impl DawApp {
     fn arranger(&mut self, ui: &mut egui::Ui) {
@@ -595,14 +801,25 @@ impl DawApp {
         max_beat = (max_beat / bar_beats).ceil() * bar_beats + bar_beats * 4.0;
         let timeline_w = max_beat as f32 * ppb;
         let n_tracks = self.project.tracks.len();
-        let lanes_h = ARR_RULER_H + n_tracks as f32 * ARR_LANE_H;
+
+        // variable lane heights: expanded tracks get an automation sub-lane
+        let lane_hs: Vec<f32> = (0..n_tracks)
+            .map(|ti| ARR_LANE_H + if self.auto_open.contains(&ti) { ARR_AUTO_H } else { 0.0 })
+            .collect();
+        let mut lane_tops = Vec::with_capacity(n_tracks);
+        let mut acc = 0.0f32;
+        for h in &lane_hs {
+            lane_tops.push(acc);
+            acc += h;
+        }
+        let lanes_h = ARR_RULER_H + acc;
 
         ui.horizontal_top(|ui| {
             // ---- track header column ----
             ui.vertical(|ui| {
                 ui.allocate_exact_size(Vec2::new(ARR_HEADER_W, ARR_RULER_H), Sense::hover());
                 for ti in 0..n_tracks {
-                    self.arr_track_header(ui, ti);
+                    self.arr_track_header(ui, ti, lane_hs[ti]);
                 }
             });
 
@@ -647,8 +864,8 @@ impl DawApp {
 
                 // lanes + clips
                 for ti in 0..n_tracks {
-                    let lane_top = ruler_bottom + ti as f32 * ARR_LANE_H;
-                    let lane = Rect::from_min_size(Pos2::new(left, lane_top), Vec2::new(timeline_w, ARR_LANE_H));
+                    let lane_top = ruler_bottom + lane_tops[ti];
+                    let lane = Rect::from_min_size(Pos2::new(left, lane_top), Vec2::new(timeline_w, lane_hs[ti]));
                     if ti % 2 == 1 {
                         p.rect_filled(lane, Rounding::ZERO, Color32::from_rgba_unmultiplied(0, 0, 0, 30));
                     }
@@ -680,6 +897,52 @@ impl DawApp {
                             }
                         }
                     }
+
+                    // ---- automation sub-lane (volume) ----
+                    if self.auto_open.contains(&ti) {
+                        let auto_top = lane_top + ARR_LANE_H;
+                        let ar = Rect::from_min_size(Pos2::new(left, auto_top), Vec2::new(timeline_w, ARR_AUTO_H));
+                        p.rect_filled(ar, Rounding::ZERO, Color32::from_rgba_unmultiplied(0, 0, 0, 60));
+                        p.line_segment([ar.left_top(), ar.right_top()], Stroke::new(1.0, theme::BORDER));
+                        let val_y = |v: f32| auto_top + (1.0 - v) * (ARR_AUTO_H - 8.0) + 4.0;
+                        let pts = &self.project.tracks[ti].volume_automation;
+                        let curve = Stroke::new(1.5, theme::ACCENT);
+                        if pts.is_empty() {
+                            // flat line at the fader value
+                            let y = val_y(self.project.tracks[ti].volume);
+                            p.line_segment([Pos2::new(left, y), Pos2::new(rect.right(), y)], Stroke::new(1.0, theme::TEXT_FAINT));
+                        } else {
+                            // segment before the first point
+                            let first = &pts[0];
+                            let fy = val_y(first.value);
+                            p.line_segment([Pos2::new(left, fy), Pos2::new(left + first.beat as f32 * ppb, fy)], curve);
+                            for w in pts.windows(2) {
+                                let (a, b) = (&w[0], &w[1]);
+                                let (ax, bx) = (left + a.beat as f32 * ppb, left + b.beat as f32 * ppb);
+                                let (ay, by) = (val_y(a.value), val_y(b.value));
+                                if a.hold {
+                                    // v6 hold: flat until the next point, then step
+                                    p.line_segment([Pos2::new(ax, ay), Pos2::new(bx, ay)], curve);
+                                    p.line_segment([Pos2::new(bx, ay), Pos2::new(bx, by)], curve);
+                                } else {
+                                    p.line_segment([Pos2::new(ax, ay), Pos2::new(bx, by)], curve);
+                                }
+                            }
+                            // segment after the last point
+                            let last = pts.last().unwrap();
+                            let ly = val_y(last.value);
+                            p.line_segment([Pos2::new(left + last.beat as f32 * ppb, ly), Pos2::new(rect.right(), ly)], curve);
+                            // point handles: square = hold, circle = ramp
+                            for pt in pts {
+                                let c = Pos2::new(left + pt.beat as f32 * ppb, val_y(pt.value));
+                                if pt.hold {
+                                    p.rect_filled(Rect::from_center_size(c, Vec2::splat(7.0)), Rounding::ZERO, theme::ACCENT);
+                                } else {
+                                    p.circle_filled(c, 3.5, theme::ACCENT);
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // playhead
@@ -687,43 +950,105 @@ impl DawApp {
                 let phx = left + pos as f32 * ppb;
                 p.line_segment([Pos2::new(phx, rect.top()), Pos2::new(phx, rect.bottom())], Stroke::new(2.0, theme::ACCENT));
 
-                self.arr_interact(rect, &resp, ppb, max_beat, n_tracks);
+                self.arr_interact(rect, &resp, ppb, max_beat, &lane_tops, &lane_hs);
             });
         });
     }
 
-    fn arr_track_header(&mut self, ui: &mut egui::Ui, ti: usize) {
-        let (id, color, name, mute, solo) = {
+    fn arr_track_header(&mut self, ui: &mut egui::Ui, ti: usize, height: f32) {
+        let (color, name, mute, solo, is_fx) = {
             let t = &self.project.tracks[ti];
-            (t.id, t.color, t.name.clone(), t.mute, t.solo)
+            (t.color, t.name.clone(), t.mute, t.solo, t.kind == TrackKind::Effect)
         };
-        let _ = id;
         let selected = ti == self.selected_track;
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ARR_HEADER_W, ARR_LANE_H), Sense::click());
+        let auto_on = self.auto_open.contains(&ti);
+        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ARR_HEADER_W, height), Sense::click());
         ui.painter().rect_filled(rect, Rounding::ZERO, if selected { theme::PANEL_ALT } else { theme::PANEL });
-        ui.painter().rect_filled(Rect::from_min_size(rect.left_top(), Vec2::new(3.0, ARR_LANE_H)), Rounding::ZERO, theme::track_color(color));
+        ui.painter().rect_filled(Rect::from_min_size(rect.left_top(), Vec2::new(3.0, height)), Rounding::ZERO, theme::track_color(color));
         ui.painter().line_segment([rect.left_bottom(), rect.right_bottom()], Stroke::new(1.0, theme::BORDER));
         ui.painter().text(Pos2::new(rect.left() + 10.0, rect.top() + 14.0), Align2::LEFT_CENTER, &name, FontId::proportional(12.0), theme::TEXT);
+        if is_fx {
+            ui.painter().text(Pos2::new(rect.right() - 8.0, rect.top() + 14.0), Align2::RIGHT_CENTER, "FX", FontId::proportional(9.0), theme::TEXT_FAINT);
+        }
         if resp.clicked() {
             self.selected_track = ti;
             self.selected_device = 0;
         }
-        let mb = Rect::from_min_size(Pos2::new(rect.left() + 10.0, rect.bottom() - 22.0), Vec2::new(18.0, 14.0));
-        let sb = Rect::from_min_size(Pos2::new(rect.left() + 32.0, rect.bottom() - 22.0), Vec2::new(18.0, 14.0));
+        // chips anchored to the clip row, not the (taller) automation lane
+        let chip_y = rect.top() + ARR_LANE_H - 22.0;
+        let mb = Rect::from_min_size(Pos2::new(rect.left() + 10.0, chip_y), Vec2::new(18.0, 14.0));
+        let sb = Rect::from_min_size(Pos2::new(rect.left() + 32.0, chip_y), Vec2::new(18.0, 14.0));
+        let ab = Rect::from_min_size(Pos2::new(rect.left() + 54.0, chip_y), Vec2::new(18.0, 14.0));
         if self.toggle_chip(ui, mb, "M", mute, Color32::from_rgb(0xd0, 0xa0, 0x40)) {
             self.set_mute(ti, !mute);
         }
         if self.toggle_chip(ui, sb, "S", solo, theme::ACCENT) {
             self.set_solo(ti, !solo);
         }
+        if self.toggle_chip(ui, ab, "A", auto_on, theme::PLAY) {
+            if auto_on {
+                self.auto_open.remove(&ti);
+            } else {
+                self.auto_open.insert(ti);
+            }
+        }
+        if auto_on {
+            ui.painter().text(
+                Pos2::new(rect.left() + 10.0, rect.top() + ARR_LANE_H + 12.0),
+                Align2::LEFT_CENTER,
+                "Volume",
+                FontId::proportional(9.0),
+                theme::TEXT_FAINT,
+            );
+        }
     }
 
-    fn arr_interact(&mut self, rect: Rect, resp: &egui::Response, ppb: f32, max_beat: f64, n_tracks: usize) {
+    /// Locate which track lane (and whether the automation sub-lane) contains `y`.
+    fn lane_at(lane_tops: &[f32], lane_hs: &[f32], local_y: f32) -> Option<(usize, bool)> {
+        for ti in 0..lane_tops.len() {
+            let top = lane_tops[ti];
+            if local_y >= top && local_y < top + lane_hs[ti] {
+                return Some((ti, local_y - top > ARR_LANE_H));
+            }
+        }
+        None
+    }
+
+    /// Nearest automation point within grab range, if any.
+    fn auto_hit(&self, ti: usize, beat: f64, value: f32, ppb: f32) -> Option<usize> {
+        let beat_tol = (8.0 / ppb) as f64;
+        self.project.tracks[ti]
+            .volume_automation
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| (p.beat - beat).abs() < beat_tol && (p.value - value).abs() < 0.18)
+            .min_by(|a, b| {
+                let da = (a.1.beat - beat).abs();
+                let db = (b.1.beat - beat).abs();
+                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(i, _)| i)
+    }
+
+    fn arr_interact(
+        &mut self,
+        rect: Rect,
+        resp: &egui::Response,
+        ppb: f32,
+        max_beat: f64,
+        lane_tops: &[f32],
+        lane_hs: &[f32],
+    ) {
         let snap = |beat: f64| (beat).max(0.0).round();
+        let snap_q = |beat: f64| ((beat / 0.25).round() * 0.25).max(0.0); // 1/16 for automation
         let pointer = resp.interact_pointer_pos();
         let ruler_bottom = rect.top() + ARR_RULER_H;
+        let auto_val = |local_y_in_lane: f32| -> f32 {
+            let y = local_y_in_lane - ARR_LANE_H; // within the automation sub-lane
+            (1.0 - (y - 4.0) / (ARR_AUTO_H - 8.0)).clamp(0.0, 1.0)
+        };
 
-        if resp.drag_started() || resp.clicked() || resp.secondary_clicked() {
+        if resp.drag_started() || resp.clicked() || resp.secondary_clicked() || resp.double_clicked() {
             if let Some(pos) = pointer {
                 let beat = ((pos.x - rect.left()) / ppb) as f64;
                 if pos.y < ruler_bottom {
@@ -731,10 +1056,41 @@ impl DawApp {
                     if resp.drag_started() {
                         self.loop_anchor = Some(snap(beat));
                     }
-                } else {
-                    // lanes: hit-test a clip
-                    let lane = ((pos.y - ruler_bottom) / ARR_LANE_H) as usize;
-                    if lane < n_tracks {
+                } else if let Some((lane, in_auto)) = Self::lane_at(lane_tops, lane_hs, pos.y - ruler_bottom) {
+                    let local_y = pos.y - ruler_bottom - lane_tops[lane];
+                    if in_auto {
+                        // ---- automation sub-lane ----
+                        let value = auto_val(local_y);
+                        let hit = self.auto_hit(lane, beat, value, ppb);
+                        if resp.double_clicked() {
+                            if let Some(idx) = hit {
+                                self.push_undo();
+                                let p = &mut self.project.tracks[lane].volume_automation[idx];
+                                p.hold = !p.hold;
+                                self.sync_automation(lane);
+                            }
+                        } else if resp.secondary_clicked() {
+                            if let Some(idx) = hit {
+                                self.push_undo();
+                                self.project.tracks[lane].volume_automation.remove(idx);
+                                self.sync_automation(lane);
+                            }
+                        } else if resp.drag_started() {
+                            if let Some(idx) = hit {
+                                self.push_undo();
+                                self.auto_drag = Some((lane, idx));
+                            }
+                        } else if resp.clicked() && hit.is_none() {
+                            self.push_undo();
+                            self.project.tracks[lane].volume_automation.push(AutomationPoint {
+                                beat: snap_q(beat),
+                                value,
+                                hold: false,
+                            });
+                            self.sync_automation(lane);
+                        }
+                    } else {
+                        // ---- clip row: hit-test an arranger clip ----
                         let mut hit = None;
                         for (i, a) in self.project.tracks[lane].arranger.iter().enumerate() {
                             if beat >= a.start && beat <= a.start + a.duration {
@@ -745,9 +1101,11 @@ impl DawApp {
                         }
                         if let Some((idx, near_end, grab)) = hit {
                             if resp.secondary_clicked() {
+                                self.push_undo();
                                 self.project.tracks[lane].arranger.remove(idx);
                                 self.sync_track(lane);
                             } else if resp.drag_started() {
+                                self.push_undo();
                                 self.selected_track = lane;
                                 self.arr_drag = Some(ArrDrag {
                                     track: lane,
@@ -769,6 +1127,13 @@ impl DawApp {
                     let b = snap(beat);
                     self.project.loop_start = anchor.min(b);
                     self.project.loop_end = (anchor.max(b)).max(anchor.min(b) + 1.0);
+                } else if let Some((tk, idx)) = self.auto_drag {
+                    if idx < self.project.tracks[tk].volume_automation.len() {
+                        let local_y = pos.y - ruler_bottom - lane_tops[tk];
+                        let p = &mut self.project.tracks[tk].volume_automation[idx];
+                        p.beat = snap_q(beat).min(max_beat);
+                        p.value = auto_val(local_y);
+                    }
                 } else if let Some(d) = self.arr_drag.as_ref().map(|d| (d.track, d.index, d.mode, d.grab)) {
                     let (tk, idx, mode, grab) = d;
                     if idx < self.project.tracks[tk].arranger.len() {
@@ -789,6 +1154,9 @@ impl DawApp {
         if resp.drag_stopped() {
             if self.loop_anchor.take().is_some() {
                 self.push_loop();
+            }
+            if let Some((tk, _)) = self.auto_drag.take() {
+                self.sync_automation(tk);
             }
             if let Some(d) = self.arr_drag.take() {
                 self.sync_track(d.track);
@@ -967,12 +1335,14 @@ impl DawApp {
             self.editing = Some((ti, scene));
         }
         if resp.secondary_clicked() {
+            self.push_undo();
             self.cmds.push(Command::SetClip { track: tid, scene, clip: None });
             self.project.tracks[ti].clips[scene] = None;
         }
     }
 
     fn create_clip(&mut self, ti: usize, scene: usize) {
+        self.push_undo();
         let (tid, color) = {
             let t = &self.project.tracks[ti];
             (t.id, t.color)
@@ -1032,15 +1402,30 @@ impl DawApp {
     }
 
     fn channel_strip(&mut self, ui: &mut egui::Ui, ti: usize) {
-        let (tid, color, name, mut volume, mut pan, mute, solo) = {
+        let (tid, color, name, mut volume, mut pan, mute, solo, is_fx) = {
             let t = &self.project.tracks[ti];
-            (t.id, t.color, t.name.clone(), t.volume, t.pan, t.mute, t.solo)
+            (t.id, t.color, t.name.clone(), t.volume, t.pan, t.mute, t.solo, t.kind == TrackKind::Effect)
         };
         let selected = ti == self.selected_track;
 
+        // effect (return) tracks reachable from this strip's sends
+        let fx_targets: Vec<(usize, String)> = if is_fx {
+            Vec::new()
+        } else {
+            self.project
+                .tracks
+                .iter()
+                .filter(|t| t.kind == TrackKind::Effect)
+                .map(|t| (t.id, t.name.clone()))
+                .collect()
+        };
+        let n_sends = fx_targets.len();
+        let frame_h = 264.0 + n_sends as f32 * 16.0;
+
         ui.vertical(|ui| {
-            let (frame, _) = ui.allocate_exact_size(Vec2::new(80.0, 260.0), Sense::hover());
-            ui.painter().rect(frame, Rounding::same(4.0), theme::PANEL_ALT, Stroke::new(1.0, if selected { theme::ACCENT_DIM } else { theme::BORDER }));
+            let (frame, _) = ui.allocate_exact_size(Vec2::new(80.0, frame_h), Sense::hover());
+            let border = if is_fx { theme::PLAY } else if selected { theme::ACCENT_DIM } else { theme::BORDER };
+            ui.painter().rect(frame, Rounding::same(4.0), theme::PANEL_ALT, Stroke::new(1.0, border));
             ui.painter().rect_filled(Rect::from_min_size(frame.left_top(), Vec2::new(80.0, 3.0)), Rounding::ZERO, theme::track_color(color));
             ui.painter().text(Pos2::new(frame.center().x, frame.top() + 14.0), Align2::CENTER_CENTER, &name, FontId::proportional(11.0), theme::TEXT);
 
@@ -1051,13 +1436,41 @@ impl DawApp {
                 self.cmds.push(Command::SetTrackPan { track: tid, value: pan });
             }
 
+            // post-fader sends to effect tracks
+            for (k, (dest, _dest_name)) in fx_targets.iter().enumerate() {
+                let y = frame.top() + 44.0 + k as f32 * 16.0;
+                let label_rect = Rect::from_min_size(Pos2::new(frame.left() + 6.0, y), Vec2::new(18.0, 14.0));
+                ui.painter().text(label_rect.left_center(), Align2::LEFT_CENTER, format!("S{}", k + 1), FontId::proportional(9.0), theme::PLAY);
+                let send_rect = Rect::from_min_size(Pos2::new(frame.left() + 24.0, y), Vec2::new(50.0, 14.0));
+                let mut level = self.project.tracks[ti]
+                    .sends
+                    .iter()
+                    .find(|(d, _)| d == dest)
+                    .map(|(_, l)| *l)
+                    .unwrap_or(0.0);
+                if ui
+                    .put(send_rect, egui::Slider::new(&mut level, 0.0..=1.0).show_value(false))
+                    .changed()
+                {
+                    let sends = &mut self.project.tracks[ti].sends;
+                    if let Some(s) = sends.iter_mut().find(|(d, _)| d == dest) {
+                        s.1 = level;
+                    } else {
+                        sends.push((*dest, level));
+                    }
+                    self.sync_sends(ti);
+                }
+            }
+
             // fader + meter
-            let fader_rect = Rect::from_min_size(Pos2::new(frame.left() + 18.0, frame.top() + 48.0), Vec2::new(20.0, 160.0));
+            let fader_top = frame.top() + 48.0 + n_sends as f32 * 16.0;
+            let fader_h = frame.bottom() - 30.0 - fader_top;
+            let fader_rect = Rect::from_min_size(Pos2::new(frame.left() + 18.0, fader_top), Vec2::new(20.0, fader_h));
             if widgets::fader(ui, fader_rect, &mut volume) {
                 self.project.tracks[ti].volume = volume;
                 self.cmds.push(Command::SetTrackGain { track: tid, value: volume });
             }
-            let meter_rect = Rect::from_min_size(Pos2::new(frame.left() + 46.0, frame.top() + 48.0), Vec2::new(10.0, 160.0));
+            let meter_rect = Rect::from_min_size(Pos2::new(frame.left() + 46.0, fader_top), Vec2::new(10.0, fader_h));
             widgets::meter(ui, meter_rect, self.track_peak(tid));
 
             // M / S
@@ -1170,6 +1583,8 @@ impl DawApp {
             .rounding(Rounding::same(8.0))
             .inner_margin(egui::Margin::same(8.0))
             .show(ui, |ui| {
+                // The strip ui is horizontal; force the card's content to stack.
+                ui.vertical(|ui| {
                 ui.set_width(card_w);
                 ui.set_min_height(card_h);
 
@@ -1300,6 +1715,7 @@ impl DawApp {
                         });
                     }
                 }
+                }); // end vertical
             });
     }
 
@@ -1491,9 +1907,11 @@ impl DawApp {
                 }
                 match hit {
                     Some((ni, near_end)) => {
+                        self.push_undo();
                         self.note_drag = Some(NoteDrag { idx: ni, mode: if near_end { DragMode::Resize } else { DragMode::Move } });
                     }
                     None if resp.clicked() => {
+                        self.push_undo();
                         let snapped = (beat / PR_GRID).round() * PR_GRID;
                         let start = snapped.clamp(0.0, clip_len - PR_GRID);
                         let note = Note { pitch, start, length: 1.0, velocity: 100 };
@@ -1548,9 +1966,11 @@ impl DawApp {
                 let row = (local_y / PR_ROW_H).floor() as usize;
                 let pitch = *pitches.get(row.min(pitches.len() - 1)).unwrap();
                 let beat = (local_x / PR_BEAT_W) as f64;
-                let clip = self.project.tracks[ti].clips[scene].as_mut().unwrap();
-                if let Some(ni) = clip.notes.iter().position(|n| n.pitch == pitch && beat >= n.start && beat <= n.start + n.length) {
-                    clip.notes.remove(ni);
+                let hit = self.project.tracks[ti].clips[scene].as_ref().unwrap().notes.iter()
+                    .position(|n| n.pitch == pitch && beat >= n.start && beat <= n.start + n.length);
+                if let Some(ni) = hit {
+                    self.push_undo();
+                    self.project.tracks[ti].clips[scene].as_mut().unwrap().notes.remove(ni);
                     self.sync_clip(ti, scene);
                 }
             }
