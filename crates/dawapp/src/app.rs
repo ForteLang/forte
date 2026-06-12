@@ -110,13 +110,11 @@ impl DawApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::install(&cc.egui_ctx);
 
-        let (audio, sample_rate, audio_error) = match audio::start() {
-            Ok(a) => {
-                let sr = a.sample_rate;
-                (Some(a), sr, None)
-            }
-            Err(e) => (None, 48_000.0, Some(e)),
-        };
+        // Always returns a working backend (silent fallback if no hardware).
+        let a = audio::start();
+        let sample_rate = a.sample_rate;
+        let audio_error = if a.silent { Some(a.device_name.clone()) } else { None };
+        let audio = Some(a);
 
         let project = Project::demo();
 
@@ -171,6 +169,10 @@ impl DawApp {
         });
         for t in &self.project.tracks {
             self.cmds.push(Command::AddTrack { slot: t.id, track: build_track(t, sr) });
+        }
+        // Optional: auto-start arrangement playback (headless capture / demos).
+        if std::env::var("BITWIG_PLAY").is_ok() {
+            self.cmds.push(Command::Play);
         }
         self.flush();
     }
@@ -607,8 +609,8 @@ impl DawApp {
                     self.view = View::Arrange;
                 }
                 if self.audio_error.is_some() {
-                    ui.label(egui::RichText::new("⚠ no audio out").color(theme::RECORD).size(10.0))
-                        .on_hover_text(self.audio_error.clone().unwrap_or_default());
+                    ui.label(egui::RichText::new("◌ silent").color(theme::TEXT_FAINT).size(10.0))
+                        .on_hover_text("No audio device — transport and sequencer run, but there is no sound output.");
                 }
             });
         });
