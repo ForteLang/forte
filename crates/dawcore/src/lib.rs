@@ -14,6 +14,7 @@ pub mod command;
 pub mod dsp;
 pub mod engine;
 pub mod model;
+pub mod samples;
 pub mod sync;
 
 pub use engine::{Engine, EngineHandle, Shared};

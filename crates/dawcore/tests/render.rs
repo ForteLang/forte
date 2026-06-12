@@ -217,6 +217,57 @@ fn bounce_writes_wav() {
 }
 
 #[test]
+fn sampler_track_makes_sound() {
+    // The demo's Kick track is a Sampler; its launcher clip must produce audio.
+    let sr = 48_000.0;
+    let (mut engine, mut handle) = Engine::new(sr);
+    let project = Project::demo();
+    let kick = project.tracks.iter().find(|t| t.name == "Kick").unwrap().id;
+    // sanity: it really is a Sampler instrument
+    assert_eq!(project.tracks.iter().find(|t| t.name == "Kick").unwrap().devices[0].kind,
+        dawcore::model::DeviceKind::Sampler);
+
+    full_sync(&mut handle, &project);
+    handle.send(Command::SetLaunchQuant(0.0));
+    handle.send(Command::Play);
+    handle.send(Command::LaunchClip { track: kick, scene: 0 });
+
+    let mut bl = vec![0.0f32; 512];
+    let mut br = vec![0.0f32; 512];
+    let mut peak = 0.0f32;
+    for _ in 0..400 {
+        engine.process(&mut bl, &mut br, 512);
+        peak = peak.max(handle.shared.track_peak(kick));
+    }
+    assert!(peak > 0.001, "sampler kick produced no sound (peak={peak})");
+}
+
+#[test]
+fn audio_clips_play_on_timeline() {
+    // The Perc (Audio) track holds audio clips; arrangement playback (no
+    // launcher) should make the track's meter rise.
+    let sr = 48_000.0;
+    let (mut engine, mut handle) = Engine::new(sr);
+    let project = Project::demo();
+    let perc = project.tracks.iter().find(|t| t.name.starts_with("Perc")).unwrap().id;
+    assert!(!project.tracks.iter().find(|t| t.name.starts_with("Perc")).unwrap().audio_clips.is_empty());
+
+    full_sync(&mut handle, &project);
+    handle.send(Command::SetLaunchQuant(0.0));
+    handle.send(Command::Play);
+
+    let mut bl = vec![0.0f32; 512];
+    let mut br = vec![0.0f32; 512];
+    let mut peak = 0.0f32;
+    // first audio clip starts at beat 2 (~1s at 120bpm); render ~4s
+    for _ in 0..(4 * 48_000 / 512) {
+        engine.process(&mut bl, &mut br, 512);
+        peak = peak.max(handle.shared.track_peak(perc));
+    }
+    assert!(peak > 0.001, "audio clips never played (peak={peak})");
+}
+
+#[test]
 fn silent_when_stopped() {
     let sr = 48_000.0;
     let (mut engine, mut handle) = Engine::new(sr);

@@ -18,6 +18,7 @@ pub enum TrackKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeviceKind {
     Polymer,
+    Sampler,
     Filter,
     Delay,
     Reverb,
@@ -29,6 +30,7 @@ impl DeviceKind {
     pub fn label(self) -> &'static str {
         match self {
             DeviceKind::Polymer => "Polymer",
+            DeviceKind::Sampler => "Sampler",
             DeviceKind::Filter => "Filter+",
             DeviceKind::Delay => "Delay-4",
             DeviceKind::Reverb => "Reverb",
@@ -38,7 +40,7 @@ impl DeviceKind {
     }
 
     pub fn is_instrument(self) -> bool {
-        matches!(self, DeviceKind::Polymer)
+        matches!(self, DeviceKind::Polymer | DeviceKind::Sampler)
     }
 
     /// Parameter labels in engine order. The GUI renders a knob per entry.
@@ -48,6 +50,7 @@ impl DeviceKind {
                 "Wave", "Cutoff", "Reso", "Attack", "Decay", "Sustain", "Release",
                 "Detune", "Sub", "FiltEnv",
             ],
+            DeviceKind::Sampler => &["Gain", "Attack", "Decay", "Sustain", "Release", "Pitch"],
             DeviceKind::Filter => &["Type", "Cutoff", "Reso"],
             DeviceKind::Delay => &["Time", "Fdbk", "Mix"],
             DeviceKind::Reverb => &["Size", "Decay", "Mix"],
@@ -62,6 +65,8 @@ impl DeviceKind {
             DeviceKind::Polymer => {
                 vec![1.0, 0.65, 0.15, 0.01, 0.3, 0.6, 0.25, 0.12, 0.3, 0.4]
             }
+            // Pitch 0.5 == centre (no transpose); ±24 semitones across the range.
+            DeviceKind::Sampler => vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5],
             DeviceKind::Filter => vec![0.0, 0.6, 0.2],
             DeviceKind::Delay => vec![0.3, 0.35, 0.3],
             DeviceKind::Reverb => vec![0.5, 0.5, 0.25],
@@ -80,6 +85,34 @@ impl DeviceKind {
     }
 }
 
+/// Where a sample comes from. Kept serialisable; the engine resolves it into a
+/// shared audio buffer.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SampleSource {
+    None,
+    Builtin(String), // "Kick" / "Snare" / "Hat"
+    File(String),    // path on disk
+}
+
+impl Default for SampleSource {
+    fn default() -> Self {
+        SampleSource::None
+    }
+}
+
+impl SampleSource {
+    pub fn label(&self) -> String {
+        match self {
+            SampleSource::None => "—".into(),
+            SampleSource::Builtin(n) => n.clone(),
+            SampleSource::File(p) => std::path::Path::new(p)
+                .file_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| p.clone()),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Device {
     pub kind: DeviceKind,
@@ -87,11 +120,26 @@ pub struct Device {
     pub params: Vec<f32>,
     /// LFO modulators living on this device (Bitwig-style per-device modulators).
     pub modulators: Vec<Modulator>,
+    /// Sample loaded into a Sampler device (ignored by other device kinds).
+    #[serde(default)]
+    pub sample: SampleSource,
 }
 
 impl Device {
     pub fn new(kind: DeviceKind) -> Self {
-        Self { kind, enabled: true, params: kind.defaults(), modulators: Vec::new() }
+        Self {
+            kind,
+            enabled: true,
+            params: kind.defaults(),
+            modulators: Vec::new(),
+            sample: SampleSource::None,
+        }
+    }
+
+    pub fn sampler(source: SampleSource) -> Self {
+        let mut d = Device::new(DeviceKind::Sampler);
+        d.sample = source;
+        d
     }
 }
 
@@ -187,6 +235,18 @@ pub struct ArrangerClip {
     pub duration: f64, // placed length in beats
 }
 
+/// An audio clip on the Arranger Timeline: a sample played from its start, at
+/// its recorded pitch, for `duration` beats (or until the buffer ends).
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AudioClip {
+    pub name: String,
+    pub color: [u8; 3],
+    pub source: SampleSource,
+    pub start: f64,
+    pub duration: f64,
+    pub gain: f32,
+}
+
 /// One point on an automation lane. `hold` is Bitwig 6's point behaviour:
 /// the value stays flat until the next point instead of ramping linearly.
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -211,6 +271,9 @@ pub struct Track {
     pub devices: Vec<Device>,
     pub clips: Vec<Option<Clip>>, // one slot per scene (Clip Launcher)
     pub arranger: Vec<ArrangerClip>, // clips on the Arranger Timeline
+    /// Audio clips on the Arranger Timeline.
+    #[serde(default)]
+    pub audio_clips: Vec<AudioClip>,
     /// Volume automation on the timeline (overrides the fader while playing).
     #[serde(default)]
     pub volume_automation: Vec<AutomationPoint>,
@@ -238,6 +301,7 @@ impl Track {
             devices,
             clips: vec![None; SCENE_COUNT],
             arranger: Vec::new(),
+            audio_clips: Vec::new(),
             volume_automation: Vec::new(),
             sends: Vec::new(),
         }
@@ -395,29 +459,32 @@ impl Project {
             next_id: 0,
         };
 
-        // Drums
-        let mut drums = Track::new(p.alloc_id(), "Drums", TrackKind::Instrument, TRACK_COLORS[0]);
-        {
-            let d = &mut drums.devices[0].params;
-            d[0] = 0.0; // sine
-            d[3] = 0.0; // attack
-            d[4] = 0.12; // decay
-            d[5] = 0.0; // sustain
-            d[6] = 0.05; // release
-            d[1] = 0.5;
-        }
-        // Demo of the unified modulation system: an LFO sweeping the cutoff.
-        {
-            let mut lfo = Modulator::new(ModKind::Lfo);
-            lfo.rate = 0.25;
-            lfo.routes.push(ModRoute { param: 1, amount: 0.35 });
-            drums.devices[0].modulators.push(lfo);
-        }
-        let mut beat = Clip::new("Beat", TRACK_COLORS[0]);
+        // Kick drum — a real Sampler playing the built-in kick one-shot.
+        let mut drums = Track::new(p.alloc_id(), "Kick", TrackKind::Instrument, TRACK_COLORS[0]);
+        drums.devices[0] = Device::sampler(SampleSource::Builtin("Kick".into()));
+        let mut beat = Clip::new("Kick", TRACK_COLORS[0]);
         for i in 0..4 {
             beat.notes.push(Note { pitch: 36, start: i as f64, length: 0.2, velocity: 110 });
         }
         drums.clips[0] = Some(beat);
+
+        // Hi-hats — Sampler, eighth-note pattern.
+        let mut hats = Track::new(p.alloc_id(), "Hats", TrackKind::Instrument, TRACK_COLORS[2]);
+        hats.devices[0] = Device::sampler(SampleSource::Builtin("Hat".into()));
+        let mut hclip = Clip::new("Hats", TRACK_COLORS[2]);
+        for i in 0..8 {
+            hclip.notes.push(Note { pitch: 42, start: i as f64 * 0.5, length: 0.1, velocity: 80 });
+        }
+        hats.clips[0] = Some(hclip);
+
+        // Snare — Sampler on the backbeat.
+        let mut snare = Track::new(p.alloc_id(), "Snare", TrackKind::Instrument, TRACK_COLORS[3]);
+        snare.devices[0] = Device::sampler(SampleSource::Builtin("Snare".into()));
+        let mut sclip = Clip::new("Snare", TRACK_COLORS[3]);
+        for &b in &[1.0, 3.0] {
+            sclip.notes.push(Note { pitch: 38, start: b, length: 0.2, velocity: 100 });
+        }
+        snare.clips[0] = Some(sclip);
 
         // Bass
         let mut bass = Track::new(p.alloc_id(), "Bass", TrackKind::Instrument, TRACK_COLORS[5]);
@@ -431,6 +498,13 @@ impl Project {
         // Keys
         let mut keys = Track::new(p.alloc_id(), "Keys", TrackKind::Instrument, TRACK_COLORS[6]);
         keys.devices[0].params[0] = 2.0; // square
+        // Demo of the unified modulation system: an LFO sweeping the cutoff.
+        {
+            let mut lfo = Modulator::new(ModKind::Lfo);
+            lfo.rate = 0.22;
+            lfo.routes.push(ModRoute { param: 1, amount: 0.3 });
+            keys.devices[0].modulators.push(lfo);
+        }
         keys.devices.push(Device::new(DeviceKind::Reverb));
         let mut kclip = Clip::new("Chords", TRACK_COLORS[6]);
         for &p2 in &[60u8, 63, 67] {
@@ -453,6 +527,19 @@ impl Project {
         }
         lead.clips[1] = Some(lclip);
 
+        // Audio track with audio clips (sampled percussion placed as audio).
+        let mut perc = Track::new(p.alloc_id(), "Perc (Audio)", TrackKind::Audio, TRACK_COLORS[4]);
+        for bar in 0..8 {
+            perc.audio_clips.push(AudioClip {
+                name: "snare".into(),
+                color: TRACK_COLORS[4],
+                source: SampleSource::Builtin("Snare".into()),
+                start: bar as f64 * 4.0 + 2.0,
+                duration: 1.0,
+                gain: 0.7,
+            });
+        }
+
         // FX return track (effect track fed by post-fader sends).
         let mut fx = Track::new(p.alloc_id(), "FX Return", TrackKind::Effect, TRACK_COLORS[8]);
         let mut rev = Device::new(DeviceKind::Reverb);
@@ -460,6 +547,7 @@ impl Project {
         fx.devices.push(rev);
         lead.sends.push((fx.id, 0.45));
         keys.sends.push((fx.id, 0.3));
+        perc.sends.push((fx.id, 0.25));
 
         // Volume automation demo: fade the lead in over bars 5-8 (v6 hold+ramp).
         lead.volume_automation = vec![
@@ -481,8 +569,14 @@ impl Project {
         if let Some(c) = lead.clips[1].clone() {
             lead.arranger.push(ArrangerClip { clip: c, start: 16.0, duration: 16.0 });
         }
+        if let Some(c) = hats.clips[0].clone() {
+            hats.arranger.push(ArrangerClip { clip: c, start: 0.0, duration: 32.0 });
+        }
+        if let Some(c) = snare.clips[0].clone() {
+            snare.arranger.push(ArrangerClip { clip: c, start: 8.0, duration: 24.0 });
+        }
 
-        p.tracks = vec![drums, bass, keys, lead, fx];
+        p.tracks = vec![drums, hats, snare, bass, keys, lead, perc, fx];
         p
     }
 }

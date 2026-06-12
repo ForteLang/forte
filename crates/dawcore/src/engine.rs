@@ -15,9 +15,11 @@ use crate::command::{Command, Garbage};
 use crate::dsp::effects::{Drive, Eq3, FdnReverb, StereoDelay};
 use crate::dsp::filter::{FilterMode, Svf};
 use crate::dsp::oscillator::Waveform;
+use crate::dsp::sampler::{Sample, Sampler};
 use crate::dsp::synth::PolySynth;
 use crate::dsp::voice::SynthParams;
-use crate::model::{self, Device, DeviceKind, ModKind, Track, MAX_TRACKS};
+use crate::model::{self, Device, DeviceKind, ModKind, SampleSource, Track, MAX_TRACKS};
+use crate::samples;
 
 const CMD_CAPACITY: usize = 1024;
 const GARBAGE_CAPACITY: usize = 1024;
@@ -99,11 +101,26 @@ pub struct EngineClip {
 
 enum Dsp {
     Synth(PolySynth),
+    Sampler(Sampler),
     Filter { l: Svf, r: Svf, mode: FilterMode },
     Delay(StereoDelay),
     Reverb(FdnReverb),
     Eq { l: Eq3, r: Eq3 },
     Drive(Drive),
+}
+
+/// Resolve a serialisable sample source into a shared buffer (UI thread only).
+pub fn resolve_sample(src: &SampleSource) -> Option<Arc<Sample>> {
+    match src {
+        SampleSource::None => None,
+        SampleSource::Builtin(name) => match name.as_str() {
+            "Kick" => Some(samples::kick()),
+            "Snare" => Some(samples::snare()),
+            "Hat" => Some(samples::hat()),
+            _ => None,
+        },
+        SampleSource::File(path) => samples::load_wav(std::path::Path::new(path), 60).ok(),
+    }
 }
 
 pub struct EngineDevice {
@@ -170,6 +187,7 @@ pub struct EngineTrack {
     pending_scene: Option<i32>,
     clips: Vec<Option<Box<EngineClip>>>,
     arranger: Vec<EngineArrClip>,
+    audio_clips: Vec<EngineAudioClip>,
     pending_offs: Vec<(u8, f64)>,
     events: Vec<NoteEvent>,
 }
@@ -185,6 +203,7 @@ fn map_cutoff(v: f32) -> f32 {
 fn build_dsp(kind: DeviceKind, sr: f32) -> Dsp {
     match kind {
         DeviceKind::Polymer => Dsp::Synth(PolySynth::new(sr)),
+        DeviceKind::Sampler => Dsp::Sampler(Sampler::new(sr)),
         DeviceKind::Filter => Dsp::Filter { l: Svf::new(sr), r: Svf::new(sr), mode: FilterMode::Lowpass },
         DeviceKind::Delay => Dsp::Delay(StereoDelay::new(sr)),
         DeviceKind::Reverb => Dsp::Reverb(FdnReverb::new(sr)),
@@ -194,13 +213,42 @@ fn build_dsp(kind: DeviceKind, sr: f32) -> Dsp {
 }
 
 pub fn build_device(dev: &Device, sr: f32) -> Box<EngineDevice> {
+    let mut dsp = build_dsp(dev.kind, sr);
+    if let Dsp::Sampler(s) = &mut dsp {
+        s.sample = resolve_sample(&dev.sample);
+    }
     Box::new(EngineDevice {
         kind: dev.kind,
         enabled: dev.enabled,
         base_params: dev.params.clone(),
         eff_params: dev.params.clone(),
-        dsp: build_dsp(dev.kind, sr),
+        dsp,
     })
+}
+
+pub struct EngineAudioClip {
+    start: f64,
+    duration: f64,
+    data: Arc<[f32]>,
+    src_sr: f32,
+    gain: f32,
+}
+
+fn build_audio_clips(track: &Track) -> Vec<EngineAudioClip> {
+    track
+        .audio_clips
+        .iter()
+        .filter_map(|c| {
+            let s = resolve_sample(&c.source)?;
+            Some(EngineAudioClip {
+                start: c.start,
+                duration: c.duration,
+                data: s.data.clone(),
+                src_sr: s.sample_rate,
+                gain: c.gain,
+            })
+        })
+        .collect()
 }
 
 pub fn build_clip(clip: &model::Clip) -> Box<EngineClip> {
@@ -284,6 +332,7 @@ pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
         pending_scene: None,
         clips,
         arranger: build_arranger(track),
+        audio_clips: build_audio_clips(track),
         pending_offs: Vec::with_capacity(64),
         events: Vec::with_capacity(512),
     };
@@ -349,6 +398,9 @@ pub struct Engine {
 
     scratch_l: Vec<f32>,
     scratch_r: Vec<f32>,
+    /// Audio-clip injection buffer for the track currently being rendered.
+    audio_l: Vec<f32>,
+    audio_r: Vec<f32>,
     /// Per-slot send buses feeding effect tracks (pre-allocated, audio thread
     /// never resizes them).
     send_l: Vec<Vec<f32>>,
@@ -389,6 +441,8 @@ impl Engine {
             last_click_beat: -1,
             scratch_l: vec![0.0; MAX_BLOCK],
             scratch_r: vec![0.0; MAX_BLOCK],
+            audio_l: vec![0.0; MAX_BLOCK],
+            audio_r: vec![0.0; MAX_BLOCK],
             send_l: (0..MAX_TRACKS).map(|_| vec![0.0; MAX_BLOCK]).collect(),
             send_r: (0..MAX_TRACKS).map(|_| vec![0.0; MAX_BLOCK]).collect(),
         };
@@ -423,11 +477,7 @@ impl Engine {
                 for t in self.tracks.iter_mut().flatten() {
                     t.pending_offs.clear();
                     t.pending_scene = None;
-                    for d in &mut t.devices {
-                        if let Dsp::Synth(s) = &mut d.dsp {
-                            s.all_notes_off();
-                        }
-                    }
+                    t.all_instruments_off();
                 }
             }
             Command::SetTempo(bpm) => self.tempo = bpm.clamp(20.0, 300.0),
@@ -483,16 +533,12 @@ impl Engine {
             }
             Command::NoteOn { track, note, velocity } => {
                 if let Some(t) = self.track_mut(track) {
-                    if let Some(s) = t.synth_mut() {
-                        s.note_on(note, velocity);
-                    }
+                    t.instrument_event(true, note, velocity);
                 }
             }
             Command::NoteOff { track, note } => {
                 if let Some(t) = self.track_mut(track) {
-                    if let Some(s) = t.synth_mut() {
-                        s.note_off(note);
-                    }
+                    t.instrument_event(false, note, 0.0);
                 }
             }
             Command::SetTrackGain { track, value } => {
@@ -675,8 +721,26 @@ impl Engine {
             // schedule note events for this block
             track.schedule(self.playing, block_start, sched_end, spb, frames);
 
-            // render this track into scratch
-            track.render(None, &mut self.scratch_l, &mut self.scratch_r, frames);
+            // render audio clips into the injection buffer, then the track
+            let has_audio = !track.audio_clips.is_empty();
+            if has_audio {
+                track.fill_audio(
+                    &mut self.audio_l,
+                    &mut self.audio_r,
+                    self.playing,
+                    block_start,
+                    dt_beats,
+                    self.sample_rate,
+                    self.tempo,
+                    frames,
+                );
+            }
+            let inject = if has_audio {
+                Some((&self.audio_l[..], &self.audio_r[..]))
+            } else {
+                None
+            };
+            track.render(inject, &mut self.scratch_l, &mut self.scratch_r, frames);
 
             // volume automation overrides the fader while the transport runs
             let vol = if self.playing {
@@ -780,11 +844,7 @@ impl Engine {
                 // wrap the global playhead; release voices so nothing hangs
                 for t in self.tracks.iter_mut().flatten() {
                     t.pending_offs.clear();
-                    for d in &mut t.devices {
-                        if let Dsp::Synth(s) = &mut d.dsp {
-                            s.all_notes_off();
-                        }
-                    }
+                    t.all_instruments_off();
                 }
                 self.position_beats = self.loop_start + (block_end - self.loop_end);
             } else {
@@ -813,21 +873,25 @@ impl Engine {
 // ---------------------------------------------------------------------------
 
 impl EngineTrack {
-    fn synth_mut(&mut self) -> Option<&mut PolySynth> {
-        self.devices.iter_mut().find_map(|d| match &mut d.dsp {
-            Dsp::Synth(s) => Some(s),
-            _ => None,
-        })
-    }
-
     fn voice_count(&self) -> usize {
         self.devices
             .iter()
             .map(|d| match &d.dsp {
                 Dsp::Synth(s) => s.active_voices(),
+                Dsp::Sampler(s) => s.active_voices(),
                 _ => 0,
             })
             .sum()
+    }
+
+    fn all_instruments_off(&mut self) {
+        for d in &mut self.devices {
+            match &mut d.dsp {
+                Dsp::Synth(s) => s.all_notes_off(),
+                Dsp::Sampler(s) => s.all_notes_off(),
+                _ => {}
+            }
+        }
     }
 
     fn update_modulators(&mut self, block_seconds: f32) {
@@ -939,6 +1003,7 @@ impl EngineTrack {
         buf_r: &mut [f32],
         frames: usize,
     ) {
+        let is_effect = self.is_effect;
         let mut ev_idx = 0;
         for i in 0..frames {
             // fire any events scheduled at this sample
@@ -947,27 +1012,25 @@ impl EngineTrack {
                     let e = &self.events[ev_idx];
                     (e.on, e.pitch, e.velocity)
                 };
-                if let Some(s) = self.synth_mut_inline() {
-                    if on {
-                        s.note_on(pitch, velocity);
-                    } else {
-                        s.note_off(pitch);
-                    }
-                }
+                self.instrument_event(on, pitch, velocity);
                 ev_idx += 1;
             }
 
-            // source: instrument voices, or the send bus for return tracks
-            let (mut l, mut r) = if let Some((in_l, in_r)) = input {
-                (in_l[i], in_r[i])
+            // effect (return) tracks take their send bus as input; source tracks
+            // sum their instruments plus any injected audio-clip signal.
+            let (mut l, mut r) = if is_effect {
+                input.map(|(a, b)| (a[i], b[i])).unwrap_or((0.0, 0.0))
             } else {
                 let mut mono = 0.0;
                 for d in &mut self.devices {
-                    if let Dsp::Synth(s) = &mut d.dsp {
-                        mono += s.next();
+                    match &mut d.dsp {
+                        Dsp::Synth(s) => mono += s.next(),
+                        Dsp::Sampler(s) => mono += s.next(),
+                        _ => {}
                     }
                 }
-                (mono, mono)
+                let (il, ir) = input.map(|(a, b)| (a[i], b[i])).unwrap_or((0.0, 0.0));
+                (mono + il, mono + ir)
             };
 
             // effect chain
@@ -976,7 +1039,7 @@ impl EngineTrack {
                     continue;
                 }
                 match &mut d.dsp {
-                    Dsp::Synth(_) => {}
+                    Dsp::Synth(_) | Dsp::Sampler(_) => {}
                     Dsp::Filter { l: fl, r: fr, mode } => {
                         l = fl.process(l, *mode);
                         r = fr.process(r, *mode);
@@ -1007,14 +1070,69 @@ impl EngineTrack {
         }
     }
 
-    // Separate borrow helper so `render` can mutate synth while iterating events.
-    fn synth_mut_inline(&mut self) -> Option<&mut PolySynth> {
+    /// Route a note on/off to every instrument device on the track.
+    fn instrument_event(&mut self, on: bool, pitch: u8, velocity: f32) {
         for d in &mut self.devices {
-            if let Dsp::Synth(s) = &mut d.dsp {
-                return Some(s);
+            match &mut d.dsp {
+                Dsp::Synth(s) => {
+                    if on {
+                        s.note_on(pitch, velocity);
+                    } else {
+                        s.note_off(pitch);
+                    }
+                }
+                Dsp::Sampler(s) => {
+                    if on {
+                        s.note_on(pitch, velocity);
+                    } else {
+                        s.note_off(pitch);
+                    }
+                }
+                _ => {}
             }
         }
-        None
+    }
+
+    /// Render this track's audio clips into the injection buffers for one block.
+    #[allow(clippy::too_many_arguments)]
+    fn fill_audio(
+        &self,
+        buf_l: &mut [f32],
+        buf_r: &mut [f32],
+        playing: bool,
+        block_start: f64,
+        dt_beats: f64,
+        _sr: f32,
+        tempo: f64,
+        frames: usize,
+    ) {
+        for i in 0..frames {
+            buf_l[i] = 0.0;
+            buf_r[i] = 0.0;
+        }
+        if !playing {
+            return;
+        }
+        let sec_per_beat = 60.0 / tempo;
+        for clip in &self.audio_clips {
+            let end = clip.start + clip.duration;
+            for i in 0..frames {
+                let b = block_start + i as f64 * dt_beats;
+                if b < clip.start || b >= end {
+                    continue;
+                }
+                let sec = (b - clip.start) * sec_per_beat;
+                let idx = sec * clip.src_sr as f64;
+                let i0 = idx.floor() as usize;
+                if i0 + 1 >= clip.data.len() {
+                    continue;
+                }
+                let frac = (idx - i0 as f64) as f32;
+                let s = (clip.data[i0] + (clip.data[i0 + 1] - clip.data[i0]) * frac) * clip.gain;
+                buf_l[i] += s;
+                buf_r[i] += s;
+            }
+        }
     }
 }
 
@@ -1035,6 +1153,15 @@ impl EngineDevice {
                     sub: p[8],
                     filter_env: p[9],
                 };
+            }
+            Dsp::Sampler(s) => {
+                // params: [Gain, Attack, Decay, Sustain, Release, Pitch]
+                s.gain = p[0];
+                s.attack = 0.001 + p[1] * p[1] * 2.0;
+                s.decay = 0.001 + p[2] * p[2] * 2.0;
+                s.sustain = p[3];
+                s.release = 0.001 + p[4] * p[4] * 2.5;
+                s.transpose = (p[5] - 0.5) * 48.0; // ±24 semitones
             }
             Dsp::Filter { l, r, mode } => {
                 *mode = FilterMode::from_index(p[0] as u8);

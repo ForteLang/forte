@@ -34,7 +34,8 @@ struct ArrDrag {
     track: usize,
     index: usize,
     mode: ArrDragMode,
-    grab: f64, // beat offset within clip where grabbed
+    grab: f64,  // beat offset within clip where grabbed
+    audio: bool, // targets an audio clip rather than a MIDI clip
 }
 
 #[derive(Clone, Copy)]
@@ -722,6 +723,18 @@ impl DawApp {
         if ui.add(browser_item("Polymer", Color32::from_rgb(0x9a, 0x6f, 0xd0))).clicked() {
             self.add_device(DeviceKind::Polymer);
         }
+        if ui.add(browser_item("Sampler", Color32::from_rgb(0xe0, 0x8a, 0x3c))).clicked() {
+            self.add_sampler(dawcore::model::SampleSource::None);
+        }
+
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new("SAMPLES").size(9.0).color(theme::TEXT_FAINT));
+        for name in ["Kick", "Snare", "Hat"] {
+            if ui.add(browser_item(name, theme::PLAY)).clicked() {
+                // add a Sampler preloaded with this built-in onto the selected track
+                self.add_sampler(dawcore::model::SampleSource::Builtin(name.into()));
+            }
+        }
 
         ui.add_space(6.0);
         ui.label(egui::RichText::new("AUDIO FX").size(9.0).color(theme::TEXT_FAINT));
@@ -729,6 +742,18 @@ impl DawApp {
             if ui.add(browser_item(kind.label(), Color32::from_rgb(0x4f, 0xb6, 0xc8))).clicked() {
                 self.add_device(kind);
             }
+        }
+    }
+
+    fn add_sampler(&mut self, source: dawcore::model::SampleSource) {
+        self.push_undo();
+        let sr = self.sample_rate;
+        if let Some(track) = self.project.tracks.get_mut(self.selected_track) {
+            let dev = Device::sampler(source);
+            let cmd = Command::AddDevice { track: track.id, device: build_device(&dev, sr) };
+            track.devices.push(dev);
+            self.selected_device = track.devices.len() - 1;
+            self.cmds.push(cmd);
         }
     }
 
@@ -896,6 +921,26 @@ impl DawApp {
                                 }
                             }
                         }
+                    }
+
+                    // audio clips (waveform-style)
+                    for a in &self.project.tracks[ti].audio_clips {
+                        let cx = left + a.start as f32 * ppb;
+                        let cw = (a.duration as f32 * ppb).max(4.0);
+                        let cr = Rect::from_min_size(Pos2::new(cx, lane_top + 3.0), Vec2::new(cw, ARR_LANE_H - 6.0));
+                        let col = theme::track_color(a.color);
+                        p.rect_filled(cr, Rounding::same(3.0), col.gamma_multiply(0.7));
+                        p.rect_stroke(cr, Rounding::same(3.0), Stroke::new(1.0, col));
+                        // stylised waveform bars
+                        let mid = cr.center().y;
+                        let bars = (cr.width() / 3.0) as i32;
+                        for k in 0..bars {
+                            let fx = cr.left() + 2.0 + k as f32 * 3.0;
+                            let ph = (k as f32 * 0.7).sin().abs() * 0.5 + (k as f32 * 0.27).cos().abs() * 0.4;
+                            let h = ph * (cr.height() * 0.4);
+                            p.line_segment([Pos2::new(fx, mid - h), Pos2::new(fx, mid + h)], Stroke::new(1.0, Color32::from_black_alpha(120)));
+                        }
+                        p.text(Pos2::new(cr.left() + 4.0, cr.top() + 8.0), Align2::LEFT_CENTER, &format!("🔊 {}", a.name), FontId::proportional(9.0), Color32::from_black_alpha(220));
                     }
 
                     // ---- automation sub-lane (volume) ----
@@ -1090,19 +1135,32 @@ impl DawApp {
                             self.sync_automation(lane);
                         }
                     } else {
-                        // ---- clip row: hit-test an arranger clip ----
+                        // ---- clip row: hit-test MIDI then audio clips ----
                         let mut hit = None;
                         for (i, a) in self.project.tracks[lane].arranger.iter().enumerate() {
                             if beat >= a.start && beat <= a.start + a.duration {
                                 let near_end = beat > a.start + a.duration - (8.0 / ppb) as f64;
-                                hit = Some((i, near_end, beat - a.start));
+                                hit = Some((i, near_end, beat - a.start, false));
                                 break;
                             }
                         }
-                        if let Some((idx, near_end, grab)) = hit {
+                        if hit.is_none() {
+                            for (i, a) in self.project.tracks[lane].audio_clips.iter().enumerate() {
+                                if beat >= a.start && beat <= a.start + a.duration {
+                                    let near_end = beat > a.start + a.duration - (8.0 / ppb) as f64;
+                                    hit = Some((i, near_end, beat - a.start, true));
+                                    break;
+                                }
+                            }
+                        }
+                        if let Some((idx, near_end, grab, audio)) = hit {
                             if resp.secondary_clicked() {
                                 self.push_undo();
-                                self.project.tracks[lane].arranger.remove(idx);
+                                if audio {
+                                    self.project.tracks[lane].audio_clips.remove(idx);
+                                } else {
+                                    self.project.tracks[lane].arranger.remove(idx);
+                                }
                                 self.sync_track(lane);
                             } else if resp.drag_started() {
                                 self.push_undo();
@@ -1112,6 +1170,7 @@ impl DawApp {
                                     index: idx,
                                     mode: if near_end { ArrDragMode::Resize } else { ArrDragMode::Move },
                                     grab,
+                                    audio,
                                 });
                             }
                         }
@@ -1134,16 +1193,28 @@ impl DawApp {
                         p.beat = snap_q(beat).min(max_beat);
                         p.value = auto_val(local_y);
                     }
-                } else if let Some(d) = self.arr_drag.as_ref().map(|d| (d.track, d.index, d.mode, d.grab)) {
-                    let (tk, idx, mode, grab) = d;
-                    if idx < self.project.tracks[tk].arranger.len() {
+                } else if let Some(d) = self.arr_drag.as_ref().map(|d| (d.track, d.index, d.mode, d.grab, d.audio)) {
+                    let (tk, idx, mode, grab, audio) = d;
+                    // (start, duration) accessors for whichever clip kind is dragged
+                    let len = if audio {
+                        self.project.tracks[tk].audio_clips.len()
+                    } else {
+                        self.project.tracks[tk].arranger.len()
+                    };
+                    if idx < len {
+                        let (start_ref, dur_ref): (&mut f64, &mut f64) = if audio {
+                            let c = &mut self.project.tracks[tk].audio_clips[idx];
+                            (&mut c.start, &mut c.duration)
+                        } else {
+                            let c = &mut self.project.tracks[tk].arranger[idx];
+                            (&mut c.start, &mut c.duration)
+                        };
                         match mode {
                             ArrDragMode::Move => {
-                                self.project.tracks[tk].arranger[idx].start = snap(beat - grab).clamp(0.0, max_beat);
+                                *start_ref = snap(beat - grab).clamp(0.0, max_beat);
                             }
                             ArrDragMode::Resize => {
-                                let start = self.project.tracks[tk].arranger[idx].start;
-                                self.project.tracks[tk].arranger[idx].duration = snap(beat - start).max(1.0);
+                                *dur_ref = snap(beat - *start_ref).max(1.0);
                             }
                         }
                     }
@@ -1540,10 +1611,10 @@ impl DawApp {
 
     fn device_card(&mut self, ui: &mut egui::Ui, di: usize) {
         let ti = self.selected_track;
-        let (tid, kind, enabled, params, modulators) = {
+        let (tid, kind, enabled, params, modulators, sample) = {
             let t = &self.project.tracks[ti];
             let d = &t.devices[di];
-            (t.id, d.kind, d.enabled, d.params.clone(), d.modulators.clone())
+            (t.id, d.kind, d.enabled, d.params.clone(), d.modulators.clone(), d.sample.clone())
         };
 
         // ring amount/colour for a given parameter (from this device's modulators)
@@ -1609,6 +1680,36 @@ impl DawApp {
 
                 if di >= self.project.tracks[ti].devices.len() {
                     return; // was just removed this frame
+                }
+
+                // sample picker for the Sampler instrument
+                if kind == DeviceKind::Sampler {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Sample").size(9.0).color(theme::TEXT_FAINT));
+                        let cur = sample.label();
+                        egui::ComboBox::from_id_salt(("samp", ti, di))
+                            .width(96.0)
+                            .selected_text(cur)
+                            .show_ui(ui, |ui| {
+                                for name in ["Kick", "Snare", "Hat"] {
+                                    if ui.selectable_label(false, name).clicked() {
+                                        self.push_undo();
+                                        self.project.tracks[ti].devices[di].sample =
+                                            dawcore::model::SampleSource::Builtin(name.into());
+                                        self.sync_track(ti);
+                                    }
+                                }
+                            });
+                        if ui.button("Load WAV…").clicked() {
+                            // load from the File window's path field
+                            let path = self.file_path.clone();
+                            self.push_undo();
+                            self.project.tracks[ti].devices[di].sample =
+                                dawcore::model::SampleSource::File(path);
+                            self.sync_track(ti);
+                            self.status = Some("Loaded sample from File path".into());
+                        }
+                    });
                 }
 
                 // parameter knobs / dropdowns, laid out in rows of up to six

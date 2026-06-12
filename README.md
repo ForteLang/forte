@@ -112,6 +112,8 @@ The audio callback never allocates, locks, or makes syscalls:
 | Project key signature (new in v6) | ✅ root + scale, drives piano-roll scale highlighting |
 | Tracks: instrument / audio / effect | ✅ |
 | Per-track device chains, bypass | ✅ |
+| **Sampler instrument** — pitched, looping playback of shared sample buffers with ADSR; built-in Kick/Snare/Hat one-shots plus WAV loading | ✅ |
+| **Audio clips on the Arranger** — samples placed on the timeline, drawn as waveforms, drag/resize/delete | ✅ |
 | Built-in synth + 5 insert effects | ✅ all DSP written from scratch |
 | Mixer: faders, pan, meters, solo/mute, master | ✅ |
 | Piano roll: add/move/resize/delete, snap, scale highlight, playhead | ✅ |
@@ -123,7 +125,7 @@ panel model.
 
 ### Known scope boundaries
 
-Audio recording/sampler, VST/CLAP plugin hosting, The Grid, comping and clip
+Live audio recording, VST/CLAP plugin hosting, The Grid, comping and clip
 aliases are **not** implemented. Effects are lightweight original DSP, not
 Bitwig's. These are deliberate boundaries, not bugs.
 
