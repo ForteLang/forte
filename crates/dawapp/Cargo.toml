@@ -1,0 +1,16 @@
+[package]
+name = "dawapp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native desktop front-end: cpal audio backend + egui GUI for the Bitwig-style DAW."
+
+[[bin]]
+name = "bitwig-clone"
+path = "src/main.rs"
+
+[dependencies]
+dawcore = { path = "../dawcore" }
+cpal = "0.15"
+eframe = { version = "0.29", default-features = true }
+egui = "0.29"

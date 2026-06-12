@@ -1,0 +1,1150 @@
+//! The Bitwig-style desktop front-end. Holds the project model and pushes edits
+//! to the audio engine through the lock-free command channel.
+
+use eframe::egui;
+use egui::{Align2, Color32, FontId, Pos2, Rect, Rounding, Sense, Stroke, Vec2};
+
+use dawcore::command::Command;
+use dawcore::engine::{build_clip, build_device, build_track};
+use dawcore::model::{
+    note_name, Clip, Device, DeviceKind, Note, Project, Scale, Track, TrackKind, NOTE_NAMES,
+    TRACK_COLORS,
+};
+
+use crate::audio::{self, Audio};
+use crate::theme;
+use crate::widgets;
+
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum View {
+    Arrange,
+    Mix,
+}
+
+#[derive(Clone, Copy)]
+enum DragMode {
+    Move,
+    Resize,
+}
+
+struct NoteDrag {
+    idx: usize,
+    mode: DragMode,
+}
+
+pub struct DawApp {
+    audio: Option<Audio>,
+    sample_rate: f32,
+    audio_error: Option<String>,
+
+    project: Project,
+    view: View,
+    selected_track: usize,
+    selected_device: usize,
+    editing: Option<(usize, usize)>, // (track display index, scene)
+    note_drag: Option<NoteDrag>,
+    master_volume: f32,
+
+    /// Commands accumulated during a frame, flushed to the engine at the end.
+    cmds: Vec<Command>,
+}
+
+// computer-keyboard → MIDI map (A row = white keys from C4)
+fn key_to_pitch(key: egui::Key) -> Option<u8> {
+    use egui::Key::*;
+    Some(match key {
+        A => 60,
+        W => 61,
+        S => 62,
+        E => 63,
+        D => 64,
+        F => 65,
+        T => 66,
+        G => 67,
+        Y => 68,
+        H => 69,
+        U => 70,
+        J => 71,
+        K => 72,
+        _ => return None,
+    })
+}
+
+impl DawApp {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        theme::install(&cc.egui_ctx);
+
+        let (audio, sample_rate, audio_error) = match audio::start() {
+            Ok(a) => {
+                let sr = a.sample_rate;
+                (Some(a), sr, None)
+            }
+            Err(e) => (None, 48_000.0, Some(e)),
+        };
+
+        let project = Project::demo();
+
+        // Optional startup hooks (handy for testing / launching into a view).
+        let view = match std::env::var("BITWIG_VIEW").as_deref() {
+            Ok("mix") => View::Mix,
+            _ => View::Arrange,
+        };
+        let editing = std::env::var("BITWIG_EDIT").ok().map(|_| (2usize, 0usize));
+
+        let mut app = DawApp {
+            audio,
+            sample_rate,
+            audio_error,
+            project,
+            view,
+            selected_track: 0,
+            selected_device: 0,
+            editing,
+            note_drag: None,
+            master_volume: 0.9,
+            cmds: Vec::new(),
+        };
+        app.initial_sync();
+        app
+    }
+
+    fn initial_sync(&mut self) {
+        let sr = self.sample_rate;
+        self.cmds.push(Command::SetTempo(self.project.tempo));
+        for t in &self.project.tracks {
+            self.cmds.push(Command::AddTrack { slot: t.id, track: build_track(t, sr) });
+        }
+        self.flush();
+    }
+
+    fn flush(&mut self) {
+        if let Some(a) = &mut self.audio {
+            for c in self.cmds.drain(..) {
+                a.handle.send(c);
+            }
+            a.handle.collect_garbage();
+        } else {
+            self.cmds.clear();
+        }
+    }
+
+    fn playing(&self) -> bool {
+        self.audio
+            .as_ref()
+            .map(|a| a.handle.shared.playing.load(std::sync::atomic::Ordering::Relaxed))
+            .unwrap_or(false)
+    }
+
+    fn position_beats(&self) -> f64 {
+        self.audio.as_ref().map(|a| a.handle.shared.position_beats()).unwrap_or(0.0)
+    }
+
+    fn track_peak(&self, slot: usize) -> f32 {
+        self.audio.as_ref().map(|a| a.handle.shared.track_peak(slot)).unwrap_or(0.0)
+    }
+
+    fn master_peak(&self) -> f32 {
+        self.audio.as_ref().map(|a| a.handle.shared.master_peak()).unwrap_or(0.0)
+    }
+
+    fn active_scene(&self, slot: usize) -> i32 {
+        self.audio.as_ref().map(|a| a.handle.shared.active_scene(slot)).unwrap_or(-1)
+    }
+
+    fn toggle_play(&mut self) {
+        if self.playing() {
+            self.cmds.push(Command::Stop);
+        } else {
+            self.cmds.push(Command::Play);
+            self.cmds.push(Command::LaunchScene(0));
+        }
+    }
+}
+
+impl eframe::App for DawApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.request_repaint(); // keep meters and the playhead live
+
+        self.handle_input(ctx);
+
+        egui::TopBottomPanel::top("transport")
+            .exact_height(46.0)
+            .show(ctx, |ui| self.transport_bar(ui));
+
+        egui::SidePanel::left("inspector")
+            .exact_width(200.0)
+            .resizable(false)
+            .show(ctx, |ui| self.inspector(ui));
+
+        egui::SidePanel::right("browser")
+            .exact_width(200.0)
+            .resizable(false)
+            .show(ctx, |ui| self.browser(ui));
+
+        let editing = self.editing.is_some();
+        egui::TopBottomPanel::bottom("bottom")
+            .exact_height(if editing { 280.0 } else { 220.0 })
+            .resizable(true)
+            .show(ctx, |ui| {
+                if editing {
+                    self.piano_roll(ui);
+                } else {
+                    self.device_panel(ui);
+                }
+            });
+
+        egui::CentralPanel::default().show(ctx, |ui| match self.view {
+            View::Arrange => self.clip_launcher(ui),
+            View::Mix => self.mixer(ui),
+        });
+
+        self.flush();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Input
+// ---------------------------------------------------------------------------
+
+impl DawApp {
+    fn handle_input(&mut self, ctx: &egui::Context) {
+        let events = ctx.input(|i| i.events.clone());
+        let track_id = self.project.tracks.get(self.selected_track).map(|t| t.id);
+        for ev in events {
+            if let egui::Event::Key { key, pressed, repeat, .. } = ev {
+                if key == egui::Key::Space && pressed && !repeat {
+                    // avoid stealing space from text fields
+                    if !ctx.wants_keyboard_input() {
+                        self.toggle_play();
+                    }
+                    continue;
+                }
+                if repeat {
+                    continue;
+                }
+                if let (Some(pitch), Some(tid)) = (key_to_pitch(key), track_id) {
+                    if ctx.wants_keyboard_input() {
+                        continue;
+                    }
+                    if pressed {
+                        self.cmds.push(Command::NoteOn { track: tid, note: pitch, velocity: 0.85 });
+                    } else {
+                        self.cmds.push(Command::NoteOff { track: tid, note: pitch });
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Transport bar
+// ---------------------------------------------------------------------------
+
+impl DawApp {
+    fn transport_bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_centered(|ui| {
+            // logo
+            let (r, _) = ui.allocate_exact_size(Vec2::new(16.0, 16.0), Sense::hover());
+            ui.painter().rect_filled(r, Rounding::same(3.0), theme::ACCENT);
+            ui.label(egui::RichText::new("BITWIG").strong().color(theme::ACCENT));
+            ui.label(egui::RichText::new("Studio 6").color(theme::TEXT_DIM));
+            ui.separator();
+
+            let playing = self.playing();
+            if ui.add(transport_btn("●", theme::RECORD, false)).clicked() {}
+            if ui.add(transport_btn(if playing { "⏸" } else { "▶" }, theme::PLAY, playing)).clicked() {
+                self.toggle_play();
+            }
+            if ui.add(transport_btn("■", theme::TEXT, false)).clicked() {
+                self.cmds.push(Command::Stop);
+            }
+            ui.separator();
+
+            // position
+            let pos = self.position_beats();
+            let (num, _) = self.project.time_sig;
+            let bar = (pos / num as f64).floor() as i64 + 1;
+            let beat = (pos % num as f64).floor() as i64 + 1;
+            let six = ((pos % 1.0) * 4.0).floor() as i64 + 1;
+            ui.label(
+                egui::RichText::new(format!("{bar}.{beat}.{six}"))
+                    .monospace()
+                    .size(16.0)
+                    .strong(),
+            );
+            ui.separator();
+
+            // tempo
+            ui.label(egui::RichText::new("TEMPO").size(9.0).color(theme::TEXT_FAINT));
+            let resp = ui.add(
+                egui::DragValue::new(&mut self.project.tempo)
+                    .range(20.0..=300.0)
+                    .speed(0.2)
+                    .fixed_decimals(1),
+            );
+            if resp.changed() {
+                self.cmds.push(Command::SetTempo(self.project.tempo));
+            }
+
+            let (n, d) = self.project.time_sig;
+            ui.label(egui::RichText::new(format!("{n}/{d}")).color(theme::TEXT_DIM));
+            ui.separator();
+
+            // project key signature (Bitwig 6)
+            ui.label(egui::RichText::new("KEY").size(9.0).color(theme::TEXT_FAINT));
+            let mut root = self.project.key.root as usize;
+            egui::ComboBox::from_id_salt("key_root")
+                .width(46.0)
+                .selected_text(NOTE_NAMES[root])
+                .show_ui(ui, |ui| {
+                    for (i, name) in NOTE_NAMES.iter().enumerate() {
+                        ui.selectable_value(&mut root, i, *name);
+                    }
+                });
+            self.project.key.root = root as u8;
+
+            let mut scale = self.project.key.scale;
+            egui::ComboBox::from_id_salt("key_scale")
+                .width(110.0)
+                .selected_text(scale.name())
+                .show_ui(ui, |ui| {
+                    for s in Scale::ALL {
+                        ui.selectable_value(&mut scale, s, s.name());
+                    }
+                });
+            self.project.key.scale = scale;
+
+            // view toggle on the far right
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.selectable_label(self.view == View::Mix, "Mix").clicked() {
+                    self.view = View::Mix;
+                }
+                if ui.selectable_label(self.view == View::Arrange, "Arrange").clicked() {
+                    self.view = View::Arrange;
+                }
+                if let Some(err) = &self.audio_error {
+                    ui.label(egui::RichText::new(format!("⚠ audio: {err}")).color(theme::RECORD).size(10.0));
+                }
+            });
+        });
+    }
+}
+
+fn transport_btn(glyph: &str, color: Color32, active: bool) -> egui::Button<'static> {
+    let mut b = egui::Button::new(egui::RichText::new(glyph).color(if active { Color32::BLACK } else { color }))
+        .min_size(Vec2::new(30.0, 26.0));
+    if active {
+        b = b.fill(color);
+    }
+    b
+}
+
+// ---------------------------------------------------------------------------
+// Inspector (left)
+// ---------------------------------------------------------------------------
+
+impl DawApp {
+    fn inspector(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new("INSPECTOR").size(10.0).color(theme::TEXT_FAINT));
+        ui.separator();
+
+        ui.label(egui::RichText::new("Project").strong());
+        ui.horizontal(|ui| {
+            ui.label("Tempo");
+            ui.label(format!("{:.1} BPM", self.project.tempo));
+        });
+        ui.horizontal(|ui| {
+            ui.label("Key");
+            let k = self.project.key;
+            ui.colored_label(theme::ACCENT, format!("{} {}", NOTE_NAMES[k.root as usize], k.scale.name()));
+        });
+        ui.horizontal(|ui| {
+            ui.label("Tracks");
+            ui.label(format!("{}", self.project.tracks.len()));
+        });
+        if let Some(a) = &self.audio {
+            ui.horizontal(|ui| {
+                ui.label("Out");
+                ui.label(egui::RichText::new(&a.device_name).size(10.0).color(theme::TEXT_DIM));
+            });
+            ui.horizontal(|ui| {
+                ui.label("SR");
+                ui.label(format!("{:.0} Hz", a.sample_rate));
+            });
+        }
+        ui.separator();
+
+        if let Some(track) = self.project.tracks.get_mut(self.selected_track) {
+            ui.label(egui::RichText::new("Track").strong());
+            ui.add(egui::TextEdit::singleline(&mut track.name).desired_width(f32::INFINITY));
+            ui.horizontal(|ui| {
+                ui.label("Type");
+                ui.label(format!("{:?}", track.kind));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Color");
+                let (r, _) = ui.allocate_exact_size(Vec2::new(16.0, 16.0), Sense::hover());
+                ui.painter().rect_filled(r, Rounding::same(3.0), theme::track_color(track.color));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Devices");
+                ui.label(format!("{}", track.devices.len()));
+            });
+            let id = track.id;
+            if ui.button("Delete Track").clicked() {
+                self.cmds.push(Command::RemoveTrack { slot: id });
+                self.project.tracks.retain(|t| t.id != id);
+                if self.selected_track >= self.project.tracks.len() && self.selected_track > 0 {
+                    self.selected_track -= 1;
+                }
+            }
+        }
+
+        ui.separator();
+        ui.label(egui::RichText::new("Keyboard").strong());
+        ui.label(
+            egui::RichText::new("Play the selected instrument with A–K (white) and W E T Y U (black). Space toggles play.")
+                .size(10.0)
+                .color(theme::TEXT_FAINT),
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Browser (right)
+// ---------------------------------------------------------------------------
+
+impl DawApp {
+    fn browser(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new("BROWSER").size(10.0).color(theme::TEXT_FAINT));
+        ui.separator();
+
+        ui.label(egui::RichText::new("ADD TRACK").size(9.0).color(theme::TEXT_FAINT));
+        for (kind, label) in [
+            (TrackKind::Instrument, "Instrument Track"),
+            (TrackKind::Audio, "Audio Track"),
+            (TrackKind::Effect, "Effect Track"),
+        ] {
+            if ui.add(browser_item(label, theme::ACCENT)).clicked() {
+                self.add_track(kind);
+            }
+        }
+
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new("INSTRUMENTS").size(9.0).color(theme::TEXT_FAINT));
+        if ui.add(browser_item("Polymer", Color32::from_rgb(0x9a, 0x6f, 0xd0))).clicked() {
+            self.add_device(DeviceKind::Polymer);
+        }
+
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new("AUDIO FX").size(9.0).color(theme::TEXT_FAINT));
+        for kind in [DeviceKind::Filter, DeviceKind::Eq, DeviceKind::Drive, DeviceKind::Delay, DeviceKind::Reverb] {
+            if ui.add(browser_item(kind.label(), Color32::from_rgb(0x4f, 0xb6, 0xc8))).clicked() {
+                self.add_device(kind);
+            }
+        }
+    }
+
+    fn add_track(&mut self, kind: TrackKind) {
+        let id = self.project.alloc_id();
+        let color = TRACK_COLORS[self.project.tracks.len() % TRACK_COLORS.len()];
+        let name = format!("Track {}", self.project.tracks.len() + 1);
+        let track = Track::new(id, name, kind, color);
+        self.cmds.push(Command::AddTrack { slot: id, track: build_track(&track, self.sample_rate) });
+        self.project.tracks.push(track);
+        self.selected_track = self.project.tracks.len() - 1;
+        self.selected_device = 0;
+    }
+
+    fn add_device(&mut self, kind: DeviceKind) {
+        let sr = self.sample_rate;
+        if let Some(track) = self.project.tracks.get_mut(self.selected_track) {
+            let dev = Device::new(kind);
+            let cmd = Command::AddDevice { track: track.id, device: build_device(&dev, sr) };
+            track.devices.push(dev);
+            self.cmds.push(cmd);
+        }
+    }
+}
+
+fn browser_item(label: &str, dot: Color32) -> impl egui::Widget + '_ {
+    move |ui: &mut egui::Ui| {
+        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 22.0), Sense::click());
+        if resp.hovered() {
+            ui.painter().rect_filled(rect, Rounding::same(4.0), theme::PANEL_RAISED);
+        }
+        let p = ui.painter_at(rect);
+        let dot_c = Pos2::new(rect.left() + 10.0, rect.center().y);
+        p.rect_filled(Rect::from_center_size(dot_c, Vec2::splat(8.0)), Rounding::same(2.0), dot);
+        p.text(
+            Pos2::new(rect.left() + 24.0, rect.center().y),
+            Align2::LEFT_CENTER,
+            label,
+            FontId::proportional(12.0),
+            theme::TEXT,
+        );
+        resp
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Clip launcher
+// ---------------------------------------------------------------------------
+
+const TRACK_W: f32 = 124.0;
+const HEAD_H: f32 = 46.0;
+const CELL_H: f32 = 52.0;
+const SCENE_W: f32 = 30.0;
+
+impl DawApp {
+    fn clip_launcher(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::both().show(ui, |ui| {
+            ui.horizontal_top(|ui| {
+                // scene launch column
+                ui.vertical(|ui| {
+                    ui.allocate_exact_size(Vec2::new(SCENE_W, HEAD_H), Sense::hover());
+                    for s in 0..self.project.scenes.len() {
+                        let (rect, resp) =
+                            ui.allocate_exact_size(Vec2::new(SCENE_W, CELL_H), Sense::click());
+                        let hot = resp.hovered();
+                        ui.painter().rect_filled(rect, Rounding::ZERO, if hot { theme::PANEL } else { theme::HEADER });
+                        ui.painter().text(
+                            rect.center(),
+                            Align2::CENTER_CENTER,
+                            format!("▶{}", s + 1),
+                            FontId::proportional(11.0),
+                            if hot { theme::ACCENT } else { theme::TEXT_FAINT },
+                        );
+                        if resp.clicked() {
+                            self.cmds.push(Command::Play);
+                            self.cmds.push(Command::LaunchScene(s));
+                        }
+                    }
+                });
+
+                // track columns
+                let track_count = self.project.tracks.len();
+                for ti in 0..track_count {
+                    self.track_column(ui, ti);
+                }
+
+                // add-track button
+                ui.vertical(|ui| {
+                    ui.add_space(HEAD_H + 4.0);
+                    if ui.button("+").clicked() {
+                        self.add_track(TrackKind::Instrument);
+                    }
+                });
+            });
+        });
+    }
+
+    fn track_column(&mut self, ui: &mut egui::Ui, ti: usize) {
+        ui.vertical(|ui| {
+            let (tid, color, name, mute, solo) = {
+                let t = &self.project.tracks[ti];
+                (t.id, t.color, t.name.clone(), t.mute, t.solo)
+            };
+            let selected = ti == self.selected_track;
+
+            // header
+            let (hrect, hresp) = ui.allocate_exact_size(Vec2::new(TRACK_W, HEAD_H), Sense::click());
+            ui.painter().rect_filled(hrect, Rounding::ZERO, if selected { theme::PANEL_ALT } else { theme::PANEL });
+            ui.painter().rect_filled(
+                Rect::from_min_size(hrect.left_top(), Vec2::new(3.0, HEAD_H)),
+                Rounding::ZERO,
+                theme::track_color(color),
+            );
+            ui.painter().text(
+                Pos2::new(hrect.left() + 10.0, hrect.top() + 12.0),
+                Align2::LEFT_CENTER,
+                &name,
+                FontId::proportional(12.0),
+                theme::TEXT,
+            );
+            if hresp.clicked() {
+                self.selected_track = ti;
+                self.selected_device = 0;
+            }
+            // M / S mini buttons inside the header
+            let mb = Rect::from_min_size(Pos2::new(hrect.left() + 8.0, hrect.bottom() - 18.0), Vec2::new(18.0, 14.0));
+            let sb = Rect::from_min_size(Pos2::new(hrect.left() + 30.0, hrect.bottom() - 18.0), Vec2::new(18.0, 14.0));
+            if self.toggle_chip(ui, mb, "M", mute, Color32::from_rgb(0xd0, 0xa0, 0x40)) {
+                self.set_mute(ti, !mute);
+            }
+            if self.toggle_chip(ui, sb, "S", solo, theme::ACCENT) {
+                self.set_solo(ti, !solo);
+            }
+
+            // clip cells
+            for scene in 0..self.project.scenes.len() {
+                self.clip_cell(ui, ti, tid, scene);
+            }
+        });
+    }
+
+    fn toggle_chip(&self, ui: &mut egui::Ui, rect: Rect, label: &str, on: bool, color: Color32) -> bool {
+        let resp = ui.interact(rect, ui.id().with(("chip", rect.left() as i32, rect.top() as i32, label)), Sense::click());
+        let bg = if on { color } else { theme::PANEL_RAISED };
+        ui.painter().rect_filled(rect, Rounding::same(2.0), bg);
+        ui.painter().text(
+            rect.center(),
+            Align2::CENTER_CENTER,
+            label,
+            FontId::proportional(9.0),
+            if on { Color32::BLACK } else { theme::TEXT_DIM },
+        );
+        resp.clicked()
+    }
+
+    fn clip_cell(&mut self, ui: &mut egui::Ui, ti: usize, tid: usize, scene: usize) {
+        let (rect, resp) = ui.allocate_exact_size(Vec2::new(TRACK_W, CELL_H), Sense::click());
+        let inner = rect.shrink(4.0);
+        let has_clip = self.project.tracks[ti].clips[scene].is_some();
+
+        if !has_clip {
+            ui.painter().rect(inner, Rounding::same(4.0), theme::SLOT_EMPTY, Stroke::new(1.0, theme::PANEL_ALT));
+            if resp.hovered() {
+                ui.painter().text(inner.center(), Align2::CENTER_CENTER, "+", FontId::proportional(16.0), theme::TEXT_FAINT);
+            }
+            if resp.clicked() {
+                self.selected_track = ti;
+                self.create_clip(ti, scene);
+            }
+            return;
+        }
+
+        let (clip_color, clip_name, notes_summary, clip_len) = {
+            let clip = self.project.tracks[ti].clips[scene].as_ref().unwrap();
+            (clip.color, clip.name.clone(), summarize(&clip.notes, clip.length), clip.length)
+        };
+        let _ = clip_len;
+        let active = self.active_scene(tid) == scene as i32 && self.playing();
+
+        ui.painter().rect_filled(inner, Rounding::same(4.0), theme::track_color(clip_color));
+        if active {
+            ui.painter().rect_stroke(inner, Rounding::same(4.0), Stroke::new(2.0, theme::PLAY));
+        }
+        ui.painter().text(
+            Pos2::new(inner.left() + 6.0, inner.top() + 9.0),
+            Align2::LEFT_CENTER,
+            &clip_name,
+            FontId::proportional(11.0),
+            Color32::from_rgba_premultiplied(0, 0, 0, 200),
+        );
+        ui.painter().text(
+            Pos2::new(inner.left() + 6.0, inner.bottom() - 8.0),
+            Align2::LEFT_CENTER,
+            if active { "▶ playing" } else { "▷" },
+            FontId::proportional(9.0),
+            Color32::from_rgba_premultiplied(0, 0, 0, 160),
+        );
+        // mini note preview
+        for (x, y, w) in &notes_summary {
+            let nr = Rect::from_min_size(
+                Pos2::new(inner.left() + 4.0 + x * (inner.width() - 8.0), inner.top() + 16.0 + y * (inner.height() - 22.0)),
+                Vec2::new((w * (inner.width() - 8.0)).max(2.0), 2.0),
+            );
+            ui.painter().rect_filled(nr, Rounding::ZERO, Color32::from_rgba_premultiplied(0, 0, 0, 120));
+        }
+
+        if resp.clicked() {
+            self.selected_track = ti;
+            self.cmds.push(Command::Play);
+            self.cmds.push(Command::LaunchClip { track: tid, scene });
+        }
+        if resp.double_clicked() {
+            self.editing = Some((ti, scene));
+        }
+        if resp.secondary_clicked() {
+            self.cmds.push(Command::SetClip { track: tid, scene, clip: None });
+            self.project.tracks[ti].clips[scene] = None;
+        }
+    }
+
+    fn create_clip(&mut self, ti: usize, scene: usize) {
+        let (tid, color) = {
+            let t = &self.project.tracks[ti];
+            (t.id, t.color)
+        };
+        let clip = Clip::new("Clip", color);
+        self.cmds.push(Command::SetClip { track: tid, scene, clip: Some(build_clip(&clip)) });
+        self.project.tracks[ti].clips[scene] = Some(clip);
+        self.editing = Some((ti, scene));
+    }
+
+    fn set_mute(&mut self, ti: usize, value: bool) {
+        let tid = self.project.tracks[ti].id;
+        self.project.tracks[ti].mute = value;
+        self.cmds.push(Command::SetTrackMute { track: tid, value });
+    }
+    fn set_solo(&mut self, ti: usize, value: bool) {
+        let tid = self.project.tracks[ti].id;
+        self.project.tracks[ti].solo = value;
+        self.cmds.push(Command::SetTrackSolo { track: tid, value });
+    }
+}
+
+fn summarize(notes: &[Note], len: f64) -> Vec<(f32, f32, f32)> {
+    if notes.is_empty() {
+        return Vec::new();
+    }
+    let lo = notes.iter().map(|n| n.pitch).min().unwrap() as f32;
+    let hi = notes.iter().map(|n| n.pitch).max().unwrap() as f32 + 1.0;
+    let range = (hi - lo).max(1.0);
+    notes
+        .iter()
+        .map(|n| {
+            (
+                (n.start / len) as f32,
+                1.0 - (n.pitch as f32 - lo) / range,
+                (n.length / len) as f32,
+            )
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Mixer
+// ---------------------------------------------------------------------------
+
+impl DawApp {
+    fn mixer(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::horizontal().show(ui, |ui| {
+            ui.horizontal_top(|ui| {
+                let n = self.project.tracks.len();
+                for ti in 0..n {
+                    self.channel_strip(ui, ti);
+                }
+                self.master_strip(ui);
+            });
+        });
+    }
+
+    fn channel_strip(&mut self, ui: &mut egui::Ui, ti: usize) {
+        let (tid, color, name, mut volume, mut pan, mute, solo) = {
+            let t = &self.project.tracks[ti];
+            (t.id, t.color, t.name.clone(), t.volume, t.pan, t.mute, t.solo)
+        };
+        let selected = ti == self.selected_track;
+
+        ui.vertical(|ui| {
+            let (frame, _) = ui.allocate_exact_size(Vec2::new(80.0, 260.0), Sense::hover());
+            ui.painter().rect(frame, Rounding::same(4.0), theme::PANEL_ALT, Stroke::new(1.0, if selected { theme::ACCENT_DIM } else { theme::BORDER }));
+            ui.painter().rect_filled(Rect::from_min_size(frame.left_top(), Vec2::new(80.0, 3.0)), Rounding::ZERO, theme::track_color(color));
+            ui.painter().text(Pos2::new(frame.center().x, frame.top() + 14.0), Align2::CENTER_CENTER, &name, FontId::proportional(11.0), theme::TEXT);
+
+            // pan slider
+            let pan_rect = Rect::from_min_size(Pos2::new(frame.left() + 8.0, frame.top() + 26.0), Vec2::new(64.0, 14.0));
+            if ui.put(pan_rect, egui::Slider::new(&mut pan, -1.0..=1.0).show_value(false)).changed() {
+                self.project.tracks[ti].pan = pan;
+                self.cmds.push(Command::SetTrackPan { track: tid, value: pan });
+            }
+
+            // fader + meter
+            let fader_rect = Rect::from_min_size(Pos2::new(frame.left() + 18.0, frame.top() + 48.0), Vec2::new(20.0, 160.0));
+            if widgets::fader(ui, fader_rect, &mut volume) {
+                self.project.tracks[ti].volume = volume;
+                self.cmds.push(Command::SetTrackGain { track: tid, value: volume });
+            }
+            let meter_rect = Rect::from_min_size(Pos2::new(frame.left() + 46.0, frame.top() + 48.0), Vec2::new(10.0, 160.0));
+            widgets::meter(ui, meter_rect, self.track_peak(tid));
+
+            // M / S
+            let mb = Rect::from_min_size(Pos2::new(frame.left() + 10.0, frame.bottom() - 24.0), Vec2::new(28.0, 18.0));
+            let sb = Rect::from_min_size(Pos2::new(frame.left() + 42.0, frame.bottom() - 24.0), Vec2::new(28.0, 18.0));
+            if self.toggle_chip(ui, mb, "M", mute, Color32::from_rgb(0xd0, 0xa0, 0x40)) {
+                self.set_mute(ti, !mute);
+            }
+            if self.toggle_chip(ui, sb, "S", solo, theme::ACCENT) {
+                self.set_solo(ti, !solo);
+            }
+        });
+    }
+
+    fn master_strip(&mut self, ui: &mut egui::Ui) {
+        ui.vertical(|ui| {
+            let (frame, _) = ui.allocate_exact_size(Vec2::new(80.0, 260.0), Sense::hover());
+            ui.painter().rect(frame, Rounding::same(4.0), theme::PANEL_ALT, Stroke::new(1.0, theme::ACCENT_DIM));
+            ui.painter().rect_filled(Rect::from_min_size(frame.left_top(), Vec2::new(80.0, 3.0)), Rounding::ZERO, theme::ACCENT);
+            ui.painter().text(Pos2::new(frame.center().x, frame.top() + 14.0), Align2::CENTER_CENTER, "Master", FontId::proportional(11.0), theme::TEXT);
+
+            let fader_rect = Rect::from_min_size(Pos2::new(frame.left() + 18.0, frame.top() + 48.0), Vec2::new(20.0, 160.0));
+            let mut v = self.master_volume;
+            if widgets::fader(ui, fader_rect, &mut v) {
+                self.master_volume = v;
+                // master gain handled by track sum + limiter; expose later if needed
+            }
+            let meter_rect = Rect::from_min_size(Pos2::new(frame.left() + 46.0, frame.top() + 48.0), Vec2::new(10.0, 160.0));
+            widgets::meter(ui, meter_rect, self.master_peak());
+        });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Device panel
+// ---------------------------------------------------------------------------
+
+impl DawApp {
+    fn device_panel(&mut self, ui: &mut egui::Ui) {
+        let track_name = self.project.tracks.get(self.selected_track).map(|t| t.name.clone()).unwrap_or_default();
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("DEVICE CHAIN").size(10.0).color(theme::TEXT_FAINT));
+            ui.label(egui::RichText::new(format!("— {track_name}")).size(10.0).color(theme::TEXT_DIM));
+            if self.playing() {
+                let v = self.audio.as_ref().map(|a| a.handle.shared.active_voices.load(std::sync::atomic::Ordering::Relaxed)).unwrap_or(0);
+                ui.label(egui::RichText::new(format!("voices: {v}")).size(10.0).color(theme::TEXT_FAINT));
+            }
+        });
+        ui.separator();
+
+        let device_count = self.project.tracks.get(self.selected_track).map(|t| t.devices.len()).unwrap_or(0);
+        if device_count == 0 {
+            ui.centered_and_justified(|ui| {
+                ui.label(egui::RichText::new("No devices — add one from the Browser ▸").color(theme::TEXT_FAINT));
+            });
+            return;
+        }
+
+        egui::ScrollArea::horizontal().show(ui, |ui| {
+            ui.horizontal_top(|ui| {
+                for di in 0..device_count {
+                    self.device_card(ui, di);
+                }
+            });
+        });
+    }
+
+    fn device_card(&mut self, ui: &mut egui::Ui, di: usize) {
+        let ti = self.selected_track;
+        let (tid, kind, enabled, params) = {
+            let t = &self.project.tracks[ti];
+            let d = &t.devices[di];
+            (t.id, d.kind, d.enabled, d.params.clone())
+        };
+
+        let labels = kind.params();
+        // card is sized to hold one or two rows of knobs
+        let knob_w = 54.0;
+        let cols = labels.len().min(6).max(1);
+        let rows = labels.len().div_ceil(6);
+        let card_w = (cols as f32 * knob_w + 24.0).max(150.0);
+        let card_h = 34.0 + rows as f32 * 62.0;
+
+        egui::Frame::none()
+            .fill(theme::PANEL_RAISED)
+            .stroke(Stroke::new(1.0, if di == self.selected_device { theme::ACCENT_DIM } else { theme::BORDER }))
+            .rounding(Rounding::same(8.0))
+            .inner_margin(egui::Margin::same(8.0))
+            .show(ui, |ui| {
+                ui.set_width(card_w);
+                ui.set_min_height(card_h);
+
+                // header
+                ui.horizontal(|ui| {
+                    let (led, lresp) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::click());
+                    ui.painter().circle_filled(led.center(), 5.0, if enabled { theme::PLAY } else { Color32::from_gray(60) });
+                    if lresp.clicked() {
+                        self.project.tracks[ti].devices[di].enabled = !enabled;
+                        self.cmds.push(Command::SetDeviceEnabled { track: tid, device: di, value: !enabled });
+                    }
+                    ui.label(egui::RichText::new(kind.label()).strong());
+                    if ui.add(egui::Button::new("✕").small()).clicked() {
+                        self.cmds.push(Command::RemoveDevice { track: tid, device: di });
+                        self.project.tracks[ti].devices.remove(di);
+                        if self.selected_device >= di && self.selected_device > 0 {
+                            self.selected_device -= 1;
+                        }
+                    }
+                });
+                ui.separator();
+
+                if di >= self.project.tracks[ti].devices.len() {
+                    return; // was just removed this frame
+                }
+
+                // parameter knobs / dropdowns, laid out in rows of up to six
+                for chunk_start in (0..labels.len()).step_by(6) {
+                    ui.horizontal(|ui| {
+                        for pi in chunk_start..(chunk_start + 6).min(labels.len()) {
+                            if pi >= params.len() {
+                                break;
+                            }
+                            let label = labels[pi];
+                            if let Some(options) = kind.options(pi) {
+                                let mut idx = params[pi] as usize;
+                                ui.allocate_ui(Vec2::new(knob_w, 56.0), |ui| {
+                                    ui.vertical_centered(|ui| {
+                                        egui::ComboBox::from_id_salt(("opt", ti, di, pi))
+                                            .width(knob_w)
+                                            .selected_text(options.get(idx).copied().unwrap_or(""))
+                                            .show_ui(ui, |ui| {
+                                                for (oi, o) in options.iter().enumerate() {
+                                                    ui.selectable_value(&mut idx, oi, *o);
+                                                }
+                                            });
+                                        ui.label(egui::RichText::new(label).size(9.0).color(theme::TEXT_DIM));
+                                    });
+                                });
+                                if idx as f32 != params[pi] {
+                                    self.project.tracks[ti].devices[di].params[pi] = idx as f32;
+                                    self.cmds.push(Command::SetParam { track: tid, device: di, param: pi, value: idx as f32 });
+                                }
+                            } else {
+                                let mut v = params[pi];
+                                if widgets::knob(ui, &mut v, label, false) {
+                                    self.project.tracks[ti].devices[di].params[pi] = v;
+                                    self.cmds.push(Command::SetParam { track: tid, device: di, param: pi, value: v });
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Piano roll
+// ---------------------------------------------------------------------------
+
+const PR_LOW: u8 = 36;
+const PR_HIGH: u8 = 84;
+const PR_ROW_H: f32 = 12.0;
+const PR_BEAT_W: f32 = 52.0;
+const PR_GRID: f64 = 0.25;
+const PR_KEYS_W: f32 = 44.0;
+
+impl DawApp {
+    fn piano_roll(&mut self, ui: &mut egui::Ui) {
+        let Some((ti, scene)) = self.editing else { return };
+        if ti >= self.project.tracks.len() || self.project.tracks[ti].clips.get(scene).map(|c| c.is_none()).unwrap_or(true) {
+            self.editing = None;
+            return;
+        }
+
+        let (tid, color, clip_name, mut clip_len) = {
+            let clip = self.project.tracks[ti].clips[scene].as_ref().unwrap();
+            (self.project.tracks[ti].id, self.project.tracks[ti].color, clip.name.clone(), clip.length)
+        };
+
+        // toolbar
+        let mut close = false;
+        let mut len_changed = false;
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(clip_name).strong());
+            ui.label(egui::RichText::new(&self.project.tracks[ti].name).color(theme::TEXT_DIM));
+            ui.separator();
+            ui.label("Length");
+            egui::ComboBox::from_id_salt("clip_len")
+                .selected_text(format!("{} beats", clip_len as i64))
+                .show_ui(ui, |ui| {
+                    for l in [1.0, 2.0, 4.0, 8.0, 16.0] {
+                        if ui.selectable_value(&mut clip_len, l, format!("{} beats", l as i64)).changed() {
+                            len_changed = true;
+                        }
+                    }
+                });
+            ui.label(egui::RichText::new("click to add · drag to move · right-click to delete").size(10.0).color(theme::TEXT_FAINT));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Close ✕").clicked() {
+                    close = true;
+                }
+            });
+        });
+        if close {
+            self.editing = None;
+            return;
+        }
+        if len_changed {
+            self.project.tracks[ti].clips[scene].as_mut().unwrap().length = clip_len;
+            self.sync_clip(ti, scene);
+        }
+
+        let pitches: Vec<u8> = (PR_LOW..=PR_HIGH).rev().collect();
+        let grid_h = pitches.len() as f32 * PR_ROW_H;
+        let grid_w = (clip_len as f32) * PR_BEAT_W;
+        let key = self.project.key;
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.horizontal_top(|ui| {
+                // key labels
+                let (keys_rect, _) = ui.allocate_exact_size(Vec2::new(PR_KEYS_W, grid_h), Sense::hover());
+                let kp = ui.painter_at(keys_rect);
+                for (row, &pitch) in pitches.iter().enumerate() {
+                    let y = keys_rect.top() + row as f32 * PR_ROW_H;
+                    let black = NOTE_NAMES[(pitch % 12) as usize].contains('#');
+                    let rr = Rect::from_min_size(Pos2::new(keys_rect.left(), y), Vec2::new(PR_KEYS_W, PR_ROW_H));
+                    kp.rect_filled(rr, Rounding::ZERO, if black { Color32::from_gray(0x1c) } else { Color32::from_gray(0x26) });
+                    if key.scale.contains(pitch, key.root) {
+                        kp.rect_filled(Rect::from_min_size(rr.left_top(), Vec2::new(3.0, PR_ROW_H)), Rounding::ZERO, theme::ACCENT_DIM);
+                    }
+                    if pitch % 12 == 0 {
+                        kp.text(Pos2::new(keys_rect.left() + 4.0, y + PR_ROW_H * 0.5), Align2::LEFT_CENTER, note_name(pitch), FontId::proportional(8.0), theme::TEXT_FAINT);
+                    }
+                }
+
+                // note grid
+                let (grect, gresp) = ui.allocate_exact_size(Vec2::new(grid_w, grid_h), Sense::click_and_drag());
+                self.draw_grid(ui, grect, &pitches, clip_len, key);
+                self.handle_piano_interaction(ui, grect, gresp, ti, scene, tid, color, &pitches, clip_len);
+
+                // playhead
+                if self.active_scene(tid) == scene as i32 && self.playing() {
+                    let ph = (self.position_beats().rem_euclid(clip_len)) as f32 * PR_BEAT_W;
+                    ui.painter().line_segment(
+                        [Pos2::new(grect.left() + ph, grect.top()), Pos2::new(grect.left() + ph, grect.bottom())],
+                        Stroke::new(2.0, theme::PLAY),
+                    );
+                }
+            });
+        });
+    }
+
+    fn draw_grid(&self, ui: &egui::Ui, rect: Rect, pitches: &[u8], clip_len: f64, key: dawcore::model::KeySignature) {
+        let p = ui.painter_at(rect);
+        p.rect_filled(rect, Rounding::ZERO, theme::SLOT_EMPTY);
+        for (row, &pitch) in pitches.iter().enumerate() {
+            let y = rect.top() + row as f32 * PR_ROW_H;
+            let black = NOTE_NAMES[(pitch % 12) as usize].contains('#');
+            if black {
+                p.rect_filled(Rect::from_min_size(Pos2::new(rect.left(), y), Vec2::new(rect.width(), PR_ROW_H)), Rounding::ZERO, Color32::from_rgba_premultiplied(0, 0, 0, 50));
+            }
+            if key.scale.contains(pitch, key.root) {
+                p.rect_filled(Rect::from_min_size(Pos2::new(rect.left(), y), Vec2::new(rect.width(), PR_ROW_H)), Rounding::ZERO, Color32::from_rgba_unmultiplied(0xff, 0x8a, 0x00, 14));
+            }
+            p.line_segment([Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)], Stroke::new(0.5, theme::GRID));
+        }
+        let mut b = 0.0;
+        while b <= clip_len {
+            let x = rect.left() + b as f32 * PR_BEAT_W;
+            let bar = (b % 1.0).abs() < 1e-6;
+            p.line_segment([Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())], Stroke::new(if bar { 1.0 } else { 0.5 }, theme::GRID));
+            b += PR_GRID;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn handle_piano_interaction(
+        &mut self,
+        ui: &mut egui::Ui,
+        rect: Rect,
+        resp: egui::Response,
+        ti: usize,
+        scene: usize,
+        tid: usize,
+        color: [u8; 3],
+        pitches: &[u8],
+        clip_len: f64,
+    ) {
+        // draw existing notes and capture hit-testing
+        let notes_len = self.project.tracks[ti].clips[scene].as_ref().unwrap().notes.len();
+        let painter = ui.painter_at(rect);
+        for ni in 0..notes_len {
+            let n = &self.project.tracks[ti].clips[scene].as_ref().unwrap().notes[ni];
+            let row = (PR_HIGH - n.pitch) as f32;
+            let nr = Rect::from_min_size(
+                Pos2::new(rect.left() + n.start as f32 * PR_BEAT_W, rect.top() + row * PR_ROW_H + 1.0),
+                Vec2::new((n.length as f32 * PR_BEAT_W - 1.0).max(3.0), PR_ROW_H - 2.0),
+            );
+            painter.rect(nr, Rounding::same(2.0), theme::track_color(color), Stroke::new(1.0, Color32::from_gray(20)));
+        }
+
+        let pointer = resp.interact_pointer_pos();
+
+        // begin drag / add
+        if resp.drag_started() || resp.clicked() {
+            if let Some(pos) = pointer {
+                let local_x = pos.x - rect.left();
+                let local_y = pos.y - rect.top();
+                let row = (local_y / PR_ROW_H).floor() as usize;
+                let pitch = *pitches.get(row.min(pitches.len() - 1)).unwrap();
+                let beat = (local_x / PR_BEAT_W) as f64;
+
+                // hit existing note?
+                let mut hit = None;
+                let notes = &self.project.tracks[ti].clips[scene].as_ref().unwrap().notes;
+                for (ni, n) in notes.iter().enumerate() {
+                    if n.pitch == pitch && beat >= n.start && beat <= n.start + n.length {
+                        let near_end = beat > n.start + n.length - 0.15;
+                        hit = Some((ni, near_end));
+                        break;
+                    }
+                }
+                match hit {
+                    Some((ni, near_end)) => {
+                        self.note_drag = Some(NoteDrag { idx: ni, mode: if near_end { DragMode::Resize } else { DragMode::Move } });
+                    }
+                    None if resp.clicked() => {
+                        let snapped = (beat / PR_GRID).round() * PR_GRID;
+                        let start = snapped.clamp(0.0, clip_len - PR_GRID);
+                        let note = Note { pitch, start, length: 1.0, velocity: 100 };
+                        self.project.tracks[ti].clips[scene].as_mut().unwrap().notes.push(note);
+                        self.cmds.push(Command::NoteOn { track: tid, note: pitch, velocity: 0.9 });
+                        self.cmds.push(Command::NoteOff { track: tid, note: pitch });
+                        self.sync_clip(ti, scene);
+                    }
+                    None => {}
+                }
+            }
+        }
+
+        // continue drag
+        if resp.dragged() {
+            if let (Some(drag), Some(pos)) = (self.note_drag.as_ref().map(|d| (d.idx, d.mode)), pointer) {
+                let (idx, mode) = drag;
+                let local_x = (pos.x - rect.left()).max(0.0);
+                let local_y = pos.y - rect.top();
+                let clip = self.project.tracks[ti].clips[scene].as_mut().unwrap();
+                if idx < clip.notes.len() {
+                    match mode {
+                        DragMode::Move => {
+                            let row = (local_y / PR_ROW_H).floor().clamp(0.0, (pitches.len() - 1) as f32) as usize;
+                            let pitch = pitches[row];
+                            let beat = ((local_x / PR_BEAT_W) as f64 / PR_GRID).round() * PR_GRID;
+                            clip.notes[idx].pitch = pitch;
+                            clip.notes[idx].start = beat.clamp(0.0, clip_len - clip.notes[idx].length);
+                        }
+                        DragMode::Resize => {
+                            let end_beat = ((local_x / PR_BEAT_W) as f64 / PR_GRID).round() * PR_GRID;
+                            let len = (end_beat - clip.notes[idx].start).max(PR_GRID);
+                            clip.notes[idx].length = len.min(clip_len - clip.notes[idx].start);
+                        }
+                    }
+                }
+            }
+        }
+
+        if resp.drag_stopped() {
+            if self.note_drag.is_some() {
+                self.note_drag = None;
+                self.sync_clip(ti, scene);
+            }
+        }
+
+        // delete with right-click
+        if resp.secondary_clicked() {
+            if let Some(pos) = pointer {
+                let local_x = pos.x - rect.left();
+                let local_y = pos.y - rect.top();
+                let row = (local_y / PR_ROW_H).floor() as usize;
+                let pitch = *pitches.get(row.min(pitches.len() - 1)).unwrap();
+                let beat = (local_x / PR_BEAT_W) as f64;
+                let clip = self.project.tracks[ti].clips[scene].as_mut().unwrap();
+                if let Some(ni) = clip.notes.iter().position(|n| n.pitch == pitch && beat >= n.start && beat <= n.start + n.length) {
+                    clip.notes.remove(ni);
+                    self.sync_clip(ti, scene);
+                }
+            }
+        }
+    }
+
+    fn sync_clip(&mut self, ti: usize, scene: usize) {
+        let tid = self.project.tracks[ti].id;
+        let clip = self.project.tracks[ti].clips[scene].as_ref().map(build_clip);
+        self.cmds.push(Command::SetClip { track: tid, scene, clip });
+    }
+}

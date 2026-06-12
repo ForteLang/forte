@@ -1,6 +1,4 @@
-node_modules
-dist
-*.local
+/target
+**/*.rs.bk
+*.wav
 .DS_Store
-
-*.tsbuildinfo
