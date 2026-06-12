@@ -79,6 +79,49 @@ fn engine_produces_audio() {
 }
 
 #[test]
+fn arranger_plays_without_launcher() {
+    // No scenes launched: the engine should play the Arranger Timeline clips.
+    let sr = 48_000.0;
+    let (mut engine, mut handle) = Engine::new(sr);
+    let project = Project::demo();
+    full_sync(&mut handle, &project);
+    handle.send(Command::SetLaunchQuant(0.0));
+    handle.send(Command::SetLoop { enabled: true, start: 0.0, end: 32.0 });
+    handle.send(Command::Play);
+
+    let mut bl = vec![0.0f32; 512];
+    let mut br = vec![0.0f32; 512];
+    let mut total = Vec::new();
+    // render ~4 seconds of arrangement
+    for _ in 0..(4 * 48_000 / 512) {
+        engine.process(&mut bl, &mut br, 512);
+        total.extend_from_slice(&bl);
+    }
+    assert!(rms(&total) > 0.001, "arranger produced no sound (rms={})", rms(&total));
+    assert!(total.iter().all(|x| x.is_finite()));
+}
+
+#[test]
+fn loop_wraps_playhead() {
+    let sr = 48_000.0;
+    let (mut engine, mut handle) = Engine::new(sr);
+    let project = Project::demo();
+    full_sync(&mut handle, &project);
+    handle.send(Command::SetLoop { enabled: true, start: 0.0, end: 4.0 });
+    handle.send(Command::Play);
+
+    let mut bl = vec![0.0f32; 512];
+    let mut br = vec![0.0f32; 512];
+    // render well past the 4-beat loop; position must stay within [0,4)
+    let mut max_pos = 0.0f64;
+    for _ in 0..2000 {
+        engine.process(&mut bl, &mut br, 512);
+        max_pos = max_pos.max(handle.shared.position_beats());
+    }
+    assert!(max_pos < 4.0, "playhead escaped the loop region: {max_pos}");
+}
+
+#[test]
 fn silent_when_stopped() {
     let sr = 48_000.0;
     let (mut engine, mut handle) = Engine::new(sr);

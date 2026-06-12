@@ -17,7 +17,7 @@ use crate::dsp::filter::{FilterMode, Svf};
 use crate::dsp::oscillator::Waveform;
 use crate::dsp::synth::PolySynth;
 use crate::dsp::voice::SynthParams;
-use crate::model::{self, Device, DeviceKind, Track, MAX_TRACKS};
+use crate::model::{self, Device, DeviceKind, ModKind, Track, MAX_TRACKS};
 
 const CMD_CAPACITY: usize = 1024;
 const GARBAGE_CAPACITY: usize = 1024;
@@ -115,11 +115,17 @@ pub struct EngineDevice {
     dsp: Dsp,
 }
 
-/// One LFO modulator targeting (device_index, param_index) pairs on its track.
+/// A modulator targeting (device_index, param_index) pairs on its track.
 pub struct EngineMod {
+    kind: ModKind,
     phase: f32,
     rate: f32, // 0..1
     shape: u8,
+    steps: Vec<f32>,
+    value: f32, // macro value / random smoothing factor
+    // runtime state
+    rand_cur: f32,
+    rand_target: f32,
     routes: Vec<(usize, usize, f32)>, // (device idx, param idx, amount)
 }
 
@@ -132,6 +138,13 @@ struct NoteEvent {
     velocity: f32,
 }
 
+pub struct EngineArrClip {
+    start: f64,
+    duration: f64,
+    content_len: f64,
+    notes: Vec<EngineNote>,
+}
+
 pub struct EngineTrack {
     devices: Vec<EngineDevice>,
     mods: Vec<EngineMod>,
@@ -140,7 +153,10 @@ pub struct EngineTrack {
     mute: bool,
     solo: bool,
     active_scene: i32,
+    /// Quantized launch request awaiting the next quant boundary.
+    pending_scene: Option<i32>,
     clips: Vec<Option<Box<EngineClip>>>,
+    arranger: Vec<EngineArrClip>,
     pending_offs: Vec<(u8, f64)>,
     events: Vec<NoteEvent>,
 }
@@ -196,14 +212,42 @@ pub fn build_mods(track: &Track) -> Box<EngineMods> {
     for (di, dev) in track.devices.iter().enumerate() {
         for m in &dev.modulators {
             mods.push(EngineMod {
+                kind: m.kind,
                 phase: 0.0,
                 rate: m.rate,
                 shape: m.shape,
+                steps: m.steps.clone(),
+                value: m.value,
+                rand_cur: 0.0,
+                rand_target: 0.0,
                 routes: m.routes.iter().map(|r| (di, r.param, r.amount)).collect(),
             });
         }
     }
     Box::new(EngineMods(mods))
+}
+
+fn build_arranger(track: &Track) -> Vec<EngineArrClip> {
+    track
+        .arranger
+        .iter()
+        .map(|a| EngineArrClip {
+            start: a.start,
+            duration: a.duration,
+            content_len: a.clip.length.max(0.0625),
+            notes: a
+                .clip
+                .notes
+                .iter()
+                .map(|n| EngineNote {
+                    pitch: n.pitch,
+                    start: n.start,
+                    length: n.length,
+                    velocity: n.velocity as f32 / 127.0,
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
@@ -213,7 +257,7 @@ pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
         .iter()
         .map(|c| c.as_ref().map(build_clip))
         .collect();
-    let mut et = EngineTrack {
+    let et = EngineTrack {
         devices,
         mods: build_mods(track).0,
         gain: track.volume,
@@ -221,14 +265,12 @@ pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
         mute: track.mute,
         solo: track.solo,
         active_scene: -1,
+        pending_scene: None,
         clips,
+        arranger: build_arranger(track),
         pending_offs: Vec::with_capacity(64),
-        events: Vec::with_capacity(256),
+        events: Vec::with_capacity(512),
     };
-    et.pending_offs.reserve(64);
-    et
-        .events
-        .reserve(256);
     Box::new(et)
 }
 
@@ -246,6 +288,11 @@ pub struct Engine {
     tempo: f64,
     playing: bool,
     position_beats: f64,
+
+    loop_enabled: bool,
+    loop_start: f64,
+    loop_end: f64,
+    launch_quant: f64,
 
     scratch_l: Vec<f32>,
     scratch_r: Vec<f32>,
@@ -273,6 +320,10 @@ impl Engine {
             tempo: 120.0,
             playing: false,
             position_beats: 0.0,
+            loop_enabled: false,
+            loop_start: 0.0,
+            loop_end: 32.0,
+            launch_quant: 4.0,
             scratch_l: vec![0.0; MAX_BLOCK],
             scratch_r: vec![0.0; MAX_BLOCK],
         };
@@ -302,9 +353,10 @@ impl Engine {
             }
             Command::Stop => {
                 self.playing = false;
-                self.position_beats = 0.0;
+                self.position_beats = if self.loop_enabled { self.loop_start } else { 0.0 };
                 for t in self.tracks.iter_mut().flatten() {
                     t.pending_offs.clear();
+                    t.pending_scene = None;
                     for d in &mut t.devices {
                         if let Dsp::Synth(s) = &mut d.dsp {
                             s.all_notes_off();
@@ -313,21 +365,40 @@ impl Engine {
                 }
             }
             Command::SetTempo(bpm) => self.tempo = bpm.clamp(20.0, 300.0),
+            Command::SetLoop { enabled, start, end } => {
+                self.loop_enabled = enabled;
+                self.loop_start = start.max(0.0);
+                self.loop_end = end.max(start + 0.25);
+            }
+            Command::SetLaunchQuant(q) => self.launch_quant = q.max(0.0),
             Command::LaunchClip { track, scene } => {
+                let immediate = self.launch_quant <= 0.0 || !self.playing;
                 if let Some(t) = self.track_mut(track) {
-                    t.active_scene = scene as i32;
+                    if immediate {
+                        t.active_scene = scene as i32;
+                        t.pending_scene = None;
+                    } else {
+                        t.pending_scene = Some(scene as i32);
+                    }
                 }
             }
             Command::LaunchScene(scene) => {
+                let immediate = self.launch_quant <= 0.0 || !self.playing;
                 for t in self.tracks.iter_mut().flatten() {
                     if scene < t.clips.len() && t.clips[scene].is_some() {
-                        t.active_scene = scene as i32;
+                        if immediate {
+                            t.active_scene = scene as i32;
+                            t.pending_scene = None;
+                        } else {
+                            t.pending_scene = Some(scene as i32);
+                        }
                     }
                 }
             }
             Command::StopTrack { track } => {
                 if let Some(t) = self.track_mut(track) {
                     t.active_scene = -1;
+                    t.pending_scene = None;
                 }
             }
             Command::NoteOn { track, note, velocity } => {
@@ -470,6 +541,27 @@ impl Engine {
         };
         let block_seconds = frames as f32 / self.sample_rate;
 
+        // Launch quantization: commit pending launcher clips at the next quant
+        // boundary that falls inside this block (Bitwig default = 1 bar).
+        if self.playing && self.launch_quant > 0.0 {
+            let q = self.launch_quant;
+            let boundary = ((block_start / q) - 1e-9).ceil() * q;
+            if boundary < block_end {
+                for t in self.tracks.iter_mut().flatten() {
+                    if let Some(ps) = t.pending_scene.take() {
+                        t.active_scene = ps;
+                    }
+                }
+            }
+        }
+
+        // Don't schedule notes past the loop end; the playhead wraps there.
+        let sched_end = if self.loop_enabled && self.playing {
+            block_end.min(self.loop_end)
+        } else {
+            block_end
+        };
+
         let any_solo = self
             .tracks
             .iter()
@@ -485,7 +577,7 @@ impl Engine {
             track.update_modulators(block_seconds);
 
             // schedule note events for this block
-            track.schedule(self.playing, block_start, block_end, spb, frames);
+            track.schedule(self.playing, block_start, sched_end, spb, frames);
 
             // render this track into scratch
             track.render(self.sample_rate, &mut self.scratch_l, &mut self.scratch_r, frames);
@@ -520,7 +612,20 @@ impl Engine {
         }
 
         if self.playing {
-            self.position_beats = block_end;
+            if self.loop_enabled && block_end >= self.loop_end {
+                // wrap the global playhead; release voices so nothing hangs
+                for t in self.tracks.iter_mut().flatten() {
+                    t.pending_offs.clear();
+                    for d in &mut t.devices {
+                        if let Dsp::Synth(s) = &mut d.dsp {
+                            s.all_notes_off();
+                        }
+                    }
+                }
+                self.position_beats = self.loop_start + (block_end - self.loop_end);
+            } else {
+                self.position_beats = block_end;
+            }
         }
 
         // publish readback
@@ -566,9 +671,9 @@ impl EngineTrack {
         for d in &mut self.devices {
             d.eff_params.copy_from_slice(&d.base_params);
         }
-        // apply each LFO to its routes, then advance phase
+        // evaluate each modulator and apply to its routes, then advance state
         for m in &mut self.mods {
-            let value = lfo(m.shape, m.phase);
+            let value = m.evaluate();
             for &(di, pi, amount) in &m.routes {
                 if let Some(d) = self.devices.get_mut(di) {
                     if let Some(p) = d.eff_params.get_mut(pi) {
@@ -576,12 +681,9 @@ impl EngineTrack {
                     }
                 }
             }
-            let hz = 0.05 + m.rate * 8.0;
-            m.phase = (m.phase + hz * block_seconds).fract();
+            m.advance(block_seconds);
         }
         // push effective params into the DSP objects
-        let sr = 0.0; // unused here; configure reads internal sr where needed
-        let _ = sr;
         for d in &mut self.devices {
             d.configure();
         }
@@ -591,6 +693,8 @@ impl EngineTrack {
         self.events.clear();
 
         if playing && self.active_scene >= 0 {
+            // A launcher clip is active: it overrides the arrangement on this
+            // track and loops phase-locked to the global transport.
             let scene = self.active_scene as usize;
             if let Some(Some(clip)) = self.clips.get(scene) {
                 let loop_len = clip.length.max(0.0625);
@@ -604,6 +708,37 @@ impl EngineTrack {
                         if onset >= bs {
                             push_event(&mut self.events, onset, bs, spb, frames, true, note.pitch, note.velocity);
                             let off = onset + note.length;
+                            if off < be {
+                                push_event(&mut self.events, off, bs, spb, frames, false, note.pitch, 0.0);
+                            } else {
+                                self.pending_offs.push((note.pitch, off));
+                            }
+                        }
+                        k += 1;
+                    }
+                }
+            }
+        } else if playing {
+            // Otherwise play this track's Arranger Timeline clips.
+            for arr in &self.arranger {
+                let region_start = arr.start;
+                let region_end = arr.start + arr.duration;
+                let w0 = bs.max(region_start);
+                let w1 = be.min(region_end);
+                if w0 >= w1 {
+                    continue;
+                }
+                let content = arr.content_len;
+                for note in &arr.notes {
+                    let mut k = (((w0 - region_start - note.start) / content).ceil() as i64).max(0);
+                    loop {
+                        let onset = region_start + note.start + k as f64 * content;
+                        if onset >= w1 {
+                            break;
+                        }
+                        if onset >= w0 {
+                            push_event(&mut self.events, onset, bs, spb, frames, true, note.pitch, note.velocity);
+                            let off = (onset + note.length).min(region_end);
                             if off < be {
                                 push_event(&mut self.events, off, bs, spb, frames, false, note.pitch, 0.0);
                             } else {
@@ -763,6 +898,61 @@ fn lfo(shape: u8, phase: f32) -> f32 {
         2 => phase * 2.0 - 1.0,                    // saw
         3 => if phase < 0.5 { 1.0 } else { -1.0 }, // square
         _ => (phase * std::f32::consts::TAU).sin(),
+    }
+}
+
+// Cheap xorshift so the Random modulator needs no allocation or external RNG.
+fn xorshift(state: &mut u32) -> f32 {
+    let mut x = if *state == 0 { 0x9E37_79B9 } else { *state };
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    (x as f32 / u32::MAX as f32) * 2.0 - 1.0 // -1..1
+}
+
+impl EngineMod {
+    /// Current bipolar output (-1..1), except Macro which is unipolar (0..1).
+    #[inline]
+    fn evaluate(&self) -> f32 {
+        match self.kind {
+            ModKind::Lfo => lfo(self.shape, self.phase),
+            ModKind::Steps => {
+                if self.steps.is_empty() {
+                    0.0
+                } else {
+                    let n = self.steps.len();
+                    let idx = ((self.phase * n as f32) as usize).min(n - 1);
+                    self.steps[idx] * 2.0 - 1.0
+                }
+            }
+            ModKind::Random => self.rand_cur,
+            ModKind::Macro => self.value, // unipolar control value
+        }
+    }
+
+    #[inline]
+    fn advance(&mut self, dt: f32) {
+        match self.kind {
+            ModKind::Lfo | ModKind::Steps => {
+                let hz = 0.05 + self.rate * 8.0;
+                self.phase = (self.phase + hz * dt).fract();
+            }
+            ModKind::Random => {
+                let hz = 0.05 + self.rate * 8.0;
+                let prev = self.phase;
+                self.phase = (self.phase + hz * dt).fract();
+                if self.phase < prev {
+                    // new cycle: pick a fresh target
+                    let mut seed = (self.rand_target.to_bits() ^ 0x1234_5678).wrapping_add(1);
+                    self.rand_target = xorshift(&mut seed);
+                }
+                // smooth toward target (value = smoothing amount)
+                let smooth = 0.001 + (1.0 - self.value) * 0.5;
+                self.rand_cur += (self.rand_target - self.rand_cur) * smooth.min(1.0);
+            }
+            ModKind::Macro => {}
+        }
     }
 }
 

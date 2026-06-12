@@ -5,10 +5,10 @@ use eframe::egui;
 use egui::{Align2, Color32, FontId, Pos2, Rect, Rounding, Sense, Stroke, Vec2};
 
 use dawcore::command::Command;
-use dawcore::engine::{build_clip, build_device, build_track};
+use dawcore::engine::{build_clip, build_device, build_mods, build_track};
 use dawcore::model::{
-    note_name, Clip, Device, DeviceKind, Note, Project, Scale, Track, TrackKind, NOTE_NAMES,
-    TRACK_COLORS,
+    note_name, Clip, Device, DeviceKind, ModKind, ModRoute, Modulator, Note, Project, Scale, Track,
+    TrackKind, NOTE_NAMES, TRACK_COLORS,
 };
 
 use crate::audio::{self, Audio};
@@ -18,7 +18,21 @@ use crate::widgets;
 #[derive(PartialEq, Eq, Clone, Copy)]
 enum View {
     Arrange,
+    Launcher,
     Mix,
+}
+
+#[derive(Clone, Copy)]
+enum ArrDragMode {
+    Move,
+    Resize,
+}
+
+struct ArrDrag {
+    track: usize,
+    index: usize,
+    mode: ArrDragMode,
+    grab: f64, // beat offset within clip where grabbed
 }
 
 #[derive(Clone, Copy)]
@@ -44,6 +58,12 @@ pub struct DawApp {
     editing: Option<(usize, usize)>, // (track display index, scene)
     note_drag: Option<NoteDrag>,
     master_volume: f32,
+
+    /// Active modulation-routing target: (track idx, device idx, modulator idx).
+    assign_mod: Option<(usize, usize, usize)>,
+    arr_drag: Option<ArrDrag>,
+    loop_anchor: Option<f64>,
+    beats_per_px: f32, // arranger zoom (beats per pixel)
 
     /// Commands accumulated during a frame, flushed to the engine at the end.
     cmds: Vec<Command>,
@@ -102,6 +122,10 @@ impl DawApp {
             editing,
             note_drag: None,
             master_volume: 0.9,
+            assign_mod: None,
+            arr_drag: None,
+            loop_anchor: None,
+            beats_per_px: 1.0 / 24.0, // 24 px per beat
             cmds: Vec::new(),
         };
         app.initial_sync();
@@ -111,10 +135,32 @@ impl DawApp {
     fn initial_sync(&mut self) {
         let sr = self.sample_rate;
         self.cmds.push(Command::SetTempo(self.project.tempo));
+        self.cmds.push(Command::SetLaunchQuant(self.project.launch_quant));
+        self.cmds.push(Command::SetLoop {
+            enabled: self.project.loop_enabled,
+            start: self.project.loop_start,
+            end: self.project.loop_end,
+        });
         for t in &self.project.tracks {
             self.cmds.push(Command::AddTrack { slot: t.id, track: build_track(t, sr) });
         }
         self.flush();
+    }
+
+    /// Rebuild a whole track in the engine after an arrangement/device edit.
+    fn sync_track(&mut self, ti: usize) {
+        let sr = self.sample_rate;
+        if let Some(t) = self.project.tracks.get(ti) {
+            self.cmds.push(Command::AddTrack { slot: t.id, track: build_track(t, sr) });
+        }
+    }
+
+    fn push_loop(&mut self) {
+        self.cmds.push(Command::SetLoop {
+            enabled: self.project.loop_enabled,
+            start: self.project.loop_start,
+            end: self.project.loop_end,
+        });
     }
 
     fn flush(&mut self) {
@@ -194,7 +240,8 @@ impl eframe::App for DawApp {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| match self.view {
-            View::Arrange => self.clip_launcher(ui),
+            View::Arrange => self.arranger(ui),
+            View::Launcher => self.clip_launcher(ui),
             View::Mix => self.mixer(ui),
         });
 
@@ -259,6 +306,11 @@ impl DawApp {
             if ui.add(transport_btn("■", theme::TEXT, false)).clicked() {
                 self.cmds.push(Command::Stop);
             }
+            // arranger loop toggle
+            if ui.add(transport_btn("⟲", theme::ACCENT, self.project.loop_enabled)).clicked() {
+                self.project.loop_enabled = !self.project.loop_enabled;
+                self.push_loop();
+            }
             ui.separator();
 
             // position
@@ -314,17 +366,46 @@ impl DawApp {
                     }
                 });
             self.project.key.scale = scale;
+            ui.separator();
+
+            // launch quantization (Bitwig default: 1 bar)
+            ui.label(egui::RichText::new("Q").size(9.0).color(theme::TEXT_FAINT));
+            let quant_label = |q: f64| match q {
+                x if x <= 0.0 => "Off",
+                x if (x - 1.0).abs() < 0.01 => "1/4",
+                x if (x - 2.0).abs() < 0.01 => "1/2",
+                x if (x - 4.0).abs() < 0.01 => "1 Bar",
+                x if (x - 8.0).abs() < 0.01 => "2 Bars",
+                _ => "1 Bar",
+            };
+            let mut q = self.project.launch_quant;
+            egui::ComboBox::from_id_salt("launch_quant")
+                .width(64.0)
+                .selected_text(quant_label(q))
+                .show_ui(ui, |ui| {
+                    for opt in [0.0, 1.0, 2.0, 4.0, 8.0] {
+                        ui.selectable_value(&mut q, opt, quant_label(opt));
+                    }
+                });
+            if q != self.project.launch_quant {
+                self.project.launch_quant = q;
+                self.cmds.push(Command::SetLaunchQuant(q));
+            }
 
             // view toggle on the far right
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.selectable_label(self.view == View::Mix, "Mix").clicked() {
                     self.view = View::Mix;
                 }
+                if ui.selectable_label(self.view == View::Launcher, "Launcher").clicked() {
+                    self.view = View::Launcher;
+                }
                 if ui.selectable_label(self.view == View::Arrange, "Arrange").clicked() {
                     self.view = View::Arrange;
                 }
-                if let Some(err) = &self.audio_error {
-                    ui.label(egui::RichText::new(format!("⚠ audio: {err}")).color(theme::RECORD).size(10.0));
+                if self.audio_error.is_some() {
+                    ui.label(egui::RichText::new("⚠ no audio out").color(theme::RECORD).size(10.0))
+                        .on_hover_text(self.audio_error.clone().unwrap_or_default());
                 }
             });
         });
@@ -487,6 +568,232 @@ fn browser_item(label: &str, dot: Color32) -> impl egui::Widget + '_ {
             theme::TEXT,
         );
         resp
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Arranger timeline
+// ---------------------------------------------------------------------------
+
+const ARR_HEADER_W: f32 = 140.0;
+const ARR_RULER_H: f32 = 26.0;
+const ARR_LANE_H: f32 = 58.0;
+
+impl DawApp {
+    fn arranger(&mut self, ui: &mut egui::Ui) {
+        let ppb = 1.0 / self.beats_per_px; // pixels per beat
+        let (num, _) = self.project.time_sig;
+        let bar_beats = num as f64;
+
+        // total timeline length
+        let mut max_beat = self.project.loop_end.max(64.0);
+        for t in &self.project.tracks {
+            for a in &t.arranger {
+                max_beat = max_beat.max(a.start + a.duration);
+            }
+        }
+        max_beat = (max_beat / bar_beats).ceil() * bar_beats + bar_beats * 4.0;
+        let timeline_w = max_beat as f32 * ppb;
+        let n_tracks = self.project.tracks.len();
+        let lanes_h = ARR_RULER_H + n_tracks as f32 * ARR_LANE_H;
+
+        ui.horizontal_top(|ui| {
+            // ---- track header column ----
+            ui.vertical(|ui| {
+                ui.allocate_exact_size(Vec2::new(ARR_HEADER_W, ARR_RULER_H), Sense::hover());
+                for ti in 0..n_tracks {
+                    self.arr_track_header(ui, ti);
+                }
+            });
+
+            // ---- timeline ----
+            egui::ScrollArea::horizontal().show(ui, |ui| {
+                let (rect, resp) =
+                    ui.allocate_exact_size(Vec2::new(timeline_w, lanes_h), Sense::click_and_drag());
+                let p = ui.painter_at(rect);
+                let left = rect.left();
+                let ruler_bottom = rect.top() + ARR_RULER_H;
+
+                // ruler background
+                p.rect_filled(Rect::from_min_max(rect.left_top(), Pos2::new(rect.right(), ruler_bottom)), Rounding::ZERO, theme::HEADER);
+
+                // bar lines + numbers
+                let mut b = 0.0;
+                let mut bar = 1;
+                while b <= max_beat {
+                    let x = left + b as f32 * ppb;
+                    p.line_segment([Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())], Stroke::new(1.0, theme::GRID));
+                    p.text(Pos2::new(x + 3.0, rect.top() + 8.0), Align2::LEFT_CENTER, format!("{bar}"), FontId::proportional(9.0), theme::TEXT_FAINT);
+                    b += bar_beats;
+                    bar += 1;
+                }
+
+                // loop region
+                if self.project.loop_enabled {
+                    let lr = Rect::from_min_max(
+                        Pos2::new(left + self.project.loop_start as f32 * ppb, rect.top()),
+                        Pos2::new(left + self.project.loop_end as f32 * ppb, ruler_bottom),
+                    );
+                    p.rect_filled(lr, Rounding::ZERO, Color32::from_rgba_unmultiplied(0xff, 0x8a, 0x00, 40));
+                    p.rect_stroke(lr, Rounding::ZERO, Stroke::new(1.0, theme::ACCENT));
+                }
+
+                // cue markers
+                for cue in &self.project.cue_markers {
+                    let x = left + cue.position as f32 * ppb;
+                    p.text(Pos2::new(x + 2.0, ruler_bottom - 6.0), Align2::LEFT_BOTTOM, &cue.name, FontId::proportional(9.0), theme::TEXT_DIM);
+                    p.line_segment([Pos2::new(x, rect.top()), Pos2::new(x, ruler_bottom)], Stroke::new(1.0, theme::TEXT_FAINT));
+                }
+
+                // lanes + clips
+                for ti in 0..n_tracks {
+                    let lane_top = ruler_bottom + ti as f32 * ARR_LANE_H;
+                    let lane = Rect::from_min_size(Pos2::new(left, lane_top), Vec2::new(timeline_w, ARR_LANE_H));
+                    if ti % 2 == 1 {
+                        p.rect_filled(lane, Rounding::ZERO, Color32::from_rgba_unmultiplied(0, 0, 0, 30));
+                    }
+                    p.line_segment([Pos2::new(left, lane.bottom()), Pos2::new(rect.right(), lane.bottom())], Stroke::new(1.0, theme::BORDER));
+
+                    let color = theme::track_color(self.project.tracks[ti].color);
+                    for a in &self.project.tracks[ti].arranger {
+                        let cx = left + a.start as f32 * ppb;
+                        let cw = (a.duration as f32 * ppb).max(4.0);
+                        let cr = Rect::from_min_size(Pos2::new(cx, lane_top + 3.0), Vec2::new(cw, ARR_LANE_H - 6.0));
+                        p.rect_filled(cr, Rounding::same(3.0), color);
+                        p.rect_stroke(cr, Rounding::same(3.0), Stroke::new(1.0, Color32::from_black_alpha(120)));
+                        p.text(Pos2::new(cr.left() + 5.0, cr.top() + 9.0), Align2::LEFT_CENTER, &a.clip.name, FontId::proportional(10.0), Color32::from_black_alpha(200));
+                        // mini notes
+                        if !a.clip.notes.is_empty() && a.clip.length > 0.0 {
+                            let lo = a.clip.notes.iter().map(|n| n.pitch).min().unwrap() as f32;
+                            let hi = a.clip.notes.iter().map(|n| n.pitch).max().unwrap() as f32 + 1.0;
+                            let range = (hi - lo).max(1.0);
+                            let reps = (a.duration / a.clip.length).ceil() as i32;
+                            for r in 0..reps {
+                                for n in &a.clip.notes {
+                                    let nb = r as f64 * a.clip.length + n.start;
+                                    if nb >= a.duration { break; }
+                                    let nx = cr.left() + (nb / a.duration) as f32 * cr.width();
+                                    let nw = ((n.length / a.duration) as f32 * cr.width()).max(1.5);
+                                    let ny = cr.bottom() - 4.0 - (n.pitch as f32 - lo) / range * (cr.height() - 16.0);
+                                    p.rect_filled(Rect::from_min_size(Pos2::new(nx, ny), Vec2::new(nw, 2.0)), Rounding::ZERO, Color32::from_black_alpha(110));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // playhead
+                let pos = self.position_beats();
+                let phx = left + pos as f32 * ppb;
+                p.line_segment([Pos2::new(phx, rect.top()), Pos2::new(phx, rect.bottom())], Stroke::new(2.0, theme::ACCENT));
+
+                self.arr_interact(rect, &resp, ppb, max_beat, n_tracks);
+            });
+        });
+    }
+
+    fn arr_track_header(&mut self, ui: &mut egui::Ui, ti: usize) {
+        let (id, color, name, mute, solo) = {
+            let t = &self.project.tracks[ti];
+            (t.id, t.color, t.name.clone(), t.mute, t.solo)
+        };
+        let _ = id;
+        let selected = ti == self.selected_track;
+        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ARR_HEADER_W, ARR_LANE_H), Sense::click());
+        ui.painter().rect_filled(rect, Rounding::ZERO, if selected { theme::PANEL_ALT } else { theme::PANEL });
+        ui.painter().rect_filled(Rect::from_min_size(rect.left_top(), Vec2::new(3.0, ARR_LANE_H)), Rounding::ZERO, theme::track_color(color));
+        ui.painter().line_segment([rect.left_bottom(), rect.right_bottom()], Stroke::new(1.0, theme::BORDER));
+        ui.painter().text(Pos2::new(rect.left() + 10.0, rect.top() + 14.0), Align2::LEFT_CENTER, &name, FontId::proportional(12.0), theme::TEXT);
+        if resp.clicked() {
+            self.selected_track = ti;
+            self.selected_device = 0;
+        }
+        let mb = Rect::from_min_size(Pos2::new(rect.left() + 10.0, rect.bottom() - 22.0), Vec2::new(18.0, 14.0));
+        let sb = Rect::from_min_size(Pos2::new(rect.left() + 32.0, rect.bottom() - 22.0), Vec2::new(18.0, 14.0));
+        if self.toggle_chip(ui, mb, "M", mute, Color32::from_rgb(0xd0, 0xa0, 0x40)) {
+            self.set_mute(ti, !mute);
+        }
+        if self.toggle_chip(ui, sb, "S", solo, theme::ACCENT) {
+            self.set_solo(ti, !solo);
+        }
+    }
+
+    fn arr_interact(&mut self, rect: Rect, resp: &egui::Response, ppb: f32, max_beat: f64, n_tracks: usize) {
+        let snap = |beat: f64| (beat).max(0.0).round();
+        let pointer = resp.interact_pointer_pos();
+        let ruler_bottom = rect.top() + ARR_RULER_H;
+
+        if resp.drag_started() || resp.clicked() || resp.secondary_clicked() {
+            if let Some(pos) = pointer {
+                let beat = ((pos.x - rect.left()) / ppb) as f64;
+                if pos.y < ruler_bottom {
+                    // ruler: start setting the loop region by dragging
+                    if resp.drag_started() {
+                        self.loop_anchor = Some(snap(beat));
+                    }
+                } else {
+                    // lanes: hit-test a clip
+                    let lane = ((pos.y - ruler_bottom) / ARR_LANE_H) as usize;
+                    if lane < n_tracks {
+                        let mut hit = None;
+                        for (i, a) in self.project.tracks[lane].arranger.iter().enumerate() {
+                            if beat >= a.start && beat <= a.start + a.duration {
+                                let near_end = beat > a.start + a.duration - (8.0 / ppb) as f64;
+                                hit = Some((i, near_end, beat - a.start));
+                                break;
+                            }
+                        }
+                        if let Some((idx, near_end, grab)) = hit {
+                            if resp.secondary_clicked() {
+                                self.project.tracks[lane].arranger.remove(idx);
+                                self.sync_track(lane);
+                            } else if resp.drag_started() {
+                                self.selected_track = lane;
+                                self.arr_drag = Some(ArrDrag {
+                                    track: lane,
+                                    index: idx,
+                                    mode: if near_end { ArrDragMode::Resize } else { ArrDragMode::Move },
+                                    grab,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if resp.dragged() {
+            if let Some(pos) = pointer {
+                let beat = ((pos.x - rect.left()) / ppb) as f64;
+                if let Some(anchor) = self.loop_anchor {
+                    let b = snap(beat);
+                    self.project.loop_start = anchor.min(b);
+                    self.project.loop_end = (anchor.max(b)).max(anchor.min(b) + 1.0);
+                } else if let Some(d) = self.arr_drag.as_ref().map(|d| (d.track, d.index, d.mode, d.grab)) {
+                    let (tk, idx, mode, grab) = d;
+                    if idx < self.project.tracks[tk].arranger.len() {
+                        match mode {
+                            ArrDragMode::Move => {
+                                self.project.tracks[tk].arranger[idx].start = snap(beat - grab).clamp(0.0, max_beat);
+                            }
+                            ArrDragMode::Resize => {
+                                let start = self.project.tracks[tk].arranger[idx].start;
+                                self.project.tracks[tk].arranger[idx].duration = snap(beat - start).max(1.0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if resp.drag_stopped() {
+            if self.loop_anchor.take().is_some() {
+                self.push_loop();
+            }
+            if let Some(d) = self.arr_drag.take() {
+                self.sync_track(d.track);
+            }
+        }
     }
 }
 
@@ -820,10 +1127,33 @@ impl DawApp {
 
     fn device_card(&mut self, ui: &mut egui::Ui, di: usize) {
         let ti = self.selected_track;
-        let (tid, kind, enabled, params) = {
+        let (tid, kind, enabled, params, modulators) = {
             let t = &self.project.tracks[ti];
             let d = &t.devices[di];
-            (t.id, d.kind, d.enabled, d.params.clone())
+            (t.id, d.kind, d.enabled, d.params.clone(), d.modulators.clone())
+        };
+
+        // ring amount/colour for a given parameter (from this device's modulators)
+        let ring_for = |pi: usize| -> Option<(f32, Color32)> {
+            let mut total = 0.0;
+            let mut color = None;
+            for m in &modulators {
+                for r in &m.routes {
+                    if r.param == pi {
+                        total += r.amount;
+                        if color.is_none() {
+                            let c = m.kind.color();
+                            color = Some(Color32::from_rgb(c[0], c[1], c[2]));
+                        }
+                    }
+                }
+            }
+            color.map(|c| (total, c))
+        };
+        // which modulator (if any) is in routing/assign mode on this device
+        let assigning: Option<usize> = match self.assign_mod {
+            Some((at, ad, am)) if at == ti && ad == di => Some(am),
+            _ => None,
         };
 
         let labels = kind.params();
@@ -831,8 +1161,8 @@ impl DawApp {
         let knob_w = 54.0;
         let cols = labels.len().min(6).max(1);
         let rows = labels.len().div_ceil(6);
-        let card_w = (cols as f32 * knob_w + 24.0).max(150.0);
-        let card_h = 34.0 + rows as f32 * 62.0;
+        let card_w = (cols as f32 * knob_w + 24.0).max(160.0);
+        let card_h = 34.0 + rows as f32 * 62.0 + 56.0; // + modulator row
 
         egui::Frame::none()
             .fill(theme::PANEL_RAISED)
@@ -893,9 +1223,21 @@ impl DawApp {
                                     self.project.tracks[ti].devices[di].params[pi] = idx as f32;
                                     self.cmds.push(Command::SetParam { track: tid, device: di, param: pi, value: idx as f32 });
                                 }
+                            } else if let Some(mi) = assigning {
+                                // routing mode: drag adjusts this modulator's amount on the param
+                                let mut amount = modulators
+                                    .get(mi)
+                                    .and_then(|m| m.routes.iter().find(|r| r.param == pi))
+                                    .map(|r| r.amount)
+                                    .unwrap_or(0.0);
+                                let c = modulators[mi].kind.color();
+                                let color = Color32::from_rgb(c[0], c[1], c[2]);
+                                if widgets::knob_assign(ui, params[pi], &mut amount, label, color) {
+                                    self.set_route(ti, di, mi, pi, amount);
+                                }
                             } else {
                                 let mut v = params[pi];
-                                if widgets::knob(ui, &mut v, label, false) {
+                                if widgets::knob(ui, &mut v, label, ring_for(pi)) {
                                     self.project.tracks[ti].devices[di].params[pi] = v;
                                     self.cmds.push(Command::SetParam { track: tid, device: di, param: pi, value: v });
                                 }
@@ -903,7 +1245,80 @@ impl DawApp {
                         }
                     });
                 }
+
+                // ---- modulator slots (Bitwig's unified modulation system) ----
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("MOD").size(9.0).color(theme::TEXT_FAINT));
+                    for (mi, m) in modulators.iter().enumerate() {
+                        let c = m.kind.color();
+                        let col = Color32::from_rgb(c[0], c[1], c[2]);
+                        let active = assigning == Some(mi);
+                        let label = if active { format!("◉ {}", m.kind.label()) } else { m.kind.label().to_string() };
+                        let chip = egui::Button::new(egui::RichText::new(label).size(10.0).color(if active { Color32::BLACK } else { col }))
+                            .fill(if active { col } else { theme::PANEL_ALT })
+                            .stroke(Stroke::new(1.0, col));
+                        if ui.add(chip).clicked() {
+                            self.assign_mod = if active { None } else { Some((ti, di, mi)) };
+                        }
+                    }
+                    // add-modulator menu
+                    ui.menu_button("+", |ui| {
+                        for k in ModKind::ALL {
+                            if ui.button(k.label()).clicked() {
+                                self.project.tracks[ti].devices[di].modulators.push(Modulator::new(k));
+                                self.sync_mods(ti);
+                                ui.close_menu();
+                            }
+                        }
+                    });
+                });
+
+                // selected-modulator controls (rate / value)
+                if let Some(mi) = assigning {
+                    if let Some(m) = modulators.get(mi) {
+                        ui.horizontal(|ui| {
+                            match m.kind {
+                                ModKind::Lfo | ModKind::Random | ModKind::Steps => {
+                                    let mut rate = m.rate;
+                                    ui.label(egui::RichText::new("Rate").size(9.0).color(theme::TEXT_DIM));
+                                    if ui.add(egui::Slider::new(&mut rate, 0.0..=1.0).show_value(false)).changed() {
+                                        self.project.tracks[ti].devices[di].modulators[mi].rate = rate;
+                                        self.sync_mods(ti);
+                                    }
+                                }
+                                ModKind::Macro => {
+                                    let mut val = m.value;
+                                    ui.label(egui::RichText::new("Macro").size(9.0).color(theme::TEXT_DIM));
+                                    if ui.add(egui::Slider::new(&mut val, 0.0..=1.0).show_value(false)).changed() {
+                                        self.project.tracks[ti].devices[di].modulators[mi].value = val;
+                                        self.sync_mods(ti);
+                                    }
+                                }
+                            }
+                            ui.label(egui::RichText::new("drag a knob above to route").size(9.0).color(theme::TEXT_FAINT));
+                        });
+                    }
+                }
             });
+    }
+
+    fn set_route(&mut self, ti: usize, di: usize, mi: usize, param: usize, amount: f32) {
+        let routes = &mut self.project.tracks[ti].devices[di].modulators[mi].routes;
+        if amount.abs() < 0.005 {
+            routes.retain(|r| r.param != param);
+        } else if let Some(r) = routes.iter_mut().find(|r| r.param == param) {
+            r.amount = amount;
+        } else {
+            routes.push(ModRoute { param, amount });
+        }
+        self.sync_mods(ti);
+    }
+
+    fn sync_mods(&mut self, ti: usize) {
+        if let Some(t) = self.project.tracks.get(ti) {
+            self.cmds.push(Command::SetModRoutes { track: t.id, modulators: build_mods(t) });
+        }
     }
 }
 

@@ -13,6 +13,8 @@ pub enum Command {
     Play,
     Stop,
     SetTempo(f64),
+    SetLoop { enabled: bool, start: f64, end: f64 },
+    SetLaunchQuant(f64),
 
     // ---- launcher / live ----
     LaunchClip { track: usize, scene: usize },

@@ -93,12 +93,59 @@ impl Device {
     }
 }
 
-/// A unipolar/bipolar LFO that modulates one or more device parameters.
+/// A unipolar/bipolar modulator. Bitwig's "unified modulation system": each
+/// modulator outputs a signal routed to one or more parameters with a bipolar
+/// amount. We model the most common types.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModKind {
+    Lfo,
+    Steps,
+    Random,
+    Macro,
+}
+
+impl ModKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            ModKind::Lfo => "LFO",
+            ModKind::Steps => "Steps",
+            ModKind::Random => "Random",
+            ModKind::Macro => "Macro",
+        }
+    }
+    pub const ALL: [ModKind; 4] = [ModKind::Lfo, ModKind::Steps, ModKind::Random, ModKind::Macro];
+    /// Distinct colour per modulator (Bitwig assigns each modulator a colour).
+    pub fn color(self) -> [u8; 3] {
+        match self {
+            ModKind::Lfo => [0x5a, 0xc8, 0x5a],
+            ModKind::Steps => [0x4f, 0xb6, 0xc8],
+            ModKind::Random => [0xd0, 0x66, 0xa8],
+            ModKind::Macro => [0xe0, 0xc6, 0x4f],
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Modulator {
-    pub rate: f32,  // 0..1 -> Hz
-    pub shape: u8,  // 0 sine 1 tri 2 saw 3 square
+    pub kind: ModKind,
+    pub rate: f32,        // 0..1 -> Hz (LFO/Steps/Random)
+    pub shape: u8,        // LFO: 0 sine 1 tri 2 saw 3 square
+    pub steps: Vec<f32>,  // Steps sequencer values 0..1
+    pub value: f32,       // Macro knob / Random smoothing
     pub routes: Vec<ModRoute>,
+}
+
+impl Modulator {
+    pub fn new(kind: ModKind) -> Self {
+        Self {
+            kind,
+            rate: 0.3,
+            shape: 0,
+            steps: vec![0.0, 0.5, 1.0, 0.5, 0.75, 0.25, 1.0, 0.0],
+            value: 0.5,
+            routes: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -129,6 +176,15 @@ impl Clip {
     }
 }
 
+/// A clip placed on the Arranger Timeline at an absolute position. Its content
+/// (`clip.length` beats) loops within the placed `duration`, as in Bitwig.
+#[derive(Clone)]
+pub struct ArrangerClip {
+    pub clip: Clip,
+    pub start: f64,    // beats on the timeline
+    pub duration: f64, // placed length in beats
+}
+
 #[derive(Clone)]
 pub struct Track {
     /// Stable engine slot id (0..MAX_TRACKS). Decoupled from display order.
@@ -142,7 +198,8 @@ pub struct Track {
     pub solo: bool,
     pub armed: bool,
     pub devices: Vec<Device>,
-    pub clips: Vec<Option<Clip>>, // one slot per scene
+    pub clips: Vec<Option<Clip>>, // one slot per scene (Clip Launcher)
+    pub arranger: Vec<ArrangerClip>, // clips on the Arranger Timeline
 }
 
 impl Track {
@@ -163,6 +220,7 @@ impl Track {
             armed: false,
             devices,
             clips: vec![None; SCENE_COUNT],
+            arranger: Vec::new(),
         }
     }
 }
@@ -235,6 +293,13 @@ pub struct Scene {
     pub name: String,
 }
 
+/// A cue marker storing a play position along the Arranger Timeline.
+#[derive(Clone)]
+pub struct CueMarker {
+    pub name: String,
+    pub position: f64, // beats
+}
+
 #[derive(Clone)]
 pub struct Project {
     pub tracks: Vec<Track>,
@@ -242,6 +307,13 @@ pub struct Project {
     pub tempo: f64,
     pub time_sig: (u32, u32),
     pub key: KeySignature,
+    // Arranger transport
+    pub loop_enabled: bool,
+    pub loop_start: f64, // beats
+    pub loop_end: f64,
+    pub cue_markers: Vec<CueMarker>,
+    /// Launch quantization in beats. 0 = off (immediate). Bitwig default: 1 bar.
+    pub launch_quant: f64,
     next_id: usize,
 }
 
@@ -285,6 +357,14 @@ impl Project {
             tempo: 120.0,
             time_sig: (4, 4),
             key: KeySignature { root: 0, scale: Scale::Minor },
+            loop_enabled: true,
+            loop_start: 0.0,
+            loop_end: 32.0, // 8 bars
+            cue_markers: vec![
+                CueMarker { name: "Intro".into(), position: 0.0 },
+                CueMarker { name: "Verse".into(), position: 16.0 },
+            ],
+            launch_quant: 4.0, // 1 bar, Bitwig default
             next_id: 0,
         };
 
@@ -298,6 +378,13 @@ impl Project {
             d[5] = 0.0; // sustain
             d[6] = 0.05; // release
             d[1] = 0.5;
+        }
+        // Demo of the unified modulation system: an LFO sweeping the cutoff.
+        {
+            let mut lfo = Modulator::new(ModKind::Lfo);
+            lfo.rate = 0.25;
+            lfo.routes.push(ModRoute { param: 1, amount: 0.35 });
+            drums.devices[0].modulators.push(lfo);
         }
         let mut beat = Clip::new("Beat", TRACK_COLORS[0]);
         for i in 0..4 {
@@ -338,6 +425,20 @@ impl Project {
             lclip.notes.push(Note { pitch, start, length: len, velocity: 95 });
         }
         lead.clips[1] = Some(lclip);
+
+        // Lay the launcher clips out on the Arranger Timeline as a simple song.
+        if let Some(c) = drums.clips[0].clone() {
+            drums.arranger.push(ArrangerClip { clip: c, start: 0.0, duration: 32.0 });
+        }
+        if let Some(c) = bass.clips[0].clone() {
+            bass.arranger.push(ArrangerClip { clip: c.clone(), start: 8.0, duration: 24.0 });
+        }
+        if let Some(c) = keys.clips[0].clone() {
+            keys.arranger.push(ArrangerClip { clip: c, start: 0.0, duration: 16.0 });
+        }
+        if let Some(c) = lead.clips[1].clone() {
+            lead.arranger.push(ArrangerClip { clip: c, start: 16.0, duration: 16.0 });
+        }
 
         p.tracks = vec![drums, bass, keys, lead];
         p

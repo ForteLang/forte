@@ -11,7 +11,7 @@ Bitwig 6's refreshed dark interface and hybrid Clip-Launcher workflow.
 > architecture, signature workflow and visual language — a genuine DAW, not a
 > mock-up.
 
-![Clip Launcher](docs/launcher.png)
+![Arranger](docs/arranger.png)
 
 ## Build & run
 
@@ -74,39 +74,53 @@ The audio callback never allocates, locks, or makes syscalls:
 
 ### Audio engine
 
-- Sample-accurate look-ahead scheduler converts clip notes (looped, phase-locked
-  to the global transport) into precisely-timed voice triggers.
+- Sample-accurate look-ahead scheduler plays both the **Arranger Timeline**
+  (clips at absolute positions, looping their content within the placed region)
+  and the **Clip Launcher** (a launcher clip overrides the arrangement on its
+  track, phase-locked to the global transport). A global **loop region** wraps
+  the playhead, and **launch quantization** defers clip launches to the next
+  bar boundary.
 - Per-track device chain: a polyphonic **Polymer** synth (two band-limited
   detuned oscillators + sub → TPT SVF with its own envelope → ADSR amp, 16-voice
   pool with oldest-voice stealing) followed by insert effects.
 - **Effects:** Filter+ (multi-mode SVF), EQ-5 (3-band), Distortion (tanh
   shaper), Delay-4 (ping-pong with damped feedback), Reverb (4-line feedback
   delay network with a Householder mixing matrix).
-- **Modulators:** per-device LFOs routable to any parameter with bipolar depth —
-  Bitwig's signature modulation concept — applied at block rate before DSP.
+- **Modulators (unified modulation system):** per-device **LFO / Steps /
+  Random / Macro** modulators, each routable to any parameter with a bipolar
+  amount, applied at block rate before DSP. The UI implements Bitwig's
+  click-the-modulator-then-drag-a-parameter routing, with coloured modulation
+  rings on the knobs.
 - Equal-power panning, mute/solo, and a `tanh` master limiter.
 
 ## Implemented vs. Bitwig 6
 
 | Area | Status |
 | --- | --- |
-| Hybrid Clip Launcher + scenes | ✅ launch clips/scenes, phase-locked playback |
+| **Arranger Timeline** with bar ruler, draggable/resizable clips, mini-note previews | ✅ |
+| **Arranger Loop region** (drag on ruler; wraps the global playhead) | ✅ |
+| **Cue markers** along the timeline | ✅ |
+| **Launch quantization** (Off · 1/4 · 1/2 · 1 Bar · 2 Bars; default 1 Bar) | ✅ |
+| Hybrid Clip Launcher + scenes; launcher clips override the arrangement per track | ✅ |
+| **Unified modulation system** — LFO / Steps / Random / Macro modulators, click-to-route, drag a knob to set bipolar depth, modulation rings | ✅ |
 | Refreshed dark v6 UI, rounded corners | ✅ |
 | Project key signature (new in v6) | ✅ root + scale, drives piano-roll scale highlighting |
 | Tracks: instrument / audio / effect | ✅ |
 | Per-track device chains, bypass | ✅ |
 | Built-in synth + 5 insert effects | ✅ all DSP written from scratch |
-| Per-device LFO modulators | ✅ |
 | Mixer: faders, pan, meters, solo/mute, master | ✅ |
 | Piano roll: add/move/resize/delete, snap, scale highlight, playhead | ✅ |
 | Transport: tempo, time-sig, position, computer-keyboard MIDI | ✅ |
 
+The three central surfaces — **Arrange** (timeline), **Launcher** (clip grid)
+and **Mix** (console) — are switched from the transport bar, mirroring Bitwig's
+panel model.
+
 ### Known scope boundaries
 
-Audio recording/sampler, VST/CLAP plugin hosting, The Grid, the arranger
-timeline, automation lanes, comping and clip aliases are **not** implemented.
-Effects are lightweight original DSP, not Bitwig's. These are deliberate
-boundaries, not bugs.
+Audio recording/sampler, VST/CLAP plugin hosting, The Grid, automation lanes,
+comping and clip aliases are **not** implemented. Effects are lightweight
+original DSP, not Bitwig's. These are deliberate boundaries, not bugs.
 
 ## Testing hooks
 
