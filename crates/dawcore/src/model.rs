@@ -17,9 +17,15 @@ pub enum TrackKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeviceKind {
+    // Note -> Note
+    Arpeggiator,
+    NoteTranspose,
+    NoteRepeat,
+    // Note -> Audio
     Polymer,
     Sampler,
     PolyGrid,
+    // Audio -> Audio
     Filter,
     Delay,
     Reverb,
@@ -27,9 +33,46 @@ pub enum DeviceKind {
     Drive,
 }
 
-impl DeviceKind {
+/// The three signal-transformation stages every device belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeviceStage {
+    NoteFx,     // Note -> Note
+    Instrument, // Note -> Audio
+    AudioFx,    // Audio -> Audio
+}
+
+impl DeviceStage {
     pub fn label(self) -> &'static str {
         match self {
+            DeviceStage::NoteFx => "NOTE FX",
+            DeviceStage::Instrument => "INSTRUMENTS",
+            DeviceStage::AudioFx => "AUDIO FX",
+        }
+    }
+}
+
+impl DeviceKind {
+    /// Every device, in stage order. The browser and factories iterate this —
+    /// adding a device here is the only registration step the UI needs.
+    pub const ALL: [DeviceKind; 11] = [
+        DeviceKind::Arpeggiator,
+        DeviceKind::NoteTranspose,
+        DeviceKind::NoteRepeat,
+        DeviceKind::Polymer,
+        DeviceKind::Sampler,
+        DeviceKind::PolyGrid,
+        DeviceKind::Filter,
+        DeviceKind::Eq,
+        DeviceKind::Drive,
+        DeviceKind::Delay,
+        DeviceKind::Reverb,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            DeviceKind::Arpeggiator => "Arpeggiator",
+            DeviceKind::NoteTranspose => "Transposer",
+            DeviceKind::NoteRepeat => "Note Repeat",
             DeviceKind::Polymer => "Polymer",
             DeviceKind::Sampler => "Sampler",
             DeviceKind::PolyGrid => "Poly Grid",
@@ -41,8 +84,20 @@ impl DeviceKind {
         }
     }
 
+    pub fn stage(self) -> DeviceStage {
+        match self {
+            DeviceKind::Arpeggiator | DeviceKind::NoteTranspose | DeviceKind::NoteRepeat => {
+                DeviceStage::NoteFx
+            }
+            DeviceKind::Polymer | DeviceKind::Sampler | DeviceKind::PolyGrid => {
+                DeviceStage::Instrument
+            }
+            _ => DeviceStage::AudioFx,
+        }
+    }
+
     pub fn is_instrument(self) -> bool {
-        matches!(self, DeviceKind::Polymer | DeviceKind::Sampler | DeviceKind::PolyGrid)
+        self.stage() == DeviceStage::Instrument
     }
 
     /// Parameter labels in engine order. The GUI renders a knob per entry.
@@ -54,6 +109,9 @@ impl DeviceKind {
             ],
             DeviceKind::Sampler => &["Gain", "Attack", "Decay", "Sustain", "Release", "Pitch"],
             DeviceKind::PolyGrid => &[],
+            DeviceKind::Arpeggiator => &["Rate", "Octaves", "Mode"],
+            DeviceKind::NoteTranspose => &["Semi"],
+            DeviceKind::NoteRepeat => &["Rate", "Gate"],
             DeviceKind::Filter => &["Type", "Cutoff", "Reso"],
             DeviceKind::Delay => &["Time", "Fdbk", "Mix"],
             DeviceKind::Reverb => &["Size", "Decay", "Mix"],
@@ -71,6 +129,9 @@ impl DeviceKind {
             // Pitch 0.5 == centre (no transpose); ±24 semitones across the range.
             DeviceKind::Sampler => vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5],
             DeviceKind::PolyGrid => Vec::new(),
+            DeviceKind::Arpeggiator => vec![0.55, 0.0, 0.0], // 1/8, 1 octave, up
+            DeviceKind::NoteTranspose => vec![0.5],          // centre = 0 semitones
+            DeviceKind::NoteRepeat => vec![0.7, 0.5],        // 1/16, 50% gate
             DeviceKind::Filter => vec![0.0, 0.6, 0.2],
             DeviceKind::Delay => vec![0.3, 0.35, 0.3],
             DeviceKind::Reverb => vec![0.5, 0.5, 0.25],
@@ -84,6 +145,7 @@ impl DeviceKind {
         match (self, param) {
             (DeviceKind::Polymer, 0) => Some(&["Sine", "Saw", "Square", "Tri"]),
             (DeviceKind::Filter, 0) => Some(&["LP", "HP", "BP", "Notch"]),
+            (DeviceKind::Arpeggiator, 2) => Some(&["Up", "Down", "UpDn"]),
             _ => None,
         }
     }

@@ -112,6 +112,10 @@ The audio callback never allocates, locks, or makes syscalls:
 | Project key signature (new in v6) | ✅ root + scale, drives piano-roll scale highlighting |
 | Tracks: instrument / audio / effect | ✅ |
 | Per-track device chains, bypass | ✅ |
+| **Device taxonomy** — every device is a typed stage (Note→Note / Note→Audio / Audio→Audio); tracks render note FX → instruments → audio FX, and the browser/UI derive from the registry (see ARCHITECTURE.md) | ✅ |
+| **Note FX** — Arpeggiator (up/down/up-down, octaves), Transposer, Note Repeat, all phase-locked to the transport and live-playable | ✅ |
+| **Key map & performance mode** — Tab toggles A–K performance playing; L/M/B/I/D/F1–F3/↑↓/Enter/Del/Ctrl+T commands (see ARCHITECTURE.md) | ✅ |
+| **Visual regression tests** — 6 golden screenshots diffed pixel-wise under Xvfb (`scripts/visual_test.sh`) | ✅ |
 | **The Grid (Poly Grid)** — a modular node-graph synth (NoteIn / Osc / LFO / ADSR / SVF / Gain / Mix / Out) with a draggable graph editor: move nodes, wire ports, tweak per-node params, add/delete modules | ✅ |
 | **Sampler instrument** — pitched, looping playback of shared sample buffers with ADSR; built-in Kick/Snare/Hat one-shots plus WAV loading | ✅ |
 | **Audio clips on the Arranger** — samples placed on the timeline, drawn as waveforms, drag/resize/delete | ✅ |

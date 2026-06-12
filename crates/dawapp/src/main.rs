@@ -7,10 +7,20 @@ mod theme;
 mod widgets;
 
 fn main() -> eframe::Result<()> {
+    // BITWIG_WINDOW=WxH overrides the initial size (used by the visual tests).
+    let (w, h) = std::env::var("BITWIG_WINDOW")
+        .ok()
+        .and_then(|s| {
+            let (a, b) = s.split_once('x')?;
+            Some((a.parse().ok()?, b.parse().ok()?))
+        })
+        .unwrap_or((1280.0, 800.0));
+
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([1280.0, 800.0])
-            .with_min_inner_size([960.0, 600.0])
+            .with_inner_size([w, h])
+            .with_min_inner_size([720.0, 480.0])
+            .with_resizable(true)
             .with_title("Bitwig Studio 6 — Clone"),
         ..Default::default()
     };

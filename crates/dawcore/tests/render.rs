@@ -33,6 +33,42 @@ fn grid_synth_makes_sound() {
     assert!(peak > 0.001, "grid synth produced no sound (peak={peak})");
 }
 
+#[test]
+fn arpeggiator_chain_produces_notes() {
+    // Note FX -> Instrument chain: hold one live chord through an Arpeggiator
+    // in front of a Polymer; the arp must keep the track sounding over time.
+    use dawcore::model::{Device, DeviceKind, Track, TrackKind};
+    let sr = 48_000.0;
+    let (mut engine, mut handle) = Engine::new(sr);
+    let mut project = Project::demo();
+    let id = project.alloc_id();
+    let mut t = Track::new(id, "ArpTrack", TrackKind::Instrument, [200, 100, 50]);
+    // chain: Arpeggiator (note fx) BEFORE the Polymer instrument
+    t.devices.insert(0, Device::new(DeviceKind::Arpeggiator));
+    project.tracks.push(t);
+
+    full_sync(&mut handle, &project);
+    handle.send(Command::Play); // transport running so the arp grid advances
+    // hold a chord live — never released
+    for &n in &[60u8, 64, 67] {
+        handle.send(Command::NoteOn { track: id, note: n, velocity: 0.9 });
+    }
+
+    let mut bl = vec![0.0f32; 512];
+    let mut br = vec![0.0f32; 512];
+    // skip the first second, then measure: a sustained chord would decay, the
+    // arp keeps retriggering so the peak must persist late in the render
+    for _ in 0..100 {
+        engine.process(&mut bl, &mut br, 512);
+    }
+    let mut late_peak = 0.0f32;
+    for _ in 0..300 {
+        engine.process(&mut bl, &mut br, 512);
+        late_peak = late_peak.max(handle.shared.track_peak(id));
+    }
+    assert!(late_peak > 0.001, "arpeggiator stopped sounding (peak={late_peak})");
+}
+
 fn render_project(seconds: f32, sr: f32) -> (Vec<f32>, Vec<f32>) {
     let (mut engine, mut handle) = Engine::new(sr);
     let project = Project::demo();

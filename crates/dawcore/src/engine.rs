@@ -12,13 +12,8 @@ use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 
 use crate::command::{Command, Garbage};
-use crate::dsp::effects::{Drive, Eq3, FdnReverb, StereoDelay};
-use crate::dsp::filter::{FilterMode, Svf};
-use crate::dsp::grid::GridSynth;
-use crate::dsp::oscillator::Waveform;
-use crate::dsp::sampler::{Sample, Sampler};
-use crate::dsp::synth::PolySynth;
-use crate::dsp::voice::SynthParams;
+use crate::device::{build_dsp, BlockCtx, Dsp, NoteEvent};
+use crate::dsp::sampler::Sample;
 use crate::model::{self, Device, DeviceKind, ModKind, SampleSource, Track, MAX_TRACKS};
 use crate::samples;
 
@@ -100,17 +95,6 @@ pub struct EngineClip {
     pub notes: Vec<EngineNote>,
 }
 
-enum Dsp {
-    Synth(PolySynth),
-    Sampler(Sampler),
-    Grid(GridSynth),
-    Filter { l: Svf, r: Svf, mode: FilterMode },
-    Delay(StereoDelay),
-    Reverb(FdnReverb),
-    Eq { l: Eq3, r: Eq3 },
-    Drive(Drive),
-}
-
 /// Resolve a serialisable sample source into a shared buffer (UI thread only).
 pub fn resolve_sample(src: &SampleSource) -> Option<Arc<Sample>> {
     match src {
@@ -150,13 +134,6 @@ pub struct EngineMod {
 
 pub struct EngineMods(pub Vec<EngineMod>);
 
-struct NoteEvent {
-    sample: u32,
-    on: bool,
-    pitch: u8,
-    velocity: f32,
-}
-
 pub struct EngineArrClip {
     start: f64,
     duration: f64,
@@ -192,39 +169,24 @@ pub struct EngineTrack {
     audio_clips: Vec<EngineAudioClip>,
     pending_offs: Vec<(u8, f64)>,
     events: Vec<NoteEvent>,
+    /// Reused buffer for the Note-FX chain (ping-pong with `events`).
+    scratch_events: Vec<NoteEvent>,
+    /// Live input (computer keyboard / MIDI) queued for the next block so it
+    /// flows through the Note-FX chain like any scheduled note.
+    live_events: Vec<NoteEvent>,
 }
 
 // ---------------------------------------------------------------------------
 // Builders (run on the UI thread — allocation allowed here)
 // ---------------------------------------------------------------------------
 
-fn map_cutoff(v: f32) -> f32 {
-    30.0 * 600.0_f32.powf(v.clamp(0.0, 1.0))
-}
-
-fn build_dsp(kind: DeviceKind, sr: f32) -> Dsp {
-    match kind {
-        DeviceKind::Polymer => Dsp::Synth(PolySynth::new(sr)),
-        DeviceKind::Sampler => Dsp::Sampler(Sampler::new(sr)),
-        // Replaced below with a compiled graph when the device carries one.
-        DeviceKind::PolyGrid => Dsp::Synth(PolySynth::new(sr)),
-        DeviceKind::Filter => Dsp::Filter { l: Svf::new(sr), r: Svf::new(sr), mode: FilterMode::Lowpass },
-        DeviceKind::Delay => Dsp::Delay(StereoDelay::new(sr)),
-        DeviceKind::Reverb => Dsp::Reverb(FdnReverb::new(sr)),
-        DeviceKind::Eq => Dsp::Eq { l: Eq3::new(sr), r: Eq3::new(sr) },
-        DeviceKind::Drive => Dsp::Drive(Drive::new()),
-    }
-}
-
 pub fn build_device(dev: &Device, sr: f32) -> Box<EngineDevice> {
-    let mut dsp = build_dsp(dev.kind, sr);
-    if let Dsp::Sampler(s) = &mut dsp {
-        s.sample = resolve_sample(&dev.sample);
-    }
-    if dev.kind == DeviceKind::PolyGrid {
-        if let Some(graph) = &dev.grid {
-            dsp = Dsp::Grid(GridSynth::compile(graph, sr));
-        }
+    let mut dsp = build_dsp(dev, sr);
+    // initial param application so a freshly added device sounds right
+    match &mut dsp {
+        Dsp::Note(fx) => fx.configure(&dev.params),
+        Dsp::Inst(i) => i.configure(&dev.params),
+        Dsp::Audio(fx) => fx.configure(&dev.params),
     }
     Box::new(EngineDevice {
         kind: dev.kind,
@@ -343,7 +305,9 @@ pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
         arranger: build_arranger(track),
         audio_clips: build_audio_clips(track),
         pending_offs: Vec::with_capacity(64),
-        events: Vec::with_capacity(512),
+        events: Vec::with_capacity(1024),
+        scratch_events: Vec::with_capacity(1024),
+        live_events: Vec::with_capacity(128),
     };
     Box::new(et)
 }
@@ -542,12 +506,12 @@ impl Engine {
             }
             Command::NoteOn { track, note, velocity } => {
                 if let Some(t) = self.track_mut(track) {
-                    t.instrument_event(true, note, velocity);
+                    t.queue_live(true, note, velocity);
                 }
             }
             Command::NoteOff { track, note } => {
                 if let Some(t) = self.track_mut(track) {
-                    t.instrument_event(false, note, 0.0);
+                    t.queue_live(false, note, 0.0);
                 }
             }
             Command::SetTrackGain { track, value } => {
@@ -597,8 +561,8 @@ impl Engine {
             Command::SetGridParam { track, device, node, param, value } => {
                 if let Some(t) = self.track_mut(track) {
                     if let Some(d) = t.devices.get_mut(device) {
-                        if let Dsp::Grid(g) = &mut d.dsp {
-                            g.set_param(node, param, value);
+                        if let Dsp::Inst(i) = &mut d.dsp {
+                            i.set_node_param(node, param, value);
                         }
                     }
                 }
@@ -736,8 +700,17 @@ impl Engine {
             // advance modulators (block rate) and bake effective params
             track.update_modulators(block_seconds);
 
-            // schedule note events for this block
+            // schedule note events for this block, then run the Note-FX chain
             track.schedule(self.playing, block_start, sched_end, spb, frames);
+            let ctx = BlockCtx {
+                sample_rate: self.sample_rate,
+                frames,
+                start_beat: block_start,
+                end_beat: sched_end,
+                samples_per_beat: spb,
+                playing: self.playing,
+            };
+            track.apply_note_fx(&ctx);
 
             // render audio clips into the injection buffer, then the track
             let has_audio = !track.audio_clips.is_empty();
@@ -895,9 +868,7 @@ impl EngineTrack {
         self.devices
             .iter()
             .map(|d| match &d.dsp {
-                Dsp::Synth(s) => s.active_voices(),
-                Dsp::Sampler(s) => s.active_voices(),
-                Dsp::Grid(g) => g.active_voices(),
+                Dsp::Inst(i) => i.voices(),
                 _ => 0,
             })
             .sum()
@@ -906,11 +877,30 @@ impl EngineTrack {
     fn all_instruments_off(&mut self) {
         for d in &mut self.devices {
             match &mut d.dsp {
-                Dsp::Synth(s) => s.all_notes_off(),
-                Dsp::Sampler(s) => s.all_notes_off(),
-                Dsp::Grid(g) => g.all_notes_off(),
-                _ => {}
+                Dsp::Inst(i) => i.reset(),
+                Dsp::Note(fx) => fx.reset(),
+                Dsp::Audio(_) => {}
             }
+        }
+        self.live_events.clear();
+    }
+
+    /// Run this block's events through the Note-FX chain, in device order.
+    fn apply_note_fx(&mut self, ctx: &BlockCtx) {
+        for di in 0..self.devices.len() {
+            if !self.devices[di].enabled || !matches!(self.devices[di].dsp, Dsp::Note(_)) {
+                continue;
+            }
+            self.scratch_events.clear();
+            {
+                let EngineTrack { devices, events, scratch_events, .. } = self;
+                if let Dsp::Note(fx) = &mut devices[di].dsp {
+                    fx.process(ctx, events, scratch_events);
+                }
+            }
+            std::mem::swap(&mut self.events, &mut self.scratch_events);
+            // off-before-on at equal sample positions so retriggers are clean
+            self.events.sort_unstable_by_key(|e| (e.sample, e.on as u8));
         }
     }
 
@@ -939,6 +929,13 @@ impl EngineTrack {
 
     fn schedule(&mut self, playing: bool, bs: f64, be: f64, spb: f64, frames: usize) {
         self.events.clear();
+
+        // live input queued since the last block fires at the block start
+        for e in self.live_events.drain(..) {
+            if self.events.len() < self.events.capacity() {
+                self.events.push(e);
+            }
+        }
 
         if playing && self.active_scene >= 0 {
             // A launcher clip is active: it overrides the arrangement on this
@@ -1026,13 +1023,14 @@ impl EngineTrack {
         let is_effect = self.is_effect;
         let mut ev_idx = 0;
         for i in 0..frames {
-            // fire any events scheduled at this sample
+            // fire any (note-FX-processed) events scheduled at this sample
             while ev_idx < self.events.len() && self.events[ev_idx].sample as usize == i {
-                let (on, pitch, velocity) = {
-                    let e = &self.events[ev_idx];
-                    (e.on, e.pitch, e.velocity)
-                };
-                self.instrument_event(on, pitch, velocity);
+                let e = self.events[ev_idx];
+                for d in &mut self.devices {
+                    if let Dsp::Inst(inst) = &mut d.dsp {
+                        inst.handle(e.on, e.pitch, e.velocity);
+                    }
+                }
                 ev_idx += 1;
             }
 
@@ -1043,46 +1041,23 @@ impl EngineTrack {
             } else {
                 let mut mono = 0.0;
                 for d in &mut self.devices {
-                    match &mut d.dsp {
-                        Dsp::Synth(s) => mono += s.next(),
-                        Dsp::Sampler(s) => mono += s.next(),
-                        Dsp::Grid(g) => mono += g.next(),
-                        _ => {}
+                    if let Dsp::Inst(inst) = &mut d.dsp {
+                        mono += inst.next();
                     }
                 }
                 let (il, ir) = input.map(|(a, b)| (a[i], b[i])).unwrap_or((0.0, 0.0));
                 (mono + il, mono + ir)
             };
 
-            // effect chain
+            // audio-FX chain, in device order
             for d in &mut self.devices {
                 if !d.enabled {
                     continue;
                 }
-                match &mut d.dsp {
-                    Dsp::Synth(_) | Dsp::Sampler(_) | Dsp::Grid(_) => {}
-                    Dsp::Filter { l: fl, r: fr, mode } => {
-                        l = fl.process(l, *mode);
-                        r = fr.process(r, *mode);
-                    }
-                    Dsp::Eq { l: el, r: er } => {
-                        l = el.process(l);
-                        r = er.process(r);
-                    }
-                    Dsp::Drive(dr) => {
-                        l = dr.process(l);
-                        r = dr.process(r);
-                    }
-                    Dsp::Delay(dl) => {
-                        let (a, b) = dl.process(l, r);
-                        l = a;
-                        r = b;
-                    }
-                    Dsp::Reverb(rv) => {
-                        let (a, b) = rv.process(l, r);
-                        l = a;
-                        r = b;
-                    }
+                if let Dsp::Audio(fx) = &mut d.dsp {
+                    let (a, b) = fx.process(l, r);
+                    l = a;
+                    r = b;
                 }
             }
 
@@ -1091,33 +1066,10 @@ impl EngineTrack {
         }
     }
 
-    /// Route a note on/off to every instrument device on the track.
-    fn instrument_event(&mut self, on: bool, pitch: u8, velocity: f32) {
-        for d in &mut self.devices {
-            match &mut d.dsp {
-                Dsp::Synth(s) => {
-                    if on {
-                        s.note_on(pitch, velocity);
-                    } else {
-                        s.note_off(pitch);
-                    }
-                }
-                Dsp::Sampler(s) => {
-                    if on {
-                        s.note_on(pitch, velocity);
-                    } else {
-                        s.note_off(pitch);
-                    }
-                }
-                Dsp::Grid(g) => {
-                    if on {
-                        g.note_on(pitch, velocity);
-                    } else {
-                        g.note_off(pitch);
-                    }
-                }
-                _ => {}
-            }
+    /// Queue a live note event; it joins the next block's Note-FX pipeline.
+    fn queue_live(&mut self, on: bool, pitch: u8, velocity: f32) {
+        if self.live_events.len() < self.live_events.capacity() {
+            self.live_events.push(NoteEvent { sample: 0, on, pitch, velocity });
         }
     }
 
@@ -1168,58 +1120,9 @@ impl EngineDevice {
     fn configure(&mut self) {
         let p = &self.eff_params;
         match &mut self.dsp {
-            Dsp::Synth(s) => {
-                s.params = SynthParams {
-                    wave: Waveform::from_index(p[0] as u8),
-                    cutoff: p[1],
-                    resonance: p[2],
-                    attack: p[3],
-                    decay: p[4],
-                    sustain: p[5],
-                    release: p[6],
-                    detune: p[7],
-                    sub: p[8],
-                    filter_env: p[9],
-                };
-            }
-            Dsp::Sampler(s) => {
-                // params: [Gain, Attack, Decay, Sustain, Release, Pitch]
-                s.gain = p[0];
-                s.attack = 0.001 + p[1] * p[1] * 2.0;
-                s.decay = 0.001 + p[2] * p[2] * 2.0;
-                s.sustain = p[3];
-                s.release = 0.001 + p[4] * p[4] * 2.5;
-                s.transpose = (p[5] - 0.5) * 48.0; // ±24 semitones
-            }
-            // Grid node params are set via SetGridParam, not the flat param bag.
-            Dsp::Grid(_) => {}
-            Dsp::Filter { l, r, mode } => {
-                *mode = FilterMode::from_index(p[0] as u8);
-                let c = map_cutoff(p[1]);
-                l.set(c, p[2]);
-                r.set(c, p[2]);
-            }
-            Dsp::Delay(d) => {
-                d.time = p[0];
-                d.feedback = p[1];
-                d.mix = p[2];
-            }
-            Dsp::Reverb(rv) => {
-                rv.size = p[0];
-                rv.decay = p[1];
-                rv.mix = p[2];
-            }
-            Dsp::Eq { l, r } => {
-                l.low_gain = p[0];
-                l.mid_gain = p[1];
-                l.high_gain = p[2];
-                r.low_gain = p[0];
-                r.mid_gain = p[1];
-                r.high_gain = p[2];
-            }
-            Dsp::Drive(dr) => {
-                dr.amount = p[0];
-            }
+            Dsp::Note(fx) => fx.configure(p),
+            Dsp::Inst(i) => i.configure(p),
+            Dsp::Audio(fx) => fx.configure(p),
         }
     }
 }

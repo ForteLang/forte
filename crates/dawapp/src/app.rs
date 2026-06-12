@@ -9,9 +9,9 @@ use std::collections::HashSet;
 use dawcore::command::Command;
 use dawcore::engine::{build_automation, build_clip, build_device, build_mods, build_track};
 use dawcore::model::{
-    note_name, AutomationPoint, Clip, Device, DeviceKind, GridConn, GridModule, GridModuleKind,
-    ModKind, ModRoute, Modulator, Note, Project, Scale, Track, TrackKind, MAX_TRACKS, NOTE_NAMES,
-    TRACK_COLORS,
+    note_name, AutomationPoint, Clip, Device, DeviceKind, DeviceStage, GridConn, GridModule,
+    GridModuleKind, ModKind, ModRoute, Modulator, Note, Project, Scale, Track, TrackKind,
+    MAX_TRACKS, NOTE_NAMES, TRACK_COLORS,
 };
 
 use crate::audio::{self, Audio};
@@ -74,6 +74,14 @@ pub struct DawApp {
     /// Dragged automation point: (track idx, point idx).
     auto_drag: Option<(usize, usize)>,
 
+    /// Tab performance mode: letter keys play notes instead of commands.
+    perform_mode: bool,
+    /// Selected launcher slot (track idx, scene) for Enter/Delete actions.
+    selected_slot: Option<(usize, usize)>,
+    show_inspector: bool,
+    show_browser: bool,
+    show_bottom: bool,
+
     // The Grid editor
     grid_edit: Option<(usize, usize)>, // (track, device) of the open Poly Grid
     grid_node_drag: Option<usize>,     // node being moved
@@ -128,12 +136,16 @@ impl DawApp {
         // Optional startup hooks (handy for testing / launching into a view).
         let view = match std::env::var("BITWIG_VIEW").as_deref() {
             Ok("mix") => View::Mix,
+            Ok("launcher") => View::Launcher,
             _ => View::Arrange,
         };
         let editing = std::env::var("BITWIG_EDIT").ok().map(|_| (2usize, 0usize));
         let mut auto_open_init = HashSet::new();
         if std::env::var("BITWIG_AUTO").is_ok() {
-            auto_open_init.insert(3); // Lead's volume lane (has demo automation)
+            // Lead's volume lane has demo automation; locate it by name.
+            if let Some(i) = project.tracks.iter().position(|t| t.name == "Lead") {
+                auto_open_init.insert(i);
+            }
         }
         // Open the Grid editor on the Bass (Poly Grid) track for headless capture.
         let (grid_edit, sel_track) = if std::env::var("BITWIG_GRID").is_ok() {
@@ -160,6 +172,11 @@ impl DawApp {
             beats_per_px: 1.0 / 24.0, // 24 px per beat
             auto_open: auto_open_init,
             auto_drag: None,
+            perform_mode: false,
+            selected_slot: None,
+            show_inspector: true,
+            show_browser: true,
+            show_bottom: true,
             grid_edit,
             grid_node_drag: None,
             grid_wire_drag: None,
@@ -365,27 +382,37 @@ impl eframe::App for DawApp {
             .exact_height(46.0)
             .show(ctx, |ui| self.transport_bar(ui));
 
-        egui::SidePanel::left("inspector")
-            .exact_width(200.0)
-            .resizable(false)
-            .show(ctx, |ui| self.inspector(ui));
+        if self.show_inspector {
+            egui::SidePanel::left("inspector")
+                .default_width(200.0)
+                .width_range(150.0..=340.0)
+                .resizable(true)
+                .show(ctx, |ui| self.inspector(ui));
+        }
 
-        egui::SidePanel::right("browser")
-            .exact_width(200.0)
-            .resizable(false)
-            .show(ctx, |ui| self.browser(ui));
+        if self.show_browser {
+            egui::SidePanel::right("browser")
+                .default_width(200.0)
+                .width_range(150.0..=340.0)
+                .resizable(true)
+                .show(ctx, |ui| self.browser(ui));
+        }
 
         let editing = self.editing.is_some();
-        egui::TopBottomPanel::bottom("bottom")
-            .exact_height(if editing { 280.0 } else { 256.0 })
-            .resizable(true)
-            .show(ctx, |ui| {
-                if editing {
-                    self.piano_roll(ui);
-                } else {
-                    self.device_panel(ui);
-                }
-            });
+        if self.show_bottom {
+            egui::TopBottomPanel::bottom("bottom")
+                .default_height(if editing { 280.0 } else { 256.0 })
+                .min_height(120.0)
+                .max_height(520.0)
+                .resizable(true)
+                .show(ctx, |ui| {
+                    if editing {
+                        self.piano_roll(ui);
+                    } else {
+                        self.device_panel(ui);
+                    }
+                });
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| match self.view {
             View::Arrange => self.arranger(ui),
@@ -409,43 +436,129 @@ impl eframe::App for DawApp {
 // ---------------------------------------------------------------------------
 
 impl DawApp {
+    /// The key map. Two layers, Bitwig-style:
+    /// - global chords (Ctrl+…) and transport keys work everywhere
+    /// - Tab toggles *performance mode*: letters play the selected instrument;
+    ///   otherwise letters are commands (L loop, M metronome, B/I/D panels…)
     fn handle_input(&mut self, ctx: &egui::Context) {
         let events = ctx.input(|i| i.events.clone());
         let track_id = self.project.tracks.get(self.selected_track).map(|t| t.id);
         for ev in events {
-            if let egui::Event::Key { key, pressed, repeat, modifiers, .. } = ev {
-                // global shortcuts
-                if modifiers.command || modifiers.ctrl {
-                    if pressed && !repeat {
-                        match key {
-                            egui::Key::Z if modifiers.shift => self.redo(),
-                            egui::Key::Z => self.undo(),
-                            egui::Key::Y => self.redo(),
-                            egui::Key::S => self.save_project(),
-                            _ => {}
-                        }
+            let egui::Event::Key { key, pressed, repeat, modifiers, .. } = ev else { continue };
+
+            // ---- global chords (work in any mode) ----
+            if modifiers.command || modifiers.ctrl {
+                if pressed && !repeat {
+                    match key {
+                        egui::Key::Z if modifiers.shift => self.redo(),
+                        egui::Key::Z => self.undo(),
+                        egui::Key::Y => self.redo(),
+                        egui::Key::S => self.save_project(),
+                        egui::Key::T if modifiers.shift => self.add_track(TrackKind::Effect),
+                        egui::Key::T => self.add_track(TrackKind::Instrument),
+                        _ => {}
                     }
-                    continue;
                 }
-                if key == egui::Key::Space && pressed && !repeat {
-                    // avoid stealing space from text fields
-                    if !ctx.wants_keyboard_input() {
+                continue;
+            }
+            if ctx.wants_keyboard_input() {
+                continue; // a text field has focus
+            }
+
+            // ---- transport & mode keys (both modes) ----
+            if pressed && !repeat {
+                match key {
+                    egui::Key::Space => {
                         self.toggle_play();
+                        continue;
                     }
-                    continue;
+                    egui::Key::Tab => {
+                        self.perform_mode = !self.perform_mode;
+                        self.status = Some(if self.perform_mode {
+                            "Performance mode — A–K play notes (Tab to exit)".into()
+                        } else {
+                            "Command mode".into()
+                        });
+                        continue;
+                    }
+                    egui::Key::Escape => {
+                        self.grid_edit = None;
+                        self.editing = None;
+                        self.file_win = false;
+                        continue;
+                    }
+                    egui::Key::F1 => { self.view = View::Arrange; continue; }
+                    egui::Key::F2 => { self.view = View::Launcher; continue; }
+                    egui::Key::F3 => { self.view = View::Mix; continue; }
+                    _ => {}
                 }
+            }
+
+            // note releases are honoured in any mode so toggling Tab mid-note
+            // can never strand a voice
+            if !pressed {
+                if let (Some(pitch), Some(tid)) = (key_to_pitch(key), track_id) {
+                    self.cmds.push(Command::NoteOff { track: tid, note: pitch });
+                }
+                continue;
+            }
+
+            if self.perform_mode {
+                // ---- performance: letters are a piano ----
                 if repeat {
                     continue;
                 }
                 if let (Some(pitch), Some(tid)) = (key_to_pitch(key), track_id) {
-                    if ctx.wants_keyboard_input() {
-                        continue;
+                    self.cmds.push(Command::NoteOn { track: tid, note: pitch, velocity: 0.85 });
+                }
+            } else if !repeat {
+                // ---- command mode: letters are commands ----
+                match key {
+                    egui::Key::L => {
+                        self.project.loop_enabled = !self.project.loop_enabled;
+                        self.push_loop();
                     }
-                    if pressed {
-                        self.cmds.push(Command::NoteOn { track: tid, note: pitch, velocity: 0.85 });
-                    } else {
-                        self.cmds.push(Command::NoteOff { track: tid, note: pitch });
+                    egui::Key::M => {
+                        self.metronome = !self.metronome;
+                        self.cmds.push(Command::SetMetronome(self.metronome));
                     }
+                    egui::Key::B => self.show_browser = !self.show_browser,
+                    egui::Key::I => self.show_inspector = !self.show_inspector,
+                    egui::Key::D => self.show_bottom = !self.show_bottom,
+                    egui::Key::ArrowUp => {
+                        self.selected_track = self.selected_track.saturating_sub(1);
+                        self.selected_device = 0;
+                    }
+                    egui::Key::ArrowDown => {
+                        if self.selected_track + 1 < self.project.tracks.len() {
+                            self.selected_track += 1;
+                            self.selected_device = 0;
+                        }
+                    }
+                    egui::Key::Enter => {
+                        if let Some((ti, sc)) = self.selected_slot {
+                            if ti < self.project.tracks.len() {
+                                if self.project.tracks[ti].clips[sc].is_some() {
+                                    self.editing = Some((ti, sc));
+                                } else {
+                                    self.create_clip(ti, sc);
+                                }
+                            }
+                        }
+                    }
+                    egui::Key::Delete | egui::Key::Backspace => {
+                        if let Some((ti, sc)) = self.selected_slot {
+                            if ti < self.project.tracks.len()
+                                && self.project.tracks[ti].clips[sc].is_some()
+                            {
+                                self.push_undo();
+                                let tid = self.project.tracks[ti].id;
+                                self.cmds.push(Command::SetClip { track: tid, scene: sc, clip: None });
+                                self.project.tracks[ti].clips[sc] = None;
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -848,6 +961,17 @@ impl DawApp {
                 self.metronome = !self.metronome;
                 self.cmds.push(Command::SetMetronome(self.metronome));
             }
+            // performance mode (Tab)
+            let perf = egui::Button::new(
+                egui::RichText::new("PLAY")
+                    .size(10.0)
+                    .color(if self.perform_mode { Color32::BLACK } else { theme::TEXT_DIM }),
+            )
+            .min_size(Vec2::new(40.0, 26.0))
+            .fill(if self.perform_mode { theme::ACCENT } else { theme::PANEL_RAISED });
+            if ui.add(perf).on_hover_text("Performance mode (Tab): A–K play the selected instrument").clicked() {
+                self.perform_mode = !self.perform_mode;
+            }
             ui.separator();
 
             // position
@@ -985,7 +1109,14 @@ impl DawApp {
         if let Some(a) = &self.audio {
             ui.horizontal(|ui| {
                 ui.label("Out");
-                ui.label(egui::RichText::new(&a.device_name).size(10.0).color(theme::TEXT_DIM));
+                // long device names must truncate, not widen the panel
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(&a.device_name).size(10.0).color(theme::TEXT_DIM),
+                    )
+                    .truncate(),
+                )
+                .on_hover_text(&a.device_name);
             });
             ui.horizontal(|ui| {
                 ui.label("SR");
@@ -1024,7 +1155,7 @@ impl DawApp {
         ui.separator();
         ui.label(egui::RichText::new("Keyboard").strong());
         ui.label(
-            egui::RichText::new("Play the selected instrument with A–K (white) and W E T Y U (black). Space toggles play.")
+            egui::RichText::new("Tab: performance mode (A–K play notes) · Space: play · L: loop · M: metronome · F1–F3: views · B/I/D: panels · ↑↓: track · Enter/Del: clip slot · Ctrl+T: new track")
                 .size(10.0)
                 .color(theme::TEXT_FAINT),
         );
@@ -1052,13 +1183,25 @@ impl DawApp {
             }
         }
 
-        ui.add_space(6.0);
-        ui.label(egui::RichText::new("INSTRUMENTS").size(9.0).color(theme::TEXT_FAINT));
-        if ui.add(browser_item("Polymer", Color32::from_rgb(0x9a, 0x6f, 0xd0))).clicked() {
-            self.add_device(DeviceKind::Polymer);
-        }
-        if ui.add(browser_item("Sampler", Color32::from_rgb(0xe0, 0x8a, 0x3c))).clicked() {
-            self.add_sampler(dawcore::model::SampleSource::None);
+        // Devices, grouped by Bitwig's three signal stages. The sections are
+        // derived from DeviceKind::stage(), so a new device shows up here the
+        // moment it's registered in the model — no UI edits needed.
+        for stage in [DeviceStage::NoteFx, DeviceStage::Instrument, DeviceStage::AudioFx] {
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(stage.label()).size(9.0).color(theme::TEXT_FAINT));
+            let dot = match stage {
+                DeviceStage::NoteFx => Color32::from_rgb(0xe0, 0xc6, 0x4f),
+                DeviceStage::Instrument => Color32::from_rgb(0x9a, 0x6f, 0xd0),
+                DeviceStage::AudioFx => Color32::from_rgb(0x4f, 0xb6, 0xc8),
+            };
+            for kind in DeviceKind::ALL {
+                if kind.stage() != stage {
+                    continue;
+                }
+                if ui.add(browser_item(kind.label(), dot)).clicked() {
+                    self.add_device(kind);
+                }
+            }
         }
 
         ui.add_space(6.0);
@@ -1067,14 +1210,6 @@ impl DawApp {
             if ui.add(browser_item(name, theme::PLAY)).clicked() {
                 // add a Sampler preloaded with this built-in onto the selected track
                 self.add_sampler(dawcore::model::SampleSource::Builtin(name.into()));
-            }
-        }
-
-        ui.add_space(6.0);
-        ui.label(egui::RichText::new("AUDIO FX").size(9.0).color(theme::TEXT_FAINT));
-        for kind in [DeviceKind::Filter, DeviceKind::Eq, DeviceKind::Drive, DeviceKind::Delay, DeviceKind::Reverb] {
-            if ui.add(browser_item(kind.label(), Color32::from_rgb(0x4f, 0xb6, 0xc8))).clicked() {
-                self.add_device(kind);
             }
         }
     }
@@ -1107,7 +1242,11 @@ impl DawApp {
         self.push_undo();
         let sr = self.sample_rate;
         if let Some(track) = self.project.tracks.get_mut(self.selected_track) {
-            let dev = Device::new(kind);
+            let dev = if kind == DeviceKind::PolyGrid {
+                Device::poly_grid()
+            } else {
+                Device::new(kind)
+            };
             let cmd = Command::AddDevice { track: track.id, device: build_device(&dev, sr) };
             track.devices.push(dev);
             self.cmds.push(cmd);
@@ -1176,6 +1315,9 @@ impl DawApp {
         ui.horizontal_top(|ui| {
             // ---- track header column ----
             ui.vertical(|ui| {
+                // headers must be contiguous: egui's default item spacing would
+                // drift them 6px per track relative to the timeline lanes
+                ui.spacing_mut().item_spacing.y = 0.0;
                 ui.allocate_exact_size(Vec2::new(ARR_HEADER_W, ARR_RULER_H), Sense::hover());
                 for ti in 0..n_tracks {
                     self.arr_track_header(ui, ti, lane_hs[ti]);
@@ -1582,9 +1724,11 @@ const SCENE_W: f32 = 30.0;
 impl DawApp {
     fn clip_launcher(&mut self, ui: &mut egui::Ui) {
         egui::ScrollArea::both().show(ui, |ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(1.0, 0.0);
             ui.horizontal_top(|ui| {
                 // scene launch column
                 ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 0.0;
                     ui.allocate_exact_size(Vec2::new(SCENE_W, HEAD_H), Sense::hover());
                     for s in 0..self.project.scenes.len() {
                         let (rect, resp) =
@@ -1624,6 +1768,7 @@ impl DawApp {
 
     fn track_column(&mut self, ui: &mut egui::Ui, ti: usize) {
         ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
             let (tid, color, name, mute, solo) = {
                 let t = &self.project.tracks[ti];
                 (t.id, t.color, t.name.clone(), t.mute, t.solo)
@@ -1686,12 +1831,18 @@ impl DawApp {
         let has_clip = self.project.tracks[ti].clips[scene].is_some();
 
         if !has_clip {
-            ui.painter().rect(inner, Rounding::same(4.0), theme::SLOT_EMPTY, Stroke::new(1.0, theme::PANEL_ALT));
+            let selected = self.selected_slot == Some((ti, scene));
+            let stroke = if selected { Stroke::new(1.5, theme::ACCENT) } else { Stroke::new(1.0, theme::PANEL_ALT) };
+            ui.painter().rect(inner, Rounding::same(4.0), theme::SLOT_EMPTY, stroke);
             if resp.hovered() {
                 ui.painter().text(inner.center(), Align2::CENTER_CENTER, "+", FontId::proportional(16.0), theme::TEXT_FAINT);
             }
+            // Bitwig: single click selects the slot, double-click creates a clip
             if resp.clicked() {
                 self.selected_track = ti;
+                self.selected_slot = Some((ti, scene));
+            }
+            if resp.double_clicked() {
                 self.create_clip(ti, scene);
             }
             return;
@@ -1705,11 +1856,24 @@ impl DawApp {
         let active = self.active_scene(tid) == scene as i32 && self.playing();
 
         ui.painter().rect_filled(inner, Rounding::same(4.0), theme::track_color(clip_color));
+        // launch zone: the left strip with the play arrow (Bitwig's clip button)
+        let launch_zone = Rect::from_min_size(inner.left_top(), Vec2::new(16.0, inner.height()));
+        ui.painter().rect_filled(launch_zone, Rounding::same(4.0), Color32::from_black_alpha(70));
+        ui.painter().text(
+            launch_zone.center(),
+            Align2::CENTER_CENTER,
+            if active { "■" } else { "▶" },
+            FontId::proportional(9.0),
+            Color32::from_black_alpha(220),
+        );
+        if self.selected_slot == Some((ti, scene)) {
+            ui.painter().rect_stroke(inner, Rounding::same(4.0), Stroke::new(1.5, theme::TEXT));
+        }
         if active {
             ui.painter().rect_stroke(inner, Rounding::same(4.0), Stroke::new(2.0, theme::PLAY));
         }
         ui.painter().text(
-            Pos2::new(inner.left() + 6.0, inner.top() + 9.0),
+            Pos2::new(inner.left() + 20.0, inner.top() + 9.0),
             Align2::LEFT_CENTER,
             &clip_name,
             FontId::proportional(11.0),
@@ -1733,11 +1897,28 @@ impl DawApp {
 
         if resp.clicked() {
             self.selected_track = ti;
-            self.cmds.push(Command::Play);
-            self.cmds.push(Command::LaunchClip { track: tid, scene });
+            self.selected_slot = Some((ti, scene));
+            let in_launch_zone = resp
+                .interact_pointer_pos()
+                .map(|p| p.x <= inner.left() + 16.0)
+                .unwrap_or(false);
+            if in_launch_zone {
+                if active {
+                    self.cmds.push(Command::StopTrack { track: tid });
+                } else {
+                    self.cmds.push(Command::Play);
+                    self.cmds.push(Command::LaunchClip { track: tid, scene });
+                }
+            }
         }
         if resp.double_clicked() {
-            self.editing = Some((ti, scene));
+            let in_launch_zone = resp
+                .interact_pointer_pos()
+                .map(|p| p.x <= inner.left() + 16.0)
+                .unwrap_or(false);
+            if !in_launch_zone {
+                self.editing = Some((ti, scene));
+            }
         }
         if resp.secondary_clicked() {
             self.push_undo();
@@ -1934,7 +2115,7 @@ impl DawApp {
             return;
         }
 
-        egui::ScrollArea::horizontal().show(ui, |ui| {
+        egui::ScrollArea::both().id_salt("devstrip").show(ui, |ui| {
             ui.horizontal_top(|ui| {
                 for di in 0..device_count {
                     self.device_card(ui, di);
@@ -2247,7 +2428,7 @@ impl DawApp {
         let grid_w = (clip_len as f32) * PR_BEAT_W;
         let key = self.project.key;
 
-        egui::ScrollArea::vertical().show(ui, |ui| {
+        egui::ScrollArea::both().id_salt("pianoroll").show(ui, |ui| {
             ui.horizontal_top(|ui| {
                 // key labels
                 let (keys_rect, _) = ui.allocate_exact_size(Vec2::new(PR_KEYS_W, grid_h), Sense::hover());
