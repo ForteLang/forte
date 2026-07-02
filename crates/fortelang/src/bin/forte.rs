@@ -19,6 +19,7 @@ fn main() -> ExitCode {
                 .cloned();
             build(&args[1], out)
         }
+        Some("lsp") => ExitCode::from(fortelang::lsp::run() as u8),
         #[cfg(not(target_family = "wasm"))]
         Some("play") if args.len() >= 2 => {
             let for_secs = args
@@ -32,6 +33,7 @@ fn main() -> ExitCode {
             eprintln!("usage: forte check <song.forte>");
             eprintln!("       forte build <song.forte> [-o out.wav]");
             eprintln!("       forte play  <song.forte> [--for SECS]");
+            eprintln!("       forte lsp");
             ExitCode::from(2)
         }
     }

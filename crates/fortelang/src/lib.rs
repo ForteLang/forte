@@ -8,6 +8,7 @@ pub mod audio;
 pub mod compile;
 pub mod diag;
 pub mod lexer;
+pub mod lsp;
 pub mod music;
 pub mod parser;
 

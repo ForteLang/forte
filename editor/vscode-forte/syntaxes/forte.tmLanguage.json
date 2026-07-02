@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Forte",
+  "scopeName": "source.forte",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#music-literals" },
+    { "include": "#strings" },
+    { "include": "#keywords" },
+    { "include": "#pattern-fns" },
+    { "include": "#numbers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.forte", "match": "//.*$" },
+        { "name": "comment.block.forte", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "music-literals": {
+      "patterns": [
+        {
+          "name": "string.other.music.forte",
+          "begin": "\\b(beat|notes|prog)\\s*(`)",
+          "beginCaptures": {
+            "1": { "name": "support.function.music.forte" },
+            "2": { "name": "punctuation.definition.string.begin.forte" }
+          },
+          "end": "`",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.forte" } }
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.forte",
+      "begin": "\"",
+      "end": "\""
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.forte",
+          "match": "\\b(song|track|return|section|let|instrument|insert|play|at|send|volume|pan|tempo|meter|key|bars)\\b"
+        }
+      ]
+    },
+    "pattern-fns": {
+      "name": "support.function.pattern.forte",
+      "match": "\\b(chords|arp|bass|sampler|polymer|grid|filter|eq|drive|delay|reverb)\\b"
+    },
+    "numbers": {
+      "name": "constant.numeric.forte",
+      "match": "-?\\b\\d+(\\.\\d+)?(bpm|dB|Hz|ms|bars?|beat)?\\b"
+    }
+  }
+}
