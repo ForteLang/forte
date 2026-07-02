@@ -19,6 +19,7 @@ pub struct Ctx {
     handle: EngineHandle,
     src: Vec<u8>,
     diags_json: Vec<u8>,
+    viz_json: Vec<u8>,
     out_l: Vec<f32>,
     out_r: Vec<f32>,
     prev_tracks: usize,
@@ -39,6 +40,7 @@ pub extern "C" fn fw_new(sample_rate: f32) -> *mut Ctx {
         handle,
         src: Vec::new(),
         diags_json: b"[]".to_vec(),
+        viz_json: b"null".to_vec(),
         out_l: vec![0.0; MAX_FRAMES],
         out_r: vec![0.0; MAX_FRAMES],
         prev_tracks: 0,
@@ -76,6 +78,7 @@ pub unsafe extern "C" fn fw_compile(ptr: *mut Ctx) -> i32 {
             let len = dawcore::bounce::arrangement_len(&p);
             c.handle.send(Command::SetLoop { enabled: true, start: 0.0, end: len });
             c.handle.send(Command::SetLaunchQuant(0.0));
+            c.viz_json = viz_json(&p);
             c.project = Some(p);
             c.diags_json = b"[]".to_vec();
             0
@@ -143,6 +146,57 @@ pub unsafe extern "C" fn fw_process(ptr: *mut Ctx, frames: usize) {
     // split_at_mut keeps the borrow checker happy without allocating
     let (l, r) = (&mut c.out_l, &mut c.out_r);
     c.engine.process(&mut l[..n], &mut r[..n], n);
+}
+
+/// Read-only visualization data derived from the compiled project (the code
+/// is the only editable truth — views are projections of it, SYS-EDT-003).
+fn viz_json(p: &Project) -> Vec<u8> {
+    let beats_per_bar = p.time_sig.0 as f64 * 4.0 / p.time_sig.1 as f64;
+    let tracks: Vec<serde_json::Value> = p
+        .tracks
+        .iter()
+        .map(|t| {
+            let clips: Vec<serde_json::Value> = t
+                .arranger
+                .iter()
+                .map(|a| {
+                    let notes: Vec<[f64; 3]> = a
+                        .clip
+                        .notes
+                        .iter()
+                        .map(|n| [n.pitch as f64, n.start, n.length])
+                        .collect();
+                    serde_json::json!({
+                        "start": a.start, "duration": a.duration,
+                        "length": a.clip.length, "notes": notes,
+                    })
+                })
+                .collect();
+            serde_json::json!({
+                "name": t.name,
+                "color": t.color,
+                "fx": t.kind == dawcore::model::TrackKind::Effect,
+                "clips": clips,
+            })
+        })
+        .collect();
+    serde_json::to_vec(&serde_json::json!({
+        "tempo": p.tempo,
+        "beatsPerBar": beats_per_bar,
+        "lengthBeats": dawcore::bounce::arrangement_len(p),
+        "tracks": tracks,
+    }))
+    .unwrap_or_else(|_| b"null".to_vec())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_viz_ptr(ptr: *mut Ctx) -> *const u8 {
+    ctx(ptr).viz_json.as_ptr()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_viz_len(ptr: *mut Ctx) -> usize {
+    ctx(ptr).viz_json.len()
 }
 
 /// Offline build digest — byte-for-byte the same path as `forte build`

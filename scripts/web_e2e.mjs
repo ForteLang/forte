@@ -69,6 +69,9 @@ try {
   await page.waitForTimeout(1500);
   const s2 = await page.textContent('#status');
   check('worklet playback advances', s1 !== s2, `${s1} → ${s2}`);
+
+  const vizTracks = await page.evaluate(() => window.__vizTracks ?? 0);
+  check('arrangement view rendered', vizTracks >= 6, `${vizTracks} tracks`);
 } finally {
   await browser.close();
   server.kill();

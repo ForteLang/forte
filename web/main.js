@@ -2,8 +2,11 @@
 // build digest; an AudioWorklet instance handles playback. Editing recompiles
 // (debounced) and hot-swaps the playing engine.
 
+import { Viz } from './viz.js';
+
 const $ = (id) => document.getElementById(id);
 const status = (t) => ($('status').textContent = t);
+const viz = new Viz($('viz'));
 
 // ---- main-thread compiler instance -----------------------------------------
 let wasmBytes, main;
@@ -21,6 +24,12 @@ function mainCompile(text) {
   const dp = main.e.fw_diags_ptr(main.ctx);
   const dl = main.e.fw_diags_len(main.ctx);
   const diags = JSON.parse(new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, dp, dl)));
+  if (n === 0) {
+    const vp = main.e.fw_viz_ptr(main.ctx);
+    const vl = main.e.fw_viz_len(main.ctx);
+    viz.setData(JSON.parse(new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, vp, vl))));
+    window.__vizTracks = viz.data?.tracks?.length ?? 0;
+  }
   return { ok: n === 0, diags };
 }
 
@@ -101,6 +110,7 @@ async function ensureAudio() {
     const m = e.data;
     if (m.kind === 'pos') {
       status(`bar ${Math.floor(m.beats / 4) + 1}.${Math.floor(m.beats % 4) + 1} | peak ${m.peak.toFixed(2)}`);
+      viz.setPlayhead(m.beats);
     }
   };
   node.port.postMessage({ cmd: 'src', text: getText() });
