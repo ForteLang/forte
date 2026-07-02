@@ -2,6 +2,7 @@
 //! reproducibly. Error paths report the documented diagnostic codes.
 
 const REFERENCE: &str = include_str!("../../../songs/first-light.forte");
+const REFERENCE2: &str = include_str!("../../../songs/slow-circles.forte");
 
 #[test]
 fn reference_song_compiles() {
@@ -24,6 +25,17 @@ fn reference_song_renders_deterministically_and_audibly() {
     assert_eq!(a.f32_digest, b.f32_digest, "same project must render bit-identically");
     assert!(a.rms > 0.01, "render must contain real signal (rms {})", a.rms);
     assert!(a.peak <= 1.0, "master limiter must bound output (peak {})", a.peak);
+}
+
+#[test]
+fn second_reference_song_compiles_in_six_eight() {
+    let p = fortelang::compile_str(REFERENCE2).expect("slow-circles must compile");
+    assert_eq!(p.tracks.len(), 4);
+    assert_eq!(p.time_sig, (6, 8));
+    // 6/8 -> 3 engine beats per bar; 12 bars = 36 beats
+    assert_eq!(dawcore::bounce::arrangement_len(&p), 36.0);
+    let info = fortelang::render_digest(&p, 4.0);
+    assert!(info.rms > 0.005, "6/8 render must contain signal (rms {})", info.rms);
 }
 
 fn err_codes(src: &str) -> Vec<&'static str> {

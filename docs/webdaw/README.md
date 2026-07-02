@@ -18,8 +18,10 @@ IEC 62304 のプロセス規律(要求→アーキテクチャ→詳細設計の
 ## 実装の現在地
 
 - **`crates/fortelang`** — 言語 v0 スライス: lexer/parser/検査(診断コード付き)、
-  dawcore へのコンパイル、`forte check` / `forte build`(WAV + build.manifest.json)。
-- **`songs/first-light.forte`** — リファレンス曲 1 曲目(6 トラック)。
+  dawcore へのコンパイル、`forte check` / `forte build`(WAV + build.manifest.json)/
+  `forte play`(リアルタイム再生+保存で即反映のホットリロード。音声デバイスがなければ
+  無音バックエンドで走行)。
+- **`songs/`** — リファレンス曲 2 曲(`first-light` 4/4、`slow-circles` 6/8)。
 - **`scripts/determinism_test.sh`** — 決定論ゲート 2 段(エンジン単体 / forte build 経由)。
   どちらも native x86_64 と wasm32-wasip1 でビット同一を CI 検証できる。
 

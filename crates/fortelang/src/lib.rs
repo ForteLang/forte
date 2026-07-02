@@ -3,6 +3,8 @@
 //! (07-determinism-spike.md) on native and wasm from the same source.
 
 pub mod ast;
+#[cfg(not(target_family = "wasm"))]
+pub mod audio;
 pub mod compile;
 pub mod diag;
 pub mod lexer;

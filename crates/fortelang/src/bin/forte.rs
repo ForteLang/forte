@@ -2,6 +2,7 @@
 //!
 //!   forte check <song.forte>              parse + compile, report diagnostics
 //!   forte build <song.forte> [-o out.wav] render WAV + build.manifest.json
+//!   forte play  <song.forte> [--for SECS] play live; reloads on file change
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -18,9 +19,19 @@ fn main() -> ExitCode {
                 .cloned();
             build(&args[1], out)
         }
+        #[cfg(not(target_family = "wasm"))]
+        Some("play") if args.len() >= 2 => {
+            let for_secs = args
+                .iter()
+                .position(|a| a == "--for")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|s| s.parse::<f64>().ok());
+            play(&args[1], for_secs)
+        }
         _ => {
             eprintln!("usage: forte check <song.forte>");
             eprintln!("       forte build <song.forte> [-o out.wav]");
+            eprintln!("       forte play  <song.forte> [--for SECS]");
             ExitCode::from(2)
         }
     }
@@ -107,5 +118,111 @@ fn build(path: &str, out: Option<String>) -> ExitCode {
     println!("built  : {out} ({:.1}s @ 48kHz)", info.seconds);
     println!("digest : {:016x} (f32, fnv1a64)", info.f32_digest);
     println!("proof  : {}", mpath.display());
+    ExitCode::SUCCESS
+}
+
+/// Live playback with hot reload: the song loops while the file is watched;
+/// every successful recompile is swapped into the running engine without
+/// stopping the transport — listen, edit, listen (SYS-EDT-002 minimal form).
+#[cfg(not(target_family = "wasm"))]
+fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
+    use dawcore::command::Command;
+    use dawcore::model::Project;
+    use dawcore::sync::full_sync;
+    use std::io::Write as _;
+    use std::time::{Duration, Instant, SystemTime};
+
+    fn compile_file(path: &str) -> Result<Project, ExitCode> {
+        let src = load(path)?;
+        fortelang::compile_str(&src).map_err(|diags| {
+            for d in &diags {
+                eprintln!("{path}:{d}");
+            }
+            ExitCode::FAILURE
+        })
+    }
+    fn apply(handle: &mut dawcore::engine::EngineHandle, p: &Project, prev_slots: usize) {
+        full_sync(handle, p);
+        for slot in p.tracks.len()..prev_slots {
+            handle.send(Command::RemoveTrack { slot });
+        }
+        let len = dawcore::bounce::arrangement_len(p);
+        handle.send(Command::SetLoop { enabled: true, start: 0.0, end: len });
+        handle.send(Command::SetLaunchQuant(0.0));
+    }
+    fn mtime(path: &str) -> Option<SystemTime> {
+        std::fs::metadata(path).and_then(|m| m.modified()).ok()
+    }
+
+    let mut project = match compile_file(path) {
+        Ok(p) => p,
+        Err(c) => return c,
+    };
+    let mut audio = fortelang::audio::start();
+    if audio.silent {
+        eprintln!("audio: 出力デバイスなし — 無音バックエンドで走行します({})", audio.device_name);
+    } else {
+        println!("audio: {}", audio.device_name);
+    }
+    apply(&mut audio.handle, &project, 0);
+    audio.handle.send(Command::Play);
+    println!(
+        "playing: \"{}\" — {} tracks, tempo {} bpm(ループ再生中。ファイルを保存すると即反映、Ctrl+C で終了)",
+        path,
+        project.tracks.len(),
+        project.tempo
+    );
+
+    let started = Instant::now();
+    let mut last_mtime = mtime(path);
+    let mut last_status = Instant::now();
+    let beats_per_bar = project.time_sig.0 as f64 * 4.0 / project.time_sig.1 as f64;
+    let mut bpb = beats_per_bar;
+    loop {
+        std::thread::sleep(Duration::from_millis(100));
+        audio.handle.collect_garbage();
+
+        // hot reload on mtime change
+        let m = mtime(path);
+        if m != last_mtime {
+            last_mtime = m;
+            match compile_file(path) {
+                Ok(p) => {
+                    let prev = project.tracks.len();
+                    apply(&mut audio.handle, &p, prev);
+                    bpb = p.time_sig.0 as f64 * 4.0 / p.time_sig.1 as f64;
+                    println!(
+                        "\nreloaded: {} tracks, tempo {} bpm",
+                        p.tracks.len(),
+                        p.tempo
+                    );
+                    project = p;
+                }
+                Err(_) => {
+                    println!("(エラーのため直前の版を再生し続けます)");
+                }
+            }
+        }
+
+        if last_status.elapsed() >= Duration::from_millis(500) {
+            last_status = Instant::now();
+            let pos = audio.handle.shared.position_beats();
+            let bar = (pos / bpb).floor() as i64 + 1;
+            let beat = (pos % bpb).floor() as i64 + 1;
+            print!(
+                "\r  bar {bar:>3}.{beat} | peak {:>5.2} | voices {:>2} ",
+                audio.handle.shared.master_peak(),
+                audio.handle.shared.active_voices.load(std::sync::atomic::Ordering::Relaxed)
+            );
+            let _ = std::io::stdout().flush();
+        }
+
+        if let Some(t) = for_secs {
+            if started.elapsed().as_secs_f64() >= t {
+                println!();
+                break;
+            }
+        }
+    }
     ExitCode::SUCCESS
 }

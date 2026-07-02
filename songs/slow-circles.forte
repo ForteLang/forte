@@ -1,0 +1,41 @@
+// Slow Circles — Forte v0 リファレンス曲 2。
+// 6/8 拍子、モジュラー音源(grid)、filter / eq を行使する。
+// 再生: cargo run -p fortelang --bin forte -- play songs/slow-circles.forte
+
+song "Slow Circles" {
+  tempo 72bpm
+  meter 6/8
+  key A minor
+
+  let pulse = beat`x-- x-- X-- x--`
+  let ride  = beat`x-x x-x x-x x-x`
+
+  track Pulse {
+    instrument sampler(sample: "Kick")
+    volume 0.8
+    play pulse at bars(1..12)
+  }
+
+  track Ride {
+    instrument sampler(sample: "Hat")
+    volume 0.45
+    pan 0.3
+    play ride at bars(3..12)
+  }
+
+  track GridBass {
+    instrument grid()
+    insert filter(type: "lp", cutoff: 0.45, reso: 0.35)
+    volume 0.65
+    play notes`A1:1.5 A1:1.5 E2:1.5 G2:1.5` at bars(1..12)
+  }
+
+  track Drift {
+    instrument polymer(wave: "tri", cutoff: 0.4, attack: 0.4, release: 0.9, detune: 0.3)
+    insert eq(low: 0.4, mid: 0.5, high: 0.65)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.45)
+    volume 0.4
+    pan -0.2
+    play notes`[A3 C4 E4]:3 [F3 A3 C4]:3 [C4 E4 G4]:3 [E3 G3 B3]:3` at bars(1..12)
+  }
+}

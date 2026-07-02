@@ -9,6 +9,11 @@ description = "Forte lang v0: compile .forte song sources into the dawcore engin
 dawcore = { path = "../dawcore" }
 serde_json = "1"
 
+# `forte play` only; not available on wasm32 (browser playback goes through
+# AudioWorklet instead — SAD §3.2).
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+cpal = "0.15"
+
 [[bin]]
 name = "forte"
 path = "src/bin/forte.rs"
