@@ -606,6 +606,26 @@ pub struct Project {
 }
 
 impl Project {
+    /// An empty project (no tracks, no loop) — the starting point for
+    /// programmatic construction, e.g. by the Forte compiler.
+    pub fn empty() -> Self {
+        Project {
+            tracks: Vec::new(),
+            scenes: (0..SCENE_COUNT)
+                .map(|i| Scene { name: format!("Scene {}", i + 1) })
+                .collect(),
+            tempo: 120.0,
+            time_sig: (4, 4),
+            key: KeySignature { root: 0, scale: Scale::Major },
+            loop_enabled: false,
+            loop_start: 0.0,
+            loop_end: 16.0,
+            cue_markers: Vec::new(),
+            launch_quant: 0.0,
+            next_id: 0,
+        }
+    }
+
     pub fn alloc_id(&mut self) -> usize {
         let id = self.next_id;
         self.next_id += 1;

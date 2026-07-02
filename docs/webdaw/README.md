@@ -15,6 +15,14 @@ IEC 62304 のプロセス規律(要求→アーキテクチャ→詳細設計の
 | 07 | [determinism-spike](07-determinism-spike.md) | Phase 0.4 スパイク結果: native/wasm ビット同一レンダリング達成 |
 | spec | [forte-lang-v0](spec/forte-lang-v0.md) | Forte lang 言語仕様 v0 ドラフト |
 
+## 実装の現在地
+
+- **`crates/fortelang`** — 言語 v0 スライス: lexer/parser/検査(診断コード付き)、
+  dawcore へのコンパイル、`forte check` / `forte build`(WAV + build.manifest.json)。
+- **`songs/first-light.forte`** — リファレンス曲 1 曲目(6 トラック)。
+- **`scripts/determinism_test.sh`** — 決定論ゲート 2 段(エンジン単体 / forte build 経由)。
+  どちらも native x86_64 と wasm32-wasip1 でビット同一を CI 検証できる。
+
 ## 意思決定の状態
 
 - **D-01 承認済(2026-07-02)**: コアは Rust(C ABI で API 化)

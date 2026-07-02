@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/dawcore", "crates/dawapp"]
+members = ["crates/dawcore", "crates/dawapp", "crates/fortelang"]
 
 [workspace.package]
 version = "0.6.0"
