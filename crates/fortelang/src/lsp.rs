@@ -3,7 +3,7 @@
 //! "errors appear as you type" in VSCode (SRS-LSP-001 first slice).
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 
 use serde_json::{json, Value};
 

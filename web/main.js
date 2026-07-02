@@ -1,0 +1,165 @@
+// Forte web editor: a main-thread wasm instance handles compile/diagnostics/
+// build digest; an AudioWorklet instance handles playback. Editing recompiles
+// (debounced) and hot-swaps the playing engine.
+
+const $ = (id) => document.getElementById(id);
+const status = (t) => ($('status').textContent = t);
+
+// ---- main-thread compiler instance -----------------------------------------
+let wasmBytes, main;
+async function initWasm() {
+  wasmBytes = await (await fetch('forte.wasm')).arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(wasmBytes.slice(0), {});
+  main = { e: instance.exports };
+  main.ctx = main.e.fw_new(48000);
+}
+function mainCompile(text) {
+  const bytes = new TextEncoder().encode(text);
+  const ptr = main.e.fw_src_prepare(main.ctx, bytes.length);
+  new Uint8Array(main.e.memory.buffer, ptr, bytes.length).set(bytes);
+  const n = main.e.fw_compile(main.ctx);
+  const dp = main.e.fw_diags_ptr(main.ctx);
+  const dl = main.e.fw_diags_len(main.ctx);
+  const diags = JSON.parse(new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, dp, dl)));
+  return { ok: n === 0, diags };
+}
+
+// ---- editor (Monaco if the CDN is reachable, plain textarea otherwise) ------
+const fallback = $('fallback');
+let getText = () => fallback.value;
+let onChange = () => {};
+fallback.addEventListener('input', () => onChange());
+
+async function tryMonaco(initial) {
+  try {
+    const base = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min';
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = `${base}/vs/loader.js`;
+      s.onload = res;
+      s.onerror = rej;
+      setTimeout(rej, 4000);
+      document.head.appendChild(s);
+    });
+    require.config({ paths: { vs: `${base}/vs` } });
+    await new Promise((res, rej) => require(['vs/editor/editor.main'], res, rej));
+    monaco.languages.register({ id: 'forte' });
+    monaco.languages.setMonarchTokensProvider('forte', {
+      tokenizer: {
+        root: [
+          [/\/\/.*/, 'comment'],
+          [/\b(song|track|return|section|let|instrument|insert|play|at|send|volume|pan|tempo|meter|key|bars)\b/, 'keyword'],
+          [/\b(chords|arp|bass|sampler|polymer|grid|filter|eq|drive|delay|reverb|beat|notes|prog)\b/, 'type'],
+          [/"[^"]*"/, 'string'],
+          [/`[^`]*`/, 'string.backtick'],
+          [/-?\d+(\.\d+)?\w*/, 'number'],
+        ],
+      },
+    });
+    fallback.remove();
+    const ed = monaco.editor.create($('editor-host'), {
+      value: initial,
+      language: 'forte',
+      theme: 'vs-dark',
+      fontSize: 13,
+      minimap: { enabled: false },
+      automaticLayout: true,
+    });
+    getText = () => ed.getValue();
+    ed.onDidChangeModelContent(() => onChange());
+    window.__forteSetMarkers = (diags) => {
+      monaco.editor.setModelMarkers(
+        ed.getModel(),
+        'forte',
+        diags.map((d) => ({
+          startLineNumber: d.line, startColumn: d.col,
+          endLineNumber: d.line, endColumn: d.col + 1,
+          severity: monaco.MarkerSeverity.Error,
+          message: `[${d.code}] ${d.message}`,
+        }))
+      );
+    };
+    return true;
+  } catch {
+    return false; // offline: keep the textarea
+  }
+}
+
+// ---- audio ------------------------------------------------------------------
+let ac, node;
+async function ensureAudio() {
+  if (ac) return;
+  ac = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
+  await ac.audioWorklet.addModule('worklet.js');
+  node = new AudioWorkletNode(ac, 'forte', { outputChannelCount: [2] });
+  node.connect(ac.destination);
+  await new Promise((res) => {
+    node.port.onmessage = (e) => e.data.kind === 'ready' && res();
+    node.port.postMessage({ cmd: 'init', wasm: wasmBytes.slice(0) });
+  });
+  node.port.onmessage = (e) => {
+    const m = e.data;
+    if (m.kind === 'pos') {
+      status(`bar ${Math.floor(m.beats / 4) + 1}.${Math.floor(m.beats % 4) + 1} | peak ${m.peak.toFixed(2)}`);
+    }
+  };
+  node.port.postMessage({ cmd: 'src', text: getText() });
+}
+
+// ---- wiring -------------------------------------------------------------------
+function showDiags(diags) {
+  const el = $('diags');
+  el.innerHTML = '';
+  if (!diags.length) {
+    el.innerHTML = '<div class="ok">✓ コンパイル OK</div>';
+  } else {
+    for (const d of diags) {
+      const div = document.createElement('div');
+      div.className = 'd';
+      div.textContent = `${d.line}:${d.col} [${d.code}] ${d.message}`;
+      el.appendChild(div);
+    }
+  }
+  window.__forteSetMarkers?.(diags);
+}
+
+let debounce;
+function recompile() {
+  clearTimeout(debounce);
+  debounce = setTimeout(() => {
+    const { ok, diags } = mainCompile(getText());
+    showDiags(diags);
+    document.body.dataset.compiled = ok ? 'ok' : 'error';
+    if (ok && node) node.port.postMessage({ cmd: 'src', text: getText() }); // hot reload
+  }, 300);
+}
+
+async function boot() {
+  const [src] = await Promise.all([
+    fetch('../songs/first-light.forte').then((r) => r.text()),
+    initWasm(),
+  ]);
+  fallback.value = src;
+  await tryMonaco(src);
+  onChange = recompile;
+  const { ok, diags } = mainCompile(getText());
+  showDiags(diags);
+  document.body.dataset.compiled = ok ? 'ok' : 'error';
+  status('ready');
+
+  $('play').onclick = async () => {
+    await ensureAudio();
+    await ac.resume();
+    node.port.postMessage({ cmd: 'play' });
+  };
+  $('stop').onclick = () => node?.port.postMessage({ cmd: 'stop' });
+  $('digest').onclick = () => {
+    status('building…');
+    setTimeout(() => {
+      const d = main.e.fw_digest(main.ctx);
+      $('digest-out').textContent = d.toString(16).padStart(16, '0');
+      status('ready');
+    }, 30);
+  };
+}
+boot();

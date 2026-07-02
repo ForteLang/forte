@@ -2,3 +2,4 @@
 **/*.rs.bk
 *.wav
 .DS_Store
+/web/forte.wasm

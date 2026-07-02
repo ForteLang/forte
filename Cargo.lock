@@ -1283,6 +1283,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forteweb"
+version = "0.6.0"
+dependencies = [
+ "dawcore",
+ "fortelang",
+ "serde_json",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"

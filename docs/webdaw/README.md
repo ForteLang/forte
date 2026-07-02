@@ -25,6 +25,12 @@ IEC 62304 のプロセス規律(要求→アーキテクチャ→詳細設計の
   `night-parade`: prog 進行リテラル・section・send/return・chords/arp/bass)。
 - **`editor/vscode-forte`** — VSCode 拡張: シンタックスハイライト、`forte lsp` に
   よるリアルタイム診断、Play(ホットリロード)/Build/Stop コマンド。
+- **`web/` + `crates/forteweb`** — ブラウザエディタのプロトタイプ:
+  メインスレッドの wasm がタイプ中診断とビルド証明、AudioWorklet 内の wasm が
+  再生+保存なしホットリロード。`scripts/build_web.sh` でビルドし、リポジトリ
+  ルートを静的配信して `/web/` を開く。E2E は `scripts/web_e2e.mjs`(実 Chromium で
+  「ブラウザのビルドダイジェスト == ネイティブ CLI」まで検証済 = **native / wasip1 /
+  ブラウザの三者ビット同一**)。
 - **`scripts/determinism_test.sh`** — 決定論ゲート 2 段(エンジン単体 / forte build 経由)。
   どちらも native x86_64 と wasm32-wasip1 でビット同一を CI 検証できる。
 
