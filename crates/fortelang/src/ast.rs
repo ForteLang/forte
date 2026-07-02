@@ -9,7 +9,28 @@ pub struct SongAst {
     pub meter: Option<((u32, u32), Pos)>,
     pub key: Option<((String, String), Pos)>, // (root, scale) as written
     pub lets: Vec<LetAst>,
+    pub sections: Vec<SectionAst>,
     pub tracks: Vec<TrackAst>,
+    pub returns: Vec<ReturnAst>,
+}
+
+/// `section verse = bars(1..8)` — a named, reusable bar range.
+#[derive(Clone, Debug)]
+pub struct SectionAst {
+    pub name: String,
+    pub bars: (u32, u32),
+    pub pos: Pos,
+}
+
+/// `return Space { insert reverb(...) }` — an effect (return) track fed by
+/// post-fader sends.
+#[derive(Clone, Debug)]
+pub struct ReturnAst {
+    pub name: String,
+    pub pos: Pos,
+    pub inserts: Vec<Call>,
+    pub volume: Option<(f64, Pos)>,
+    pub pan: Option<(f64, Pos)>,
 }
 
 #[derive(Clone, Debug)]
@@ -36,6 +57,8 @@ pub struct TrackAst {
     pub plays: Vec<PlayAst>,
     pub volume: Option<(f64, Pos)>,
     pub pan: Option<(f64, Pos)>,
+    /// `send Space 0.3` — (return name, level).
+    pub sends: Vec<(String, f64, Pos)>,
 }
 
 #[derive(Clone, Debug)]
@@ -54,13 +77,23 @@ pub enum Arg {
 #[derive(Clone, Debug)]
 pub struct PlayAst {
     pub pattern: PatternRef,
-    /// Inclusive 1-based bar range from `bars(a..b)`.
-    pub bars: (u32, u32),
+    pub at: AtRef,
     pub pos: Pos,
+}
+
+/// Where a play is placed: an explicit bar range or a named section.
+#[derive(Clone, Debug)]
+pub enum AtRef {
+    /// Inclusive 1-based bar range from `bars(a..b)`.
+    Bars(u32, u32),
+    Section(String, Pos),
 }
 
 #[derive(Clone, Debug)]
 pub enum PatternRef {
     Name(String, Pos),
     Lit(PatternLit),
+    /// Pattern function: `chords(x)`, `arp(x, rate: 0.25, style: "up")`,
+    /// `bass(x, rate: 0.5)`.
+    Fn { name: String, inner: Box<PatternRef>, args: Vec<(String, Arg)>, pos: Pos },
 }

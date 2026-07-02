@@ -108,8 +108,9 @@ pub song "Aozora" {
   接続)に完全展開される。
 - 制御構造(`let` / `fn` / `if` / `for` / `map` / `repeat`)はすべてコンパイル時。
   実行時に評価されるのは DSP 層の `process` のみ。
-- ルーティング既定: `track` → 暗黙の `Master`。明示ルーティングは
-  `route Keys -> ReverbBus gain -6dB`。**DECISION-S1**: send/return の構文。
+- ルーティング既定: `track` → 暗黙の `Master`。send/return は
+  `return Space { insert reverb(...) }` ブロック+トラック内の `send Space 0.35`
+  (**DECISION-S1 解決済 — v0 実装に準拠**)。
 - 乱数: `random(seed: 42)` が返す純粋な生成器のみ。シードは省略不可。
 - `song` は値なので、関数が `Song` を返す・変奏を `map` で作る等が可能
   (アルゴリズム作曲はこの経路で行う)。
@@ -119,8 +120,12 @@ pub song "Aozora" {
 - `beat` … `x`=ヒット、`-`=休符、`X`=アクセント、空白=グルーピング(無意味)。
   解像度はリテラル長から推論(1 小節を等分)。**DECISION-S2**: 3 連符等の非 2 冪。
 - `notes` … `notes\`C4:1/4 E4:1/4 G4:1/2\``(ピッチ:長さ)。
-- `prog` … コード名と `|`。`Progression` 値になり、`arp`/`voicing`/`bass` 等の
-  標準関数の入力になる。**進行が一級の値であることが類似検索(SRS-PLY-002)の基盤**。
+- `prog` … コード名と `|`(小節区切り。1 小節内の複数コードは時間を等分)。
+  `Progression` 値になり、パターン関数 `chords(x)` / `arp(x, rate:, style: "up|down|updown")` /
+  `bass(x, rate:)` の入力になる。裸の `prog` はブロックコードとして鳴る。
+  クオリティ: (メジャー), m, min, 7, maj7, m7, min7, dim, aug, sus2, sus4。
+  **進行が一級の値であることが類似検索(SRS-PLY-002)の基盤**。
+- `section verse = bars(1..8)` で名前付き区間を定義し、`play x at verse` で参照する。
 
 ## 6. DSP 層
 
@@ -208,7 +213,7 @@ musicLit    := ("beat"|"notes"|"prog") "`" raw "`"
 | ID | 内容 | 期限 |
 | --- | --- | --- |
 | DECISION-T1 | ジェネリクスの範囲 | パーサ実装前 |
-| DECISION-S1 | send/return ルーティング構文 | リファレンス曲移植時 |
-| DECISION-S2 | 非 2 冪分割(3 連)の beat リテラル表現 | 同上 |
-| DECISION-S3 | `section` と曲構造の反復(A-B-A)の一級表現 | 同上 |
+| ~~DECISION-S1~~ | ~~send/return ルーティング構文~~ → **解決: `return Name {}` + `send Name level`** | 済 |
+| DECISION-S2 | 非 2 冪分割(3 連)の beat リテラル表現 | リファレンス曲移植時 |
+| DECISION-S3 | `section` の反復(A-B-A)の一級表現(単純な `section` は実装済) | 同上 |
 | DECISION-D1 | `process` のフレーム粒度(1 サンプル vs 小ブロック) | インタープリタ実装時 |

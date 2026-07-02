@@ -38,6 +38,58 @@ fn second_reference_song_compiles_in_six_eight() {
     assert!(info.rms > 0.005, "6/8 render must contain signal (rms {})", info.rms);
 }
 
+const REFERENCE3: &str = include_str!("../../../songs/night-parade.forte");
+
+#[test]
+fn third_reference_song_uses_prog_sections_and_sends() {
+    let p = fortelang::compile_str(REFERENCE3).expect("night-parade must compile");
+    // 5 tracks + 1 return
+    assert_eq!(p.tracks.len(), 6);
+    let space = p.tracks.iter().find(|t| t.name == "Space").unwrap();
+    assert_eq!(space.kind, dawcore::model::TrackKind::Effect);
+    // sends resolved to the return's id
+    let keys = p.tracks.iter().find(|t| t.name == "Keys").unwrap();
+    assert_eq!(keys.sends, vec![(space.id, 0.35)]);
+    // section placement: hats start at bar 5 (beat 16)
+    let hats = p.tracks.iter().find(|t| t.name == "Hats").unwrap();
+    assert_eq!(hats.arranger[0].start, 16.0);
+    // prog: Em block chord = E3/G3/B3 (52/55/59)
+    let keys_clip = &keys.arranger[0].clip;
+    let mut first: Vec<u8> =
+        keys_clip.notes.iter().filter(|n| n.start == 0.0).map(|n| n.pitch).collect();
+    first.sort_unstable();
+    assert_eq!(first, vec![52, 55, 59]);
+    // arp fills bar at rate 0.25: 16 notes per bar
+    let arp = p.tracks.iter().find(|t| t.name == "Arp").unwrap();
+    let arp_clip = &arp.arranger[0].clip;
+    assert_eq!(arp_clip.notes.iter().filter(|n| n.start < 4.0).count(), 16);
+    // renders with signal
+    let info = fortelang::render_digest(&p, 4.0);
+    assert!(info.rms > 0.01, "render must contain signal (rms {})", info.rms);
+}
+
+#[test]
+fn unknown_section_and_return_are_reported() {
+    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() send Nowhere 0.3 play beat`x---` at nowhere } }"#;
+    let codes = err_codes(src);
+    assert!(codes.contains(&"E-MOD-003"), "unknown section: {codes:?}");
+    assert!(codes.contains(&"E-MOD-004"), "unknown return: {codes:?}");
+}
+
+#[test]
+fn bad_chord_and_bad_style_are_reported() {
+    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play prog`Hm7` at bars(1..1) } }"#;
+    assert!(err_codes(src).contains(&"E-PROG-002"));
+    let src2 = r#"song "X" { tempo 120bpm track A { instrument polymer() play arp(prog`Em`, style: "spiral") at bars(1..1) } }"#;
+    assert!(err_codes(src2).contains(&"E-PAT-002"));
+}
+
+#[test]
+fn pattern_fn_requires_prog() {
+    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play chords(beat`x---`) at bars(1..1) } }"#;
+    assert!(err_codes(src).contains(&"E-PAT-001"));
+}
+
 fn err_codes(src: &str) -> Vec<&'static str> {
     match fortelang::compile_str(src) {
         Ok(_) => Vec::new(),

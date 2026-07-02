@@ -113,7 +113,9 @@ impl Parser {
             meter: None,
             key: None,
             lets: Vec::new(),
+            sections: Vec::new(),
             tracks: Vec::new(),
+            returns: Vec::new(),
         };
 
         loop {
@@ -165,14 +167,33 @@ impl Parser {
                         let lit = self.music_lit()?;
                         song.lets.push(LetAst { name, value: lit, pos });
                     }
+                    "section" => {
+                        self.bump();
+                        let pos = self.pos();
+                        let name = self.ident("section の名前")?;
+                        self.expect(Tok::Eq, "`=`");
+                        if !self.keyword("bars") {
+                            self.err("E-PARSE-013", "section は `= bars(a..b)` で定義します");
+                        }
+                        self.expect(Tok::LParen, "`(`");
+                        let a = self.number("開始小節")?;
+                        self.expect(Tok::DotDot, "`..`");
+                        let b = self.number("終了小節")?;
+                        self.expect(Tok::RParen, "`)`");
+                        song.sections.push(SectionAst { name, bars: (a.0 as u32, b.0 as u32), pos });
+                    }
                     "track" => {
                         let t = self.track()?;
                         song.tracks.push(t);
                     }
+                    "return" => {
+                        let r = self.return_block()?;
+                        song.returns.push(r);
+                    }
                     other => {
                         self.err(
                             "E-PARSE-007",
-                            format!("song 内で使えない要素です: {other}(tempo/meter/key/let/track)"),
+                            format!("song 内で使えない要素です: {other}(tempo/meter/key/let/section/track/return)"),
                         );
                         self.bump();
                     }
@@ -188,12 +209,12 @@ impl Parser {
 
     fn music_lit(&mut self) -> Option<PatternLit> {
         let pos = self.pos();
-        let kind = self.ident("音楽リテラルの種類(beat / notes)")?;
-        if kind != "beat" && kind != "notes" {
+        let kind = self.ident("音楽リテラルの種類(beat / notes / prog)")?;
+        if kind != "beat" && kind != "notes" && kind != "prog" {
             self.diags.push(Diag::new(
                 "E-PARSE-009",
                 pos,
-                format!("音楽リテラルは beat`…` か notes`…` です(見つかったのは {kind})"),
+                format!("音楽リテラルは beat`…` / notes`…` / prog`…` です(見つかったのは {kind})"),
             ));
         }
         if let Tok::Backtick(raw) = self.peek().clone() {
@@ -218,6 +239,7 @@ impl Parser {
             plays: Vec::new(),
             volume: None,
             pan: None,
+            sends: Vec::new(),
         };
         loop {
             match self.peek().clone() {
@@ -250,30 +272,31 @@ impl Parser {
                     "play" => {
                         self.bump();
                         let ppos = self.pos();
-                        let pattern = match self.peek().clone() {
-                            Tok::Ident(id) if id != "beat" && id != "notes" => {
-                                let p = self.pos();
-                                self.bump();
-                                PatternRef::Name(id, p)
-                            }
-                            _ => PatternRef::Lit(self.music_lit()?),
-                        };
+                        let pattern = self.pattern_expr()?;
                         if !self.keyword("at") {
-                            self.err("E-PARSE-012", "play には `at bars(a..b)` が必要です");
+                            self.err("E-PARSE-012", "play には `at bars(a..b)` か `at セクション名` が必要です");
                         }
-                        if !self.keyword("bars") {
-                            self.err("E-PARSE-013", "v0 では配置は bars(a..b) のみ対応です");
+                        let at = if self.keyword("bars") {
+                            self.expect(Tok::LParen, "`(`");
+                            let a = self.number("開始小節")?;
+                            self.expect(Tok::DotDot, "`..`");
+                            let b = self.number("終了小節")?;
+                            self.expect(Tok::RParen, "`)`");
+                            AtRef::Bars(a.0 as u32, b.0 as u32)
+                        } else {
+                            let spos = self.pos();
+                            let name = self.ident("配置先(bars(a..b) かセクション名)")?;
+                            AtRef::Section(name, spos)
+                        };
+                        t.plays.push(PlayAst { pattern, at, pos: ppos });
+                    }
+                    "send" => {
+                        self.bump();
+                        let spos = self.pos();
+                        let dest = self.ident("send 先(return の名前)")?;
+                        if let Some((level, _, _)) = self.number("send レベル") {
+                            t.sends.push((dest, level, spos));
                         }
-                        self.expect(Tok::LParen, "`(`");
-                        let a = self.number("開始小節")?;
-                        self.expect(Tok::DotDot, "`..`");
-                        let b = self.number("終了小節")?;
-                        self.expect(Tok::RParen, "`)`");
-                        t.plays.push(PlayAst {
-                            pattern,
-                            bars: (a.0 as u32, b.0 as u32),
-                            pos: ppos,
-                        });
                     }
                     "volume" => {
                         self.bump();
@@ -291,7 +314,7 @@ impl Parser {
                         self.err(
                             "E-PARSE-014",
                             format!(
-                                "track 内で使えない要素です: {other}(instrument/insert/play/volume/pan)"
+                                "track 内で使えない要素です: {other}(instrument/insert/play/send/volume/pan)"
                             ),
                         );
                         self.bump();
@@ -304,6 +327,108 @@ impl Parser {
             }
         }
         Some(t)
+    }
+
+    /// Pattern expression: a literal, a `let` name, or a pattern function
+    /// `chords(x)` / `arp(x, rate: 0.25, style: "up")` / `bass(x, rate: 0.5)`.
+    fn pattern_expr(&mut self) -> Option<PatternRef> {
+        if let Tok::Ident(id) = self.peek().clone() {
+            if id == "beat" || id == "notes" || id == "prog" {
+                return Some(PatternRef::Lit(self.music_lit()?));
+            }
+            let pos = self.pos();
+            self.bump();
+            if *self.peek() == Tok::LParen {
+                self.bump();
+                let inner = self.pattern_expr()?;
+                let mut args = Vec::new();
+                loop {
+                    match self.peek().clone() {
+                        Tok::RParen => {
+                            self.bump();
+                            break;
+                        }
+                        Tok::Comma => {
+                            self.bump();
+                            let key = self.ident("引数名")?;
+                            self.expect(Tok::Colon, "引数の `:`");
+                            let apos = self.pos();
+                            let arg = match self.peek().clone() {
+                                Tok::Str(s) => {
+                                    self.bump();
+                                    Arg::Str(s, apos)
+                                }
+                                _ => {
+                                    let (n, _unit, p) = self.number("引数の値")?;
+                                    Arg::Num(n, p)
+                                }
+                            };
+                            args.push((key, arg));
+                        }
+                        _ => {
+                            self.err("E-PARSE-015", "引数は `, 名前: 値` の形で書いてください");
+                            self.bump();
+                        }
+                    }
+                }
+                return Some(PatternRef::Fn { name: id, inner: Box::new(inner), args, pos });
+            }
+            return Some(PatternRef::Name(id, pos));
+        }
+        self.err("E-PARSE-016", "パターン(名前・リテラル・chords()/arp()/bass())が必要です");
+        None
+    }
+
+    /// `return Name { insert … / volume / pan }` — an effect return track.
+    fn return_block(&mut self) -> Option<ReturnAst> {
+        let pos = self.pos();
+        self.bump(); // "return"
+        let name = self.ident("return の名前")?;
+        self.expect(Tok::LBrace, "`{`");
+        let mut r = ReturnAst { name, pos, inserts: Vec::new(), volume: None, pan: None };
+        loop {
+            match self.peek().clone() {
+                Tok::RBrace => {
+                    self.bump();
+                    break;
+                }
+                Tok::Eof => {
+                    self.err("E-PARSE-006", "return ブロックが閉じていません(`}` が必要)");
+                    break;
+                }
+                Tok::Ident(kw) => match kw.as_str() {
+                    "insert" => {
+                        self.bump();
+                        let c = self.call()?;
+                        r.inserts.push(c);
+                    }
+                    "volume" => {
+                        self.bump();
+                        if let Some((n, _, p)) = self.number("volume") {
+                            r.volume = Some((n, p));
+                        }
+                    }
+                    "pan" => {
+                        self.bump();
+                        if let Some((n, _, p)) = self.number("pan") {
+                            r.pan = Some((n, p));
+                        }
+                    }
+                    other => {
+                        self.err(
+                            "E-PARSE-017",
+                            format!("return 内で使えない要素です: {other}(insert/volume/pan)"),
+                        );
+                        self.bump();
+                    }
+                },
+                _ => {
+                    self.err("E-PARSE-008", "return 内で解釈できないトークンです");
+                    self.bump();
+                }
+            }
+        }
+        Some(r)
     }
 
     fn call(&mut self) -> Option<Call> {

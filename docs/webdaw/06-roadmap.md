@@ -21,7 +21,7 @@ Status: Draft v0.1 / 2026-07-02
 | 0.3 | `forte build`(WAV+build.manifest.json)と `forte play`(CLI 再生) — **✅ `forte check/build/play` 実装済。play はファイル監視ホットリロード付き(再生を止めずに再コンパイル反映、エラー時は直前版を維持)** | SRS-BLD-001/002 |
 | 0.4 | **決定論 CI**: native/wasm の出力ハッシュ一致ゲート — **✅ スパイク成功(07-determinism-spike.md)。`scripts/determinism_test.sh` がゲートの原型** | SYS-ENG-001 |
 | 0.5 | `@std` 初期ライブラリ(シンセ 2、EQ、delay、reverb、limiter) | D-06 |
-| 0.6 | リファレンス曲 3 曲をコードで移植(ユーザーテスト素材) — **🔶 2 曲(`first-light` 4/4・6tr、`slow-circles` 6/8・grid/filter/eq 行使)。native/wasm 同一ダイジェスト** | SYS-LNG-001 受入 |
+| 0.6 | リファレンス曲 3 曲をコードで移植(ユーザーテスト素材) — **✅ 3 曲(`first-light` 4/4、`slow-circles` 6/8、`night-parade` prog/section/send-return/arp 行使)。native/wasm 同一ダイジェスト** | SYS-LNG-001 受入 |
 
 **Exit 基準**: 外部の作曲経験者 2 名がドキュメントだけを頼りに 8 小節を書けて、
 2 環境ハッシュが一致する。

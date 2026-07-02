@@ -21,7 +21,8 @@ IEC 62304 のプロセス規律(要求→アーキテクチャ→詳細設計の
   dawcore へのコンパイル、`forte check` / `forte build`(WAV + build.manifest.json)/
   `forte play`(リアルタイム再生+保存で即反映のホットリロード。音声デバイスがなければ
   無音バックエンドで走行)。
-- **`songs/`** — リファレンス曲 2 曲(`first-light` 4/4、`slow-circles` 6/8)。
+- **`songs/`** — リファレンス曲 3 曲(`first-light` 4/4、`slow-circles` 6/8、
+  `night-parade`: prog 進行リテラル・section・send/return・chords/arp/bass)。
 - **`scripts/determinism_test.sh`** — 決定論ゲート 2 段(エンジン単体 / forte build 経由)。
   どちらも native x86_64 と wasm32-wasip1 でビット同一を CI 検証できる。
 

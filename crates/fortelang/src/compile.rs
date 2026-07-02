@@ -59,6 +59,22 @@ pub fn compile(song: &SongAst) -> Result<Project, Vec<Diag>> {
         }
     }
 
+    // ---- sections ----------------------------------------------------------
+    let mut sections: HashMap<&str, (u32, u32)> = HashMap::new();
+    for s in &song.sections {
+        let (a, b) = s.bars;
+        if a == 0 || b < a {
+            diags.push(Diag::new(
+                "E-TIME-001",
+                s.pos,
+                format!("section {} = bars({a}..{b}) が不正です(小節は 1 始まり、開始 ≤ 終了)", s.name),
+            ));
+        }
+        if sections.insert(s.name.as_str(), s.bars).is_some() {
+            diags.push(Diag::new("E-MOD-002", s.pos, format!("section '{}' が重複しています", s.name)));
+        }
+    }
+
     // ---- tracks -----------------------------------------------------------
     if song.tracks.is_empty() {
         diags.push(Diag::new(
@@ -115,39 +131,30 @@ pub fn compile(song: &SongAst) -> Result<Project, Vec<Diag>> {
 
         // plays → arranger clips
         for play in &tast.plays {
-            let (lit, clip_name) = match &play.pattern {
-                PatternRef::Lit(l) => (l, format!("{} clip", tast.name)),
-                PatternRef::Name(n, pos) => match lets.get(n.as_str()) {
-                    Some(l) => ((*l), n.clone()),
+            let (notes, len_beats, clip_name) =
+                match eval_pattern(&play.pattern, &lets, beats_per_bar, beat_pitch) {
+                    Ok(v) => v,
+                    Err(d) => {
+                        diags.push(d);
+                        continue;
+                    }
+                };
+            let (a, b) = match &play.at {
+                AtRef::Bars(a, b) => (*a, *b),
+                AtRef::Section(name, pos) => match sections.get(name.as_str()) {
+                    Some(r) => *r,
                     None => {
-                        let mut names: Vec<&str> = lets.keys().copied().collect();
+                        let mut names: Vec<&str> = sections.keys().copied().collect();
                         names.sort();
                         diags.push(Diag::new(
-                            "E-MOD-001",
+                            "E-MOD-003",
                             *pos,
-                            format!("パターン '{n}' が定義されていません(定義済み: {})", names.join(", ")),
+                            format!("section '{name}' が定義されていません(定義済み: {})", names.join(", ")),
                         ));
                         continue;
                     }
                 },
             };
-            let parsed = match lit.kind.as_str() {
-                "beat" => music::parse_beat(&lit.raw, beats_per_bar, beat_pitch, lit.pos),
-                "notes" => music::parse_notes(&lit.raw, lit.pos),
-                other => Err(Diag::new(
-                    "E-PARSE-009",
-                    lit.pos,
-                    format!("音楽リテラルは beat / notes です(見つかったのは {other})"),
-                )),
-            };
-            let (notes, len_beats): (Vec<Note>, f64) = match parsed {
-                Ok(v) => v,
-                Err(d) => {
-                    diags.push(d);
-                    continue;
-                }
-            };
-            let (a, b) = play.bars;
             if a == 0 || b < a {
                 diags.push(Diag::new(
                     "E-TIME-001",
@@ -169,10 +176,171 @@ pub fn compile(song: &SongAst) -> Result<Project, Vec<Diag>> {
         p.tracks.push(track);
     }
 
+    // ---- return (effect) tracks -------------------------------------------
+    let mut return_ids: HashMap<&str, usize> = HashMap::new();
+    for (ri, rast) in song.returns.iter().enumerate() {
+        let id = p.alloc_id();
+        let color = TRACK_COLORS[(song.tracks.len() + ri) % TRACK_COLORS.len()];
+        let mut track = Track::new(id, rast.name.clone(), TrackKind::Effect, color);
+        for call in &rast.inserts {
+            match build_effect(call) {
+                Ok(dev) => track.devices.push(dev),
+                Err(d) => diags.push(d),
+            }
+        }
+        if let Some((v, pos)) = rast.volume {
+            if !(0.0..=1.0).contains(&v) {
+                diags.push(Diag::new("E-TYPE-002", pos, format!("volume {v} は 0..1 の範囲外です")));
+            } else {
+                track.volume = v as f32;
+            }
+        }
+        if let Some((v, pos)) = rast.pan {
+            if !(-1.0..=1.0).contains(&v) {
+                diags.push(Diag::new("E-TYPE-003", pos, format!("pan {v} は -1..1 の範囲外です")));
+            } else {
+                track.pan = v as f32;
+            }
+        }
+        if return_ids.insert(rast.name.as_str(), id).is_some() {
+            diags.push(Diag::new("E-MOD-002", rast.pos, format!("return '{}' が重複しています", rast.name)));
+        }
+        p.tracks.push(track);
+    }
+
+    // ---- resolve sends (returns may be declared anywhere in the song) -----
+    for (ti, tast) in song.tracks.iter().enumerate() {
+        for (dest, level, pos) in &tast.sends {
+            let Some(&dest_id) = return_ids.get(dest.as_str()) else {
+                let mut names: Vec<&str> = return_ids.keys().copied().collect();
+                names.sort();
+                diags.push(Diag::new(
+                    "E-MOD-004",
+                    *pos,
+                    format!("return '{dest}' が定義されていません(定義済み: {})", names.join(", ")),
+                ));
+                continue;
+            };
+            if !(0.0..=1.0).contains(level) {
+                diags.push(Diag::new("E-TYPE-002", *pos, format!("send レベル {level} は 0..1 の範囲外です")));
+                continue;
+            }
+            p.tracks[ti].sends.push((dest_id, *level as f32));
+        }
+    }
+
     if diags.is_empty() {
         Ok(p)
     } else {
         Err(diags)
+    }
+}
+
+/// Evaluate a pattern expression to notes. Returns (notes, length in beats,
+/// clip display name).
+fn eval_pattern(
+    pref: &PatternRef,
+    lets: &HashMap<&str, &PatternLit>,
+    beats_per_bar: f64,
+    beat_pitch: u8,
+) -> Result<(Vec<Note>, f64, String), Diag> {
+    match pref {
+        PatternRef::Lit(lit) => eval_lit(lit, beats_per_bar, beat_pitch).map(|(n, l)| (n, l, "clip".into())),
+        PatternRef::Name(name, pos) => {
+            let lit = resolve_let(name, *pos, lets)?;
+            eval_lit(lit, beats_per_bar, beat_pitch).map(|(n, l)| (n, l, name.clone()))
+        }
+        PatternRef::Fn { name, inner, args, pos } => {
+            // inner must be a prog literal (directly or via a let)
+            let lit = match inner.as_ref() {
+                PatternRef::Lit(l) => l,
+                PatternRef::Name(n, npos) => resolve_let(n, *npos, lets)?,
+                PatternRef::Fn { .. } => {
+                    return Err(Diag::new("E-PAT-003", *pos, format!("{name}() の入れ子はできません")))
+                }
+            };
+            if lit.kind != "prog" {
+                return Err(Diag::new(
+                    "E-PAT-001",
+                    *pos,
+                    format!("{name}() には prog リテラル(コード進行)を渡します(見つかったのは {})", lit.kind),
+                ));
+            }
+            let (events, len) = music::parse_prog(&lit.raw, beats_per_bar, lit.pos)?;
+            let mut rate: Option<f64> = None;
+            let mut style = "up".to_string();
+            for (key, arg) in args {
+                match (key.as_str(), arg) {
+                    ("rate", Arg::Num(n, apos)) => {
+                        if *n <= 0.0 || *n > beats_per_bar {
+                            return Err(Diag::new(
+                                "E-TIME-002",
+                                *apos,
+                                format!("rate {n} は 0 より大きく 1 小節({beats_per_bar} 拍)以下にしてください"),
+                            ));
+                        }
+                        rate = Some(*n);
+                    }
+                    ("style", Arg::Str(s, _)) => style = s.clone(),
+                    (other, arg) => {
+                        let pos = match arg {
+                            Arg::Num(_, p) | Arg::Str(_, p) => *p,
+                        };
+                        return Err(Diag::new(
+                            "E-PAT-002",
+                            pos,
+                            format!("{name}() に '{other}' という引数はありません(rate, style)"),
+                        ));
+                    }
+                }
+            }
+            let notes = match name.as_str() {
+                "chords" => music::prog_chords(&events),
+                "bass" => music::prog_bass(&events, rate),
+                "arp" => music::prog_arp(&events, rate.unwrap_or(0.5), &style, *pos)?,
+                other => {
+                    return Err(Diag::new(
+                        "E-PAT-002",
+                        *pos,
+                        format!("パターン関数 '{other}' はありません(chords / arp / bass)"),
+                    ))
+                }
+            };
+            Ok((notes, len, format!("{name}")))
+        }
+    }
+}
+
+fn resolve_let<'a>(
+    name: &str,
+    pos: Pos,
+    lets: &HashMap<&str, &'a PatternLit>,
+) -> Result<&'a PatternLit, Diag> {
+    lets.get(name).copied().ok_or_else(|| {
+        let mut names: Vec<&str> = lets.keys().copied().collect();
+        names.sort();
+        Diag::new(
+            "E-MOD-001",
+            pos,
+            format!("パターン '{name}' が定義されていません(定義済み: {})", names.join(", ")),
+        )
+    })
+}
+
+/// Evaluate a bare literal; a bare `prog` plays block chords.
+fn eval_lit(lit: &PatternLit, beats_per_bar: f64, beat_pitch: u8) -> Result<(Vec<Note>, f64), Diag> {
+    match lit.kind.as_str() {
+        "beat" => music::parse_beat(&lit.raw, beats_per_bar, beat_pitch, lit.pos),
+        "notes" => music::parse_notes(&lit.raw, lit.pos),
+        "prog" => {
+            let (events, len) = music::parse_prog(&lit.raw, beats_per_bar, lit.pos)?;
+            Ok((music::prog_chords(&events), len))
+        }
+        other => Err(Diag::new(
+            "E-PARSE-009",
+            lit.pos,
+            format!("音楽リテラルは beat / notes / prog です(見つかったのは {other})"),
+        )),
     }
 }
 
