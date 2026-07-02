@@ -144,7 +144,7 @@ impl Drive {
     #[inline]
     pub fn process(&self, x: f32) -> f32 {
         let k = 1.0 + self.amount * 20.0;
-        let shaped = (x * k).tanh();
+        let shaped = crate::dmath::tanh(x * k);
         shaped / (1.0 + self.amount * 1.5)
     }
 }

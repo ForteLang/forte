@@ -61,7 +61,7 @@ impl Adsr {
     /// One-pole time constant: reach ~63% of target per `time` seconds.
     #[inline]
     fn rate(&self, time: f32) -> f32 {
-        1.0 - (-1.0 / (time * self.sample_rate)).exp()
+        1.0 - crate::dmath::exp(-1.0 / (time * self.sample_rate))
     }
 
     #[inline]

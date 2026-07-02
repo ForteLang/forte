@@ -62,7 +62,7 @@ impl Svf {
     pub fn set(&mut self, cutoff: f32, resonance: f32) {
         let cutoff = cutoff.clamp(20.0, self.sample_rate * 0.45);
         let q = 0.5 + resonance.clamp(0.0, 0.99) * 9.5;
-        self.g = (std::f32::consts::PI * cutoff / self.sample_rate).tan();
+        self.g = crate::dmath::tan(std::f32::consts::PI * cutoff / self.sample_rate);
         self.k = 1.0 / q;
         self.a1 = 1.0 / (1.0 + self.g * (self.g + self.k));
         self.a2 = self.g * self.a1;
@@ -99,7 +99,7 @@ impl OnePole {
         Self { a0: 1.0, b1: 0.0, z1: 0.0 }
     }
     pub fn set_lowpass(&mut self, cutoff: f32, sr: f32) {
-        let x = (-2.0 * std::f32::consts::PI * cutoff / sr).exp();
+        let x = crate::dmath::exp(-2.0 * std::f32::consts::PI * cutoff / sr);
         self.a0 = 1.0 - x;
         self.b1 = x;
     }

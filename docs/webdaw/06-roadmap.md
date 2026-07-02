@@ -19,7 +19,7 @@ Status: Draft v0.1 / 2026-07-02
 | 0.1 | Forte lang 仕様書 v0(構文・型・決定論規約)+パーサ/型検査 | SRS-LANG-001..006 |
 | 0.2 | forte-core: dawcore の engine/dsp/bounce をレンダーグラフ化して移植(単スレッド) | SRS-CORE-001/003/005 |
 | 0.3 | `forte build`(WAV+build.manifest.json)と `forte play`(CLI 再生) | SRS-BLD-001/002 |
-| 0.4 | **決定論 CI**: native/wasm の出力ハッシュ一致ゲート | SYS-ENG-001 |
+| 0.4 | **決定論 CI**: native/wasm の出力ハッシュ一致ゲート — **✅ スパイク成功(07-determinism-spike.md)。`scripts/determinism_test.sh` がゲートの原型** | SYS-ENG-001 |
 | 0.5 | `@std` 初期ライブラリ(シンセ 2、EQ、delay、reverb、limiter) | D-06 |
 | 0.6 | リファレンス曲 3 曲をコードで移植(ユーザーテスト素材) | SYS-LNG-001 受入 |
 
@@ -113,7 +113,9 @@ Status: Draft v0.1 / 2026-07-02
 
 ## 直近のアクション(Phase 0 開始時)
 
-1. D-01(Rust vs C++)と D-02(独自 DSL)の最終承認 ← **創業者判断待ち**
-2. 決定論スパイク: dawcore の bounce を wasm32 でビルドし native とハッシュ比較(1〜2 週)
-3. 言語仕様 v0 のドラフト+リファレンス曲 1 曲の手書き移植(構文の実地検証)
+1. ~~D-01(Rust vs C++)と D-02(独自 DSL)の最終承認~~ ✅ 承認済(2026-07-02)
+2. ~~決定論スパイク: dawcore の bounce を wasm32 でビルドし native とハッシュ比較~~
+   ✅ 成功 — libm 統一でビット同一(07-determinism-spike.md)
+3. 言語仕様 v0 のドラフト(spec/forte-lang-v0.md に着手済)+リファレンス曲 1 曲の手書き移植
 4. プロジェクト名の決定(Forte は仮称)
+5. forte-lang パーサ/型検査の実装開始(0.1)

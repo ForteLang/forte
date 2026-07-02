@@ -12,6 +12,7 @@
 pub mod bounce;
 pub mod command;
 pub mod device;
+pub mod dmath;
 pub mod dsp;
 pub mod engine;
 pub mod model;

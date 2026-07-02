@@ -67,7 +67,7 @@ impl Oscillator {
         let p = self.phase;
 
         let out = match wave {
-            Waveform::Sine => (p * TAU).sin(),
+            Waveform::Sine => crate::dmath::sin(p * TAU),
             Waveform::Saw => {
                 // naive saw is 2t-1; subtract the BLEP residual at the wrap
                 let mut v = 2.0 * p - 1.0;

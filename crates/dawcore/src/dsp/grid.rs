@@ -245,7 +245,7 @@ impl GridSynth {
                                 1 => 1.0 - 4.0 * (*phase - 0.5).abs(),
                                 2 => *phase * 2.0 - 1.0,
                                 3 => if *phase < 0.5 { 1.0 } else { -1.0 },
-                                _ => (*phase * std::f32::consts::TAU).sin(),
+                                _ => crate::dmath::sin(*phase * std::f32::consts::TAU),
                             };
                             *phase = (*phase + hz / sr).fract();
                         }
@@ -270,9 +270,9 @@ impl GridSynth {
                     }
                     GridModuleKind::Filter => {
                         if let NodeState::Filter(svf) = &mut voice.states[ni] {
-                            let base = 30.0 * 600.0_f32.powf(params[0].clamp(0.0, 1.0));
+                            let base = 30.0 * crate::dmath::powf(600.0, params[0].clamp(0.0, 1.0));
                             // cutoff mod input shifts up to ±4 octaves
-                            let cutoff = base * 2.0_f32.powf(ins[1] * 4.0);
+                            let cutoff = base * crate::dmath::powf(2.0, ins[1] * 4.0);
                             svf.set(cutoff, params[1]);
                             out[0] = svf.process(ins[0], FilterMode::Lowpass);
                         }

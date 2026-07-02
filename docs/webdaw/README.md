@@ -12,10 +12,11 @@ IEC 62304 のプロセス規律(要求→アーキテクチャ→詳細設計の
 | 04 | [software-architecture](04-software-architecture.md) | アーキテクチャ設計(SAD)+意思決定記録(ADR) |
 | 05 | [detailed-design](05-detailed-design.md) | 詳細設計(SDD): 言語スケッチ・エンジン・録音・Hub |
 | 06 | [roadmap](06-roadmap.md) | 開発ロードマップ(Phase 0–5)+リスクレジスタ |
+| 07 | [determinism-spike](07-determinism-spike.md) | Phase 0.4 スパイク結果: native/wasm ビット同一レンダリング達成 |
+| spec | [forte-lang-v0](spec/forte-lang-v0.md) | Forte lang 言語仕様 v0 ドラフト |
 
-## 承認待ちの意思決定(創業者判断)
+## 意思決定の状態
 
-- **D-01**: コア実装言語 — Rust(推奨、dawcore 資産流用)か C++ か
-- **D-02**: 独自 DSL(推奨)か既存言語への埋め込みか
-- 名称(Forte は仮)
-- 系譜保存ライセンスの法的レビュー着手時期
+- **D-01 承認済(2026-07-02)**: コアは Rust(C ABI で API 化)
+- **D-02 承認済(2026-07-02)**: 独自 DSL
+- 未決: 名称(Forte は仮)、系譜保存ライセンスの法的レビュー着手時期

@@ -43,7 +43,7 @@ fn norm_to_seconds(v: f32) -> f32 {
 
 fn norm_to_cutoff(v: f32) -> f32 {
     // 30 Hz .. ~18 kHz, exponential
-    30.0 * (600.0_f32).powf(v.clamp(0.0, 1.0))
+    30.0 * crate::dmath::powf(600.0, v.clamp(0.0, 1.0))
 }
 
 #[derive(Clone, Copy)]
@@ -153,5 +153,5 @@ impl Voice {
 
 #[inline]
 pub fn midi_to_freq(note: u8) -> f32 {
-    440.0 * 2.0_f32.powf((note as f32 - 69.0) / 12.0)
+    440.0 * crate::dmath::powf(2.0, (note as f32 - 69.0) / 12.0)
 }

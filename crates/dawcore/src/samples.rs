@@ -10,7 +10,7 @@ use crate::dsp::sampler::Sample;
 const SR: f32 = 44_100.0;
 
 fn env(t: f32, decay: f32) -> f32 {
-    (-t / decay).exp()
+    crate::dmath::exp(-t / decay)
 }
 
 /// A punchy kick: pitch-swept sine with a fast amplitude decay.
@@ -21,7 +21,7 @@ pub fn kick() -> Arc<Sample> {
         let t = i as f32 / SR;
         let freq = 120.0 * env(t, 0.06) + 45.0;
         let phase = std::f32::consts::TAU * freq * t;
-        *s = phase.sin() * env(t, 0.18) * 0.9;
+        *s = crate::dmath::sin(phase) * env(t, 0.18) * 0.9;
     }
     Arc::new(Sample::one_shot(d.into(), SR, 36))
 }
@@ -34,7 +34,7 @@ pub fn snare() -> Arc<Sample> {
     let mut lp = 0.0f32;
     for (i, s) in d.iter_mut().enumerate() {
         let t = i as f32 / SR;
-        let tone = (std::f32::consts::TAU * 190.0 * t).sin() * env(t, 0.08) * 0.5;
+        let tone = crate::dmath::sin(std::f32::consts::TAU * 190.0 * t) * env(t, 0.08) * 0.5;
         rng ^= rng << 13;
         rng ^= rng >> 17;
         rng ^= rng << 5;

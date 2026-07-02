@@ -744,7 +744,7 @@ impl Engine {
             let audible = track.solo || (!track.mute && !(any_solo && !track.solo));
             let g = if audible { vol * vol } else { 0.0 };
             let theta = (track.pan + 1.0) * 0.5 * std::f32::consts::FRAC_PI_2;
-            let (pl, pr) = (theta.cos(), theta.sin());
+            let (pl, pr) = (crate::dmath::cos(theta), crate::dmath::sin(theta));
 
             let mut tpeak = 0.0f32;
             for i in 0..frames {
@@ -792,7 +792,7 @@ impl Engine {
             let audible = track.solo || (!track.mute && !(any_solo && !track.solo));
             let g = if audible { track.gain * track.gain } else { 0.0 };
             let theta = (track.pan + 1.0) * 0.5 * std::f32::consts::FRAC_PI_2;
-            let (pl, pr) = (theta.cos(), theta.sin());
+            let (pl, pr) = (crate::dmath::cos(theta), crate::dmath::sin(theta));
 
             let mut tpeak = 0.0f32;
             for i in 0..frames {
@@ -820,13 +820,13 @@ impl Engine {
             }
             if self.click_env > 0.0005 {
                 self.click_phase += self.click_freq / self.sample_rate;
-                let s = (self.click_phase * std::f32::consts::TAU).sin() * self.click_env * 0.2;
+                let s = crate::dmath::sin(self.click_phase * std::f32::consts::TAU) * self.click_env * 0.2;
                 out_l[i] += s;
                 out_r[i] += s;
                 self.click_env *= 0.998;
             }
-            out_l[i] = out_l[i].clamp(-1.5, 1.5).tanh();
-            out_r[i] = out_r[i].clamp(-1.5, 1.5).tanh();
+            out_l[i] = crate::dmath::tanh(out_l[i].clamp(-1.5, 1.5));
+            out_r[i] = crate::dmath::tanh(out_r[i].clamp(-1.5, 1.5));
             master_peak = master_peak.max(out_l[i].abs()).max(out_r[i].abs());
         }
 
@@ -1133,7 +1133,7 @@ fn lfo(shape: u8, phase: f32) -> f32 {
         1 => 1.0 - 4.0 * (phase - 0.5).abs(),     // triangle
         2 => phase * 2.0 - 1.0,                    // saw
         3 => if phase < 0.5 { 1.0 } else { -1.0 }, // square
-        _ => (phase * std::f32::consts::TAU).sin(),
+        _ => crate::dmath::sin(phase * std::f32::consts::TAU),
     }
 }
 
