@@ -72,6 +72,43 @@ try {
 
   const vizTracks = await page.evaluate(() => window.__vizTracks ?? 0);
   check('arrangement view rendered', vizTracks >= 6, `${vizTracks} tracks`);
+
+  // 5) local-first: edits autosave to OPFS and survive a reload
+  await page.evaluate(async () => {
+    const marker = '\n// persisted-marker\n';
+    const ta = document.getElementById('fallback');
+    if (ta) {
+      ta.value += marker;
+      ta.dispatchEvent(new Event('input'));
+    } else {
+      const ed = monaco.editor.getModels()[0];
+      ed.setValue(ed.getValue() + marker);
+    }
+    await new Promise((r) => setTimeout(r, 1000)); // autosave debounce
+  });
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('body[data-compiled]', { timeout: 15000 });
+  const persisted = await page.evaluate(() => window.__forteGetText());
+  check('OPFS persistence across reload', persisted.includes('persisted-marker'));
+
+  // 6) offline PWA: with the service worker active, the editor still boots,
+  //    compiles and plays with the network cut
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.waitForTimeout(500); // let precache finish
+  await page.context().setOffline(true);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('body[data-compiled]', { timeout: 15000 });
+  await page.click('#play');
+  const offlinePlays = await page
+    .waitForFunction(
+      () => /bar\s+\d+\.\d/.test(document.getElementById('status').textContent),
+      null,
+      { timeout: 15000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  check('offline PWA: boots, compiles and plays with network cut', offlinePlays);
+  await page.context().setOffline(false);
 } finally {
   await browser.close();
   server.kill();

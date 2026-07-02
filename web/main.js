@@ -1,12 +1,14 @@
 // Forte web editor: a main-thread wasm instance handles compile/diagnostics/
-// build digest; an AudioWorklet instance handles playback. Editing recompiles
-// (debounced) and hot-swaps the playing engine.
+// build digest/viz; an AudioWorklet instance handles playback with hot reload.
+// Songs autosave to OPFS (local-first): close the tab, come back, keep working.
 
 import { Viz } from './viz.js';
+import { Store } from './storage.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t) => ($('status').textContent = t);
 const viz = new Viz($('viz'));
+const BUILTINS = ['first-light.forte', 'slow-circles.forte', 'night-parade.forte'];
 
 // ---- main-thread compiler instance -----------------------------------------
 let wasmBytes, main;
@@ -36,8 +38,10 @@ function mainCompile(text) {
 // ---- editor (Monaco if the CDN is reachable, plain textarea otherwise) ------
 const fallback = $('fallback');
 let getText = () => fallback.value;
+let setText = (t) => (fallback.value = t);
 let onChange = () => {};
 fallback.addEventListener('input', () => onChange());
+window.__forteGetText = () => getText();
 
 async function tryMonaco(initial) {
   try {
@@ -75,6 +79,7 @@ async function tryMonaco(initial) {
       automaticLayout: true,
     });
     getText = () => ed.getValue();
+    setText = (t) => ed.setValue(t);
     ed.onDidChangeModelContent(() => onChange());
     window.__forteSetMarkers = (diags) => {
       monaco.editor.setModelMarkers(
@@ -99,7 +104,12 @@ let ac, node;
 async function ensureAudio() {
   if (ac) return;
   ac = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
-  await ac.audioWorklet.addModule('worklet.js');
+  // worklet module loads bypass the service worker (Chromium limitation), so
+  // fetch through the SW cache ourselves and load from a blob URL — this is
+  // what keeps playback working offline.
+  const src = await (await fetch('worklet.js')).text();
+  const blobUrl = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  await ac.audioWorklet.addModule(blobUrl);
   node = new AudioWorkletNode(ac, 'forte', { outputChannelCount: [2] });
   node.connect(ac.destination);
   await new Promise((res) => {
@@ -114,6 +124,55 @@ async function ensureAudio() {
     }
   };
   node.port.postMessage({ cmd: 'src', text: getText() });
+}
+
+// ---- files (OPFS, local-first) ----------------------------------------------
+let store = null;
+let currentName = BUILTINS[0];
+
+async function localNames() {
+  return store ? store.list() : [];
+}
+
+async function refreshFileList() {
+  const locals = await localNames();
+  const sel = $('file');
+  sel.innerHTML = '';
+  const add = (value, label) => {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = label;
+    sel.appendChild(o);
+  };
+  for (const n of locals) add(n, `● ${n}`);
+  for (const n of BUILTINS) if (!locals.includes(n)) add(n, `demo: ${n}`);
+  sel.value = currentName;
+}
+
+async function loadSong(name) {
+  currentName = name;
+  localStorage.setItem('forte.last', name);
+  const locals = await localNames();
+  let text;
+  if (locals.includes(name)) {
+    text = await store.read(name);
+  } else {
+    text = await (await fetch(`../songs/${name}`)).text();
+  }
+  setText(text);
+  recompile(0);
+}
+
+let saveTimer;
+function autosave() {
+  if (!store) return;
+  clearTimeout(saveTimer);
+  $('saved').textContent = '● …';
+  saveTimer = setTimeout(async () => {
+    await store.write(currentName, getText());
+    $('saved').textContent = '✓ saved';
+    refreshFileList();
+  }, 500);
 }
 
 // ---- wiring -------------------------------------------------------------------
@@ -134,29 +193,71 @@ function showDiags(diags) {
 }
 
 let debounce;
-function recompile() {
+function recompile(delay = 300) {
   clearTimeout(debounce);
   debounce = setTimeout(() => {
     const { ok, diags } = mainCompile(getText());
     showDiags(diags);
     document.body.dataset.compiled = ok ? 'ok' : 'error';
     if (ok && node) node.port.postMessage({ cmd: 'src', text: getText() }); // hot reload
-  }, 300);
+  }, delay);
 }
 
+const NEW_TEMPLATE = `song "Untitled" {
+  tempo 120bpm
+  meter 4/4
+
+  track Drums {
+    instrument sampler(sample: "Kick")
+    play beat\`x--- x--- x--- x---\` at bars(1..4)
+  }
+}
+`;
+
 async function boot() {
-  const [src] = await Promise.all([
-    fetch('../songs/first-light.forte').then((r) => r.text()),
-    initWasm(),
-  ]);
-  fallback.value = src;
-  await tryMonaco(src);
-  onChange = recompile;
-  const { ok, diags } = mainCompile(getText());
-  showDiags(diags);
-  document.body.dataset.compiled = ok ? 'ok' : 'error';
+  navigator.serviceWorker?.register('sw.js').catch(() => {});
+  await initWasm();
+  try {
+    store = await new Store().init();
+  } catch {
+    store = null; // OPFS unavailable: still fully usable, just no persistence
+  }
+  const last = localStorage.getItem('forte.last');
+  const locals = await localNames();
+  currentName =
+    last && (locals.includes(last) || BUILTINS.includes(last)) ? last : BUILTINS[0];
+
+  const initialText = locals.includes(currentName)
+    ? await store.read(currentName)
+    : await (await fetch(`../songs/${currentName}`)).text();
+  setText(initialText);
+  await tryMonaco(initialText);
+  onChange = () => {
+    autosave();
+    recompile();
+  };
+  await refreshFileList();
+  recompile(0);
   status('ready');
 
+  $('file').onchange = (e) => loadSong(e.target.value);
+  $('new').onclick = async () => {
+    const name = prompt('曲名 (例: my-song)');
+    if (!name || !store) return;
+    const file = `${name.replace(/[^\w-]/g, '-')}.forte`;
+    await store.write(file, NEW_TEMPLATE);
+    await refreshFileList();
+    loadSong(file);
+  };
+  $('delete').onclick = async () => {
+    if (!store) return;
+    const locals = await localNames();
+    if (!locals.includes(currentName)) return;
+    if (!confirm(`ローカルの ${currentName} を削除しますか?`)) return;
+    await store.remove(currentName);
+    await refreshFileList();
+    loadSong(BUILTINS.includes(currentName) ? currentName : BUILTINS[0]);
+  };
   $('play').onclick = async () => {
     await ensureAudio();
     await ac.resume();

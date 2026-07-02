@@ -23,6 +23,8 @@
   button:hover { background: #353b47; }
   button.primary { background: #e8b34c; color: #16181d; border-color: #e8b34c; font-weight: 600; }
   #status { margin-left: auto; font-size: 12px; color: #8a919e; font-variant-numeric: tabular-nums; }
+  select { background: #2b2f38; color: #d7dae0; border: 1px solid #3a3f4b; border-radius: 6px; padding: 5px 8px; font-size: 13px; max-width: 210px; }
+  #saved { font-size: 11px; color: #7fbf7f; min-width: 46px; }
   #wrap { flex: 1; display: flex; min-height: 0; }
   #editor-host { flex: 1; min-width: 0; }
   textarea#fallback {
@@ -49,6 +51,10 @@
 <body>
 <header>
   <h1>FORTE</h1>
+  <select id="file" title="song"></select>
+  <button id="new">New</button>
+  <button id="delete" title="ローカルコピーを削除">Del</button>
+  <span id="saved" title="OPFS に自動保存されます"></span>
   <button id="play" class="primary">▶ Play</button>
   <button id="stop">■ Stop</button>
   <button id="digest">Build digest</button>

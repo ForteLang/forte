@@ -26,11 +26,13 @@ IEC 62304 のプロセス規律(要求→アーキテクチャ→詳細設計の
 - **`editor/vscode-forte`** — VSCode 拡張: シンタックスハイライト、`forte lsp` に
   よるリアルタイム診断、Play(ホットリロード)/Build/Stop コマンド。
 - **`web/` + `crates/forteweb`** — ブラウザエディタのプロトタイプ:
-  メインスレッドの wasm がタイプ中診断とビルド証明、AudioWorklet 内の wasm が
-  再生+保存なしホットリロード。`scripts/build_web.sh` でビルドし、リポジトリ
-  ルートを静的配信して `/web/` を開く。E2E は `scripts/web_e2e.mjs`(実 Chromium で
-  「ブラウザのビルドダイジェスト == ネイティブ CLI」まで検証済 = **native / wasip1 /
-  ブラウザの三者ビット同一**)。
+  メインスレッドの wasm がタイプ中診断・ビルド証明・可視化データ、AudioWorklet 内の
+  wasm が再生+ホットリロード。読み取り専用アレンジビュー(コードが唯一の真実)。
+  **OPFS 自動保存(複数曲・リロード後も残存)+ Service Worker で完全オフライン動作**
+  = ローカルファースト(SYS-NFR-001)の最初の実証。`scripts/build_web.sh` でビルドし、
+  リポジトリルートを静的配信して `/web/` を開く。E2E は `scripts/web_e2e.mjs`
+  (実 Chromium 7 項目: **native / wasip1 / ブラウザの三者ビット同一**、OPFS 永続、
+  ネットワーク切断での起動・コンパイル・再生)。
 - **`scripts/determinism_test.sh`** — 決定論ゲート 2 段(エンジン単体 / forte build 経由)。
   どちらも native x86_64 と wasm32-wasip1 でビット同一を CI 検証できる。
 

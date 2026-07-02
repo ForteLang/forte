@@ -67,7 +67,7 @@ Status: Draft v0.1 / 2026-07-02
 
 | # | 成果物 | 対応要求 |
 | --- | --- | --- |
-| 3.1 | Web エディタ(Monaco+wasm LSP+AudioWorklet 再生+OPFS+PWA オフライン) — **🔶 プロトタイプ前倒しで実装(`web/`+`crates/forteweb`): タイプ中診断・ビルド証明ダイジェスト・AudioWorklet 再生+ホットリロード。実 Chromium E2E でブラウザ==ネイティブのビット同一を検証(`scripts/web_e2e.mjs`)。OPFS/PWA は未** | SRS-WEB-001..003 |
+| 3.1 | Web エディタ(Monaco+wasm LSP+AudioWorklet 再生+OPFS+PWA オフライン) — **🔶 プロトタイプ前倒しで実装(`web/`+`crates/forteweb`): タイプ中診断・ビルド証明ダイジェスト・AudioWorklet 再生+ホットリロード・読み取り専用アレンジビュー・OPFS 自動保存(複数曲、リロード後も残存)・Service Worker による完全オフライン動作(worklet は blob URL 経由で SW キャッシュから)。実 Chromium E2E 7 項目(`scripts/web_e2e.mjs`): ブラウザ==ネイティブのビット同一、OPFS 永続、**ネットワーク切断状態での起動・コンパイル・再生**まで検証済** | SRS-WEB-001..003 |
 | 3.2 | open-stems リリース+**演奏 fork モード**(最小録音 GUI) | SRS-BLD-003, SRS-REC-006 |
 | 3.3 | Safari/Firefox 縮退モード実装 | SRS-WEB-004 |
 | 3.4 | 指紋照合+通報モデレーション v1 | SRS-HUB-006 |
