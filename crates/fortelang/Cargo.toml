@@ -7,6 +7,7 @@ description = "Forte lang v0: compile .forte song sources into the dawcore engin
 
 [dependencies]
 dawcore = { path = "../dawcore" }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # `forte play` only; not available on wasm32 (browser playback goes through

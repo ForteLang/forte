@@ -37,6 +37,10 @@ IEC 62304 のプロセス規律(要求→アーキテクチャ→詳細設計の
   ネットワーク切断での起動・コンパイル・再生)。
 - **`scripts/determinism_test.sh`** — 決定論ゲート 2 段(エンジン単体 / forte build 経由)。
   どちらも native x86_64 と wasm32-wasip1 でビット同一を CI 検証できる。
+- **ローカル Hub(`forte hub`)** — fork 系譜レジストリの最初の実装。
+  `publish`(曲/ライブラリを import ごとスナップショット、要コンパイル成功)、
+  `fork`(**取得の唯一の手段**。来歴スタンプ `.forte-lineage.json` を書き込む)、
+  `lineage`(祖先チェーン+fork 一覧)、`list`。シーケンス番号ベースで決定論的。
 
 ## 意思決定の状態
 

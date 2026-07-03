@@ -1279,6 +1279,7 @@ version = "0.6.0"
 dependencies = [
  "cpal",
  "dawcore",
+ "serde",
  "serde_json",
 ]
 

@@ -21,6 +21,8 @@ fn main() -> ExitCode {
         }
         Some("lsp") => ExitCode::from(fortelang::lsp::run() as u8),
         #[cfg(not(target_family = "wasm"))]
+        Some("hub") if args.len() >= 2 => hub_cmd(&args[1..]),
+        #[cfg(not(target_family = "wasm"))]
         Some("play") if args.len() >= 2 => {
             let for_secs = args
                 .iter()
@@ -34,6 +36,10 @@ fn main() -> ExitCode {
             eprintln!("       forte build <song.forte> [-o out.wav]");
             eprintln!("       forte play  <song.forte> [--for SECS]");
             eprintln!("       forte lsp");
+            eprintln!("       forte hub publish <file.forte> [--as NAME] [--hub DIR]");
+            eprintln!("       forte hub fork <NAME> <DEST-DIR>   [--hub DIR]");
+            eprintln!("       forte hub lineage <NAME>           [--hub DIR]");
+            eprintln!("       forte hub list                     [--hub DIR]");
             ExitCode::from(2)
         }
     }
@@ -132,6 +138,48 @@ fn build(path: &str, out: Option<String>) -> ExitCode {
     println!("digest : {:016x} (f32, fnv1a64)", info.f32_digest);
     println!("proof  : {}", mpath.display());
     ExitCode::SUCCESS
+}
+
+/// Local hub: fork-lineage registry (no server yet — SYS-HUB-002 prototype).
+#[cfg(not(target_family = "wasm"))]
+fn hub_cmd(args: &[String]) -> ExitCode {
+    let hub_dir = args
+        .iter()
+        .position(|a| a == "--hub")
+        .and_then(|i| args.get(i + 1).cloned())
+        .or_else(|| std::env::var("FORTE_HUB").ok())
+        .unwrap_or_else(|| ".forte-hub".into());
+    let hub = match fortelang::hub::Hub::open(&hub_dir) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("hub: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let result = match args.first().map(String::as_str) {
+        Some("publish") if args.len() >= 2 => {
+            let name = args
+                .iter()
+                .position(|a| a == "--as")
+                .and_then(|i| args.get(i + 1))
+                .map(String::as_str);
+            hub.publish(&args[1], name)
+        }
+        Some("fork") if args.len() >= 3 => hub.fork(&args[1], &args[2]),
+        Some("lineage") if args.len() >= 2 => hub.lineage(&args[1]),
+        Some("list") => hub.list(),
+        _ => Err("usage: forte hub <publish|fork|lineage|list> …".into()),
+    };
+    match result {
+        Ok(msg) => {
+            println!("{msg}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("hub: {e}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 /// Live playback with hot reload: the song loops while the file is watched;

@@ -8,6 +8,8 @@ pub mod audio;
 pub mod compile;
 pub mod diag;
 pub mod grid_build;
+#[cfg(not(target_family = "wasm"))]
+pub mod hub;
 pub mod lexer;
 pub mod lsp;
 pub mod music;
