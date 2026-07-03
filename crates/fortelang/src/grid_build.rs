@@ -55,6 +55,19 @@ fn prim(name: &str) -> Option<Prim> {
             params: &[("a", 0, 0.05), ("d", 1, 0.3), ("s", 2, 0.6), ("r", 3, 0.25)],
             options: &[],
         },
+        "noise" => Prim {
+            kind: GridModuleKind::Noise,
+            inputs: &[],
+            params: &[],
+            options: &[],
+        },
+        "shaper" => Prim {
+            kind: GridModuleKind::Shaper,
+            inputs: &[("in", 0, None), ("mod", 1, None)],
+            params: &[("drive", 0, 0.3)],
+            // engine decodes with (v * 2.999) as u8
+            options: &[("mode", 1, &["tanh", "clip", "fold"], &[0.1, 0.5, 0.9])],
+        },
         "svf" => Prim {
             kind: GridModuleKind::Filter,
             inputs: &[("in", 0, None), ("mod", 1, None)],
@@ -206,7 +219,7 @@ impl<'a> Builder<'a> {
                     return Err(Diag::new(
                         "E-GRID-004",
                         *pos,
-                        format!("DSP プリミティブ '{name}' はありません(osc / lfo / adsr / svf / gain / mix)"),
+                        format!("DSP プリミティブ '{name}' はありません(osc / noise / lfo / adsr / svf / shaper / gain / mix)"),
                     ));
                 };
                 // params first (defaults), then wire inputs

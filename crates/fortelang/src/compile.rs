@@ -106,7 +106,7 @@ pub fn compile(
         // instrument (required unless the track only places recorded audio)
         let mut beat_pitch = 36u8; // C2 default; samplers use their sample root
         match &tast.instrument {
-            Some(call) => match build_instrument(call, &user_devices) {
+            Some(call) => match build_instrument(call, &user_devices, assets) {
                 Ok((dev, root)) => {
                     beat_pitch = root;
                     track.devices[0] = dev;
@@ -431,9 +431,7 @@ fn eval_pattern(
                     }
                     ("style", Arg::Str(s, _)) => style = s.clone(),
                     (other, arg) => {
-                        let pos = match arg {
-                            Arg::Num(_, p) | Arg::Str(_, p) => *p,
-                        };
+                        let pos = arg.pos();
                         return Err(Diag::new(
                             "E-PAT-002",
                             pos,
@@ -504,6 +502,7 @@ const EFFECTS: &[&str] = &["filter", "eq", "drive", "delay", "reverb"];
 fn build_instrument(
     call: &Call,
     user_devices: &HashMap<&str, &DeviceAst>,
+    assets: &HashMap<String, crate::AssetInfo>,
 ) -> Result<(Device, u8), Diag> {
     if let Some(dev_ast) = user_devices.get(call.name.as_str()) {
         let graph = grid_build::instantiate(dev_ast, call)?;
@@ -517,6 +516,55 @@ fn build_instrument(
             let mut root = 36u8;
             for (key, arg) in &call.args {
                 match (key.as_str(), arg) {
+                    // recorded take as the instrument: your voice becomes a synth
+                    ("take", Arg::Ident(name, pos)) => {
+                        let Some(info) = assets.get(name) else {
+                            let mut names: Vec<&str> =
+                                assets.keys().map(String::as_str).collect();
+                            names.sort();
+                            return Err(Diag::new(
+                                "E-PROV-003",
+                                *pos,
+                                format!(
+                                    "録音アセット '{name}' が import されていません(あるもの: {})",
+                                    names.join(", ")
+                                ),
+                            ));
+                        };
+                        dev.sample = SampleSource::Asset(info.key.clone());
+                        if root == 36 {
+                            root = 60; // asset registry roots takes at C4
+                        }
+                    }
+                    ("take", arg) => {
+                        return Err(Diag::new(
+                            "E-TYPE-004",
+                            arg.pos(),
+                            "sampler.take は import した名前で指定します(例: take: myTake)",
+                        ))
+                    }
+                    // the note the take was performed at: play it there and it
+                    // sounds untouched; everything else is repitched from it
+                    ("root", Arg::Ident(s, pos)) => {
+                        let p = music::parse_pitch(s, *pos)?;
+                        if !(36..=84).contains(&p) {
+                            return Err(Diag::new(
+                                "E-TYPE-002",
+                                *pos,
+                                format!("root {s} は C2..C6 の範囲で指定してください"),
+                            ));
+                        }
+                        root = p;
+                        // asset roots are C4 (60): encode the offset in Pitch
+                        dev.params[5] = 0.5 + (60.0 - p as f32) / 48.0;
+                    }
+                    ("root", arg) => {
+                        return Err(Diag::new(
+                            "E-TYPE-004",
+                            arg.pos(),
+                            "sampler.root は音名で指定します(例: root: A3)",
+                        ))
+                    }
                     ("sample", Arg::Str(s, pos)) => {
                         let canon = match s.to_ascii_lowercase().as_str() {
                             "kick" => ("Kick", 36),
@@ -547,7 +595,7 @@ fn build_instrument(
                 return Err(Diag::new(
                     "E-DEV-004",
                     call.pos,
-                    "sampler には sample: \"Kick\" などの指定が必要です",
+                    "sampler には sample: \"Kick\" か take: <import した録音> の指定が必要です",
                 ));
             }
             Ok((dev, root))
@@ -639,9 +687,7 @@ fn build_lfo(m: &ModulateAst, track: &Track) -> Result<Modulator, Diag> {
                 };
             }
             (other, arg) => {
-                let pos = match arg {
-                    Arg::Num(_, p) | Arg::Str(_, p) => *p,
-                };
+                let pos = arg.pos();
                 return Err(Diag::new(
                     "E-LFO-003",
                     pos,
@@ -700,15 +746,12 @@ fn set_param(
 ) -> Result<(), Diag> {
     let k = key.to_ascii_lowercase();
     if let Some((_, idx, choices)) = opts.iter().find(|(name, _, _)| *name == k) {
-        let (s, pos) = match arg {
-            Arg::Str(s, pos) => (s, pos),
-            Arg::Num(_, pos) => {
-                return Err(Diag::new(
-                    "E-TYPE-004",
-                    *pos,
-                    format!("{}.{k} は文字列で指定します({})", call.name, choices.join(" / ")),
-                ))
-            }
+        let Arg::Str(s, pos) = arg else {
+            return Err(Diag::new(
+                "E-TYPE-004",
+                arg.pos(),
+                format!("{}.{k} は文字列で指定します({})", call.name, choices.join(" / ")),
+            ));
         };
         match choices.iter().position(|c| *c == s.to_ascii_lowercase()) {
             Some(i) => {
@@ -722,12 +765,10 @@ fn set_param(
             )),
         }
     } else if let Some((_, idx)) = params.iter().find(|(name, _)| *name == k) {
-        let (n, pos) = match arg {
-            Arg::Num(n, pos) => (*n, pos),
-            Arg::Str(_, pos) => {
-                return Err(Diag::new("E-TYPE-004", *pos, format!("{}.{k} は数値で指定します", call.name)))
-            }
+        let Arg::Num(n, pos) = arg else {
+            return Err(Diag::new("E-TYPE-004", arg.pos(), format!("{}.{k} は数値で指定します", call.name)));
         };
+        let n = *n;
         if !(0.0..=1.0).contains(&n) {
             return Err(Diag::new(
                 "E-TYPE-002",

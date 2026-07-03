@@ -171,9 +171,18 @@ song "..." {
 }
 ```
 
-プリミティブは 6 つ: `osc / lfo / adsr / svf / gain / mix`。
+プリミティブは 8 つ: `osc / noise / lfo / adsr / svf / shaper / gain / mix`。
 信号は `note.freq / note.gate / note.vel`、node 名、入れ子呼び出しで配線します。
 ポリフォニー(8 声)はエンジンが面倒を見ます。
+
+- `noise()` — ホワイトノイズ。スネアやハットの素。決定論的(同じソースは
+  ビルドしても同じビット)なので安心して使えます。
+- `shaper(in: x, drive: 0.5, mode: "tanh"|"clip"|"fold")` — ウェーブシェイパー。
+  tanh は太く、clip は硬く、fold は倍音が畳み込まれて金属的に。
+
+**ドラムキットまるごと自作**の実例が `songs/handmade-kit.forte` にあります
+(Kick = sine+tanh、Snare = noise+SVF+胴鳴り、Hat = noise+clip。
+ビルトインサンプル不使用 — 音色の一字一句がコードです)。
 
 ## 4. ライブラリに分割して import
 
@@ -238,6 +247,23 @@ song "..." {
 
 来歴のない `.frec`(他所から持ち込んだ音)はコンパイルエラー E-PROV-001 に
 なります。これは仕様であってバグではありません — Forte の信条です。
+
+### 録音を楽器にする(take sampler)
+
+タイムラインに貼るだけでなく、**録音そのものを楽器化**できます:
+
+```forte
+import voice from "./take1.frec"
+
+track Choir {
+  instrument sampler(take: voice, root: A3)   // A3 で歌ったテイクなら root: A3
+  play notes`A3:1 C4:1 E4:1` at bars(1..4)    // 和声がクロマチックに再ピッチされる
+}
+```
+
+`root` にはテイクを演奏した音名(C2..C6)を書きます。その音で弾くと原音、
+それ以外はサンプラーが再ピッチします。自分の声・口ドラム・鼻歌 — マイクで
+録れる音はぜんぶシンセの材料です。attack/decay などの ADSR も効きます。
 
 ## 7. VSCode で書く
 

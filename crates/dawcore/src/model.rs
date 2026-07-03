@@ -191,9 +191,11 @@ impl SampleSource {
 pub enum GridModuleKind {
     NoteIn, // pitch / gate / velocity source
     Osc,
+    Noise, // deterministic white noise (per-voice xorshift PRNG)
     Lfo,
     Adsr,
     Filter,
+    Shaper, // waveshaper: tanh / clip / fold
     Gain,
     Mix,
     Out,
@@ -208,6 +210,8 @@ impl GridModuleKind {
         match self {
             GridModuleKind::NoteIn => "Note In",
             GridModuleKind::Osc => "Osc",
+            GridModuleKind::Noise => "Noise",
+            GridModuleKind::Shaper => "Shaper",
             GridModuleKind::Lfo => "LFO",
             GridModuleKind::Adsr => "ADSR",
             GridModuleKind::Filter => "SVF",
@@ -220,9 +224,11 @@ impl GridModuleKind {
         match self {
             GridModuleKind::NoteIn => &[],
             GridModuleKind::Osc => &["Pitch"],
+            GridModuleKind::Noise => &[],
             GridModuleKind::Lfo => &[],
             GridModuleKind::Adsr => &["Gate"],
             GridModuleKind::Filter => &["In", "Cutoff"],
+            GridModuleKind::Shaper => &["In", "Mod"],
             GridModuleKind::Gain => &["In", "Mod"],
             GridModuleKind::Mix => &["A", "B"],
             GridModuleKind::Out => &["In"],
@@ -232,6 +238,8 @@ impl GridModuleKind {
         match self {
             GridModuleKind::NoteIn => &["Pitch", "Gate", "Vel"],
             GridModuleKind::Osc => &["Out"],
+            GridModuleKind::Noise => &["Out"],
+            GridModuleKind::Shaper => &["Out"],
             GridModuleKind::Lfo => &["Out"],
             GridModuleKind::Adsr => &["Env"],
             GridModuleKind::Filter => &["Out"],
@@ -246,6 +254,7 @@ impl GridModuleKind {
             GridModuleKind::Lfo => &["Rate", "Shape"],
             GridModuleKind::Adsr => &["A", "D", "S", "R"],
             GridModuleKind::Filter => &["Cutoff", "Reso"],
+            GridModuleKind::Shaper => &["Drive", "Mode"],
             GridModuleKind::Gain => &["Level"],
             _ => &[],
         }
@@ -256,6 +265,7 @@ impl GridModuleKind {
             GridModuleKind::Lfo => vec![0.3, 0.0],
             GridModuleKind::Adsr => vec![0.05, 0.3, 0.6, 0.25],
             GridModuleKind::Filter => vec![0.65, 0.2],
+            GridModuleKind::Shaper => vec![0.3, 0.1], // tanh
             GridModuleKind::Gain => vec![0.8],
             _ => Vec::new(),
         }

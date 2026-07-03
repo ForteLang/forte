@@ -321,3 +321,54 @@ fn automate_and_modulate_errors_are_reported() {
     let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutoff with random(amount: 0.4) } }"#;
     assert!(err_codes(src).contains(&"E-PARSE-021"));
 }
+
+// ---------------------------------------------------------------------------
+// noise / shaper: sound design primitives
+// ---------------------------------------------------------------------------
+
+const NOISE_SONG: &str = r#"device Snare : Instrument {
+  node env = adsr(a: 0.001, d: 0.12, s: 0.0, r: 0.08)
+  node n   = noise()
+  node f   = svf(in: n, cutoff: 0.75, reso: 0.3)
+  out gain(in: f, mod: env, level: 0.9)
+}
+device FoldLead : Instrument {
+  node env = adsr(a: 0.01, d: 0.3, s: 0.5, r: 0.2)
+  node o   = osc(shape: "sine")
+  node sh  = shaper(in: o, drive: 0.6, mode: "fold")
+  out gain(in: sh, mod: env, level: 0.8)
+}
+song "SoundDesign" {
+  tempo 120bpm
+  track Drums { instrument Snare() play beat`x-x- x-x-` at bars(1..2) }
+  track Lead  { instrument FoldLead() play notes`C3:1 G3:1` at bars(1..2) }
+}"#;
+
+#[test]
+fn noise_and_shaper_render_deterministically() {
+    let p = fortelang::compile_str(NOISE_SONG).expect("noise/shaper song must compile");
+    let a = fortelang::render_digest(&p, 2.0);
+    let b = fortelang::render_digest(&p, 2.0);
+    assert!(a.rms > 0.005, "noise snare + folded lead must sound (rms {})", a.rms);
+    assert_eq!(a.f32_digest, b.f32_digest, "noise must be deterministic (reseeded per note)");
+
+    // the shaper mode is audible in the build digest
+    let tanh = NOISE_SONG.replace("mode: \"fold\"", "mode: \"tanh\"");
+    let p2 = fortelang::compile_str(&tanh).unwrap();
+    assert_ne!(
+        a.f32_digest,
+        fortelang::render_digest(&p2, 2.0).f32_digest,
+        "fold and tanh must sound different"
+    );
+}
+
+#[test]
+fn unknown_primitive_lists_the_new_ones() {
+    let src = r#"device X : Instrument { node a = warp() out gain(in: a) }
+song "Y" { tempo 120bpm track A { instrument X() play beat`x---` at bars(1..1) } }"#;
+    let err = match fortelang::compile_str(src) {
+        Err(ds) => ds.iter().map(|d| d.message.clone()).collect::<Vec<_>>().join("\n"),
+        Ok(_) => String::new(),
+    };
+    assert!(err.contains("noise") && err.contains("shaper"), "{err}");
+}

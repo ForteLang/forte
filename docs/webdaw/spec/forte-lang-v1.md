@@ -107,9 +107,11 @@ num       = [ "-" ] NUMBER [ UNIT ] ;
 | プリミティブ | 信号入力(既定) | パラメータ(既定) |
 | --- | --- | --- |
 | `osc` | `freq`(note.freq) | `shape`: sine/saw/square/tri |
+| `noise` | — | —(決定論: per-voice xorshift、ノート毎に再シード) |
 | `lfo` | — | `rate` 0..1(=0.05..12Hz), `shape`: sine/tri/saw/square |
 | `adsr` | `gate`(note.gate) | `a` .05, `d` .3, `s` .6, `r` .25(正規化) |
 | `svf` | `in`(必須), `mod`(±4oct) | `cutoff` .65(=30..18kHz 指数), `reso` .2 |
+| `shaper` | `in`(必須), `mod`(drive 加算) | `drive` .3, `mode`: tanh/clip/fold |
 | `gain` | `in`(必須), `mod`(0..2 倍) | `level` .8 |
 | `mix` | `a`, `b`(必須) | — |
 
@@ -121,6 +123,7 @@ num       = [ "-" ] NUMBER [ UNIT ] ;
 | instrument | パラメータ |
 | --- | --- |
 | `sampler(sample: "Kick"\|"Snare"\|"Hat")` | gain, attack, decay, sustain, release, pitch |
+| `sampler(take: <import した録音>, root: A3)` | 同上。録音テイクが楽器になる: `root` はテイクを演奏した音名(C2..C6)で、その音で弾くと原音、他はクロマチックに再ピッチ |
 | `polymer` | wave(sine/saw/square/tri), cutoff, reso, attack, decay, sustain, release, detune, sub, filtenv |
 | `grid()` | 既定パッチのモジュラー音源 |
 

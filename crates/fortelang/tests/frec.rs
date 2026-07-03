@@ -99,3 +99,59 @@ fn stereo_takes_are_mono_mixed_and_seconds_computed() {
     .unwrap();
     compile_with_loader(SONG, &FsLoader, &dir).expect("stereo take must compile");
 }
+
+// ---------------------------------------------------------------------------
+// take sampler: a recording becomes a playable instrument
+// ---------------------------------------------------------------------------
+
+const TAKE_SONG: &str = r#"import voice from "./take.frec"
+song "Voice" {
+  tempo 120bpm
+  track Lead {
+    instrument sampler(take: voice, root: A3)
+    play notes`A3:1 C4:1 E4:1 _:1` at bars(1..2)
+  }
+}"#;
+
+#[test]
+fn recorded_take_becomes_an_instrument() {
+    let dir = temp_dir("takeinst");
+    std::fs::write(format!("{dir}/take.frec"), frec::encode(48_000, 1, &tone(), &provenance()))
+        .unwrap();
+    let p = compile_with_loader(TAKE_SONG, &FsLoader, &dir).expect("take sampler must compile");
+    let dev = &p.tracks[0].devices[0];
+    assert_eq!(dev.kind, dawcore::model::DeviceKind::Sampler);
+    assert!(matches!(dev.sample, dawcore::model::SampleSource::Asset(_)));
+    // root A3 (57): asset roots are C4 (60) so Pitch encodes +3 semitones
+    assert!((dev.params[5] - (0.5 + 3.0 / 48.0)).abs() < 1e-6, "pitch={}", dev.params[5]);
+
+    // the take is audible and root changes the pitch (and thus the audio)
+    let a3 = fortelang::render_digest(&p, 2.0);
+    assert!(a3.rms > 0.01, "take instrument must sound (rms {})", a3.rms);
+    let c5 = TAKE_SONG.replace("root: A3", "root: C5");
+    let p2 = compile_with_loader(&c5, &FsLoader, &dir).unwrap();
+    let c5 = fortelang::render_digest(&p2, 2.0);
+    assert_ne!(a3.f32_digest, c5.f32_digest, "root must repitch the instrument");
+}
+
+#[test]
+fn take_sampler_errors_are_reported() {
+    let dir = temp_dir("takeerr");
+    std::fs::write(format!("{dir}/take.frec"), frec::encode(48_000, 1, &tone(), &provenance()))
+        .unwrap();
+    let codes = |src: &str| -> Vec<&'static str> {
+        match compile_with_loader(src, &FsLoader, &dir) {
+            Ok(_) => Vec::new(),
+            Err(ds) => ds.into_iter().map(|d| d.code).collect(),
+        }
+    };
+    // unknown take name lists what is imported
+    let src = TAKE_SONG.replace("take: voice", "take: nothere");
+    assert!(codes(&src).contains(&"E-PROV-003"), "{src}");
+    // root outside C2..C6
+    let src = TAKE_SONG.replace("root: A3", "root: C8");
+    assert!(codes(&src).contains(&"E-TYPE-002"));
+    // take must be a bare name, not a string
+    let src = TAKE_SONG.replace("take: voice", "take: \"voice\"");
+    assert!(codes(&src).contains(&"E-TYPE-004"));
+}

@@ -716,6 +716,10 @@ impl Parser {
                                 self.bump();
                                 Arg::Str(s, apos)
                             }
+                            Tok::Ident(name) => {
+                                self.bump();
+                                Arg::Ident(name, apos)
+                            }
                             _ => {
                                 let (n, _unit, p) = self.number("引数の値")?;
                                 Arg::Num(n, p)

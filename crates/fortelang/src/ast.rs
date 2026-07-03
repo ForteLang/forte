@@ -165,6 +165,16 @@ pub struct Call {
 pub enum Arg {
     Num(f64, Pos),
     Str(String, Pos),
+    /// Bare name: an imported take (`take: myTake`) or a note (`root: A3`).
+    Ident(String, Pos),
+}
+
+impl Arg {
+    pub fn pos(&self) -> Pos {
+        match self {
+            Arg::Num(_, p) | Arg::Str(_, p) | Arg::Ident(_, p) => *p,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

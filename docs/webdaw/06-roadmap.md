@@ -20,7 +20,7 @@ Status: Draft v0.1 / 2026-07-02
 | 0.2 | forte-core: dawcore の engine/dsp/bounce をレンダーグラフ化して移植(単スレッド) — 🔶 v0 は dawcore を直接ターゲットにコンパイル(グラフ IR は次段) | SRS-CORE-001/003/005 |
 | 0.3 | `forte build`(WAV+build.manifest.json)と `forte play`(CLI 再生) — **✅ `forte check/build/play` 実装済。play はファイル監視ホットリロード付き(再生を止めずに再コンパイル反映、エラー時は直前版を維持)** | SRS-BLD-001/002 |
 | 0.4 | **決定論 CI**: native/wasm の出力ハッシュ一致ゲート — **✅ スパイク成功(07-determinism-spike.md)。`scripts/determinism_test.sh` がゲートの原型** | SYS-ENG-001 |
-| 0.5 | `@std` 初期ライブラリ(シンセ 2、EQ、delay、reverb、limiter) — **🔶 ビルトイン 8 デバイス+`device` 構文による言語内音源定義(ノードグラフ→Grid 展開、`songs/handmade.forte` で実証)** | D-06 |
+| 0.5 | `@std` 初期ライブラリ(シンセ 2、EQ、delay、reverb、limiter) — **🔶 ビルトイン 8 デバイス+`device` 構文による言語内音源定義(ノードグラフ→Grid 展開、`songs/handmade.forte` で実証)。音作り拡充: DSP プリミティブに `noise`(決定論 xorshift)と `shaper`(tanh/clip/fold)を追加し、ドラムキットの完全自作が可能に(`songs/handmade-kit.forte`)。録音テイクの楽器化 `sampler(take: x, root: A3)` — マイクで録った音がクロマチックに演奏できるサンプラー音源になる(SYS-REC-001 の白箱原則そのまま)** | D-06 |
 | 0.6 | リファレンス曲 3 曲をコードで移植(ユーザーテスト素材) — **✅ 3 曲(`first-light` 4/4、`slow-circles` 6/8、`night-parade` prog/section/send-return/arp 行使)。native/wasm 同一ダイジェスト** | SYS-LNG-001 受入 |
 
 **Exit 基準**: 外部の作曲経験者 2 名がドキュメントだけを頼りに 8 小節を書けて、

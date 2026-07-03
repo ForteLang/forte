@@ -29,6 +29,9 @@ enum NodeState {
     Adsr { env: Adsr, prev_gate: f32 },
     Filter(Svf),
     Lfo { phase: f32 },
+    /// xorshift32 state — deterministic noise, reseeded per note-on so the
+    /// same source renders the same bits everywhere.
+    Noise(u32),
 }
 
 struct GridVoice {
@@ -85,12 +88,16 @@ fn topo_order(n: usize, conns: &[GridConn]) -> Vec<usize> {
     order
 }
 
-fn fresh_state(kind: GridModuleKind, sr: f32) -> NodeState {
+fn fresh_state(kind: GridModuleKind, sr: f32, node_idx: usize) -> NodeState {
     match kind {
         GridModuleKind::Osc => NodeState::Osc(Oscillator::default()),
         GridModuleKind::Adsr => NodeState::Adsr { env: Adsr::new(sr), prev_gate: 0.0 },
         GridModuleKind::Filter => NodeState::Filter(Svf::new(sr)),
         GridModuleKind::Lfo => NodeState::Lfo { phase: 0.0 },
+        // two noise nodes in one patch must not correlate: seed by node index
+        GridModuleKind::Noise => {
+            NodeState::Noise(0x9e37_79b9 ^ (node_idx as u32).wrapping_mul(0x85eb_ca6b))
+        }
         _ => NodeState::None,
     }
 }
@@ -116,7 +123,12 @@ impl GridSynth {
 
         let voices = (0..GRID_VOICES)
             .map(|_| GridVoice {
-                states: graph.modules.iter().map(|m| fresh_state(m.kind, sample_rate)).collect(),
+                states: graph
+                    .modules
+                    .iter()
+                    .enumerate()
+                    .map(|(i, m)| fresh_state(m.kind, sample_rate, i))
+                    .collect(),
                 note: 0,
                 velocity: 0.0,
                 gate: 0.0,
@@ -162,7 +174,7 @@ impl GridSynth {
         let sr = self.sample_rate;
         let v = &mut self.voices[idx];
         for (si, st) in v.states.iter_mut().enumerate() {
-            *st = fresh_state(self.nodes[si].kind, sr);
+            *st = fresh_state(self.nodes[si].kind, sr, si);
         }
         v.note = note;
         v.velocity = velocity.clamp(0.0, 1.0);
@@ -236,6 +248,27 @@ impl GridSynth {
                         if let NodeState::Osc(osc) = &mut voice.states[ni] {
                             out[0] = osc.next(freq, sr, shape);
                         }
+                    }
+                    GridModuleKind::Noise => {
+                        if let NodeState::Noise(s) = &mut voice.states[ni] {
+                            *s ^= *s << 13;
+                            *s ^= *s >> 17;
+                            *s ^= *s << 5;
+                            out[0] = (*s as f32 / u32::MAX as f32) * 2.0 - 1.0;
+                        }
+                    }
+                    GridModuleKind::Shaper => {
+                        let drive = (params[0] + ins[1]).clamp(0.0, 1.0);
+                        let x = ins[0] * (1.0 + drive * 15.0);
+                        out[0] = match (params[1] * 2.999) as u8 {
+                            1 => x.clamp(-1.0, 1.0), // hard clip
+                            2 => {
+                                // triangle wavefolder: reflects instead of clipping
+                                let t = (x * 0.25 + 0.25).rem_euclid(1.0);
+                                4.0 * (t - 0.5).abs() - 1.0
+                            }
+                            _ => crate::dmath::tanh(x),
+                        };
                     }
                     GridModuleKind::Lfo => {
                         if let NodeState::Lfo { phase } = &mut voice.states[ni] {

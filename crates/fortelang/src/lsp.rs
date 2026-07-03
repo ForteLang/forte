@@ -183,6 +183,8 @@ const DOCS: &[(&str, &str, &str)] = &[
     ("notes", "ノート列: `notes\\`C4:1/2 [E4 G4]:1 _:1\\``", "literal"),
     ("prog", "コード進行: `prog\\`Em | C G | D\\``(| が小節)。類似検索の対象になる", "literal"),
     ("osc", "DSP: オシレータ `osc(shape: \"saw\", freq: note.freq)`", "dsp"),
+    ("noise", "DSP: ホワイトノイズ `noise()`(決定論的 — 同じソースは同じビット)", "dsp"),
+    ("shaper", "DSP: ウェーブシェイパー `shaper(in:, drive: 0.4, mode: \"tanh|clip|fold\")`", "dsp"),
     ("lfo", "DSP: LFO `lfo(rate: 0.3, shape: \"sine\")`", "dsp"),
     ("adsr", "DSP: エンベロープ `adsr(a,d,s,r, gate: note.gate)`", "dsp"),
     ("svf", "DSP: フィルタ `svf(in:, cutoff:, reso:, mod:)`", "dsp"),

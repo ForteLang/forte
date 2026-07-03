@@ -1,0 +1,71 @@
+// Handmade Kit — リファレンス曲 5: ドラムキットを noise / shaper で完全自作する。
+// ビルトインサンプルすら使わない。音色の一字一句がこのファイルにある。
+// 再生: forte play songs/handmade-kit.forte
+
+device Kick : Instrument {
+  param punch = 0.5 in 0.0..1.0
+
+  node env = adsr(a: 0.001, d: 0.18, s: 0.0, r: 0.1)
+  node o   = osc(shape: "sine")                 // 低いルートで鳴らす前提(C2)
+  node sh  = shaper(in: o, drive: punch, mode: "tanh")
+  out gain(in: sh, mod: env, level: 1.0)
+}
+
+device Snare : Instrument {
+  param tone = 0.75 in 0.0..1.0
+
+  node env = adsr(a: 0.001, d: 0.12, s: 0.0, r: 0.08)
+  node n   = noise()
+  node f   = svf(in: n, cutoff: tone, reso: 0.3)
+  node bd  = osc(shape: "sine")                 // 胴鳴り
+  node bde = adsr(a: 0.001, d: 0.06, s: 0.0, r: 0.05)
+  node body = gain(in: bd, mod: bde, level: 0.5)
+  out gain(in: mix(a: f, b: body), mod: env, level: 0.9)
+}
+
+device Hat : Instrument {
+  param open = 0.05 in 0.0..1.0
+
+  node env = adsr(a: 0.001, d: open, s: 0.0, r: 0.04)
+  node n   = noise()
+  node hp  = svf(in: n, cutoff: 0.95, reso: 0.2)
+  node fz  = shaper(in: hp, drive: 0.25, mode: "clip")
+  out gain(in: fz, mod: env, level: 0.6)
+}
+
+song "Handmade Kit" {
+  tempo 92bpm
+  key C minor
+
+  section groove = bars(1..8)
+
+  let kick  = beat`x--- --x- x--- ----`
+  let snare = beat`---- x--- ---- x--x`
+  let hats  = beat`x-x- x-x- x-x- x-xX`
+
+  track Kick {
+    instrument Kick(punch: 0.6)
+    volume 0.9
+    play kick at groove
+  }
+
+  track Snare {
+    instrument Snare(tone: 0.7)
+    volume 0.7
+    play snare at groove
+  }
+
+  track Hats {
+    instrument Hat(open: 0.08)
+    volume 0.5
+    pan 0.2
+    play hats at groove
+  }
+
+  track Bass {
+    instrument polymer(wave: "saw", cutoff: 0.28, sub: 0.8, release: 0.12)
+    volume 0.65
+    play bass(prog`Cm | Cm | Ab | Bb`, rate: 0.5) at groove
+    modulate cutoff with lfo(rate: 0.2, amount: 0.2)
+  }
+}
