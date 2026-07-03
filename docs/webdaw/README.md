@@ -13,7 +13,8 @@ IEC 62304 のプロセス規律(要求→アーキテクチャ→詳細設計の
 | 05 | [detailed-design](05-detailed-design.md) | 詳細設計(SDD): 言語スケッチ・エンジン・録音・Hub |
 | 06 | [roadmap](06-roadmap.md) | 開発ロードマップ(Phase 0–5)+リスクレジスタ |
 | 07 | [determinism-spike](07-determinism-spike.md) | Phase 0.4 スパイク結果: native/wasm ビット同一レンダリング達成 |
-| spec | [forte-lang-v0](spec/forte-lang-v0.md) | Forte lang 言語仕様 v0 ドラフト |
+| spec | [forte-lang-v1](spec/forte-lang-v1.md) | **言語仕様 v1(実装準拠): 文法 EBNF・意味論・診断カタログ・決定論契約** |
+| spec | [forte-lang-v0](spec/forte-lang-v0.md) | 言語仕様 v0 ドラフト(設計意図・将来構想) |
 
 ## 実装の現在地
 

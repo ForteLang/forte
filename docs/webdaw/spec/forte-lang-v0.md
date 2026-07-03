@@ -1,5 +1,9 @@
 # Forte lang 仕様 v0 (ドラフト)
 
+> **📌 実装準拠の仕様は [forte-lang-v1.md](forte-lang-v1.md) を参照。**
+> 本文書は設計意図と将来構想(任意式 DSP、ジェネリクス、単位型の完全検査など)を
+> 含む上位ドラフトとして残す。
+
 Status: Draft v0.1 / 2026-07-02
 対応要求: SRS-LANG-001..008 / 上位: 05-detailed-design.md §1
 

@@ -4,6 +4,16 @@ Status: Draft v0.1 / 2026-07-02
 上位文書: 02-system-requirements.md (SYS)
 下位文書: 04-software-architecture.md (SAD), 05-detailed-design.md (SDD)
 
+> **実装状態(2026-07 時点)**: 本書の要求のうち v0 実装が存在するもの —
+> LANG(001-008 の主要部+fmt+import)、PKG(ローカル import と Hub fork。semver は未)、
+> CORE(dawcore 直結。専用レンダーグラフ IR は未)、BLD(build+manifest+digest)、
+> LSP(診断・補完・ホバー・整形)、VIS(アレンジ概観+プレイヘッド。ピアノロールは未)、
+> WEB(001-005: エディタ・AudioWorklet・OPFS・PWA・縮退は Chromium 検証のみ)、
+> REC(001-005: .frec 来歴・PCM 直取り・較正。クラッシュ回復・演奏 fork GUI は未)、
+> HUB(ローカル Hub+HTTP: fork-only・release/verify・類似検索・再生台帳。git 互換・
+> 指紋照合は未)、PLY(プレイヤー・系譜ページ・進行類似 v1)、SEC(来歴の構造検証のみ。
+> 暗号署名・保存時暗号化は未)。詳細は 06-roadmap.md の各項ステータス。
+
 表記: SRS-<コンポーネント>-<番号> [→ トレース先 SYS]。
 コンポーネント: LANG(言語処理系), PKG(パッケージ管理), CORE(オーディオエンジン),
 BLD(ビルド), LSP(エディタ支援), VIS(可視化), WEB(Webエディタ/実行環境),
