@@ -74,6 +74,41 @@ fn main() -> ExitCode {
         Some("repl") => ExitCode::from(fortelang::repl::run() as u8),
         #[cfg(not(target_family = "wasm"))]
         Some("hub") if args.len() >= 2 => hub_cmd(&args[1..]),
+        Some("init") => vcs_print(fortelang::vcs::Repo::init(".")),
+        Some("status") => vcs_status(),
+        Some("commit") => {
+            let msg = args
+                .iter()
+                .position(|a| a == "-m")
+                .and_then(|i| args.get(i + 1))
+                .cloned()
+                .unwrap_or_default();
+            vcs_print(fortelang::vcs::Repo::open(".").and_then(|r| r.commit(&msg)))
+        }
+        Some("log") => vcs_log(),
+        Some("branch") => match fortelang::vcs::Repo::open(".") {
+            Err(e) => vcs_print(Err(e)),
+            Ok(repo) => match args.get(1) {
+                Some(name) => vcs_print(repo.create_branch(name)),
+                None => {
+                    let cur = repo.current_branch().ok().flatten();
+                    match repo.branches() {
+                        Ok(bs) => {
+                            for (name, hash) in bs {
+                                let mark = if Some(&name) == cur.as_ref() { "*" } else { " " };
+                                println!("{mark} {name} {}", &hash[..8]);
+                            }
+                            ExitCode::SUCCESS
+                        }
+                        Err(e) => vcs_print(Err(e)),
+                    }
+                }
+            },
+        },
+        Some("checkout") if args.len() >= 2 => {
+            vcs_print(fortelang::vcs::Repo::open(".").and_then(|r| r.checkout(&args[1])))
+        }
+        Some("diff") => vcs_diff(&args[1..]),
         #[cfg(not(target_family = "wasm"))]
         Some("play") if args.len() >= 2 => {
             let for_secs = args
@@ -91,6 +126,13 @@ fn main() -> ExitCode {
             eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
             eprintln!("       forte lsp");
+            eprintln!("       forte init                  (このディレクトリをリポジトリに)");
+            eprintln!("       forte status");
+            eprintln!("       forte commit -m \"メッセージ\"");
+            eprintln!("       forte log");
+            eprintln!("       forte branch [NAME]");
+            eprintln!("       forte checkout <branch|hash>");
+            eprintln!("       forte diff [REV [REV]]      (音楽の言葉で差分。既定 HEAD↔作業)");
             eprintln!("       forte hub publish <file.forte> [--as NAME] [--hub DIR]");
             eprintln!("       forte hub fork <NAME> <DEST-DIR>   [--hub DIR]");
             eprintln!("       forte hub release <NAME>           [--hub DIR]");
@@ -367,4 +409,88 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+// ---------------------------------------------------------------------------
+// VCS subcommands
+// ---------------------------------------------------------------------------
+
+fn vcs_print(res: Result<String, String>) -> ExitCode {
+    match res {
+        Ok(msg) => {
+            println!("{msg}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn vcs_status() -> ExitCode {
+    let repo = match fortelang::vcs::Repo::open(".") {
+        Ok(r) => r,
+        Err(e) => return vcs_print(Err(e)),
+    };
+    let run = || -> Result<String, String> {
+        let base = match repo.head()? {
+            Some(h) => repo.read_tree(&repo.commit_obj(&h)?.tree)?,
+            None => fortelang::vcs::Snapshot::new(),
+        };
+        let work = repo.working_snapshot()?;
+        let (added, modified, deleted) = fortelang::vcs::Repo::changes(&base, &work);
+        let branch = repo.current_branch()?.unwrap_or_else(|| "(detached)".into());
+        let mut out = format!("ブランチ: {branch}\n");
+        if added.is_empty() && modified.is_empty() && deleted.is_empty() {
+            out.push_str("変更なし(クリーン)");
+        } else {
+            for p in &added {
+                out.push_str(&format!("  + {p}\n"));
+            }
+            for p in &modified {
+                out.push_str(&format!("  ~ {p}\n"));
+            }
+            for p in &deleted {
+                out.push_str(&format!("  - {p}\n"));
+            }
+            out.push_str("(差分の中身は forte diff)");
+        }
+        Ok(out)
+    };
+    vcs_print(run())
+}
+
+fn vcs_log() -> ExitCode {
+    let run = || -> Result<String, String> {
+        let repo = fortelang::vcs::Repo::open(".")?;
+        let head = repo.head()?.ok_or("まだコミットがありません")?;
+        let mut out = String::new();
+        for (hash, c) in repo.log(&head)? {
+            out.push_str(&format!("#{:<3} {} {} — {}\n", c.n, &hash[..8], c.author, c.message));
+        }
+        out.pop();
+        Ok(out)
+    };
+    vcs_print(run())
+}
+
+/// `forte diff`            — HEAD ↔ 作業ツリー
+/// `forte diff REV`        — REV ↔ 作業ツリー
+/// `forte diff REV REV`    — REV ↔ REV
+fn vcs_diff(args: &[String]) -> ExitCode {
+    let run = || -> Result<String, String> {
+        let repo = fortelang::vcs::Repo::open(".")?;
+        let (old, new) = match args {
+            [] => {
+                let head = repo.head()?.ok_or("まだコミットがありません")?;
+                (repo.read_tree(&repo.commit_obj(&head)?.tree)?, repo.working_snapshot()?)
+            }
+            [rev] => (repo.snapshot_of(rev)?, repo.working_snapshot()?),
+            [a, b, ..] => (repo.snapshot_of(a)?, repo.snapshot_of(b)?),
+        };
+        let report = fortelang::semdiff::diff_snapshots(&old, &new);
+        Ok(if report.is_empty() { "変更なし".into() } else { report.trim_end().to_string() })
+    };
+    vcs_print(run())
 }

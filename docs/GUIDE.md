@@ -255,6 +255,40 @@ npm install && npm run compile
 - **Forte: Show Arrangement** — アレンジビュー(読み取り専用)が横に開き、
   **保存するたびに更新**されます
 
+## 7.5 バージョン管理 — 曲の履歴を持つ
+
+曲のフォルダをリポジトリにすると、スケッチを壊す不安なく実験できます。
+
+```bash
+cd my-song/
+forte init                        # .forte/ ができる(git の .git に相当)
+forte commit -m "最初のスケッチ"   # *.forte と *.frec(録音)を丸ごと記録
+forte status                      # 何を変えたか
+forte log                         # 履歴
+```
+
+**diff が音楽の言葉で出る**のが Forte の売りです。行番号ではなく、
+コンパイル済みのモデル同士を比較します:
+
+```
+$ forte diff
+~ song.forte
+    tempo: 108 → 116 bpm
+    track Keys: Polymer の wave: square → saw
+    track Hats: 小節 13..16: 配置を削除
+~ handmade.forte (import 経由で音が変わります)
+    track Lead: Poly Grid のパッチ(ノードグラフ)が変わりました
+```
+
+- コメントや整形だけの変更は「モデルは同一」と教えてくれます。
+- 音源ライブラリ(import 先)だけを編集した場合、**それを聴く曲の側**にも
+  差分が出ます。
+- 別アイデアはブランチで: `forte branch idea && forte checkout idea`。
+  戻るのは `forte checkout main`。過去の版は `forte log` のハッシュで
+  `forte checkout 3cc5a7e9` — その場で鳴らして聴き比べられます
+  (未コミットの変更があるときは安全のため checkout を拒否します)。
+- `forte diff main idea` でブランチ同士の比較もできます。
+
 ## 8. Hub — 公開・fork・リリース
 
 ```bash

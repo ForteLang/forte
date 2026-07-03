@@ -69,6 +69,22 @@ python3 -m http.server 8000   # リポジトリルートで
 # → http://localhost:8000/web/
 ```
 
+**バージョン管理**(曲のリポジトリ。diff は行番号ではなく**音楽の言葉**で出る):
+
+```bash
+cd my-song/ && forte init          # .forte/ リポジトリを作る
+forte commit -m "最初のスケッチ"    # *.forte / *.frec をスナップショット
+forte log                          # 履歴
+forte branch idea && forte checkout idea   # 別アイデアを試す
+forte diff                         # 例: tempo: 108 → 116 bpm
+                                   #     track Keys: Polymer の wave: square → saw
+                                   #     track Hats: 小節 13..16: 配置を削除
+forte checkout main                # いつでも聴き比べに戻れる
+```
+
+音源ライブラリだけ編集した場合も、それを import している曲側に
+「import 経由で音が変わります」と差分が出ます(全てがコードだからできる芸当)。
+
 **Hub**(fork 系譜レジストリ: 取得は fork のみ、来歴は構造的に記録される):
 
 ```bash
