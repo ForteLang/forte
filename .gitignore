@@ -4,3 +4,5 @@
 .DS_Store
 /web/forte.wasm
 *.manifest.json
+node_modules/
+package-lock.json
