@@ -1,0 +1,52 @@
+// Handmade — Forte v0 リファレンス曲 4。
+// 音源そのものをコードで定義する(device 構文 → ボイス毎ノードグラフに展開)。
+// これが「プラグイン = import できるコード」というホワイトボックス原則の最小形。
+// 再生: cargo run -p fortelang --bin forte -- play songs/handmade.forte
+
+device WarmLead : Instrument {
+  param cutoff = 0.6 in 0.0..1.0
+  param vib    = 0.25
+
+  node o    = osc(shape: "saw")                       // freq は既定で note.freq
+  node env  = adsr(a: 0.03, d: 0.25, s: 0.6, r: 0.3)  // gate は既定で note.gate
+  node wob  = lfo(rate: vib, shape: "sine")
+  node f    = svf(in: o, cutoff: cutoff, reso: 0.3, mod: wob)
+  out gain(in: f, mod: env, level: 0.9)
+}
+
+device SubBass : Instrument {
+  param drivein = 0.7
+
+  node o   = osc(shape: "square")
+  node env = adsr(a: 0.01, d: 0.2, s: 0.7, r: 0.15)
+  node f   = svf(in: o, cutoff: 0.25, reso: 0.15)
+  out gain(in: f, mod: env, level: drivein)
+}
+
+song "Handmade" {
+  tempo 100bpm
+  meter 4/4
+  key G minor
+
+  let pulse = beat`x--- x--- x--- x-x-`
+  let line  = prog`Gm | Eb | Bb | F`
+
+  track Kick {
+    instrument sampler(sample: "Kick")
+    play pulse at bars(1..12)
+  }
+
+  track Bass {
+    instrument SubBass(drivein: 0.8)
+    volume 0.75
+    play bass(line, rate: 1) at bars(1..12)
+  }
+
+  track Lead {
+    instrument WarmLead(cutoff: 0.7, vib: 0.35)
+    insert delay(time: 0.3, fdbk: 0.3, mix: 0.25)
+    volume 0.55
+    pan 0.1
+    play arp(line, rate: 0.5, style: "updown") at bars(5..12)
+  }
+}

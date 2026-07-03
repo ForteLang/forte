@@ -68,6 +68,50 @@ fn third_reference_song_uses_prog_sections_and_sends() {
     assert!(info.rms > 0.01, "render must contain signal (rms {})", info.rms);
 }
 
+const REFERENCE4: &str = include_str!("../../../songs/handmade.forte");
+
+#[test]
+fn user_defined_devices_compile_to_grid_graphs() {
+    let p = fortelang::compile_str(REFERENCE4).expect("handmade must compile");
+    let lead = p.tracks.iter().find(|t| t.name == "Lead").unwrap();
+    let dev = &lead.devices[0];
+    assert_eq!(dev.kind, dawcore::model::DeviceKind::PolyGrid);
+    let graph = dev.grid.as_ref().unwrap();
+    // NoteIn + osc + adsr + lfo + svf + gain + Out = 7 modules
+    assert_eq!(graph.modules.len(), 7);
+    assert_eq!(graph.modules[0].kind, dawcore::model::GridModuleKind::NoteIn);
+    assert_eq!(graph.modules.last().unwrap().kind, dawcore::model::GridModuleKind::Out);
+    // instantiation arg cutoff: 0.7 overrode the 0.6 default on the svf node
+    let svf = graph
+        .modules
+        .iter()
+        .find(|m| m.kind == dawcore::model::GridModuleKind::Filter)
+        .unwrap();
+    assert_eq!(svf.params[0], 0.7);
+    // and it makes sound
+    let info = fortelang::render_digest(&p, 4.0);
+    assert!(info.rms > 0.01, "custom devices must produce signal (rms {})", info.rms);
+}
+
+#[test]
+fn device_errors_are_reported() {
+    // unknown primitive
+    let src = r#"device X : Instrument { out warp(in: osc()) } song "S" { tempo 120bpm track A { instrument X() play beat`x---` at bars(1..1) } }"#;
+    assert!(err_codes(src).contains(&"E-GRID-004"), "{:?}", err_codes(src));
+    // missing required input
+    let src2 = r#"device X : Instrument { out svf(cutoff: 0.5) } song "S" { tempo 120bpm track A { instrument X() play beat`x---` at bars(1..1) } }"#;
+    assert!(err_codes(src2).contains(&"E-GRID-001"));
+    // forward reference
+    let src3 = r#"device X : Instrument { node a = gain(in: b) node b = osc() out a } song "S" { tempo 120bpm track A { instrument X() play beat`x---` at bars(1..1) } }"#;
+    assert!(err_codes(src3).contains(&"E-GRID-002"));
+    // instantiation out of declared range
+    let src4 = r#"device X : Instrument { param c = 0.5 in 0.0..1.0 out gain(in: osc(), level: c) } song "S" { tempo 120bpm track A { instrument X(c: 2.0) play beat`x---` at bars(1..1) } }"#;
+    assert!(err_codes(src4).contains(&"E-TYPE-002"));
+    // builtin shadowing
+    let src5 = r#"device polymer : Instrument { out osc() } song "S" { tempo 120bpm track A { instrument grid() play beat`x---` at bars(1..1) } }"#;
+    assert!(err_codes(src5).contains(&"E-DEV-008"));
+}
+
 #[test]
 fn unknown_section_and_return_are_reported() {
     let src = r#"song "X" { tempo 120bpm track A { instrument polymer() send Nowhere 0.3 play beat`x---` at nowhere } }"#;

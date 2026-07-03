@@ -154,6 +154,28 @@ pub device MonoSaw : Instrument {
   **決定論スパイク(07)により、この規約で native/wasm ビット同一が実証済み。**
 - v0 実装はインタープリタ(Rust のオペレータ木)で開始(SDD §2)。
 
+### 6.1 v0 実装済みサブセット: ノードグラフ型 device
+
+任意式の `process` に先行して、**宣言的なノードグラフとしての device** を v0 で実装済み
+(ボイス毎インタープリタ=dawcore Grid に展開):
+
+```forte
+device WarmLead : Instrument {
+  param cutoff = 0.6 in 0.0..1.0       // 使用側: instrument WarmLead(cutoff: 0.7)
+  node o   = osc(shape: "saw")          // freq 省略時は note.freq
+  node env = adsr(a: 0.03, d: 0.25, s: 0.6, r: 0.3)   // gate 省略時は note.gate
+  node f   = svf(in: o, cutoff: cutoff, reso: 0.3, mod: lfo(rate: 0.25))
+  out gain(in: f, mod: env, level: 0.9)
+}
+```
+
+- プリミティブ: `osc(shape, freq)` / `lfo(rate, shape)` / `adsr(a,d,s,r, gate)` /
+  `svf(in, cutoff, reso, mod)` / `gain(in, level, mod)` / `mix(a, b)`。
+  信号ソース: `note.freq` / `note.gate` / `note.vel`、宣言済み `node` 名、入れ子呼び出し。
+- `param` は**インスタンス化時に束縛**(コンパイル時定数)。範囲は `in lo..hi`
+  (既定 0..1)で検査される。実行時オートメーション対応は forte-core で。
+- 前方参照は不可(E-GRID-002)。数値引数はすべて正規化 0..1。
+
 ## 7. 標準ライブラリ `@std` (v0 収録)
 
 | モジュール | 内容(dawcore からの移植元) |

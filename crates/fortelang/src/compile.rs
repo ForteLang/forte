@@ -6,15 +6,33 @@ use std::collections::HashMap;
 
 use crate::ast::*;
 use crate::diag::{Diag, Pos};
+use crate::grid_build;
 use crate::music;
 use dawcore::model::{
     ArrangerClip, Clip, Device, DeviceKind, KeySignature, Note, Project, SampleSource, Scale,
     Track, TrackKind, TRACK_COLORS,
 };
 
-pub fn compile(song: &SongAst) -> Result<Project, Vec<Diag>> {
+pub fn compile(file: &FileAst) -> Result<Project, Vec<Diag>> {
+    let song = &file.song;
     let mut diags: Vec<Diag> = Vec::new();
     let mut p = Project::empty();
+
+    // ---- user-defined devices ----------------------------------------------
+    let mut user_devices: HashMap<&str, &DeviceAst> = HashMap::new();
+    for d in &file.devices {
+        if INSTRUMENTS.contains(&d.name.as_str()) || EFFECTS.contains(&d.name.as_str()) {
+            diags.push(Diag::new(
+                "E-DEV-008",
+                d.pos,
+                format!("device '{}' はビルトイン名と衝突しています", d.name),
+            ));
+            continue;
+        }
+        if user_devices.insert(d.name.as_str(), d).is_some() {
+            diags.push(Diag::new("E-MOD-002", d.pos, format!("device '{}' が重複しています", d.name)));
+        }
+    }
 
     // ---- song header ------------------------------------------------------
     match song.tempo {
@@ -91,7 +109,7 @@ pub fn compile(song: &SongAst) -> Result<Project, Vec<Diag>> {
         // instrument (required)
         let mut beat_pitch = 36u8; // C2 default; samplers use their sample root
         match &tast.instrument {
-            Some(call) => match build_instrument(call) {
+            Some(call) => match build_instrument(call, &user_devices) {
                 Ok((dev, root)) => {
                     beat_pitch = root;
                     track.devices[0] = dev;
@@ -353,7 +371,16 @@ const EFFECTS: &[&str] = &["filter", "eq", "drive", "delay", "reverb"];
 
 /// Build an instrument device. Returns the device plus the root pitch that
 /// `beat` literals on this track trigger.
-fn build_instrument(call: &Call) -> Result<(Device, u8), Diag> {
+fn build_instrument(
+    call: &Call,
+    user_devices: &HashMap<&str, &DeviceAst>,
+) -> Result<(Device, u8), Diag> {
+    if let Some(dev_ast) = user_devices.get(call.name.as_str()) {
+        let graph = grid_build::instantiate(dev_ast, call)?;
+        let mut dev = Device::new(DeviceKind::PolyGrid);
+        dev.grid = Some(graph);
+        return Ok((dev, 36));
+    }
     match call.name.as_str() {
         "sampler" => {
             let mut dev = Device::new(DeviceKind::Sampler);
@@ -417,7 +444,10 @@ fn build_instrument(call: &Call) -> Result<(Device, u8), Diag> {
         other => Err(Diag::new(
             "E-DEV-001",
             call.pos,
-            format!("instrument '{other}' はありません(使えるもの: {})", INSTRUMENTS.join(", ")),
+            format!(
+                "instrument '{other}' はありません(使えるもの: {}。または device で自作)",
+                INSTRUMENTS.join(", ")
+            ),
         )),
     }
 }

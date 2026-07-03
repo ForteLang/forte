@@ -2,6 +2,50 @@
 
 use crate::diag::Pos;
 
+/// A whole `.forte` file: user device definitions followed by one song.
+#[derive(Clone, Debug)]
+pub struct FileAst {
+    pub devices: Vec<DeviceAst>,
+    pub song: SongAst,
+}
+
+/// `device WarmLead : Instrument { param … / node … / out … }` — a synth
+/// defined in the language itself; lowered to a Grid node graph.
+#[derive(Clone, Debug)]
+pub struct DeviceAst {
+    pub name: String,
+    pub pos: Pos,
+    pub params: Vec<DevParam>,
+    pub nodes: Vec<(String, NodeExpr, Pos)>,
+    pub out: Option<NodeExpr>,
+}
+
+/// `param cutoff = 0.65 in 0.0..1.0`
+#[derive(Clone, Debug)]
+pub struct DevParam {
+    pub name: String,
+    pub default: f64,
+    pub range: Option<(f64, f64)>,
+    pub pos: Pos,
+}
+
+#[derive(Clone, Debug)]
+pub enum NodeExpr {
+    /// DSP primitive: `osc(shape: "saw")`, `svf(in: o, cutoff: cutoff)` …
+    Call { name: String, args: Vec<(String, NodeArg)>, pos: Pos },
+    /// A previously declared `node` name, or (in numeric positions) a `param`.
+    Ref(String, Pos),
+    /// `note.freq` / `note.gate` / `note.vel`
+    NotePort(String, Pos),
+}
+
+#[derive(Clone, Debug)]
+pub enum NodeArg {
+    Num(f64, Pos),
+    Str(String, Pos),
+    Expr(NodeExpr),
+}
+
 #[derive(Clone, Debug)]
 pub struct SongAst {
     pub name: String,

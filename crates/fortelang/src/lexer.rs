@@ -21,6 +21,7 @@ pub enum Tok {
     Slash,
     Minus,
     DotDot,
+    Dot,
     Eq,
     Eof,
 }
@@ -86,6 +87,11 @@ pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
                 out.push(Spanned { tok: Tok::DotDot, pos: p });
                 i += 2;
                 col += 2;
+            }
+            '.' => {
+                out.push(Spanned { tok: Tok::Dot, pos: p });
+                i += 1;
+                col += 1;
             }
             '"' => {
                 let mut s = String::new();

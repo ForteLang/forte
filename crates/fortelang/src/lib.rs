@@ -7,6 +7,7 @@ pub mod ast;
 pub mod audio;
 pub mod compile;
 pub mod diag;
+pub mod grid_build;
 pub mod lexer;
 pub mod lsp;
 pub mod music;
@@ -20,8 +21,8 @@ use diag::Diag;
 
 /// Parse + compile a `.forte` source into an engine project.
 pub fn compile_str(src: &str) -> Result<Project, Vec<Diag>> {
-    let ast = parser::parse(src)?;
-    compile::compile(&ast)
+    let file = parser::parse(src)?;
+    compile::compile(&file)
 }
 
 pub struct RenderInfo {

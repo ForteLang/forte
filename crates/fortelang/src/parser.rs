@@ -18,11 +18,19 @@ use crate::ast::*;
 use crate::diag::{Diag, Pos};
 use crate::lexer::{lex, Spanned, Tok};
 
-pub fn parse(src: &str) -> Result<SongAst, Vec<Diag>> {
+pub fn parse(src: &str) -> Result<FileAst, Vec<Diag>> {
     let toks = lex(src).map_err(|d| vec![d])?;
     let mut p = Parser { toks, i: 0, diags: Vec::new() };
+    let mut devices = Vec::new();
+    while matches!(p.peek(), Tok::Ident(s) if s == "device") {
+        if let Some(d) = p.device() {
+            devices.push(d);
+        } else {
+            break;
+        }
+    }
     match p.song() {
-        Some(song) if p.diags.is_empty() => Ok(song),
+        Some(song) if p.diags.is_empty() => Ok(FileAst { devices, song }),
         _ => Err(p.diags),
     }
 }
@@ -327,6 +335,128 @@ impl Parser {
             }
         }
         Some(t)
+    }
+
+    /// `device Name : Instrument { param … / node … / out … }`
+    fn device(&mut self) -> Option<DeviceAst> {
+        let pos = self.pos();
+        self.bump(); // "device"
+        let name = self.ident("device の名前")?;
+        if *self.peek() == Tok::Colon {
+            self.bump();
+            let kind = self.ident("device の種類")?;
+            if kind != "Instrument" {
+                self.err("E-GRID-005", format!("v0 の device は Instrument のみです(見つかったのは {kind})"));
+            }
+        }
+        self.expect(Tok::LBrace, "`{`");
+        let mut d = DeviceAst { name, pos, params: Vec::new(), nodes: Vec::new(), out: None };
+        loop {
+            match self.peek().clone() {
+                Tok::RBrace => {
+                    self.bump();
+                    break;
+                }
+                Tok::Eof => {
+                    self.err("E-PARSE-006", "device ブロックが閉じていません(`}` が必要)");
+                    break;
+                }
+                Tok::Ident(kw) => match kw.as_str() {
+                    "param" => {
+                        self.bump();
+                        let ppos = self.pos();
+                        let name = self.ident("param の名前")?;
+                        self.expect(Tok::Eq, "`=`");
+                        let (default, _, _) = self.number("param の既定値")?;
+                        let mut range = None;
+                        if self.keyword("in") {
+                            let a = self.number("範囲の下限")?;
+                            self.expect(Tok::DotDot, "`..`");
+                            let b = self.number("範囲の上限")?;
+                            range = Some((a.0, b.0));
+                        }
+                        d.params.push(DevParam { name, default, range, pos: ppos });
+                    }
+                    "node" => {
+                        self.bump();
+                        let npos = self.pos();
+                        let name = self.ident("node の名前")?;
+                        self.expect(Tok::Eq, "`=`");
+                        let expr = self.node_expr()?;
+                        d.nodes.push((name, expr, npos));
+                    }
+                    "out" => {
+                        self.bump();
+                        let expr = self.node_expr()?;
+                        if d.out.is_some() {
+                            self.err("E-GRID-006", "out は device に 1 つだけです");
+                        }
+                        d.out = Some(expr);
+                    }
+                    other => {
+                        self.err(
+                            "E-PARSE-018",
+                            format!("device 内で使えない要素です: {other}(param/node/out)"),
+                        );
+                        self.bump();
+                    }
+                },
+                _ => {
+                    self.err("E-PARSE-008", "device 内で解釈できないトークンです");
+                    self.bump();
+                }
+            }
+        }
+        Some(d)
+    }
+
+    /// DSP expression: `osc(shape: "saw")` / `note.freq` / a node or param name.
+    fn node_expr(&mut self) -> Option<NodeExpr> {
+        let pos = self.pos();
+        let name = self.ident("DSP 式(osc()/svf()/… か node 名)")?;
+        if name == "note" && *self.peek() == Tok::Dot {
+            self.bump();
+            let port = self.ident("note のポート(freq/gate/vel)")?;
+            return Some(NodeExpr::NotePort(port, pos));
+        }
+        if *self.peek() == Tok::LParen {
+            self.bump();
+            let mut args = Vec::new();
+            loop {
+                match self.peek().clone() {
+                    Tok::RParen => {
+                        self.bump();
+                        break;
+                    }
+                    Tok::Ident(key) => {
+                        self.bump();
+                        self.expect(Tok::Colon, "引数の `:`");
+                        let apos = self.pos();
+                        let arg = match self.peek().clone() {
+                            Tok::Str(s) => {
+                                self.bump();
+                                NodeArg::Str(s, apos)
+                            }
+                            Tok::Num(..) | Tok::Minus => {
+                                let (n, _, p) = self.number("引数の値")?;
+                                NodeArg::Num(n, p)
+                            }
+                            _ => NodeArg::Expr(self.node_expr()?),
+                        };
+                        args.push((key, arg));
+                        if *self.peek() == Tok::Comma {
+                            self.bump();
+                        }
+                    }
+                    _ => {
+                        self.err("E-PARSE-015", "引数は `名前: 値` の形で書いてください");
+                        self.bump();
+                    }
+                }
+            }
+            return Some(NodeExpr::Call { name, args, pos });
+        }
+        Some(NodeExpr::Ref(name, pos))
     }
 
     /// Pattern expression: a literal, a `let` name, or a pattern function
