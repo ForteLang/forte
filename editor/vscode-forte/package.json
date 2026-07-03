@@ -28,7 +28,17 @@
     "commands": [
       { "command": "forte.play", "title": "Forte: Play (hot reload)" },
       { "command": "forte.build", "title": "Forte: Build" },
-      { "command": "forte.stop", "title": "Forte: Stop Playback" }
+      { "command": "forte.stop", "title": "Forte: Stop Playback" },
+      { "command": "forte.repl", "title": "Forte: REPL" },
+      { "command": "forte.sendToRepl", "title": "Forte: Send Selection to REPL" },
+      { "command": "forte.showArrangement", "title": "Forte: Show Arrangement" }
+    ],
+    "keybindings": [
+      {
+        "command": "forte.sendToRepl",
+        "key": "shift+enter",
+        "when": "editorTextFocus && editorLangId == forte"
+      }
     ],
     "configuration": {
       "title": "Forte",

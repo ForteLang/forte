@@ -241,9 +241,13 @@ npm install && npm run compile
 # このフォルダを VSCode で開いて F5(拡張開発ホスト)
 ```
 
-設定 `forte.path` に `target/release/forte` の絶対パスを入れると:
+設定 `forte.path` に `forte` の絶対パス(`~/.cargo/bin/forte`)を入れると:
 - エラーが打ちながら赤線で出る(補完・ホバー・format-on-save も対応)
 - コマンドパレットから **Forte: Play (hot reload)** / **Build** / **Stop**
+- **Forte: REPL** でジャム用ターミナルを開き、`.forte` ファイル上で
+  **Shift+Enter** — 選択範囲(なければ現在行)が REPL に飛んで即鳴ります
+- **Forte: Show Arrangement** — アレンジビュー(読み取り専用)が横に開き、
+  **保存するたびに更新**されます
 
 ## 8. Hub — 公開・fork・リリース
 

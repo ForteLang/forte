@@ -19,6 +19,25 @@ fn main() -> ExitCode {
                 .cloned();
             build(&args[1], out)
         }
+        Some("viz") if args.len() >= 2 => {
+            let path = &args[1];
+            let src = match load(path) {
+                Ok(s) => s,
+                Err(c) => return c,
+            };
+            match fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base_dir(path)) {
+                Ok(p) => {
+                    println!("{}", fortelang::viz::viz_json(&p));
+                    ExitCode::SUCCESS
+                }
+                Err(diags) => {
+                    for d in &diags {
+                        eprintln!("{path}:{d}");
+                    }
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("fmt") if args.len() >= 2 => {
             let check = args.iter().any(|a| a == "--check");
             let path = &args[1];
@@ -70,6 +89,7 @@ fn main() -> ExitCode {
             eprintln!("       forte play  <song.forte> [--for SECS]");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
             eprintln!("       forte fmt   <song.forte> [--check]");
+            eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
             eprintln!("       forte lsp");
             eprintln!("       forte hub publish <file.forte> [--as NAME] [--hub DIR]");
             eprintln!("       forte hub fork <NAME> <DEST-DIR>   [--hub DIR]");

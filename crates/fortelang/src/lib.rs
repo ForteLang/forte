@@ -22,6 +22,7 @@ pub mod parser;
 pub mod perform;
 #[cfg(not(target_family = "wasm"))]
 pub mod repl;
+pub mod viz;
 
 use dawcore::command::Command;
 use dawcore::engine::Engine;
