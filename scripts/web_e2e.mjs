@@ -142,7 +142,7 @@ try {
   //    a song importing the take must compile (provenance validated in-wasm)
   await page.click('#rec');
   await page.waitForFunction(
-    () => document.getElementById('status').textContent.includes('recording'),
+    () => document.body.dataset.rec === 'on',
     null,
     { timeout: 15000 }
   );
@@ -184,6 +184,30 @@ try {
     'calibration flow completes honestly',
     calib === 'nodetect', // fake mic can't hear the probe; a number here would be a lie
     `data-calib=${calib}`
+  );
+
+  // 10) crash recovery: reload mid-recording (the stop path never runs) —
+  //     the streamed PCM must come back as a real take on next boot
+  await page.click('#rec');
+  await page.waitForFunction(
+    () => document.body.dataset.rec === 'on',
+    null,
+    { timeout: 15000 }
+  );
+  await page.waitForTimeout(1500); // > one flush interval
+  await page.reload({ waitUntil: 'load' }); // simulated crash
+  await page.waitForSelector('body[data-recovered="ok"]', { timeout: 20000 });
+  const recovered = await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const assets = await (await root.getDirectoryHandle('songs')).getDirectoryHandle('assets');
+    const names = [];
+    for await (const [n] of assets.entries()) names.push(n);
+    return names.sort();
+  });
+  check(
+    'crashed take recovered on boot',
+    recovered.includes('take-2.frec') && !recovered.includes('.recording.pcm'),
+    recovered.join(', ')
   );
 } finally {
   await browser.close();

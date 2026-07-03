@@ -167,55 +167,106 @@ async function ensureAudio() {
 }
 
 // ---- recording (mic → provenance-stamped .frec in OPFS) ----------------------
-let rec = null; // { ctx, stream, node, chunks, rate }
+// Chunks stream through rec-worker.js to OPFS as they arrive, so a crashed
+// tab loses at most the final second; recoverCrashedTake() picks it up on
+// the next boot (SRS-REC-002).
+let rec = null; // { ctx, stream, worker, rate, session, startedAt }
+
+async function saveTake(pcm, rate, provenance) {
+  const takes = store ? await store.list('.frec') : [];
+  const name = `assets/take-${takes.length + 1}.frec`;
+  await store?.writeBytes(name, encodeFrec(rate, 1, pcm, provenance));
+  await refreshModules();
+  document.body.dataset.lastTake = name;
+  return name;
+}
+
 async function recStart() {
+  const worker = new Worker('rec-worker.js');
+  const session = crypto.randomUUID();
+  const startedAt = new Date().toISOString();
   // the constraints matter: without them the browser applies phone-call
   // processing that ruins music takes (SRS-REC-005)
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
   });
   const ctx = new AudioContext({ sampleRate: 48000 });
+  await new Promise((res) => {
+    worker.onmessage = (e) => e.data.kind === 'started' && res();
+    worker.postMessage({ cmd: 'start', rate: ctx.sampleRate, startedAt, session });
+  });
   const src = await (await fetch('recorder.js')).text();
   await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
   const node = new AudioWorkletNode(ctx, 'forte-rec');
-  const chunks = [];
-  node.port.onmessage = (e) => chunks.push(e.data.data);
+  node.port.onmessage = (e) =>
+    worker.postMessage({ cmd: 'chunk', data: e.data.data }, [e.data.data.buffer]);
   ctx.createMediaStreamSource(stream).connect(node);
-  rec = { ctx, stream, node, chunks, rate: ctx.sampleRate };
+  rec = { ctx, stream, worker, rate: ctx.sampleRate, session, startedAt };
   $('rec').textContent = '■ 録音停止';
+  document.body.dataset.rec = 'on';
   status('recording…');
 }
 
 async function recStop() {
-  const { ctx, stream, chunks, rate } = rec;
+  const { ctx, stream, worker, rate, session, startedAt } = rec;
   rec = null;
   stream.getTracks().forEach((t) => t.stop());
   await ctx.close();
   $('rec').textContent = '● Rec';
-  const total = chunks.reduce((n, c) => n + c.length, 0);
-  const pcm = new Float32Array(total);
-  let off = 0;
-  for (const c of chunks) {
-    pcm.set(c, off);
-    off += c.length;
-  }
+  document.body.dataset.rec = 'off';
+  await new Promise((res) => {
+    worker.onmessage = (e) => e.data.kind === 'stopped' && res();
+    worker.postMessage({ cmd: 'stop' });
+  });
+  worker.terminate();
+  const bytes = await store.readBytes('assets/.recording.pcm');
+  const pcm = new Float32Array(bytes.buffer, 0, Math.floor(bytes.byteLength / 4));
   const calib = JSON.parse(localStorage.getItem('forte.calibration') || 'null');
   const provenance = {
     device_class: 'microphone',
-    recorded_at: new Date().toISOString(),
+    recorded_at: startedAt,
     by: 'user:web',
-    session: crypto.randomUUID(),
+    session,
     sig: 'webcrypto:stub', // real device keys arrive with Hub accounts
     // measured round-trip latency travels with the take, so any consumer can
     // compensate placement (SRS-REC-004)
     ...(calib ? { latency_samples: calib.rtl_samples, latency_confidence: calib.confidence } : {}),
   };
-  const takes = store ? await store.list('.frec') : [];
-  const name = `assets/take-${takes.length + 1}.frec`;
-  await store?.writeBytes(name, encodeFrec(rate, 1, pcm, provenance));
-  await refreshModules();
-  document.body.dataset.lastTake = name;
-  status(`saved ${name} (${(total / rate).toFixed(1)}s) — import ${name.split('/')[1].replace('.frec', '').replace('-', '_')} from "./${name}"`);
+  const name = await saveTake(pcm, rate, provenance);
+  await store.remove('assets/.recording.pcm').catch(() => {});
+  await store.remove('assets/.recording.json').catch(() => {});
+  status(`saved ${name} (${(pcm.length / rate).toFixed(1)}s) — import ${name.split('/')[1].replace('.frec', '').replace('-', '_')} from "./${name}"`);
+}
+
+/// A leftover .recording.* pair means the tab died mid-take: turn what was
+/// flushed into a real take instead of losing it.
+async function recoverCrashedTake() {
+  if (!store) return;
+  let journal, bytes;
+  try {
+    journal = JSON.parse(await store.read('assets/.recording.json'));
+    bytes = await store.readBytes('assets/.recording.pcm');
+  } catch {
+    return; // nothing to recover
+  }
+  try {
+    if (bytes.byteLength >= 4) {
+      const pcm = new Float32Array(bytes.buffer, 0, Math.floor(bytes.byteLength / 4));
+      const name = await saveTake(pcm, journal.rate || 48000, {
+        device_class: 'microphone',
+        recorded_at: journal.started_at || new Date().toISOString(),
+        by: 'user:web',
+        session: journal.session || 'recovered',
+        sig: 'webcrypto:stub',
+        recovered: true,
+      });
+      document.body.dataset.recovered = 'ok';
+      status(`前回のクラッシュから録音を復元しました: ${name}`);
+    }
+  } finally {
+    await store.remove('assets/.recording.pcm').catch(() => {});
+    await store.remove('assets/.recording.json').catch(() => {});
+  }
 }
 
 // ---- files (OPFS, local-first) ----------------------------------------------
@@ -399,6 +450,7 @@ async function boot() {
   await refreshFileList();
   recompile(0);
   status('ready');
+  await recoverCrashedTake();
 
   $('file').onchange = (e) => loadSong(e.target.value);
   $('new').onclick = async () => {
