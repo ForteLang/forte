@@ -54,7 +54,9 @@ forte> :save jam.forte                     ← ジャムがそのまま曲ファ
 
 | REPL コマンド | 効果 |
 | --- | --- |
-| (パターンを入力) | その場でループ再生。`beat` / `notes` / `prog` / `chords()` / `arp()` / `bass()` |
+| (パターンを入力) | **現在のトラック**で即ループ再生。`beat` / `notes` / `prog` / `chords()` / `arp()` / `bass()` |
+| `:track Bass` / `:tracks` / `:drop Bass` | トラックを重ねる(ループステーション)。以後のパターン・`:inst`・`:fx` はそのトラックへ |
+| `:vol 0.7` / `:pan -0.3` / `:undo` | 現在トラックの音量/パン、一手戻る |
 | `let 名前 = …` / `device … { … }` / `import …` | セッションに積む(複数行 OK、エラーはロールバック) |
 | `:tempo 140` / `:inst polymer(…)` / `:fx reverb(…)` / `:fx clear` | 鳴らしたまま変更 |
 | `:show` / `:save jam.forte` / `:stop` / `:quit` / `:help` | ソース表示 / 曲として保存 / 停止 / 終了 |

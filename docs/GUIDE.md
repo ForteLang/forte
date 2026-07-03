@@ -43,8 +43,13 @@ forte> device Bloop : Instrument {      # 音源の自作も REPL で(複数行 
   ...>   out gain(in: o, mod: adsr())
   ...> }
 forte> :inst Bloop()
-forte> :save jam.forte                  # ジャムがそのまま曲ファイルに
-forte> :quit
+forte> :track Bass                      # ← トラックを重ねる(ループステーション)
+forte:Bass> :inst polymer(wave: "saw", sub: 0.8)
+forte:Bass> bass(theme, rate: 0.5)      # 鳴っているドラムの上に重なる
+forte:Bass> :vol 0.7
+forte:Bass> :undo                       # 一手戻る
+forte:Bass> :save jam.forte             # 多重トラックの曲として保存
+forte:Bass> :quit
 ```
 
 `:help` で全コマンド。`:save` した曲は `forte play jam.forte` でそのまま続きを作れます。

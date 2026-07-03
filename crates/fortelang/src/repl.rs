@@ -1,33 +1,55 @@
-//! `forte repl` — type a pattern, hear it immediately. The session keeps a
-//! live engine; every input hot-swaps the loop without stopping the
-//! transport, exactly like `forte play`'s file watching but at line
-//! granularity. `:save` turns the jam into a real .forte file.
+//! `forte repl` — type a pattern, hear it immediately; layer tracks like a
+//! loop station. The session keeps a live engine; every input hot-swaps the
+//! arrangement without stopping the transport. `:save` turns the jam into a
+//! real multi-track .forte file, and `:undo` rewinds any step.
 
 use std::io::{BufRead, Write};
 
 use dawcore::command::Command;
 use dawcore::sync::full_sync;
 
-pub struct Session {
-    pub tempo: f64,
+#[derive(Clone)]
+pub struct TrackState {
+    pub name: String,
     pub instrument: String,
     pub inserts: Vec<String>,
+    pub pattern: Option<String>,
+    pub volume: Option<f64>,
+    pub pan: Option<f64>,
+}
+
+impl TrackState {
+    fn new(name: &str) -> Self {
+        TrackState {
+            name: name.into(),
+            instrument: "polymer()".into(),
+            inserts: Vec::new(),
+            pattern: None,
+            volume: None,
+            pan: None,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Session {
+    pub tempo: f64,
     pub imports: Vec<String>,
     pub devices: Vec<String>,
     pub lets: Vec<String>,
-    pub last_pattern: Option<String>,
+    pub tracks: Vec<TrackState>,
+    pub current: usize,
 }
 
 impl Default for Session {
     fn default() -> Self {
         Session {
             tempo: 120.0,
-            instrument: "polymer()".into(),
-            inserts: Vec::new(),
             imports: Vec::new(),
             devices: Vec::new(),
             lets: Vec::new(),
-            last_pattern: None,
+            tracks: vec![TrackState::new("Main")],
+            current: 0,
         }
     }
 }
@@ -42,8 +64,12 @@ pub enum Action {
 }
 
 impl Session {
-    /// Render the whole session as a valid .forte source around `pattern`.
-    pub fn source_for(&self, pattern: &str) -> String {
+    fn cur(&mut self) -> &mut TrackState {
+        &mut self.tracks[self.current]
+    }
+
+    /// Render the whole session as a valid multi-track .forte source.
+    pub fn source(&self) -> String {
         let mut s = String::new();
         for im in &self.imports {
             s.push_str(im);
@@ -59,27 +85,59 @@ impl Session {
             s.push_str(l);
             s.push('\n');
         }
-        s.push_str("\n  track Repl {\n");
-        s.push_str(&format!("    instrument {}\n", self.instrument));
-        for fx in &self.inserts {
-            s.push_str(&format!("    insert {fx}\n"));
+        let mut any = false;
+        for t in &self.tracks {
+            let Some(pattern) = &t.pattern else { continue };
+            any = true;
+            s.push_str(&format!("\n  track {} {{\n    instrument {}\n", t.name, t.instrument));
+            for fx in &t.inserts {
+                s.push_str(&format!("    insert {fx}\n"));
+            }
+            if let Some(v) = t.volume {
+                s.push_str(&format!("    volume {v}\n"));
+            }
+            if let Some(p) = t.pan {
+                s.push_str(&format!("    pan {p}\n"));
+            }
+            s.push_str(&format!("    play {pattern} at bars(1..8)\n  }}\n"));
         }
-        s.push_str(&format!("    play {pattern} at bars(1..8)\n  }}\n}}\n"));
+        if !any {
+            // a song needs at least one track; silence until a pattern arrives
+            s.push_str("\n  track Main {\n    instrument polymer()\n    play beat`----` at bars(1..8)\n  }\n");
+        }
+        s.push('}');
+        s.push('\n');
         s
     }
 
-    fn placeholder(&self) -> &str {
-        self.last_pattern.as_deref().unwrap_or("beat`----`")
-    }
-
-    /// Validate a candidate session change by compiling the resulting source.
-    fn validated(&self, source: &str) -> Result<(), String> {
-        crate::compile_with_loader(source, &crate::FsLoader, ".")
+    /// Validate a candidate session by compiling its source.
+    fn validated(&self) -> Result<(), String> {
+        crate::compile_with_loader(&self.source(), &crate::FsLoader, ".")
             .map(|_| ())
             .map_err(|ds| ds.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n"))
     }
 
-    pub fn eval(&mut self, input: &str) -> Action {
+    /// Apply a mutation transactionally: clone, mutate, compile-check; commit
+    /// only on success so a typo can never poison the session.
+    fn try_mutate(
+        &mut self,
+        undo: &mut Vec<Session>,
+        f: impl FnOnce(&mut Session),
+        ok: impl FnOnce(&Session) -> Action,
+    ) -> Action {
+        let mut candidate = self.clone();
+        f(&mut candidate);
+        match candidate.validated() {
+            Ok(()) => {
+                undo.push(self.clone());
+                *self = candidate;
+                ok(self)
+            }
+            Err(e) => Action::Msg(e),
+        }
+    }
+
+    pub fn eval(&mut self, input: &str, undo: &mut Vec<Session>) -> Action {
         let input = input.trim();
         if input.is_empty() || input.starts_with("//") {
             return Action::None;
@@ -87,43 +145,90 @@ impl Session {
 
         // ---- directives ----------------------------------------------------
         if let Some(rest) = input.strip_prefix(':') {
-            let (cmd, arg) = rest.split_once(' ').unwrap_or((rest, ""));
+            let (cmd, arg) = rest.split_once(' ').map(|(c, a)| (c, a.trim())).unwrap_or((rest.trim(), ""));
             return match cmd {
                 "help" | "h" => Action::Msg(HELP.into()),
                 "quit" | "q" | "exit" => Action::Quit,
                 "stop" => Action::Stop,
-                "show" => Action::Msg(self.source_for(self.placeholder())),
+                "show" => Action::Msg(self.source()),
                 "save" if !arg.is_empty() => Action::Save(arg.to_string()),
+                "undo" => match undo.pop() {
+                    Some(prev) => {
+                        *self = prev;
+                        Action::Play(self.source())
+                    }
+                    None => Action::Msg("これ以上戻れません".into()),
+                },
+                "tracks" => Action::Msg(
+                    self.tracks
+                        .iter()
+                        .enumerate()
+                        .map(|(i, t)| {
+                            format!(
+                                "{}{}\t{}\t{}",
+                                if i == self.current { "▶ " } else { "  " },
+                                t.name,
+                                t.instrument,
+                                t.pattern.as_deref().unwrap_or("(空)")
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+                "track" if !arg.is_empty() => {
+                    if let Some(i) = self.tracks.iter().position(|t| t.name == arg) {
+                        self.current = i;
+                        Action::Msg(format!("▶ {arg}(既存トラックに切替)"))
+                    } else {
+                        self.tracks.push(TrackState::new(arg));
+                        self.current = self.tracks.len() - 1;
+                        Action::Msg(format!("▶ {arg}(新規トラック — パターンを打つと重なります)"))
+                    }
+                }
+                "drop" if !arg.is_empty() => {
+                    let Some(i) = self.tracks.iter().position(|t| t.name == arg) else {
+                        return Action::Msg(format!("トラック '{arg}' はありません"));
+                    };
+                    self.try_mutate(
+                        undo,
+                        |s| {
+                            s.tracks.remove(i);
+                            if s.tracks.is_empty() {
+                                s.tracks.push(TrackState::new("Main"));
+                            }
+                            s.current = s.current.min(s.tracks.len() - 1);
+                        },
+                        |s| Action::Play(s.source()),
+                    )
+                }
                 "tempo" => match arg.parse::<f64>() {
                     Ok(t) if (20.0..=400.0).contains(&t) => {
-                        self.tempo = t;
-                        Action::Play(self.source_for(self.placeholder().to_string().as_str()))
+                        self.try_mutate(undo, |s| s.tempo = t, |s| Action::Play(s.source()))
                     }
                     _ => Action::Msg(format!("tempo は 20..400 で: {arg}")),
                 },
                 "inst" if !arg.is_empty() => {
-                    let old = std::mem::replace(&mut self.instrument, arg.to_string());
-                    match self.validated(&self.source_for(self.placeholder())) {
-                        Ok(()) => Action::Play(self.source_for(self.placeholder().to_string().as_str())),
-                        Err(e) => {
-                            self.instrument = old;
-                            Action::Msg(e)
-                        }
-                    }
+                    let a = arg.to_string();
+                    self.try_mutate(undo, |s| s.cur().instrument = a, |s| Action::Play(s.source()))
                 }
+                "vol" => match arg.parse::<f64>() {
+                    Ok(v) if (0.0..=1.0).contains(&v) => {
+                        self.try_mutate(undo, |s| s.cur().volume = Some(v), |s| Action::Play(s.source()))
+                    }
+                    _ => Action::Msg("vol は 0..1 で".into()),
+                },
+                "pan" => match arg.parse::<f64>() {
+                    Ok(v) if (-1.0..=1.0).contains(&v) => {
+                        self.try_mutate(undo, |s| s.cur().pan = Some(v), |s| Action::Play(s.source()))
+                    }
+                    _ => Action::Msg("pan は -1..1 で".into()),
+                },
                 "fx" if arg == "clear" => {
-                    self.inserts.clear();
-                    Action::Play(self.source_for(self.placeholder().to_string().as_str()))
+                    self.try_mutate(undo, |s| s.cur().inserts.clear(), |s| Action::Play(s.source()))
                 }
                 "fx" if !arg.is_empty() => {
-                    self.inserts.push(arg.to_string());
-                    match self.validated(&self.source_for(self.placeholder())) {
-                        Ok(()) => Action::Play(self.source_for(self.placeholder().to_string().as_str())),
-                        Err(e) => {
-                            self.inserts.pop();
-                            Action::Msg(e)
-                        }
-                    }
+                    let a = arg.to_string();
+                    self.try_mutate(undo, |s| s.cur().inserts.push(a), |s| Action::Play(s.source()))
                 }
                 _ => Action::Msg(format!("不明なコマンド :{cmd}(:help で一覧)")),
             };
@@ -131,63 +236,36 @@ impl Session {
 
         // ---- session declarations ------------------------------------------
         if input.starts_with("let ") {
-            self.lets.push(input.to_string());
-            return match self.validated(&self.source_for(self.placeholder())) {
-                Ok(()) => Action::Msg(format!("定義しました: {input}")),
-                Err(e) => {
-                    self.lets.pop();
-                    Action::Msg(e)
-                }
-            };
+            let a = input.to_string();
+            return self.try_mutate(undo, |s| s.lets.push(a), |_| Action::Msg("定義しました".into()));
         }
         if input.starts_with("import ") {
-            self.imports.push(input.to_string());
-            return match self.validated(&self.source_for(self.placeholder())) {
-                Ok(()) => Action::Msg(format!("import しました")),
-                Err(e) => {
-                    self.imports.pop();
-                    Action::Msg(e)
-                }
-            };
+            let a = input.to_string();
+            return self.try_mutate(undo, |s| s.imports.push(a), |_| Action::Msg("import しました".into()));
         }
         if input.starts_with("device ") || input.starts_with("device\t") {
-            self.devices.push(input.to_string());
-            return match self.validated(&self.source_for(self.placeholder())) {
-                Ok(()) => Action::Msg("device を定義しました".into()),
-                Err(e) => {
-                    self.devices.pop();
-                    Action::Msg(e)
-                }
-            };
+            let a = input.to_string();
+            return self
+                .try_mutate(undo, |s| s.devices.push(a), |_| Action::Msg("device を定義しました".into()));
         }
 
-        // ---- anything else is a pattern: play it now -----------------------
-        let src = self.source_for(input);
-        match self.validated(&src) {
-            Ok(()) => {
-                self.last_pattern = Some(input.to_string());
-                Action::Play(src)
-            }
-            Err(e) => Action::Msg(e),
-        }
+        // ---- anything else is a pattern for the current track --------------
+        let a = input.to_string();
+        self.try_mutate(undo, |s| s.cur().pattern = Some(a), |s| Action::Play(s.source()))
     }
 }
 
 const HELP: &str = "\
-パターンを打つと即ループ再生されます(再生を止めずに差し替え):
-  beat`x--- x-x-`             ステップ
-  notes`C4:1/2 E4:1/2 G4:1`   ノート列
-  prog`Am | F | C | G`        進行(ブロックコード)
-  chords(prog`…`) / arp(prog`…`, rate: 0.25) / bass(prog`…`)
-宣言(セッションに積まれます):
-  let name = beat`…`          → 以後 name だけで再生
-  device Name : Instrument { … }   (複数行 OK)
-  import { X } from \"./lib.forte\"
-コマンド:
-  :tempo 140      :inst polymer(wave: \"saw\")   :inst WarmLead(cutoff: 0.7)
-  :fx reverb(mix: 0.3)   :fx clear
-  :show(現在のソース)  :save jam.forte(曲として保存)
-  :stop  :quit";
+パターンを打つと現在のトラックで即ループ再生(再生は止まりません):
+  beat`x--- x-x-` / notes`C4:1/2 …` / prog`Am | F | C | G`
+  chords(…) / arp(…, rate: 0.25) / bass(…)
+重ねる(ループステーション):
+  :track Bass        トラックを作成/切替(以後のパターン・:inst はそのトラックへ)
+  :tracks            一覧(▶ が現在)   :drop Bass  削除
+宣言(セッションに積む): let 名前 = … / device … { … } / import …
+調整: :tempo 140  :inst polymer(wave: \"saw\")  :fx reverb(mix: 0.3)  :fx clear
+      :vol 0.7  :pan -0.3
+その他: :undo(一手戻る) :show :save jam.forte :stop :quit";
 
 /// Count how far `line` leaves us inside braces / backticks / block comments,
 /// so multi-line device blocks and literals can be collected.
@@ -234,16 +312,17 @@ pub fn run() -> i32 {
     if audio.silent {
         eprintln!("audio: 出力デバイスなし — 無音で走ります({})", audio.device_name);
     }
-    println!("forte repl — パターンを打てば鳴ります(:help でヘルプ, :quit で終了)");
+    println!("forte repl — パターンを打てば鳴ります。:track で重ねる(:help / :quit)");
 
     let mut session = Session::default();
+    let mut undo: Vec<Session> = Vec::new();
     let mut prev_tracks = 0usize;
     let mut playing = false;
     let stdin = std::io::stdin();
     let mut lines = stdin.lock().lines();
 
     loop {
-        print!("forte> ");
+        print!("forte:{}> ", session.tracks[session.current].name);
         let _ = std::io::stdout().flush();
         // collect a full input (multi-line for device blocks / literals)
         let mut buf = String::new();
@@ -263,7 +342,7 @@ pub fn run() -> i32 {
         }
 
         audio.handle.collect_garbage();
-        match session.eval(&buf) {
+        match session.eval(&buf, &mut undo) {
             Action::None => {}
             Action::Msg(m) => println!("{m}"),
             Action::Stop => {
@@ -273,8 +352,7 @@ pub fn run() -> i32 {
             }
             Action::Quit => return 0,
             Action::Save(path) => {
-                let src = session.source_for(session.placeholder().to_string().as_str());
-                match std::fs::write(&path, &src) {
+                match std::fs::write(&path, session.source()) {
                     Ok(()) => println!("saved: {path}"),
                     Err(e) => println!("{path}: {e}"),
                 }
@@ -294,7 +372,12 @@ pub fn run() -> i32 {
                             audio.handle.send(Command::Play);
                             playing = true;
                         }
-                        println!("♪ playing ({} bpm, loop {} beats)", p.tempo, len);
+                        println!(
+                            "♪ playing ({} bpm, {} tracks, loop {} beats)",
+                            p.tempo,
+                            p.tracks.len(),
+                            len
+                        );
                     }
                     Err(ds) => {
                         for d in ds {
