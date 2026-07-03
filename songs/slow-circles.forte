@@ -1,6 +1,6 @@
 // Slow Circles — Forte v0 リファレンス曲 2。
 // 6/8 拍子、モジュラー音源(grid)、filter / eq を行使する。
-// 再生: cargo run -p fortelang --bin forte -- play songs/slow-circles.forte
+// 再生: forte play songs/slow-circles.forte
 
 song "Slow Circles" {
   tempo 72bpm

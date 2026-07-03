@@ -52,6 +52,8 @@ fn main() -> ExitCode {
         }
         Some("lsp") => ExitCode::from(fortelang::lsp::run() as u8),
         #[cfg(not(target_family = "wasm"))]
+        Some("repl") => ExitCode::from(fortelang::repl::run() as u8),
+        #[cfg(not(target_family = "wasm"))]
         Some("hub") if args.len() >= 2 => hub_cmd(&args[1..]),
         #[cfg(not(target_family = "wasm"))]
         Some("play") if args.len() >= 2 => {
@@ -66,6 +68,7 @@ fn main() -> ExitCode {
             eprintln!("usage: forte check <song.forte>");
             eprintln!("       forte build <song.forte> [-o out.wav]");
             eprintln!("       forte play  <song.forte> [--for SECS]");
+            eprintln!("       forte repl                  (打った行がその場で鳴る)");
             eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte lsp");
             eprintln!("       forte hub publish <file.forte> [--as NAME] [--hub DIR]");

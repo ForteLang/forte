@@ -30,14 +30,25 @@ song "Handmade" {
 ## Quickstart
 
 ```bash
-# 検証: エラーは音楽の語彙で、行番号つきで出る
-cargo run --release -p fortelang --bin forte -- check songs/first-light.forte
+cargo install --path crates/fortelang   # `forte` コマンドが入る(~/.cargo/bin)
 
-# ビルド: WAV + ビルド証明(build.manifest.json、出力ダイジェスト入り)
-cargo run --release -p fortelang --bin forte -- build songs/first-light.forte
+forte repl                              # ★打った行がその場で鳴る
+forte check songs/first-light.forte     # 検証(エラーは音楽の語彙+行番号)
+forte play  songs/first-light.forte     # ライブ再生。保存するたび即反映
+forte build songs/first-light.forte     # WAV + ビルド証明(digest 入り)
+```
 
-# ライブ再生: ファイルを保存するたび、再生を止めずに反映(ホットリロード)
-cargo run --release -p fortelang --bin forte -- play songs/first-light.forte
+REPL はこんな感じ:
+
+```
+forte> beat`x--- x-x-`                     ← 即ループ再生
+♪ playing (120 bpm, loop 32 beats)
+forte> let theme = prog`Am | F | C | G`
+forte> arp(theme, rate: 0.25, style: "updown")
+♪ playing
+forte> :inst polymer(wave: "saw")          ← 音色を差し替え(鳴りっぱなし)
+forte> :fx reverb(mix: 0.3)
+forte> :save jam.forte                     ← ジャムがそのまま曲ファイルになる
 ```
 
 **ブラウザエディタ**(タイプ中診断・AudioWorklet 再生・OPFS 自動保存・完全オフライン PWA):

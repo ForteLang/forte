@@ -1,6 +1,6 @@
 // First Light — Forte v0 リファレンス曲。
 // すべてがコード: パターン、音源、エフェクト、ミックス。
-// ビルド: cargo run -p fortelang --bin forte -- build songs/first-light.forte
+// ビルド: forte build songs/first-light.forte
 
 song "First Light" {
   tempo 96bpm

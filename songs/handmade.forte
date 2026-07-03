@@ -1,7 +1,7 @@
 // Handmade — Forte v0 リファレンス曲 4。
 // 音源はコードであり、ライブラリとして分割して import できる。
 // (エコシステムでは import 元が fork 系譜として記録される — 02-system-requirements.md)
-// 再生: cargo run -p fortelang --bin forte -- play songs/handmade.forte
+// 再生: forte play songs/handmade.forte
 
 import { WarmLead, SubBass } from "./devices/warm.forte"
 

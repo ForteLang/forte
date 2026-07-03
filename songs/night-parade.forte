@@ -1,6 +1,6 @@
 // Night Parade — Forte v0 リファレンス曲 3。
 // コード進行(prog)、セクション、send/return、chords/arp/bass を行使する。
-// 再生: cargo run -p fortelang --bin forte -- play songs/night-parade.forte
+// 再生: forte play songs/night-parade.forte
 
 song "Night Parade" {
   tempo 108bpm

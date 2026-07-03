@@ -17,8 +17,7 @@
 ```bash
 git clone <このリポジトリ>
 cd <リポジトリ>
-cargo build --release -p fortelang        # CLI をビルド
-alias forte=$PWD/target/release/forte     # 以下 forte と書きます
+cargo install --path crates/fortelang    # `forte` コマンドが入ります
 ```
 
 動作確認:
@@ -27,6 +26,28 @@ alias forte=$PWD/target/release/forte     # 以下 forte と書きます
 forte check songs/first-light.forte
 # OK: song をコンパイルしました(6 tracks, tempo 96 bpm, 16 小節)
 ```
+
+## 0.5 いきなり音を出す(REPL)
+
+ファイルを作る前に、まず鳴らせます:
+
+```
+$ forte repl
+forte> beat`x--- x-x-`                  # 打った瞬間からループ再生
+forte> let theme = prog`Am | F | C | G`
+forte> arp(theme, rate: 0.25, style: "updown")
+forte> :inst polymer(wave: "saw", cutoff: 0.4)   # 鳴らしたまま音色替え
+forte> :fx delay(time: 0.3, mix: 0.25)
+forte> device Bloop : Instrument {      # 音源の自作も REPL で(複数行 OK)
+  ...>   node o = osc(shape: "square")
+  ...>   out gain(in: o, mod: adsr())
+  ...> }
+forte> :inst Bloop()
+forte> :save jam.forte                  # ジャムがそのまま曲ファイルに
+forte> :quit
+```
+
+`:help` で全コマンド。`:save` した曲は `forte play jam.forte` でそのまま続きを作れます。
 
 ## 1. 最初の曲(5 分)
 

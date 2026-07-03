@@ -19,6 +19,8 @@ pub mod lexer;
 pub mod lsp;
 pub mod music;
 pub mod parser;
+#[cfg(not(target_family = "wasm"))]
+pub mod repl;
 
 use dawcore::command::Command;
 use dawcore::engine::Engine;
