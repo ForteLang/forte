@@ -23,6 +23,12 @@ class ForteProcessor extends AudioWorkletProcessor {
       }
       case 'src': {
         if (!this.ready) return;
+        if (msg.modules) {
+          const mb = new TextEncoder().encode(msg.modules);
+          const mp = this.e.fw_modules_prepare(this.ctx, mb.length);
+          new Uint8Array(this.e.memory.buffer, mp, mb.length).set(mb);
+          this.e.fw_modules_commit(this.ctx);
+        }
         const bytes = new TextEncoder().encode(msg.text);
         const ptr = this.e.fw_src_prepare(this.ctx, bytes.length);
         new Uint8Array(this.e.memory.buffer, ptr, bytes.length).set(bytes);

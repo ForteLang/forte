@@ -1,6 +1,6 @@
 // Service worker: precache the whole editor so it works fully offline
 // (SYS-NFR-001 — the Hub is for sharing, never a dependency for composing).
-const CACHE = 'forte-v1';
+const CACHE = 'forte-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -12,6 +12,8 @@ const ASSETS = [
   '../songs/first-light.forte',
   '../songs/slow-circles.forte',
   '../songs/night-parade.forte',
+  '../songs/handmade.forte',
+  '../songs/devices/warm.forte',
 ];
 
 self.addEventListener('install', (e) => {

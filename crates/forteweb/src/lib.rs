@@ -7,10 +7,13 @@
 //! engine was updated in place, transport untouched); >0 = diagnostic count,
 //! fetch JSON via `fw_diags_ptr/len`.
 
+use std::collections::HashMap;
+
 use dawcore::command::Command;
 use dawcore::engine::{Engine, EngineHandle};
 use dawcore::model::Project;
 use dawcore::sync::full_sync;
+use fortelang::ModuleLoader;
 
 pub const MAX_FRAMES: usize = 128; // AudioWorklet render quantum
 
@@ -18,12 +21,26 @@ pub struct Ctx {
     engine: Engine,
     handle: EngineHandle,
     src: Vec<u8>,
+    stage: Vec<u8>,
+    modules: HashMap<String, String>,
     diags_json: Vec<u8>,
     viz_json: Vec<u8>,
     out_l: Vec<f32>,
     out_r: Vec<f32>,
     prev_tracks: usize,
     project: Option<Project>,
+}
+
+/// Imports resolve against a map the page supplies (OPFS files + bundled
+/// demo libraries) — the browser's stand-in for a filesystem.
+struct MapLoader<'a>(&'a HashMap<String, String>);
+impl ModuleLoader for MapLoader<'_> {
+    fn load(&self, path: &str) -> Result<String, String> {
+        self.0
+            .get(path)
+            .cloned()
+            .ok_or_else(|| "エディタのファイル一覧にありません".into())
+    }
 }
 
 /// # Safety
@@ -39,6 +56,8 @@ pub extern "C" fn fw_new(sample_rate: f32) -> *mut Ctx {
         engine,
         handle,
         src: Vec::new(),
+        stage: Vec::new(),
+        modules: HashMap::new(),
         diags_json: b"[]".to_vec(),
         viz_json: b"null".to_vec(),
         out_l: vec![0.0; MAX_FRAMES],
@@ -68,7 +87,7 @@ pub unsafe extern "C" fn fw_compile(ptr: *mut Ctx) -> i32 {
             return 1;
         }
     };
-    match fortelang::compile_str(src) {
+    match fortelang::compile_with_loader(src, &MapLoader(&c.modules), "") {
         Ok(p) => {
             full_sync(&mut c.handle, &p);
             for slot in p.tracks.len()..c.prev_tracks {
@@ -96,6 +115,28 @@ pub unsafe extern "C" fn fw_compile(ptr: *mut Ctx) -> i32 {
             c.diags_json = serde_json::to_vec(&arr).unwrap_or_else(|_| b"[]".to_vec());
             diags.len() as i32
         }
+    }
+}
+
+/// Stage a JSON object `{"path": "source", …}` of importable module files.
+#[no_mangle]
+pub unsafe extern "C" fn fw_modules_prepare(ptr: *mut Ctx, len: usize) -> *mut u8 {
+    let c = ctx(ptr);
+    c.stage.clear();
+    c.stage.resize(len, 0);
+    c.stage.as_mut_ptr()
+}
+
+/// Parse the staged module map. Returns the module count, or -1 on bad JSON.
+#[no_mangle]
+pub unsafe extern "C" fn fw_modules_commit(ptr: *mut Ctx) -> i32 {
+    let c = ctx(ptr);
+    match serde_json::from_slice::<HashMap<String, String>>(&c.stage) {
+        Ok(m) => {
+            c.modules = m;
+            c.modules.len() as i32
+        }
+        Err(_) => -1,
     }
 }
 

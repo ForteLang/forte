@@ -8,7 +8,15 @@ import { Store } from './storage.js';
 const $ = (id) => document.getElementById(id);
 const status = (t) => ($('status').textContent = t);
 const viz = new Viz($('viz'));
-const BUILTINS = ['first-light.forte', 'slow-circles.forte', 'night-parade.forte'];
+const BUILTINS = [
+  'first-light.forte',
+  'slow-circles.forte',
+  'night-parade.forte',
+  'handmade.forte', // imports from devices/warm.forte
+];
+// bundled device libraries, importable from any song
+const MODULE_LIBS = ['devices/warm.forte'];
+let bundledModules = {};
 
 // ---- main-thread compiler instance -----------------------------------------
 let wasmBytes, main;
@@ -18,7 +26,27 @@ async function initWasm() {
   main = { e: instance.exports };
   main.ctx = main.e.fw_new(48000);
 }
+// module map = bundled libraries + every OPFS file (so local songs can split
+// out their own device libraries and import them)
+let modulesJson = '{}';
+async function refreshModules() {
+  const map = { ...bundledModules };
+  if (store) {
+    for (const name of await store.list()) {
+      map[name] = await store.read(name);
+    }
+  }
+  modulesJson = JSON.stringify(map);
+}
+function setModules(inst) {
+  const bytes = new TextEncoder().encode(modulesJson);
+  const ptr = inst.e.fw_modules_prepare(inst.ctx, bytes.length);
+  new Uint8Array(inst.e.memory.buffer, ptr, bytes.length).set(bytes);
+  inst.e.fw_modules_commit(inst.ctx);
+}
+
 function mainCompile(text) {
+  setModules(main);
   const bytes = new TextEncoder().encode(text);
   const ptr = main.e.fw_src_prepare(main.ctx, bytes.length);
   new Uint8Array(main.e.memory.buffer, ptr, bytes.length).set(bytes);
@@ -123,7 +151,7 @@ async function ensureAudio() {
       viz.setPlayhead(m.beats);
     }
   };
-  node.port.postMessage({ cmd: 'src', text: getText() });
+  node.port.postMessage({ cmd: 'src', text: getText(), modules: modulesJson });
 }
 
 // ---- files (OPFS, local-first) ----------------------------------------------
@@ -172,6 +200,7 @@ function autosave() {
     await store.write(currentName, getText());
     $('saved').textContent = '✓ saved';
     refreshFileList();
+    refreshModules(); // local files are importable modules
   }, 500);
 }
 
@@ -199,7 +228,7 @@ function recompile(delay = 300) {
     const { ok, diags } = mainCompile(getText());
     showDiags(diags);
     document.body.dataset.compiled = ok ? 'ok' : 'error';
-    if (ok && node) node.port.postMessage({ cmd: 'src', text: getText() }); // hot reload
+    if (ok && node) node.port.postMessage({ cmd: 'src', text: getText(), modules: modulesJson }); // hot reload
   }, delay);
 }
 
@@ -222,6 +251,12 @@ async function boot() {
   } catch {
     store = null; // OPFS unavailable: still fully usable, just no persistence
   }
+  for (const lib of MODULE_LIBS) {
+    try {
+      bundledModules[lib] = await (await fetch(`../songs/${lib}`)).text();
+    } catch { /* offline without cache: song imports will diagnose */ }
+  }
+  await refreshModules();
   const last = localStorage.getItem('forte.last');
   const locals = await localNames();
   currentName =
@@ -267,7 +302,8 @@ async function boot() {
   $('digest').onclick = () => {
     status('building…');
     setTimeout(() => {
-      const d = main.e.fw_digest(main.ctx);
+      // wasm i64 returns arrive as *signed* BigInt; render as unsigned hex
+      const d = BigInt.asUintN(64, main.e.fw_digest(main.ctx));
       $('digest-out').textContent = d.toString(16).padStart(16, '0');
       status('ready');
     }, 30);

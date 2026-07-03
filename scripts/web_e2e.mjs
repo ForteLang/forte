@@ -11,6 +11,7 @@ import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 
 const NATIVE_DIGEST = '10a443f96fc027cf'; // forte build songs/first-light.forte
+const NATIVE_DIGEST_HANDMADE = 'd66a3103bcf1cad1'; // forte build songs/handmade.forte
 const PORT = 8329;
 const ROOT = new URL('..', import.meta.url).pathname;
 
@@ -109,6 +110,27 @@ try {
     .catch(() => false);
   check('offline PWA: boots, compiles and plays with network cut', offlinePlays);
   await page.context().setOffline(false);
+
+  // 7) imports in the browser: handmade.forte pulls its instruments from
+  //    devices/warm.forte and builds bit-identical to the native CLI
+  await page.selectOption('#file', 'handmade.forte');
+  await page.waitForFunction(
+    () => document.body.dataset.compiled === 'ok' && window.__forteGetText().includes('Handmade'),
+    null,
+    { timeout: 15000 }
+  );
+  await page.click('#digest');
+  await page.waitForFunction(
+    () => /^[0-9a-f]{16}$/.test(document.getElementById('digest-out').textContent),
+    null,
+    { timeout: 60000 }
+  );
+  const digest2 = await page.textContent('#digest-out');
+  check(
+    'browser imports + device DSL digest == native',
+    digest2 === NATIVE_DIGEST_HANDMADE,
+    digest2
+  );
 } finally {
   await browser.close();
   server.kill();
