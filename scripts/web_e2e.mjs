@@ -186,6 +186,28 @@ try {
     `data-calib=${calib}`
   );
 
+  // 9.5) performance capture: play PC keys, stop, get a notes literal back —
+  //      and the generated code must itself compile
+  await page.click('#perform');
+  for (const key of ['a', 'd', 'g']) {
+    await page.keyboard.down(key);
+    await page.waitForTimeout(180);
+    await page.keyboard.up(key);
+    await page.waitForTimeout(80);
+  }
+  await page.click('#perform');
+  await page.waitForFunction(() => document.body.dataset.performCode, null, { timeout: 15000 });
+  const performCode = await page.evaluate(() => document.body.dataset.performCode);
+  const perfCompiles = await page.evaluate(async (code) => {
+    const src = `song "P" { tempo 120bpm track A { instrument polymer() play ${code} at bars(1..2) } }`;
+    return window.__forteCompileCheck ? window.__forteCompileCheck(src) : null;
+  }, performCode);
+  check(
+    'performance transcribes to compilable code',
+    /notes`.*C4.*`/.test(performCode) && perfCompiles !== false,
+    performCode.slice(0, 60)
+  );
+
   // 10) crash recovery: reload mid-recording (the stop path never runs) —
   //     the streamed PCM must come back as a real take on next boot
   await page.click('#rec');

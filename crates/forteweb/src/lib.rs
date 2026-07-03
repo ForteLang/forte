@@ -27,6 +27,8 @@ pub struct Ctx {
     calib_probe: Vec<f32>,
     calib_rec: Vec<f32>,
     calib_conf: f32,
+    perform: Vec<f32>,
+    transcription: Vec<u8>,
     diags_json: Vec<u8>,
     viz_json: Vec<u8>,
     out_l: Vec<f32>,
@@ -103,6 +105,8 @@ pub extern "C" fn fw_new(sample_rate: f32) -> *mut Ctx {
         calib_probe: Vec::new(),
         calib_rec: Vec::new(),
         calib_conf: 0.0,
+        perform: Vec::new(),
+        transcription: Vec::new(),
         diags_json: b"[]".to_vec(),
         viz_json: b"null".to_vec(),
         out_l: vec![0.0; MAX_FRAMES],
@@ -307,6 +311,55 @@ pub unsafe extern "C" fn fw_viz_ptr(ptr: *mut Ctx) -> *const u8 {
 #[no_mangle]
 pub unsafe extern "C" fn fw_viz_len(ptr: *mut Ctx) -> usize {
     ctx(ptr).viz_json.len()
+}
+
+// ---- live performance (monitoring + transcription) ---------------------------
+
+/// Live note input, routed to the first track's instrument (works with the
+/// transport stopped — free-running monitoring).
+#[no_mangle]
+pub unsafe extern "C" fn fw_note(ptr: *mut Ctx, on: i32, pitch: u32, vel: f32) {
+    let c = ctx(ptr);
+    if on != 0 {
+        c.handle.send(Command::NoteOn { track: 0, note: pitch as u8, velocity: vel });
+    } else {
+        c.handle.send(Command::NoteOff { track: 0, note: pitch as u8 });
+    }
+}
+
+/// Stage `n` played notes as (start_beats, len_beats, pitch) triples.
+#[no_mangle]
+pub unsafe extern "C" fn fw_perform_buf(ptr: *mut Ctx, n: usize) -> *mut f32 {
+    let c = ctx(ptr);
+    c.perform.clear();
+    c.perform.resize(n * 3, 0.0);
+    c.perform.as_mut_ptr()
+}
+
+/// Quantize the staged performance to `grid` beats and render the body of a
+/// `notes` literal. Returns its length (0 = empty take); fetch via
+/// [`fw_transcribe_ptr`].
+#[no_mangle]
+pub unsafe extern "C" fn fw_transcribe(ptr: *mut Ctx, grid: f32) -> usize {
+    let c = ctx(ptr);
+    let notes: Vec<fortelang::perform::PlayedNote> = c
+        .perform
+        .chunks_exact(3)
+        .map(|t| fortelang::perform::PlayedNote {
+            start: t[0] as f64,
+            len: t[1] as f64,
+            pitch: t[2] as u8,
+        })
+        .collect();
+    c.transcription = fortelang::perform::transcribe(&notes, grid as f64)
+        .unwrap_or_default()
+        .into_bytes();
+    c.transcription.len()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_transcribe_ptr(ptr: *mut Ctx) -> *const u8 {
+    ctx(ptr).transcription.as_ptr()
 }
 
 // ---- loopback calibration ---------------------------------------------------

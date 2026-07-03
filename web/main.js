@@ -82,6 +82,13 @@ let setText = (t) => (fallback.value = t);
 let onChange = () => {};
 fallback.addEventListener('input', () => onChange());
 window.__forteGetText = () => getText();
+window.__forteCompileCheck = (src) => {
+  // compile arbitrary source in the main wasm instance without touching the
+  // editor (used by tests); restores the editor's project afterwards
+  const r = mainCompile(src);
+  mainCompile(getText());
+  return r.ok;
+};
 
 async function tryMonaco(initial) {
   try {
@@ -319,6 +326,89 @@ function autosave() {
   }, 500);
 }
 
+// ---- performance capture: play keys/MIDI, get code back (roadmap 1.4) --------
+// A performance in Forte is not an opaque event recording — it comes back as
+// a notes literal you can read, edit and commit.
+let perf = null; // { t0, tempo, active: Map<pitch, startBeats>, events: [] }
+const KEY_TO_PITCH = {
+  a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66,
+  g: 67, y: 68, h: 69, u: 70, j: 71, k: 72, o: 73, l: 74,
+};
+
+function perfBeats() {
+  return ((performance.now() - perf.t0) / 1000) * ((viz.data?.tempo ?? 120) / 60);
+}
+function perfNote(on, pitch) {
+  if (!perf) return;
+  node?.port.postMessage({ cmd: 'note', on, pitch, vel: 0.85 }); // live monitor
+  if (on && !perf.active.has(pitch)) {
+    perf.active.set(pitch, perfBeats());
+  } else if (!on && perf.active.has(pitch)) {
+    const start = perf.active.get(pitch);
+    perf.active.delete(pitch);
+    perf.events.push([start, Math.max(perfBeats() - start, 0.05), pitch]);
+  }
+}
+function onPerfKey(e) {
+  if (e.repeat || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+  const pitch = KEY_TO_PITCH[e.key?.toLowerCase()];
+  if (pitch === undefined) return;
+  e.preventDefault();
+  perfNote(e.type === 'keydown', pitch);
+}
+
+async function performToggle() {
+  if (perf) {
+    // stop: flush held notes, transcribe in wasm, hand the code back
+    for (const [pitch] of [...perf.active]) perfNote(false, pitch);
+    window.removeEventListener('keydown', onPerfKey, true);
+    window.removeEventListener('keyup', onPerfKey, true);
+    const events = perf.events;
+    perf = null;
+    $('perform').textContent = '🎹 Perform';
+    if (!events.length) {
+      status('演奏なし');
+      return;
+    }
+    const flat = new Float32Array(events.length * 3);
+    events.forEach(([s, l, p], i) => flat.set([s, l, p], i * 3));
+    const ptr = main.e.fw_perform_buf(main.ctx, events.length);
+    new Float32Array(main.e.memory.buffer, ptr, flat.length).set(flat);
+    const len = main.e.fw_transcribe(main.ctx, 0.25); // 1/16 grid
+    const body = new TextDecoder().decode(
+      new Uint8Array(main.e.memory.buffer, main.e.fw_transcribe_ptr(main.ctx), len)
+    );
+    const code = `notes\`${body}\``;
+    document.body.dataset.performCode = code;
+    const div = document.createElement('div');
+    div.className = 'ok';
+    div.style.userSelect = 'all';
+    div.textContent = `🎹 ${code}`;
+    $('diags').prepend(div);
+    status('書き起こしました(下の診断欄からコピーして play に貼ってください)');
+    return;
+  }
+  await ensureAudio();
+  await ac.resume();
+  perf = { t0: performance.now(), active: new Map(), events: [] };
+  window.addEventListener('keydown', onPerfKey, true);
+  window.addEventListener('keyup', onPerfKey, true);
+  // hardware MIDI when the browser has it (Chromium); PC keys always work
+  try {
+    const midi = await navigator.requestMIDIAccess?.();
+    midi?.inputs.forEach((input) => {
+      input.onmidimessage = (m) => {
+        const [st, pitch, vel] = m.data;
+        const kind = st & 0xf0;
+        if (kind === 0x90 && vel > 0) perfNote(true, pitch);
+        else if (kind === 0x80 || (kind === 0x90 && vel === 0)) perfNote(false, pitch);
+      };
+    });
+  } catch { /* no MIDI permission — keyboard still works */ }
+  $('perform').textContent = '■ 演奏終了';
+  status('演奏モード: A〜K が白鍵、W/E/T/Y/U が黒鍵(MIDI 鍵盤も可)');
+}
+
 // ---- loopback calibration (SRS-REC-004) ---------------------------------------
 // Play a chirp through the speakers while recording the mic on the SAME
 // AudioContext clock; the wasm cross-correlator finds where it landed.
@@ -482,6 +572,7 @@ async function boot() {
       document.body.dataset.calib = 'fail';
       status(`calib: ${e.message}`);
     });
+  $('perform').onclick = () => performToggle().catch((e) => status(`perform: ${e.message}`));
   $('digest').onclick = () => {
     status('building…');
     setTimeout(() => {

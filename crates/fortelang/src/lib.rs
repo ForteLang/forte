@@ -19,6 +19,7 @@ pub mod lexer;
 pub mod lsp;
 pub mod music;
 pub mod parser;
+pub mod perform;
 #[cfg(not(target_family = "wasm"))]
 pub mod repl;
 

@@ -37,7 +37,7 @@ Status: Draft v0.1 / 2026-07-02
 | 1.1 | forte-lsp(補完・診断・ホバー)+ VSCode 拡張(再生コントロール) — **🔶 診断 LSP(`forte lsp`、プロトコルテスト付)+ VSCode 拡張(`editor/vscode-forte`: ハイライト・診断・Play/Build/Stop コマンド)実装済。補完・ホバーは未** | SRS-LSP-001/002 |
 | 1.2 | 差分ビルド+ホットリロード(変更→音まで 1 秒以内) | SRS-LANG-007, SRS-CORE-006 |
 | 1.3 | 可視化 Webview(ピアノロール/アレンジ/メーター、読み取り専用+コードジャンプ) | SRS-VIS-001/002 |
-| 1.4 | MIDI 入力→パターン記録(演奏をコードとして書き起こす) | SRS-REC-001 |
+| 1.4 | MIDI 入力→パターン記録(演奏をコードとして書き起こす) — **✅ ブラウザ演奏モード(🎹): Web MIDI + PC キー鍵盤で live モニタしながら演奏 → 停止時に 1/16 量子化・和音グループ化・休符挿入で `notes` リテラルに書き起こし(Rust 実装+単体テスト、生成コードのコンパイル通過を E2E 検証)** | SRS-REC-001 |
 | 1.5 | マイク録音 v1: `.frec`+来歴+クラッシュ回復+ループバック較正 — **🔶 `.frec` フォーマット+来歴強制(来歴なしはコンパイルエラー E-PROV-001)+`import take from "*.frec"`+`audio take at …` 構文+エンジン再生を実装。ブラウザ録音 UI 実装済(getUserMedia EC/NS/AGC オフ → AudioWorklet PCM 直取り → 来歴付き .frec を OPFS へ。E2E はフェイクマイクで検証)。ループバック較正実装済(チャープ再生→同一 AudioContext クロックで捕捉→wasm 相関でサンプル精度の往復実測、結果はテイクの来歴に latency_samples として記録)。逐次 OPFS 書き込み(専用 Worker + SyncAccessHandle、毎秒 flush)によるクラッシュ回復も実装済 — 録音中にタブが死んでも次回起動時にテイクとして復元される(E2E で検証)** | SRS-REC-002..005 |
 | 1.6 | `forte test` / `forte fmt` | SRS-LANG-002 |
 

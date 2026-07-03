@@ -41,6 +41,9 @@ class ForteProcessor extends AudioWorkletProcessor {
       case 'play':
         if (this.ready) this.e.fw_play(this.ctx);
         break;
+      case 'note':
+        if (this.ready) this.e.fw_note(this.ctx, msg.on ? 1 : 0, msg.pitch, msg.vel ?? 0.8);
+        break;
       case 'stop':
         if (this.ready) this.e.fw_stop(this.ctx);
         break;
