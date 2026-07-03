@@ -20,7 +20,13 @@ await new Promise((r) => setTimeout(r, 800));
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM || undefined,
-  args: ['--autoplay-policy=no-user-gesture-required', '--no-proxy-server'],
+  args: [
+    '--autoplay-policy=no-user-gesture-required',
+    '--no-proxy-server',
+    // fake mic (emits a tone) so the recording path is testable headlessly
+    '--use-fake-device-for-media-stream',
+    '--use-fake-ui-for-media-stream',
+  ],
 });
 const page = await (await browser.newContext()).newPage();
 page.on('pageerror', (e) => console.log('pageerror:', e.message));
@@ -131,6 +137,43 @@ try {
     digest2 === NATIVE_DIGEST_HANDMADE,
     digest2
   );
+
+  // 8) recording: capture the fake mic into a provenance-stamped .frec, then
+  //    a song importing the take must compile (provenance validated in-wasm)
+  await page.click('#rec');
+  await page.waitForFunction(
+    () => document.getElementById('status').textContent.includes('recording'),
+    null,
+    { timeout: 15000 }
+  );
+  await page.waitForTimeout(1200);
+  await page.click('#rec');
+  await page.waitForFunction(() => document.body.dataset.lastTake, null, { timeout: 15000 });
+  const take = await page.evaluate(() => document.body.dataset.lastTake);
+  const recSong = [
+    `import take from "./${take}"`,
+    'song "Rec" {',
+    '  tempo 120bpm',
+    '  track Kick { instrument sampler(sample: "Kick") play beat`x---` at bars(1..2) }',
+    '  track Voice { audio take at bars(1..2) }',
+    '}',
+    '',
+  ].join('\n');
+  await page.evaluate((text) => {
+    const ta = document.getElementById('fallback');
+    if (ta) {
+      ta.value = text;
+      ta.dispatchEvent(new Event('input'));
+    } else {
+      monaco.editor.getModels()[0].setValue(text);
+    }
+  }, recSong);
+  await page.waitForFunction(
+    () => document.body.dataset.compiled === 'ok' && window.__forteGetText().includes('Voice'),
+    null,
+    { timeout: 15000 }
+  );
+  check('recorded take imports and compiles in browser', true, take);
 } finally {
   await browser.close();
   server.kill();

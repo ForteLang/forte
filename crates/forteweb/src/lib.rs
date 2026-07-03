@@ -23,6 +23,7 @@ pub struct Ctx {
     src: Vec<u8>,
     stage: Vec<u8>,
     modules: HashMap<String, String>,
+    assets: HashMap<String, Vec<u8>>,
     diags_json: Vec<u8>,
     viz_json: Vec<u8>,
     out_l: Vec<f32>,
@@ -31,16 +32,53 @@ pub struct Ctx {
     project: Option<Project>,
 }
 
-/// Imports resolve against a map the page supplies (OPFS files + bundled
-/// demo libraries) — the browser's stand-in for a filesystem.
-struct MapLoader<'a>(&'a HashMap<String, String>);
+/// Imports resolve against maps the page supplies (OPFS files + bundled demo
+/// libraries; recorded takes as base64) — the browser's stand-in for a
+/// filesystem.
+struct MapLoader<'a> {
+    text: &'a HashMap<String, String>,
+    bin: &'a HashMap<String, Vec<u8>>,
+}
 impl ModuleLoader for MapLoader<'_> {
     fn load(&self, path: &str) -> Result<String, String> {
-        self.0
+        self.text
             .get(path)
             .cloned()
             .ok_or_else(|| "エディタのファイル一覧にありません".into())
     }
+    fn load_bytes(&self, path: &str) -> Result<Vec<u8>, String> {
+        self.bin
+            .get(path)
+            .cloned()
+            .ok_or_else(|| "録音アセットがエディタの一覧にありません".into())
+    }
+}
+
+fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut rev = [255u8; 256];
+    for (i, &c) in TABLE.iter().enumerate() {
+        rev[c as usize] = i as u8;
+    }
+    let mut out = Vec::with_capacity(s.len() / 4 * 3);
+    let mut acc = 0u32;
+    let mut bits = 0u32;
+    for &c in s.as_bytes() {
+        if c == b'=' || c == b'\n' || c == b'\r' {
+            continue;
+        }
+        let v = rev[c as usize];
+        if v == 255 {
+            return None;
+        }
+        acc = (acc << 6) | v as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Some(out)
 }
 
 /// # Safety
@@ -58,6 +96,7 @@ pub extern "C" fn fw_new(sample_rate: f32) -> *mut Ctx {
         src: Vec::new(),
         stage: Vec::new(),
         modules: HashMap::new(),
+        assets: HashMap::new(),
         diags_json: b"[]".to_vec(),
         viz_json: b"null".to_vec(),
         out_l: vec![0.0; MAX_FRAMES],
@@ -87,7 +126,8 @@ pub unsafe extern "C" fn fw_compile(ptr: *mut Ctx) -> i32 {
             return 1;
         }
     };
-    match fortelang::compile_with_loader(src, &MapLoader(&c.modules), "") {
+    let loader = MapLoader { text: &c.modules, bin: &c.assets };
+    match fortelang::compile_with_loader(src, &loader, "") {
         Ok(p) => {
             full_sync(&mut c.handle, &p);
             for slot in p.tracks.len()..c.prev_tracks {
@@ -135,6 +175,29 @@ pub unsafe extern "C" fn fw_modules_commit(ptr: *mut Ctx) -> i32 {
         Ok(m) => {
             c.modules = m;
             c.modules.len() as i32
+        }
+        Err(_) => -1,
+    }
+}
+
+/// Parse a staged `{path: base64}` map of binary assets (.frec takes).
+/// Returns the asset count, or -1 on bad JSON/base64.
+#[no_mangle]
+pub unsafe extern "C" fn fw_assets_commit(ptr: *mut Ctx) -> i32 {
+    let c = ctx(ptr);
+    match serde_json::from_slice::<HashMap<String, String>>(&c.stage) {
+        Ok(m) => {
+            let mut out = HashMap::new();
+            for (k, v) in m {
+                match base64_decode(&v) {
+                    Some(bytes) => {
+                        out.insert(k, bytes);
+                    }
+                    None => return -1,
+                }
+            }
+            c.assets = out;
+            c.assets.len() as i32
         }
         Err(_) => -1,
     }

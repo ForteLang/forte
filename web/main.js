@@ -4,6 +4,7 @@
 
 import { Viz } from './viz.js';
 import { Store } from './storage.js';
+import { encodeFrec, toBase64 } from './frec.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t) => ($('status').textContent = t);
@@ -27,22 +28,33 @@ async function initWasm() {
   main.ctx = main.e.fw_new(48000);
 }
 // module map = bundled libraries + every OPFS file (so local songs can split
-// out their own device libraries and import them)
+// out their own device libraries and import them); recorded takes ride along
+// as base64
 let modulesJson = '{}';
+let assetsJson = '{}';
 async function refreshModules() {
   const map = { ...bundledModules };
+  const assets = {};
   if (store) {
     for (const name of await store.list()) {
       map[name] = await store.read(name);
     }
+    for (const name of await store.list('.frec')) {
+      assets[name] = toBase64(await store.readBytes(name));
+    }
   }
   modulesJson = JSON.stringify(map);
+  assetsJson = JSON.stringify(assets);
 }
-function setModules(inst) {
-  const bytes = new TextEncoder().encode(modulesJson);
+function stage(inst, json, commit) {
+  const bytes = new TextEncoder().encode(json);
   const ptr = inst.e.fw_modules_prepare(inst.ctx, bytes.length);
   new Uint8Array(inst.e.memory.buffer, ptr, bytes.length).set(bytes);
-  inst.e.fw_modules_commit(inst.ctx);
+  commit(inst.ctx);
+}
+function setModules(inst) {
+  stage(inst, modulesJson, inst.e.fw_modules_commit);
+  stage(inst, assetsJson, inst.e.fw_assets_commit);
 }
 
 function mainCompile(text) {
@@ -151,7 +163,55 @@ async function ensureAudio() {
       viz.setPlayhead(m.beats);
     }
   };
-  node.port.postMessage({ cmd: 'src', text: getText(), modules: modulesJson });
+  node.port.postMessage({ cmd: 'src', text: getText(), modules: modulesJson, assets: assetsJson });
+}
+
+// ---- recording (mic → provenance-stamped .frec in OPFS) ----------------------
+let rec = null; // { ctx, stream, node, chunks, rate }
+async function recStart() {
+  // the constraints matter: without them the browser applies phone-call
+  // processing that ruins music takes (SRS-REC-005)
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+  });
+  const ctx = new AudioContext({ sampleRate: 48000 });
+  const src = await (await fetch('recorder.js')).text();
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+  const node = new AudioWorkletNode(ctx, 'forte-rec');
+  const chunks = [];
+  node.port.onmessage = (e) => chunks.push(e.data);
+  ctx.createMediaStreamSource(stream).connect(node);
+  rec = { ctx, stream, node, chunks, rate: ctx.sampleRate };
+  $('rec').textContent = '■ 録音停止';
+  status('recording…');
+}
+
+async function recStop() {
+  const { ctx, stream, chunks, rate } = rec;
+  rec = null;
+  stream.getTracks().forEach((t) => t.stop());
+  await ctx.close();
+  $('rec').textContent = '● Rec';
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const pcm = new Float32Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    pcm.set(c, off);
+    off += c.length;
+  }
+  const provenance = {
+    device_class: 'microphone',
+    recorded_at: new Date().toISOString(),
+    by: 'user:web',
+    session: crypto.randomUUID(),
+    sig: 'webcrypto:stub', // real device keys arrive with Hub accounts
+  };
+  const takes = store ? await store.list('.frec') : [];
+  const name = `assets/take-${takes.length + 1}.frec`;
+  await store?.writeBytes(name, encodeFrec(rate, 1, pcm, provenance));
+  await refreshModules();
+  document.body.dataset.lastTake = name;
+  status(`saved ${name} (${(total / rate).toFixed(1)}s) — import ${name.split('/')[1].replace('.frec', '').replace('-', '_')} from "./${name}"`);
 }
 
 // ---- files (OPFS, local-first) ----------------------------------------------
@@ -228,7 +288,7 @@ function recompile(delay = 300) {
     const { ok, diags } = mainCompile(getText());
     showDiags(diags);
     document.body.dataset.compiled = ok ? 'ok' : 'error';
-    if (ok && node) node.port.postMessage({ cmd: 'src', text: getText(), modules: modulesJson }); // hot reload
+    if (ok && node) node.port.postMessage({ cmd: 'src', text: getText(), modules: modulesJson, assets: assetsJson }); // hot reload
   }, delay);
 }
 
@@ -299,6 +359,7 @@ async function boot() {
     node.port.postMessage({ cmd: 'play' });
   };
   $('stop').onclick = () => node?.port.postMessage({ cmd: 'stop' });
+  $('rec').onclick = () => (rec ? recStop() : recStart()).catch((e) => status(`rec: ${e.message}`));
   $('digest').onclick = () => {
     status('building…');
     setTimeout(() => {
