@@ -98,10 +98,10 @@ scripts/          決定論ゲート・ブラウザ E2E
 ## テスト
 
 ```bash
-cargo test -p dawcore -p fortelang     # エンジン+言語+Hub(23 tests)
+cargo test -p dawcore -p fortelang     # エンジン+言語+Hub+REPL
 scripts/determinism_test.sh            # native/wasm ビット同一ゲート(2 段)
-node scripts/web_e2e.mjs               # ブラウザ E2E 8 項目(要 playwright)
-node scripts/hub_e2e.mjs               # Hub E2E 6 項目
+node scripts/web_e2e.mjs               # ブラウザ E2E(要 playwright)
+node scripts/hub_e2e.mjs               # Hub E2E
 ```
 
 ---
