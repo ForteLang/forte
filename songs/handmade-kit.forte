@@ -5,9 +5,10 @@
 device Kick : Instrument {
   param punch = 0.5 in 0.0..1.0
 
-  node env = adsr(a: 0.001, d: 0.18, s: 0.0, r: 0.1)
-  node o   = osc(shape: "sine")                 // 低いルートで鳴らす前提(C2)
-  node sh  = shaper(in: o, drive: punch, mode: "tanh")
+  node env  = adsr(a: 0.001, d: 0.18, s: 0.0, r: 0.1)
+  node penv = adsr(a: 0.001, d: 0.05, s: 0.0, r: 0.03)   // ピッチドロップ(808 の「ドゥン」)
+  node o    = osc(shape: "sine", mod: gain(in: penv, level: 0.4))  // +1.6oct → 基音へ
+  node sh   = shaper(in: o, drive: punch, mode: "tanh")
   out gain(in: sh, mod: env, level: 1.0)
 }
 

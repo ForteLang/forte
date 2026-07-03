@@ -372,3 +372,21 @@ song "Y" { tempo 120bpm track A { instrument X() play beat`x---` at bars(1..1) }
     };
     assert!(err.contains("noise") && err.contains("shaper"), "{err}");
 }
+
+#[test]
+fn osc_pitch_mod_makes_kick_drops() {
+    let with_drop = r#"device K : Instrument {
+  node env  = adsr(a: 0.001, d: 0.18, s: 0.0, r: 0.1)
+  node penv = adsr(a: 0.001, d: 0.05, s: 0.0, r: 0.03)
+  node o    = osc(shape: "sine", mod: gain(in: penv, level: 0.4))
+  out gain(in: o, mod: env, level: 1.0)
+}
+song "X" { tempo 120bpm track A { instrument K() play beat`x---` at bars(1..1) } }"#;
+    let p = fortelang::compile_str(with_drop).unwrap();
+    let dropped = fortelang::render_digest(&p, 2.0);
+    assert!(dropped.rms > 0.005, "kick must sound (rms {})", dropped.rms);
+    // the pitch envelope is audible: same patch without the mod differs
+    let flat = with_drop.replace(", mod: gain(in: penv, level: 0.4)", "");
+    let p2 = fortelang::compile_str(&flat).unwrap();
+    assert_ne!(dropped.f32_digest, fortelang::render_digest(&p2, 2.0).f32_digest);
+}

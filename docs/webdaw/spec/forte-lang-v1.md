@@ -106,7 +106,7 @@ num       = [ "-" ] NUMBER [ UNIT ] ;
 
 | プリミティブ | 信号入力(既定) | パラメータ(既定) |
 | --- | --- | --- |
-| `osc` | `freq`(note.freq) | `shape`: sine/saw/square/tri |
+| `osc` | `freq`(note.freq), `mod`(±4oct) | `shape`: sine/saw/square/tri |
 | `noise` | — | —(決定論: per-voice xorshift、ノート毎に再シード) |
 | `lfo` | — | `rate` 0..1(=0.05..12Hz), `shape`: sine/tri/saw/square |
 | `adsr` | `gate`(note.gate) | `a` .05, `d` .3, `s` .6, `r` .25(正規化) |

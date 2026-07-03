@@ -29,7 +29,7 @@ fn prim(name: &str) -> Option<Prim> {
     Some(match name {
         "osc" => Prim {
             kind: GridModuleKind::Osc,
-            inputs: &[("freq", 0, Some(0))], // defaults to note.freq
+            inputs: &[("freq", 0, Some(0)), ("mod", 1, None)], // freq defaults to note.freq
             params: &[],
             options: &[(
                 "shape",

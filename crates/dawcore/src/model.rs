@@ -223,7 +223,7 @@ impl GridModuleKind {
     pub fn inputs(self) -> &'static [&'static str] {
         match self {
             GridModuleKind::NoteIn => &[],
-            GridModuleKind::Osc => &["Pitch"],
+            GridModuleKind::Osc => &["Pitch", "Mod"],
             GridModuleKind::Noise => &[],
             GridModuleKind::Lfo => &[],
             GridModuleKind::Adsr => &["Gate"],

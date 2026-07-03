@@ -243,7 +243,10 @@ impl GridSynth {
                         out[2] = voice.velocity;
                     }
                     GridModuleKind::Osc => {
-                        let freq = if connected[0] { ins[0].max(0.1) } else { 220.0 };
+                        let base = if connected[0] { ins[0].max(0.1) } else { 220.0 };
+                        // pitch mod shifts up to ±4 octaves (mirrors the SVF's
+                        // cutoff mod) — envelopes make kick drops, LFOs vibrato
+                        let freq = base * crate::dmath::powf(2.0, ins[1] * 4.0);
                         let shape = Waveform::from_index((params[0] * 3.999) as u8);
                         if let NodeState::Osc(osc) = &mut voice.states[ni] {
                             out[0] = osc.next(freq, sr, shape);
