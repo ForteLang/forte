@@ -181,6 +181,16 @@ fn hub_cmd(args: &[String]) -> ExitCode {
         Some("release") if args.len() >= 2 => hub.release(&args[1]),
         Some("verify") if args.len() >= 2 => hub.verify(&args[1]),
         Some("lineage") if args.len() >= 2 => hub.lineage(&args[1]),
+        Some("similar") if args.len() >= 2 => hub.similar(&args[1]).map(|v| {
+            if v.is_empty() {
+                "同じ進行を使う曲は(まだ)ありません".into()
+            } else {
+                v.into_iter()
+                    .map(|(name, sig)| format!("{name}\t(進行 {sig})"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        }),
         Some("list") => hub.list(),
         _ => Err("usage: forte hub <publish|fork|lineage|list> …".into()),
     };

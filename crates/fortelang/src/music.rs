@@ -218,6 +218,23 @@ fn parse_chord(sym: &str, pos: Pos) -> Result<(u8, Vec<i32>), Diag> {
     Ok(((((base + acc) % 12 + 12) % 12) as u8, intervals))
 }
 
+/// Transposition-invariant signature of a progression: each chord as
+/// (root interval from the first chord, quality intervals). `Em | C | G | D`
+/// and `Am | F | C | G` share one signature — that is how "songs built on the
+/// same progression" are found regardless of key (SRS-PLY-002).
+pub fn prog_signature(events: &[ChordEvent]) -> String {
+    let Some(first) = events.first() else { return String::new() };
+    events
+        .iter()
+        .map(|ev| {
+            let rel = ((ev.root_pc as i32 - first.root_pc as i32) % 12 + 12) % 12;
+            let ivs: Vec<String> = ev.intervals.iter().map(|i| i.to_string()).collect();
+            format!("{rel}:{}", ivs.join("."))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Block chords: every chord tone held for the chord's duration (root oct 3).
 pub fn prog_chords(events: &[ChordEvent]) -> Vec<Note> {
     let mut notes = Vec::new();

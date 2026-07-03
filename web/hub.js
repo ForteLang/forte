@@ -61,6 +61,9 @@ async function showDetail(name) {
   const lin = [];
   if (repo.forked_from) lin.push(`└─ forked from: ${repo.forked_from.repo} v${repo.forked_from.v}`);
   for (const f of repo.forks) lin.push(`⑂ fork -> ${f.name} v${f.v}`);
+  if (repo.plays) lin.push(`▶ plays: ${repo.plays}`);
+  for (const s of repo.similar ?? [])
+    lin.push(`♪ 同じ進行: <a href="#" class="similar" data-name="${s.name}">${s.name}</a> (キー非依存)`);
   for (const rel of repo.releases)
     lin.push(`release v${rel.v}: digest ${rel.digest} (${rel.seconds.toFixed(1)}s, verified ${rel.verified}回) <span id="vbadge-${rel.v}"></span>`);
   lin.push(`fork events: ${repo.fork_events}`);
@@ -73,6 +76,12 @@ async function showDetail(name) {
     $('d-code').appendChild(pre);
   }
   status(repo.kind === 'song' ? '' : '(library — 再生対象は song)');
+  for (const a of document.querySelectorAll('a.similar')) {
+    a.onclick = (e) => {
+      e.preventDefault();
+      showDetail(a.dataset.name);
+    };
+  }
 }
 
 $('back').onclick = (e) => {
@@ -103,6 +112,9 @@ $('listen').onclick = async () => {
   node.port.postMessage({ cmd: 'src', text: current.entrySrc, modules: JSON.stringify(current.files) });
   await ac.resume();
   node.port.postMessage({ cmd: 'play' });
+  // listens are ledger events — the raw data the contribution economy
+  // will be computed from (SRS-HUB-007)
+  fetch(`${API}/api/repos/${current.repo.name}/play?by=browser`, { method: 'POST' }).catch(() => {});
 };
 $('stop').onclick = () => node?.port.postMessage({ cmd: 'stop' });
 

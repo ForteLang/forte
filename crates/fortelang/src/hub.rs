@@ -47,6 +47,9 @@ pub struct Version {
     /// rel path -> fnv1a64 content hash
     pub files: BTreeMap<String, String>,
     pub forked_from: Option<Origin>,
+    /// transposition-invariant chord-progression signatures found in the song
+    #[serde(default)]
+    pub progressions: Vec<String>,
 }
 
 /// A deterministic build of a song version: anyone can `verify` that the
@@ -133,6 +136,7 @@ impl Hub {
         };
         let file = crate::parser::parse(&src).map_err(|_| "parse".to_string())?;
         let devices: Vec<String> = file.devices.iter().map(|d| d.name.clone()).collect();
+        let progressions = extract_progressions(&file);
 
         // snapshot the entry + transitive local imports (self-contained repo)
         let mut files: BTreeMap<String, String> = BTreeMap::new();
@@ -171,6 +175,7 @@ impl Hub {
             devices,
             files: hashes,
             forked_from: forked_from.clone(),
+            progressions,
         });
         reg.events.push(Event { seq: reg.seq, kind: "publish".into(), repo: name.into(), v, by: author() });
         self.save(&reg)?;
@@ -361,6 +366,45 @@ impl Hub {
         Ok(out)
     }
 
+    /// Songs sharing at least one progression signature with `name` —
+    /// key-independent, because signatures are transposition-invariant.
+    pub fn similar(&self, name: &str) -> Result<Vec<(String, String)>, String> {
+        let reg = self.registry()?;
+        let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
+        let mine = &repo.versions.last().ok_or("バージョンがありません")?.progressions;
+        let mut out = Vec::new();
+        for (other, r) in &reg.repos {
+            if other == name {
+                continue;
+            }
+            if let Some(v) = r.versions.last() {
+                if let Some(shared) = v.progressions.iter().find(|p| mine.contains(p)) {
+                    out.push((other.clone(), shared.clone()));
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Ledger a listen (SRS-HUB-007: events only — the economy comes later,
+    /// but only because this data exists from day one).
+    pub fn play_event(&self, name: &str, by: &str) -> Result<u64, String> {
+        let mut reg = self.registry()?;
+        let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
+        let v = repo.versions.last().ok_or("バージョンがありません")?.v;
+        reg.seq += 1;
+        reg.events.push(Event {
+            seq: reg.seq,
+            kind: "play".into(),
+            repo: name.into(),
+            v,
+            by: if by.is_empty() { "anonymous".into() } else { by.into() },
+        });
+        let plays = reg.events.iter().filter(|e| e.kind == "play" && e.repo == name).count() as u64;
+        self.save(&reg)?;
+        Ok(plays)
+    }
+
     // ---- JSON views for the HTTP API / browser hub page --------------------
 
     pub fn repos_json(&self) -> Result<serde_json::Value, String> {
@@ -413,11 +457,19 @@ impl Hub {
             .collect();
         let fork_events =
             reg.events.iter().filter(|e| e.kind == "fork" && e.repo == name).count();
+        let plays = reg.events.iter().filter(|e| e.kind == "play" && e.repo == name).count();
+        let similar: Vec<serde_json::Value> = self
+            .similar(name)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(other, sig)| serde_json::json!({ "name": other, "progression": sig }))
+            .collect();
         Ok(serde_json::json!({
             "name": name, "v": latest.v, "kind": latest.kind, "author": latest.author,
             "entry": latest.entry, "devices": latest.devices,
             "forked_from": latest.forked_from,
             "forks": forks, "fork_events": fork_events, "releases": releases,
+            "plays": plays, "similar": similar,
         }))
     }
 
@@ -473,6 +525,47 @@ impl Hub {
         }
         Ok(out)
     }
+}
+
+/// Pull the transposition-invariant signatures out of every prog literal in
+/// the file (song lets and inline pattern literals).
+fn extract_progressions(file: &crate::ast::FileAst) -> Vec<String> {
+    let Some(song) = &file.song else { return Vec::new() };
+    let beats_per_bar = song
+        .meter
+        .map(|((n, d), _)| n as f64 * 4.0 / d as f64)
+        .unwrap_or(4.0);
+    let pos = crate::diag::Pos { line: 1, col: 1 };
+    let mut sigs: Vec<String> = Vec::new();
+    let mut push = |lit: &crate::ast::PatternLit| {
+        if lit.kind == "prog" {
+            if let Ok((events, _)) = crate::music::parse_prog(&lit.raw, beats_per_bar, pos) {
+                let sig = crate::music::prog_signature(&events);
+                if !sig.is_empty() && !sigs.contains(&sig) {
+                    sigs.push(sig);
+                }
+            }
+        }
+    };
+    for l in &song.lets {
+        push(&l.value);
+    }
+    for t in &song.tracks {
+        for p in &t.plays {
+            let mut pref = &p.pattern;
+            loop {
+                match pref {
+                    crate::ast::PatternRef::Lit(l) => {
+                        push(l);
+                        break;
+                    }
+                    crate::ast::PatternRef::Fn { inner, .. } => pref = inner,
+                    crate::ast::PatternRef::Name(..) => break,
+                }
+            }
+        }
+    }
+    sigs
 }
 
 /// Collect `rel` (relative to the entry's base dir) and its transitive local

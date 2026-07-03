@@ -78,6 +78,13 @@ fn route(hub: &Hub, method: &str, path: &str, query: &str) -> (&'static str, Str
             Ok(v) => ("200 OK", serde_json::json!({ "files": v }).to_string()),
             Err(e) => err("404 Not Found", &e),
         },
+        ("POST", ["api", "repos", name, "play"]) => {
+            let by = query.split('&').find_map(|kv| kv.strip_prefix("by=")).unwrap_or("");
+            match hub.play_event(name, by) {
+                Ok(plays) => ("200 OK", serde_json::json!({ "plays": plays }).to_string()),
+                Err(e) => err("404 Not Found", &e),
+            }
+        }
         ("POST", ["api", "repos", name, "fork"]) => {
             let by = query
                 .split('&')

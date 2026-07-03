@@ -122,6 +122,29 @@ fn verify_detects_tampered_sources() {
 }
 
 #[test]
+fn similar_songs_found_across_keys_and_plays_ledgered() {
+    let hub_dir = temp_dir("hub6");
+    let hub = Hub::open(&hub_dir).unwrap();
+    // Em|C|G|D (night-parade) and Am|F|C|G (night-drive): same progression,
+    // different keys — the signature must be transposition-invariant
+    hub.publish(&format!("{}/night-parade.forte", songs_dir()), None).unwrap();
+    hub.publish(&format!("{}/night-drive.forte", songs_dir()), None).unwrap();
+
+    let sim = hub.similar("night-drive").unwrap();
+    assert_eq!(sim.len(), 1, "{sim:?}");
+    assert_eq!(sim[0].0, "night-parade");
+    let sim = hub.similar("night-parade").unwrap();
+    assert!(sim.iter().any(|(n, _)| n == "night-drive"), "{sim:?}");
+
+    // play events accumulate in the ledger and surface in the JSON view
+    assert_eq!(hub.play_event("night-drive", "alice").unwrap(), 1);
+    assert_eq!(hub.play_event("night-drive", "bob").unwrap(), 2);
+    let detail = hub.repo_json("night-drive").unwrap();
+    assert_eq!(detail["plays"], 2);
+    assert!(detail["similar"][0]["name"] == "night-parade");
+}
+
+#[test]
 fn broken_sources_cannot_be_published() {
     let hub_dir = temp_dir("hub3");
     let work = temp_dir("work3");
