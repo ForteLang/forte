@@ -28,6 +28,8 @@ pub struct Registry {
 #[derive(Serialize, Deserialize, Default)]
 pub struct Repo {
     pub versions: Vec<Version>,
+    #[serde(default)]
+    pub releases: Vec<Release>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -37,11 +39,25 @@ pub struct Version {
     pub author: String,
     /// "song" or "library"
     pub kind: String,
+    /// the entry file within `files` (what compiles/builds)
+    #[serde(default)]
+    pub entry: String,
     /// devices defined locally in the entry (library exports)
     pub devices: Vec<String>,
     /// rel path -> fnv1a64 content hash
     pub files: BTreeMap<String, String>,
     pub forked_from: Option<Origin>,
+}
+
+/// A deterministic build of a song version: anyone can `verify` that the
+/// stored audio digest reproduces from the stored source (SRS-HUB-004 local).
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Release {
+    pub v: u32,
+    pub seq: u64,
+    pub digest: String, // fnv1a64 of the f32 sample stream
+    pub seconds: f64,
+    pub by: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
@@ -151,6 +167,7 @@ impl Hub {
             seq: reg.seq,
             author: author(),
             kind: kind.into(),
+            entry: file_name.clone(),
             devices,
             files: hashes,
             forked_from: forked_from.clone(),
@@ -199,6 +216,92 @@ impl Hub {
         Ok(format!("forked: {name} v{} -> {dest} (系譜に記録済み)", ver.v))
     }
 
+    /// Compile the stored snapshot of `name` (latest version). The hub store
+    /// is the clean room: only files that were published exist there.
+    fn build_snapshot(&self, name: &str, ver: &Version) -> Result<crate::RenderInfo, String> {
+        if ver.kind != "song" {
+            return Err(format!("'{name}' は {} です(release できるのは song)", ver.kind));
+        }
+        let dir = self.root.join("store").join(name).join(format!("v{}", ver.v));
+        let entry = if ver.entry.is_empty() {
+            return Err("エントリファイルが記録されていません(旧形式)".into());
+        } else {
+            dir.join(&ver.entry)
+        };
+        let src = std::fs::read_to_string(&entry).map_err(|e| e.to_string())?;
+        let project =
+            crate::compile_with_loader(&src, &crate::FsLoader, &dir.to_string_lossy())
+                .map_err(|ds| ds.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n"))?;
+        Ok(crate::render_digest(&project, 8.0))
+    }
+
+    /// Deterministically build the latest version of a song and record the
+    /// audio digest in the ledger. The digest is the release's identity.
+    pub fn release(&self, name: &str) -> Result<String, String> {
+        let mut reg = self.registry()?;
+        let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
+        let ver = repo.versions.last().ok_or("バージョンがありません")?.clone();
+        let info = self.build_snapshot(name, &ver)?;
+        let digest = format!("{:016x}", info.f32_digest);
+
+        // manifest lives next to the snapshot (the audio itself can always be
+        // regenerated from it — that's the point)
+        let dir = self.root.join("store").join(name).join(format!("v{}", ver.v));
+        let manifest = serde_json::json!({
+            "repo": name, "v": ver.v, "digest": digest,
+            "seconds": info.seconds, "engine": env!("CARGO_PKG_VERSION"),
+        });
+        std::fs::write(
+            dir.join("release.manifest.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .map_err(|e| e.to_string())?;
+
+        reg.seq += 1;
+        let seq = reg.seq;
+        let repo = reg.repos.get_mut(name).unwrap();
+        repo.releases.push(Release {
+            v: ver.v,
+            seq,
+            digest: digest.clone(),
+            seconds: info.seconds,
+            by: author(),
+        });
+        reg.events.push(Event { seq, kind: "release".into(), repo: name.into(), v: ver.v, by: author() });
+        self.save(&reg)?;
+        Ok(format!("released: {name} v{} — digest {digest} ({:.1}s)", ver.v, info.seconds))
+    }
+
+    /// Clean-room reproduction: rebuild the stored source and compare the
+    /// digest with the ledger. Anyone can audit a release this way.
+    pub fn verify(&self, name: &str) -> Result<String, String> {
+        let mut reg = self.registry()?;
+        let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
+        let rel = repo.releases.last().ok_or_else(|| format!("'{name}' に release がありません"))?.clone();
+        let ver = repo
+            .versions
+            .iter()
+            .find(|v| v.v == rel.v)
+            .ok_or("リリース対象のバージョンがありません")?
+            .clone();
+        let info = self.build_snapshot(name, &ver)?;
+        let digest = format!("{:016x}", info.f32_digest);
+
+        reg.seq += 1;
+        let seq = reg.seq;
+        reg.events.push(Event { seq, kind: "verify".into(), repo: name.into(), v: rel.v, by: author() });
+        self.save(&reg)?;
+
+        if digest == rel.digest {
+            Ok(format!("VERIFIED: {name} v{} はソースから再現一致({digest})", rel.v))
+        } else {
+            Err(format!(
+                "MISMATCH: {name} v{} — 台帳 {} / 再ビルド {digest}(ソースかエンジンが改竄・変更されています)",
+                rel.v, rel.digest
+            ))
+        }
+    }
+
     /// Human-readable lineage: ancestry chain, forks of this repo, dependents.
     pub fn lineage(&self, name: &str) -> Result<String, String> {
         let reg = self.registry()?;
@@ -240,6 +343,17 @@ impl Hub {
         }
         if !kids.is_empty() {
             out.push_str(&format!("forks -> {}\n", kids.join(", ")));
+        }
+        for rel in &repo.releases {
+            let verified = reg
+                .events
+                .iter()
+                .filter(|e| e.kind == "verify" && e.repo == name && e.v == rel.v)
+                .count();
+            out.push_str(&format!(
+                "release v{}: digest {} ({:.1}s, verified {}回)\n",
+                rel.v, rel.digest, rel.seconds, verified
+            ));
         }
         let fork_events =
             reg.events.iter().filter(|e| e.kind == "fork" && e.repo == name).count();

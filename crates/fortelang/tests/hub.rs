@@ -76,6 +76,52 @@ fn publishing_a_song_snapshots_its_imports() {
 }
 
 #[test]
+fn release_records_digest_and_verify_reproduces_it() {
+    let hub_dir = temp_dir("hub4");
+    let hub = Hub::open(&hub_dir).unwrap();
+    hub.publish(&format!("{}/handmade.forte", songs_dir()), None).unwrap();
+
+    // release: deterministic build, digest goes into the ledger
+    let msg = hub.release("handmade").unwrap();
+    assert!(msg.contains("digest"), "{msg}");
+    let reg = hub.registry().unwrap();
+    let rel = reg.repos["handmade"].releases.last().unwrap().clone();
+    assert_eq!(rel.digest.len(), 16);
+
+    // verify: clean-room rebuild reproduces the digest
+    let msg = hub.verify("handmade").unwrap();
+    assert!(msg.contains("VERIFIED"), "{msg}");
+
+    // lineage shows the release and its verification count
+    let lin = hub.lineage("handmade").unwrap();
+    assert!(lin.contains(&rel.digest), "{lin}");
+    assert!(lin.contains("verified 1回"), "{lin}");
+
+    // libraries cannot be released
+    hub.publish(&format!("{}/devices/warm.forte", songs_dir()), None).unwrap();
+    assert!(hub.release("warm").is_err());
+}
+
+#[test]
+fn verify_detects_tampered_sources() {
+    let hub_dir = temp_dir("hub5");
+    let hub = Hub::open(&hub_dir).unwrap();
+    hub.publish(&format!("{}/handmade.forte", songs_dir()), None).unwrap();
+    hub.release("handmade").unwrap();
+
+    // tamper with the stored snapshot (simulates a compromised store);
+    // note: device param *defaults* are overridden at the call site, so touch
+    // something that actually reaches the audio — the filter resonance
+    let stored = format!("{hub_dir}/store/handmade/v1/devices/warm.forte");
+    let src = std::fs::read_to_string(&stored).unwrap();
+    assert!(src.contains("reso: 0.3"));
+    std::fs::write(&stored, src.replace("reso: 0.3", "reso: 0.9")).unwrap();
+
+    let err = hub.verify("handmade").err().expect("tampering must be detected");
+    assert!(err.contains("MISMATCH"), "{err}");
+}
+
+#[test]
 fn broken_sources_cannot_be_published() {
     let hub_dir = temp_dir("hub3");
     let work = temp_dir("work3");

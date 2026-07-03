@@ -53,7 +53,7 @@ Status: Draft v0.1 / 2026-07-02
 | 2.1 | git ホスティング+認可層(**public は clone 拒否・fork API のみ**) | SRS-HUB-001/002 |
 | 2.2 | 系譜グラフ DB+公開 API(fork/depends/performed/released) — **🔶 ローカル Hub として前倒し実装(`forte hub publish/fork/lineage/list`): 取得は fork のみ、fork 先に来歴スタンプ、再 publish で forked_from が構造的に記録される。サーバーはこのデータモデルを HTTP で包む段** | SRS-HUB-003 |
 | 2.3 | forte-pkg: Hub fork 経由の依存解決+forte.lock | SRS-PKG-001..004 |
-| 2.4 | リリースパイプライン(クリーンルーム決定論ビルド+ハッシュ検証+Opus 配信) | SRS-HUB-004/005 |
+| 2.4 | リリースパイプライン(クリーンルーム決定論ビルド+ハッシュ検証+Opus 配信) — **🔶 ローカル版実装(`forte hub release/verify`): スナップショットからの決定論ビルドでダイジェストを台帳に記録し、誰でも再現検証できる(改竄はMISMATCHで検出、検証回数は系譜に表示)。配信(Opus)はサーバー段** | SRS-HUB-004/005 |
 | 2.5 | 曲ページ(系譜表示・コードブラウズ)+Web プレイヤー | SRS-HUB-008, SRS-PLY-001 |
 | 2.6 | 再生イベント台帳(記録のみ) | SRS-HUB-007 |
 | 2.7 | 系譜保存ライセンス v1(法的レビュー込み) | SYS-GOV-001 |

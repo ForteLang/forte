@@ -38,6 +38,8 @@ fn main() -> ExitCode {
             eprintln!("       forte lsp");
             eprintln!("       forte hub publish <file.forte> [--as NAME] [--hub DIR]");
             eprintln!("       forte hub fork <NAME> <DEST-DIR>   [--hub DIR]");
+            eprintln!("       forte hub release <NAME>           [--hub DIR]");
+            eprintln!("       forte hub verify <NAME>            [--hub DIR]");
             eprintln!("       forte hub lineage <NAME>           [--hub DIR]");
             eprintln!("       forte hub list                     [--hub DIR]");
             ExitCode::from(2)
@@ -166,6 +168,8 @@ fn hub_cmd(args: &[String]) -> ExitCode {
             hub.publish(&args[1], name)
         }
         Some("fork") if args.len() >= 3 => hub.fork(&args[1], &args[2]),
+        Some("release") if args.len() >= 2 => hub.release(&args[1]),
+        Some("verify") if args.len() >= 2 => hub.verify(&args[1]),
         Some("lineage") if args.len() >= 2 => hub.lineage(&args[1]),
         Some("list") => hub.list(),
         _ => Err("usage: forte hub <publish|fork|lineage|list> …".into()),
