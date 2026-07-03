@@ -5,6 +5,7 @@
 pub mod ast;
 #[cfg(not(target_family = "wasm"))]
 pub mod audio;
+pub mod calib;
 pub mod compile;
 pub mod diag;
 pub mod fmt;

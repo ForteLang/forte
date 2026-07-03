@@ -38,7 +38,7 @@ Status: Draft v0.1 / 2026-07-02
 | 1.2 | 差分ビルド+ホットリロード(変更→音まで 1 秒以内) | SRS-LANG-007, SRS-CORE-006 |
 | 1.3 | 可視化 Webview(ピアノロール/アレンジ/メーター、読み取り専用+コードジャンプ) | SRS-VIS-001/002 |
 | 1.4 | MIDI 入力→パターン記録(演奏をコードとして書き起こす) | SRS-REC-001 |
-| 1.5 | マイク録音 v1: `.frec`+来歴+クラッシュ回復+ループバック較正 — **🔶 `.frec` フォーマット+来歴強制(来歴なしはコンパイルエラー E-PROV-001)+`import take from "*.frec"`+`audio take at …` 構文+エンジン再生を実装。ブラウザ録音 UI 実装済(getUserMedia EC/NS/AGC オフ → AudioWorklet PCM 直取り → 来歴付き .frec を OPFS へ。E2E はフェイクマイクで検証)。較正・クラッシュ回復は未** | SRS-REC-002..005 |
+| 1.5 | マイク録音 v1: `.frec`+来歴+クラッシュ回復+ループバック較正 — **🔶 `.frec` フォーマット+来歴強制(来歴なしはコンパイルエラー E-PROV-001)+`import take from "*.frec"`+`audio take at …` 構文+エンジン再生を実装。ブラウザ録音 UI 実装済(getUserMedia EC/NS/AGC オフ → AudioWorklet PCM 直取り → 来歴付き .frec を OPFS へ。E2E はフェイクマイクで検証)。ループバック較正実装済(チャープ再生→同一 AudioContext クロックで捕捉→wasm 相関でサンプル精度の往復実測、結果はテイクの来歴に latency_samples として記録)。クラッシュ回復は未** | SRS-REC-002..005 |
 | 1.6 | `forte test` / `forte fmt` | SRS-LANG-002 |
 
 **Exit 基準**: 作曲者 5 名のクローズド試用で、1 曲を録音込みで完成させられる。

@@ -7,7 +7,9 @@ class ForteRecorder extends AudioWorkletProcessor {
     const ch = inputs[0]?.[0];
     if (ch && ch.length) {
       const copy = new Float32Array(ch);
-      this.port.postMessage(copy, [copy.buffer]);
+      // currentFrame ties each chunk to the AudioContext clock — that is what
+      // makes loopback calibration sample-accurate
+      this.port.postMessage({ frame: currentFrame, data: copy }, [copy.buffer]);
     }
     return true;
   }

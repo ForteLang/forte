@@ -24,6 +24,9 @@ pub struct Ctx {
     stage: Vec<u8>,
     modules: HashMap<String, String>,
     assets: HashMap<String, Vec<u8>>,
+    calib_probe: Vec<f32>,
+    calib_rec: Vec<f32>,
+    calib_conf: f32,
     diags_json: Vec<u8>,
     viz_json: Vec<u8>,
     out_l: Vec<f32>,
@@ -97,6 +100,9 @@ pub extern "C" fn fw_new(sample_rate: f32) -> *mut Ctx {
         stage: Vec::new(),
         modules: HashMap::new(),
         assets: HashMap::new(),
+        calib_probe: Vec::new(),
+        calib_rec: Vec::new(),
+        calib_conf: 0.0,
         diags_json: b"[]".to_vec(),
         viz_json: b"null".to_vec(),
         out_l: vec![0.0; MAX_FRAMES],
@@ -301,6 +307,52 @@ pub unsafe extern "C" fn fw_viz_ptr(ptr: *mut Ctx) -> *const u8 {
 #[no_mangle]
 pub unsafe extern "C" fn fw_viz_len(ptr: *mut Ctx) -> usize {
     ctx(ptr).viz_json.len()
+}
+
+// ---- loopback calibration ---------------------------------------------------
+
+/// The chirp probe the page must play (written into wasm memory).
+#[no_mangle]
+pub unsafe extern "C" fn fw_calib_probe(ptr: *mut Ctx, rate: f32, seconds: f32) -> *const f32 {
+    let c = ctx(ptr);
+    c.calib_probe = fortelang::calib::chirp(rate, seconds);
+    c.calib_probe.as_ptr()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_calib_probe_len(ptr: *mut Ctx) -> usize {
+    ctx(ptr).calib_probe.len()
+}
+
+/// Buffer for the recording captured while the probe played.
+#[no_mangle]
+pub unsafe extern "C" fn fw_calib_rec(ptr: *mut Ctx, len: usize) -> *mut f32 {
+    let c = ctx(ptr);
+    c.calib_rec.clear();
+    c.calib_rec.resize(len, 0.0);
+    c.calib_rec.as_mut_ptr()
+}
+
+/// Cross-correlate. Returns the lag in samples, or -1 when the probe was not
+/// heard (confidence too low). Confidence via [`fw_calib_confidence`].
+#[no_mangle]
+pub unsafe extern "C" fn fw_calib_run(ptr: *mut Ctx) -> i32 {
+    let c = ctx(ptr);
+    match fortelang::calib::estimate_delay(&c.calib_probe, &c.calib_rec) {
+        Some((lag, conf)) => {
+            c.calib_conf = conf;
+            lag as i32
+        }
+        None => {
+            c.calib_conf = 0.0;
+            -1
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_calib_confidence(ptr: *mut Ctx) -> f32 {
+    ctx(ptr).calib_conf
 }
 
 /// Offline build digest — byte-for-byte the same path as `forte build`

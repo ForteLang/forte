@@ -179,7 +179,7 @@ async function recStart() {
   await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
   const node = new AudioWorkletNode(ctx, 'forte-rec');
   const chunks = [];
-  node.port.onmessage = (e) => chunks.push(e.data);
+  node.port.onmessage = (e) => chunks.push(e.data.data);
   ctx.createMediaStreamSource(stream).connect(node);
   rec = { ctx, stream, node, chunks, rate: ctx.sampleRate };
   $('rec').textContent = '■ 録音停止';
@@ -199,12 +199,16 @@ async function recStop() {
     pcm.set(c, off);
     off += c.length;
   }
+  const calib = JSON.parse(localStorage.getItem('forte.calibration') || 'null');
   const provenance = {
     device_class: 'microphone',
     recorded_at: new Date().toISOString(),
     by: 'user:web',
     session: crypto.randomUUID(),
     sig: 'webcrypto:stub', // real device keys arrive with Hub accounts
+    // measured round-trip latency travels with the take, so any consumer can
+    // compensate placement (SRS-REC-004)
+    ...(calib ? { latency_samples: calib.rtl_samples, latency_confidence: calib.confidence } : {}),
   };
   const takes = store ? await store.list('.frec') : [];
   const name = `assets/take-${takes.length + 1}.frec`;
@@ -262,6 +266,67 @@ function autosave() {
     refreshFileList();
     refreshModules(); // local files are importable modules
   }, 500);
+}
+
+// ---- loopback calibration (SRS-REC-004) ---------------------------------------
+// Play a chirp through the speakers while recording the mic on the SAME
+// AudioContext clock; the wasm cross-correlator finds where it landed.
+// rtl = (found position in recording) - (when we played it). Browsers cannot
+// report this number truthfully, so we measure it.
+async function calibrate() {
+  status('calibrating…');
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+  });
+  const ctx = new AudioContext({ sampleRate: 48000 });
+  const src = await (await fetch('recorder.js')).text();
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+  const node = new AudioWorkletNode(ctx, 'forte-rec');
+  let firstFrame = null;
+  const chunks = [];
+  node.port.onmessage = (e) => {
+    if (firstFrame === null) firstFrame = e.data.frame;
+    chunks.push(e.data.data);
+  };
+  ctx.createMediaStreamSource(stream).connect(node);
+
+  // probe from the same wasm code the tests verify
+  const probePtr = main.e.fw_calib_probe(main.ctx, 48000, 0.15);
+  const probeLen = main.e.fw_calib_probe_len(main.ctx);
+  const probe = new Float32Array(main.e.memory.buffer, probePtr, probeLen).slice();
+  const buf = ctx.createBuffer(1, probe.length, 48000);
+  buf.copyToChannel(probe, 0);
+  const player = ctx.createBufferSource();
+  player.buffer = buf;
+  player.connect(ctx.destination);
+  const startAt = ctx.currentTime + 0.25;
+  player.start(startAt);
+
+  await new Promise((r) => setTimeout(r, 1200));
+  stream.getTracks().forEach((t) => t.stop());
+  await ctx.close();
+
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const recPtr = main.e.fw_calib_rec(main.ctx, total);
+  let off = 0;
+  for (const c of chunks) {
+    new Float32Array(main.e.memory.buffer, recPtr + off * 4, c.length).set(c);
+    off += c.length;
+  }
+  const lag = main.e.fw_calib_run(main.ctx);
+  document.body.dataset.calib = lag >= 0 ? 'ok' : 'nodetect';
+  if (lag < 0) {
+    status('較正: プローブ音を検出できませんでした(スピーカー→マイクの経路を確認)');
+    return;
+  }
+  const conf = main.e.fw_calib_confidence(main.ctx);
+  const playedAtFrame = Math.round(startAt * 48000) - firstFrame;
+  const rtl = lag - playedAtFrame;
+  localStorage.setItem(
+    'forte.calibration',
+    JSON.stringify({ rtl_samples: rtl, rate: 48000, confidence: conf, at: new Date().toISOString() })
+  );
+  status(`較正完了: 往復 ${((rtl / 48000) * 1000).toFixed(1)}ms (信頼度 ${conf.toFixed(2)}) — 以後のテイクに記録されます`);
 }
 
 // ---- wiring -------------------------------------------------------------------
@@ -360,6 +425,11 @@ async function boot() {
   };
   $('stop').onclick = () => node?.port.postMessage({ cmd: 'stop' });
   $('rec').onclick = () => (rec ? recStop() : recStart()).catch((e) => status(`rec: ${e.message}`));
+  $('calib').onclick = () =>
+    calibrate().catch((e) => {
+      document.body.dataset.calib = 'fail';
+      status(`calib: ${e.message}`);
+    });
   $('digest').onclick = () => {
     status('building…');
     setTimeout(() => {

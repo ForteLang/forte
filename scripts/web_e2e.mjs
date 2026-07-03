@@ -174,6 +174,17 @@ try {
     { timeout: 15000 }
   );
   check('recorded take imports and compiles in browser', true, take);
+
+  // 9) calibration flow completes: the fake mic cannot hear the probe, so the
+  //    honest outcome is a graceful "not detected" (never a bogus number)
+  await page.click('#calib');
+  await page.waitForSelector('body[data-calib]', { timeout: 30000 });
+  const calib = await page.evaluate(() => document.body.dataset.calib);
+  check(
+    'calibration flow completes honestly',
+    calib === 'nodetect', // fake mic can't hear the probe; a number here would be a lie
+    `data-calib=${calib}`
+  );
 } finally {
   await browser.close();
   server.kill();
