@@ -1,142 +1,89 @@
-# Bitwig Studio 6 — Clone
+# Forte (仮称) — compose music as code
 
-A **native desktop DAW** written in Rust, modelled on
-[Bitwig Studio 6](https://www.bitwig.com). It has a real-time audio engine
-(lock-free, no allocation on the audio thread) driving hardware output through
-**cpal**, and an immediate-mode GUI built with **egui/eframe** that mirrors
-Bitwig 6's refreshed dark interface and hybrid Clip-Launcher workflow.
+**音楽制作を「コード・fork・ビルド・リリース」によるオープン開発の世界へ。**
+曲も、パターンも、コード進行も、そして音源そのものも、読める・直せる・fork できる
+ソースコード(`.forte`)。ビルドは決定論的で、同じコミットからは native / wasm /
+ブラウザのどこでも**ビット同一のオーディオ**が再現される。リリースの正しさは
+誰でも(ブラウザのタブからでも)再検証できる。
 
-> Code-level identity with a commercial, closed-source C++ application is not
-> attainable. This is a faithful, *running* reimplementation of Bitwig 6's
-> architecture, signature workflow and visual language — a genuine DAW, not a
-> mock-up.
+ビジョン・要求仕様・アーキテクチャは [docs/webdaw/](docs/webdaw/README.md) に
+IEC 62304 型のドキュメント体系で整備している。
 
-![Arranger](docs/arranger.png)
+```forte
+import { WarmLead, SubBass } from "./devices/warm.forte"
 
-## Build & run
+song "Handmade" {
+  tempo 100bpm
+  key G minor
+  let line = prog`Gm | Eb | Bb | F`
 
-Requires a Rust toolchain and ALSA dev headers on Linux
-(`libasound2-dev`); macOS/Windows need no extra packages.
+  track Lead {
+    instrument WarmLead(cutoff: 0.7, vib: 0.35)
+    insert delay(time: 0.3, fdbk: 0.3, mix: 0.25)
+    play arp(line, rate: 0.5, style: "updown") at bars(5..12)
+  }
+}
+```
+
+## Quickstart
 
 ```bash
-cargo run -p dawapp --release
+# 検証: エラーは音楽の語彙で、行番号つきで出る
+cargo run --release -p fortelang --bin forte -- check songs/first-light.forte
+
+# ビルド: WAV + ビルド証明(build.manifest.json、出力ダイジェスト入り)
+cargo run --release -p fortelang --bin forte -- build songs/first-light.forte
+
+# ライブ再生: ファイルを保存するたび、再生を止めずに反映(ホットリロード)
+cargo run --release -p fortelang --bin forte -- play songs/first-light.forte
 ```
 
-The window opens into the Clip Launcher with a small demo project. Press
-**Space** to start playback, click a clip to launch it, double-click a clip to
-open the piano roll, and play the selected instrument live with the **A–K**
-(white) / **W E T Y U** (black) keys.
-
-Run the engine's offline tests (no audio hardware needed — they render to a WAV
-and assert real signal):
+**ブラウザエディタ**(タイプ中診断・AudioWorklet 再生・OPFS 自動保存・完全オフライン PWA):
 
 ```bash
-cargo test -p dawcore
+scripts/build_web.sh
+python3 -m http.server 8000   # リポジトリルートで
+# → http://localhost:8000/web/
 ```
 
-## Architecture
+**Hub**(fork 系譜レジストリ: 取得は fork のみ、来歴は構造的に記録される):
 
-A Cargo workspace with a hard split between the real-time core and the front-end.
-
-```
-crates/
-  dawcore/   ── real-time audio engine + DSP. No GUI, no hardware deps.
-    dsp/       band-limited oscillators (polyBLEP), ADSR, TPT state-variable
-               filter, polyphonic voice/synth, stereo delay, FDN reverb, EQ, drive
-    model.rs   plain-data project model (tracks, clips, devices, scenes, key sig)
-    command.rs lock-free UI→audio message protocol (+ garbage return channel)
-    engine.rs  audio-thread engine: sample-accurate scheduler, mixer, modulators
-    sync.rs    helpers to mirror model edits into the engine
-    tests/     offline render tests (engine → WAV, assert non-silence/finite/limited)
-
-  dawapp/    ── native front-end.
-    audio.rs   cpal output stream; the Engine is moved into the audio callback
-    theme.rs   Bitwig 6 dark visual language for egui
-    widgets.rs custom-painted rotary knobs, faders, signal meters
-    app.rs     the DAW UI: transport, inspector, browser, clip launcher,
-               mixer, device panel, piano roll
-    main.rs    eframe entry point
+```bash
+export FORTE_HUB=~/.forte-hub
+forte hub publish songs/handmade.forte   # import ごとスナップショット
+forte hub release handmade               # 決定論ビルド → ダイジェストを台帳へ
+forte hub verify handmade                # 誰でも再現検証できる
+forte hub serve                          # → http://localhost:8000/web/hub.html で系譜をディグる
 ```
 
-### Real-time discipline
+**VSCode**: `editor/vscode-forte/`(シンタックスハイライト+ `forte lsp` 診断+
+Play/Build コマンド)。
 
-The audio callback never allocates, locks, or makes syscalls:
+## リポジトリ構成
 
-- **UI → audio** messages travel over a lock-free SPSC ring buffer
-  (`ringbuf`). Hot messages (notes, transport, parameter tweaks) carry only
-  small `Copy` payloads.
-- **Structural edits** (adding a track, replacing a clip's notes) build their
-  heap objects *on the UI thread* and hand them over as `Box<…>`. When the audio
-  thread swaps one in, the displaced object is shipped **back** through a garbage
-  channel so it is dropped by the UI thread, never freed under the audio lock.
-- **Readback** (transport position, per-track meters, active scene, voice count)
-  is published through atomics the UI polls each frame.
+```
+crates/dawcore    リアルタイムエンジン+DSP(ロックフリー、決定論、no GUI)
+crates/fortelang  言語: lexer/parser/検査、コンパイラ、CLI(check/build/play/lsp/hub)
+crates/forteweb   ブラウザ用 C-ABI wasm(コンパイル・再生・ビルド証明)
+web/              ブラウザエディタ+Hub 系譜ページ(PWA)
+editor/           VSCode 拡張
+songs/            リファレンス曲 4 曲+デバイスライブラリ
+docs/webdaw/      ビジョン/SYS/SRS/SAD/SDD/ロードマップ+調査レポート
+scripts/          決定論ゲート・ブラウザ E2E
+```
 
-### Audio engine
+## テスト
 
-- Sample-accurate look-ahead scheduler plays both the **Arranger Timeline**
-  (clips at absolute positions, looping their content within the placed region)
-  and the **Clip Launcher** (a launcher clip overrides the arrangement on its
-  track, phase-locked to the global transport). A global **loop region** wraps
-  the playhead, and **launch quantization** defers clip launches to the next
-  bar boundary.
-- Per-track device chain: a polyphonic **Polymer** synth (two band-limited
-  detuned oscillators + sub → TPT SVF with its own envelope → ADSR amp, 16-voice
-  pool with oldest-voice stealing) followed by insert effects.
-- **Effects:** Filter+ (multi-mode SVF), EQ-5 (3-band), Distortion (tanh
-  shaper), Delay-4 (ping-pong with damped feedback), Reverb (4-line feedback
-  delay network with a Householder mixing matrix).
-- **Modulators (unified modulation system):** per-device **LFO / Steps /
-  Random / Macro** modulators, each routable to any parameter with a bipolar
-  amount, applied at block rate before DSP. The UI implements Bitwig's
-  click-the-modulator-then-drag-a-parameter routing, with coloured modulation
-  rings on the knobs.
-- Equal-power panning, mute/solo, and a `tanh` master limiter.
+```bash
+cargo test -p dawcore -p fortelang     # エンジン+言語+Hub(23 tests)
+scripts/determinism_test.sh            # native/wasm ビット同一ゲート(2 段)
+node scripts/web_e2e.mjs               # ブラウザ E2E 8 項目(要 playwright)
+node scripts/hub_e2e.mjs               # Hub E2E 6 項目
+```
 
-## Implemented vs. Bitwig 6
+---
 
-| Area | Status |
-| --- | --- |
-| **Arranger Timeline** with bar ruler, draggable/resizable clips, mini-note previews | ✅ |
-| **Arranger Loop region** (drag on ruler; wraps the global playhead) | ✅ |
-| **Cue markers** along the timeline | ✅ |
-| **Launch quantization** (Off · 1/4 · 1/2 · 1 Bar · 2 Bars; default 1 Bar) | ✅ |
-| Hybrid Clip Launcher + scenes; launcher clips override the arrangement per track | ✅ |
-| **Automation lanes** — per-track volume automation with Bitwig 6's per-point **hold** behaviour; click to add, drag to move, double-click toggles hold | ✅ |
-| **Unified modulation system** — LFO / Steps / Random / Macro modulators, click-to-route, drag a knob to set bipolar depth, modulation rings | ✅ |
-| **Send/Return buses** — effect tracks act as returns fed by post-fader sends, with per-channel send sliders in the mixer | ✅ |
-| **Project save/load** (JSON via serde) with Ctrl+S, plus **Undo/Redo** (Ctrl+Z / Ctrl+Y, 64 levels) | ✅ |
-| **WAV export** — offline bounce of the arrangement through the same engine | ✅ |
-| **Metronome** with accented downbeats | ✅ |
-| Refreshed dark v6 UI, rounded corners | ✅ |
-| Project key signature (new in v6) | ✅ root + scale, drives piano-roll scale highlighting |
-| Tracks: instrument / audio / effect | ✅ |
-| Per-track device chains, bypass | ✅ |
-| **Device taxonomy** — every device is a typed stage (Note→Note / Note→Audio / Audio→Audio); tracks render note FX → instruments → audio FX, and the browser/UI derive from the registry (see ARCHITECTURE.md) | ✅ |
-| **Note FX** — Arpeggiator (up/down/up-down, octaves), Transposer, Note Repeat, all phase-locked to the transport and live-playable | ✅ |
-| **Key map & performance mode** — Tab toggles A–K performance playing; L/M/B/I/D/F1–F3/↑↓/Enter/Del/Ctrl+T commands (see ARCHITECTURE.md) | ✅ |
-| **Visual regression tests** — 6 golden screenshots diffed pixel-wise under Xvfb (`scripts/visual_test.sh`) | ✅ |
-| **The Grid (Poly Grid)** — a modular node-graph synth (NoteIn / Osc / LFO / ADSR / SVF / Gain / Mix / Out) with a draggable graph editor: move nodes, wire ports, tweak per-node params, add/delete modules | ✅ |
-| **Sampler instrument** — pitched, looping playback of shared sample buffers with ADSR; built-in Kick/Snare/Hat one-shots plus WAV loading | ✅ |
-| **Audio clips on the Arranger** — samples placed on the timeline, drawn as waveforms, drag/resize/delete | ✅ |
-| Built-in synth + 5 insert effects | ✅ all DSP written from scratch |
-| Mixer: faders, pan, meters, solo/mute, master | ✅ |
-| Piano roll: add/move/resize/delete, snap, scale highlight, playhead | ✅ |
-| Transport: tempo, time-sig, position, computer-keyboard MIDI | ✅ |
-
-The three central surfaces — **Arrange** (timeline), **Launcher** (clip grid)
-and **Mix** (console) — are switched from the transport bar, mirroring Bitwig's
-panel model.
-
-### Known scope boundaries
-
-Live audio recording, VST/CLAP plugin hosting, comping and clip aliases are
-**not** implemented. The Grid covers the core module set, not Bitwig's full
-library. Effects are lightweight original DSP, not Bitwig's. These are
-deliberate boundaries, not bugs.
-
-## Testing hooks
-
-Two environment variables help when launching for inspection:
-`BITWIG_VIEW=mix` opens straight into the mixer; `BITWIG_EDIT=1` opens a clip in
-the piano roll on start.
+エンジン(`dawcore`)は本リポジトリの前身である Bitwig Studio 風 DAW の実装から
+流用しており、その規律(音声スレッドで割り当てない・ロックしない、UI→audio は
+ロックフリーリング、オフラインとリアルタイムが同一エンジン)が Forte の決定論
+ビルドの土台になっている。

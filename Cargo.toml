@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["crates/dawcore", "crates/dawapp", "crates/fortelang", "crates/forteweb"]
+members = ["crates/dawcore", "crates/fortelang", "crates/forteweb"]
 
 [workspace.package]
 version = "0.6.0"
 edition = "2021"
 license = "MIT"
-authors = ["bitwig-clone contributors"]
+authors = ["forte contributors"]
 
 [profile.release]
 opt-level = 3

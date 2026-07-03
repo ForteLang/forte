@@ -3,7 +3,7 @@ name = "dawcore"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Real-time audio engine and DSP for the Bitwig-style DAW. No GUI or hardware dependencies."
+description = "Forte real-time audio engine and DSP core. No GUI or hardware dependencies."
 
 [dependencies]
 libm = "0.2"

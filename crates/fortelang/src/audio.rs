@@ -1,6 +1,6 @@
 //! Real-time output for `forte play`: a cpal stream owning the [`Engine`],
 //! with a silent paced-thread fallback so playback "runs" on machines without
-//! audio hardware (adapted from dawapp's backend).
+//! audio hardware (originally built for the engine's native front-end).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
