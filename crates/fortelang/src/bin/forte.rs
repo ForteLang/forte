@@ -42,6 +42,7 @@ fn main() -> ExitCode {
             eprintln!("       forte hub verify <NAME>            [--hub DIR]");
             eprintln!("       forte hub lineage <NAME>           [--hub DIR]");
             eprintln!("       forte hub list                     [--hub DIR]");
+            eprintln!("       forte hub serve [--port 9377]      [--hub DIR]");
             ExitCode::from(2)
         }
     }
@@ -168,6 +169,15 @@ fn hub_cmd(args: &[String]) -> ExitCode {
             hub.publish(&args[1], name)
         }
         Some("fork") if args.len() >= 3 => hub.fork(&args[1], &args[2]),
+        Some("serve") => {
+            let port = args
+                .iter()
+                .position(|a| a == "--port")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(9377);
+            fortelang::hub_server::serve(hub, port).map(|_| String::new())
+        }
         Some("release") if args.len() >= 2 => hub.release(&args[1]),
         Some("verify") if args.len() >= 2 => hub.verify(&args[1]),
         Some("lineage") if args.len() >= 2 => hub.lineage(&args[1]),

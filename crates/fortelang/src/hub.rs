@@ -361,6 +361,105 @@ impl Hub {
         Ok(out)
     }
 
+    // ---- JSON views for the HTTP API / browser hub page --------------------
+
+    pub fn repos_json(&self) -> Result<serde_json::Value, String> {
+        let reg = self.registry()?;
+        let repos: Vec<serde_json::Value> = reg
+            .repos
+            .iter()
+            .filter_map(|(name, r)| {
+                let v = r.versions.last()?;
+                Some(serde_json::json!({
+                    "name": name, "v": v.v, "kind": v.kind, "author": v.author,
+                    "devices": v.devices,
+                    "releases": r.releases.len(),
+                    "forked_from": v.forked_from,
+                }))
+            })
+            .collect();
+        Ok(serde_json::json!({ "repos": repos }))
+    }
+
+    pub fn repo_json(&self, name: &str) -> Result<serde_json::Value, String> {
+        let reg = self.registry()?;
+        let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
+        let latest = repo.versions.last().ok_or("バージョンがありません")?;
+        let releases: Vec<serde_json::Value> = repo
+            .releases
+            .iter()
+            .map(|rel| {
+                let verified = reg
+                    .events
+                    .iter()
+                    .filter(|e| e.kind == "verify" && e.repo == name && e.v == rel.v)
+                    .count();
+                serde_json::json!({
+                    "v": rel.v, "digest": rel.digest, "seconds": rel.seconds,
+                    "by": rel.by, "verified": verified,
+                })
+            })
+            .collect();
+        let forks: Vec<serde_json::Value> = reg
+            .repos
+            .iter()
+            .flat_map(|(other, r)| {
+                r.versions.iter().filter_map(move |ver| {
+                    ver.forked_from.as_ref().filter(|o| o.repo == name).map(|o| {
+                        serde_json::json!({ "name": other, "v": ver.v, "from_v": o.v })
+                    })
+                })
+            })
+            .collect();
+        let fork_events =
+            reg.events.iter().filter(|e| e.kind == "fork" && e.repo == name).count();
+        Ok(serde_json::json!({
+            "name": name, "v": latest.v, "kind": latest.kind, "author": latest.author,
+            "entry": latest.entry, "devices": latest.devices,
+            "forked_from": latest.forked_from,
+            "forks": forks, "fork_events": fork_events, "releases": releases,
+        }))
+    }
+
+    /// Latest snapshot's file contents (what the browser player compiles).
+    pub fn snapshot_files(&self, name: &str) -> Result<BTreeMap<String, String>, String> {
+        let reg = self.registry()?;
+        let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
+        let ver = repo.versions.last().ok_or("バージョンがありません")?;
+        let dir = self.root.join("store").join(name).join(format!("v{}", ver.v));
+        let mut out = BTreeMap::new();
+        for rel in ver.files.keys() {
+            out.insert(
+                rel.clone(),
+                std::fs::read_to_string(dir.join(rel)).map_err(|e| e.to_string())?,
+            );
+        }
+        Ok(out)
+    }
+
+    /// Remote fork: record the ledger event and hand back the files plus the
+    /// lineage stamp the client must keep with its copy.
+    pub fn fork_remote(&self, name: &str, by: &str) -> Result<serde_json::Value, String> {
+        let mut reg = self.registry()?;
+        let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
+        let ver = repo.versions.last().ok_or("バージョンがありません")?.clone();
+        let files = self.snapshot_files(name)?;
+        reg.seq += 1;
+        reg.events.push(Event {
+            seq: reg.seq,
+            kind: "fork".into(),
+            repo: name.into(),
+            v: ver.v,
+            by: if by.is_empty() { "anonymous".into() } else { by.into() },
+        });
+        self.save(&reg)?;
+        Ok(serde_json::json!({
+            "origin": Origin { repo: name.into(), v: ver.v },
+            "entry": ver.entry,
+            "files": files,
+        }))
+    }
+
     pub fn list(&self) -> Result<String, String> {
         let reg = self.registry()?;
         if reg.repos.is_empty() {

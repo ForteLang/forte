@@ -1,7 +1,8 @@
 // Local-first project storage on OPFS (Origin Private File System): songs
-// survive reloads and offline use without any server. Chromium-first — Safari
-// needs the worker/SyncAccessHandle path and 7-day-eviction mitigation later
-// (SAD degradation matrix).
+// survive reloads and offline use without any server. Supports nested paths
+// ("devices/warm.forte") so imported libraries keep their import paths.
+// Chromium-first — Safari needs the worker/SyncAccessHandle path and
+// 7-day-eviction mitigation later (SAD degradation matrix).
 
 export class Store {
   async init() {
@@ -12,27 +13,47 @@ export class Store {
     return this;
   }
 
+  async resolve(path, create) {
+    const parts = path.split('/').filter(Boolean);
+    const base = parts.pop();
+    let dir = this.dir;
+    for (const p of parts) {
+      dir = await dir.getDirectoryHandle(p, { create });
+    }
+    return { dir, base };
+  }
+
   async list() {
     const out = [];
-    for await (const [name, handle] of this.dir.entries()) {
-      if (handle.kind === 'file' && name.endsWith('.forte')) out.push(name);
-    }
+    const walk = async (dir, prefix) => {
+      for await (const [name, handle] of dir.entries()) {
+        if (handle.kind === 'file' && name.endsWith('.forte')) {
+          out.push(prefix + name);
+        } else if (handle.kind === 'directory') {
+          await walk(handle, `${prefix}${name}/`);
+        }
+      }
+    };
+    await walk(this.dir, '');
     return out.sort();
   }
 
-  async read(name) {
-    const handle = await this.dir.getFileHandle(name);
+  async read(path) {
+    const { dir, base } = await this.resolve(path, false);
+    const handle = await dir.getFileHandle(base);
     return (await handle.getFile()).text();
   }
 
-  async write(name, text) {
-    const handle = await this.dir.getFileHandle(name, { create: true });
+  async write(path, text) {
+    const { dir, base } = await this.resolve(path, true);
+    const handle = await dir.getFileHandle(base, { create: true });
     const w = await handle.createWritable();
     await w.write(text);
     await w.close();
   }
 
-  async remove(name) {
-    await this.dir.removeEntry(name);
+  async remove(path) {
+    const { dir, base } = await this.resolve(path, false);
+    await dir.removeEntry(base);
   }
 }

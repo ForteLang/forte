@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Forte Hub — 系譜でディグる</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #16181d; color: #d7dae0;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    background: #1e2128; border-bottom: 1px solid #2b2f38; }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: 2px; color: #e8b34c; }
+  header span { font-size: 12px; color: #8a919e; }
+  main { max-width: 860px; margin: 0 auto; padding: 18px 16px; }
+  .repo { border: 1px solid #2b2f38; border-radius: 10px; padding: 12px 16px;
+    margin-bottom: 10px; background: #1a1d23; cursor: pointer; }
+  .repo:hover { border-color: #3a3f4b; }
+  .repo h2 { margin: 0 0 4px; font-size: 15px; }
+  .meta { font-size: 12px; color: #8a919e; }
+  .badge { display: inline-block; font-size: 10px; padding: 2px 8px;
+    border-radius: 99px; border: 1px solid #3a3f4b; margin-left: 6px; color: #8a919e; }
+  .badge.song { color: #7fbf7f; border-color: #3d5c3d; }
+  .badge.verified { color: #16181d; background: #7fbf7f; border-color: #7fbf7f; font-weight: 700; }
+  .badge.failed { color: #16181d; background: #e06c75; border-color: #e06c75; font-weight: 700; }
+  #detail { display: none; }
+  button {
+    background: #2b2f38; color: #d7dae0; border: 1px solid #3a3f4b;
+    border-radius: 6px; padding: 7px 16px; font-size: 13px; cursor: pointer; margin-right: 8px;
+  }
+  button.primary { background: #e8b34c; color: #16181d; border-color: #e8b34c; font-weight: 600; }
+  pre { background: #14161b; border: 1px solid #2b2f38; border-radius: 8px;
+    padding: 12px; font: 12px/1.6 ui-monospace, monospace; overflow-x: auto; }
+  .lineage { font: 12px/1.8 ui-monospace, monospace; color: #a8b0bd; }
+  #status { font-size: 12px; color: #8a919e; margin-left: 8px; font-variant-numeric: tabular-nums; }
+  a { color: #e8b34c; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FORTE HUB</h1>
+  <span>リリースはコードから再現される。だからブラウザがプレイヤーであり監査人。</span>
+</header>
+<main>
+  <div id="list">loading…</div>
+  <div id="detail">
+    <p><a href="#" id="back">← 一覧へ</a></p>
+    <h2 id="d-name"></h2>
+    <div class="lineage" id="d-lineage"></div>
+    <p>
+      <button id="listen" class="primary">▶ Listen</button>
+      <button id="stop">■ Stop</button>
+      <button id="verify">Verify in browser</button>
+      <button id="fork">Fork → エディタへ</button>
+      <span id="status"></span>
+    </p>
+    <div id="d-code"></div>
+  </div>
+</main>
+<script type="module" src="hub.js"></script>
+</body>
+</html>

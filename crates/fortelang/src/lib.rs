@@ -10,6 +10,8 @@ pub mod diag;
 pub mod grid_build;
 #[cfg(not(target_family = "wasm"))]
 pub mod hub;
+#[cfg(not(target_family = "wasm"))]
+pub mod hub_server;
 pub mod lexer;
 pub mod lsp;
 pub mod music;
