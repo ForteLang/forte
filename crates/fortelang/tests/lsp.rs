@@ -54,6 +54,15 @@ impl Lsp {
         self.stdout.read_exact(&mut buf).unwrap();
         serde_json::from_slice(&buf).unwrap()
     }
+    /// Read messages until the response with the given request id arrives.
+    fn read_response(&mut self, id: i64) -> serde_json::Value {
+        loop {
+            let msg = self.read();
+            if msg["id"] == id {
+                return msg;
+            }
+        }
+    }
     /// Read messages until the next publishDiagnostics for `uri`.
     fn diagnostics_for(&mut self, uri: &str) -> Vec<serde_json::Value> {
         loop {
@@ -98,6 +107,47 @@ fn lsp_pushes_and_clears_diagnostics() {
     );
     let diags = lsp.diagnostics_for(uri);
     assert!(diags.is_empty(), "{diags:?}");
+
+    // completion includes builtins, keywords and names from the document
+    let id = lsp.request(
+        "textDocument/completion",
+        serde_json::json!({"textDocument": {"uri": uri}, "position": {"line": 0, "character": 0}}),
+    );
+    let resp = lsp.read_response(id);
+    let labels: Vec<String> = resp["result"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["label"].as_str().unwrap().to_string())
+        .collect();
+    for expected in ["polymer", "prog", "song"] {
+        assert!(labels.contains(&expected.to_string()), "missing {expected}: {labels:?}");
+    }
+
+    // hover documents known words
+    let col = fixed.find("polymer").unwrap() as u64;
+    let id = lsp.request(
+        "textDocument/hover",
+        serde_json::json!({"textDocument": {"uri": uri}, "position": {"line": 0, "character": col}}),
+    );
+    let resp = lsp.read_response(id);
+    assert!(resp["result"]["contents"]["value"].as_str().unwrap().contains("polymer"));
+
+    // formatting returns a whole-document edit for messy input
+    let messy = "song \"X\" {\n      tempo 120bpm\ntrack A { instrument polymer() play beat`x---` at bars(1..1) }\n}";
+    lsp.notify(
+        "textDocument/didChange",
+        serde_json::json!({"textDocument": {"uri": uri, "version": 3},
+                            "contentChanges": [{"text": messy}]}),
+    );
+    let _ = lsp.diagnostics_for(uri);
+    let id = lsp.request(
+        "textDocument/formatting",
+        serde_json::json!({"textDocument": {"uri": uri}, "options": {"tabSize": 2}}),
+    );
+    let resp = lsp.read_response(id);
+    let new_text = resp["result"][0]["newText"].as_str().unwrap();
+    assert!(new_text.contains("\n  tempo 120bpm\n"), "{new_text}");
 
     // clean shutdown
     lsp.request("shutdown", serde_json::Value::Null);

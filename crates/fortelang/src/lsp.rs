@@ -29,6 +29,9 @@ pub fn run() -> i32 {
                         "capabilities": {
                             "textDocumentSync": 1, // full
                             "positionEncoding": "utf-16",
+                            "completionProvider": {},
+                            "hoverProvider": true,
+                            "documentFormattingProvider": true,
                         },
                         "serverInfo": {"name": "forte-lsp", "version": env!("CARGO_PKG_VERSION")},
                     }),
@@ -65,6 +68,39 @@ pub fn run() -> i32 {
                     &mut writer,
                     "textDocument/publishDiagnostics",
                     json!({"uri": uri, "diagnostics": []}),
+                );
+            }
+            "textDocument/formatting" => {
+                let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
+                let result = docs.get(uri).and_then(|text| {
+                    let formatted = crate::fmt::format(text).ok()?;
+                    if formatted == *text {
+                        return Some(Value::Array(vec![]));
+                    }
+                    let lines = text.lines().count() as u64 + 1;
+                    Some(json!([{
+                        "range": {"start": {"line": 0, "character": 0},
+                                   "end": {"line": lines, "character": 0}},
+                        "newText": formatted,
+                    }]))
+                });
+                respond(&mut writer, id, result.unwrap_or(Value::Null));
+            }
+            "textDocument/completion" => {
+                let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
+                let items = docs.get(uri).map(|t| completions(t)).unwrap_or_default();
+                respond(&mut writer, id, json!(items));
+            }
+            "textDocument/hover" => {
+                let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
+                let line = params["position"]["line"].as_u64().unwrap_or(0) as usize;
+                let ch = params["position"]["character"].as_u64().unwrap_or(0) as usize;
+                let doc = docs.get(uri).and_then(|t| hover(t, line, ch));
+                respond(
+                    &mut writer,
+                    id,
+                    doc.map(|md| json!({"contents": {"kind": "markdown", "value": md}}))
+                        .unwrap_or(Value::Null),
                 );
             }
             _ => {
@@ -113,6 +149,92 @@ fn publish(writer: &mut impl Write, uri: &str, text: &str) {
         "textDocument/publishDiagnostics",
         json!({"uri": uri, "diagnostics": diags}),
     );
+}
+
+// ---- completion / hover ------------------------------------------------------
+
+/// (word, hover markdown, completion detail). One table drives both features.
+const DOCS: &[(&str, &str, &str)] = &[
+    ("song", "曲の定義: `song \"名前\" { tempo / meter / key / let / section / track / return }`", "keyword"),
+    ("track", "トラック: `track 名前 { instrument … play … }`", "keyword"),
+    ("return", "リターントラック: `return 名前 { insert reverb(...) }` — `send 名前 0.3` で送る", "keyword"),
+    ("section", "名前付き区間: `section verse = bars(1..8)` → `play x at verse`", "keyword"),
+    ("device", "自作音源: `device 名前 : Instrument { param / node / out }`", "keyword"),
+    ("tempo", "テンポ: `tempo 120bpm`", "keyword"),
+    ("meter", "拍子: `meter 4/4`", "keyword"),
+    ("key", "キー: `key D minor`", "keyword"),
+    ("play", "配置: `play パターン at bars(1..8)` / `at セクション名`", "keyword"),
+    ("audio", "録音テイクの配置: `audio take at bars(2..3)`(要 `import take from \"./t.frec\"`)", "keyword"),
+    ("send", "ポストフェーダーセンド: `send Space 0.35`", "keyword"),
+    ("sampler", "ビルトインサンプラー: `sampler(sample: \"Kick\"|\"Snare\"|\"Hat\")`", "instrument"),
+    ("polymer", "2osc 減算シンセ: wave(sine/saw/square/tri), cutoff, reso, attack, decay, sustain, release, detune, sub, filtenv", "instrument"),
+    ("grid", "モジュラー音源(既定パッチ): `grid()`", "instrument"),
+    ("filter", "マルチモードフィルタ: type(lp/hp/bp/notch), cutoff, reso", "effect"),
+    ("eq", "3 バンド EQ: low, mid, high", "effect"),
+    ("drive", "ディストーション: drive", "effect"),
+    ("delay", "ピンポンディレイ: time, fdbk, mix", "effect"),
+    ("reverb", "FDN リバーブ: size, decay, mix", "effect"),
+    ("chords", "進行をブロックコードで鳴らす: `chords(進行)`", "pattern fn"),
+    ("arp", "アルペジオ: `arp(進行, rate: 0.25, style: \"up|down|updown\")`", "pattern fn"),
+    ("bass", "ルート音ライン: `bass(進行, rate: 0.5)`", "pattern fn"),
+    ("beat", "ステップ列: `beat\\`x--- X-x-\\``(x=ヒット X=アクセント -=休符)", "literal"),
+    ("notes", "ノート列: `notes\\`C4:1/2 [E4 G4]:1 _:1\\``", "literal"),
+    ("prog", "コード進行: `prog\\`Em | C G | D\\``(| が小節)。類似検索の対象になる", "literal"),
+    ("osc", "DSP: オシレータ `osc(shape: \"saw\", freq: note.freq)`", "dsp"),
+    ("lfo", "DSP: LFO `lfo(rate: 0.3, shape: \"sine\")`", "dsp"),
+    ("adsr", "DSP: エンベロープ `adsr(a,d,s,r, gate: note.gate)`", "dsp"),
+    ("svf", "DSP: フィルタ `svf(in:, cutoff:, reso:, mod:)`", "dsp"),
+    ("gain", "DSP: ゲイン `gain(in:, level:, mod:)`", "dsp"),
+    ("mix", "DSP: 2 入力加算 `mix(a:, b:)`", "dsp"),
+];
+
+/// Static vocabulary plus names defined in this document (lets, sections,
+/// devices, returns).
+fn completions(text: &str) -> Vec<Value> {
+    let mut items: Vec<Value> = DOCS
+        .iter()
+        .map(|(w, doc, detail)| {
+            json!({"label": w, "kind": 14, "detail": detail,
+                   "documentation": {"kind": "markdown", "value": doc}})
+        })
+        .collect();
+    if let Ok(file) = crate::parser::parse(text) {
+        for d in &file.devices {
+            items.push(json!({"label": d.name, "kind": 7, "detail": "user device"}));
+        }
+        if let Some(song) = &file.song {
+            for l in &song.lets {
+                items.push(json!({"label": l.name, "kind": 6, "detail": format!("let ({})", l.value.kind)}));
+            }
+            for s in &song.sections {
+                items.push(json!({"label": s.name, "kind": 6,
+                                   "detail": format!("section bars({}..{})", s.bars.0, s.bars.1)}));
+            }
+            for r in &song.returns {
+                items.push(json!({"label": r.name, "kind": 6, "detail": "return"}));
+            }
+        }
+    }
+    items
+}
+
+fn hover(text: &str, line: usize, ch: usize) -> Option<String> {
+    let l = text.lines().nth(line)?;
+    let chars: Vec<char> = l.chars().collect();
+    if ch > chars.len() {
+        return None;
+    }
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut start = ch.min(chars.len().saturating_sub(1));
+    while start > 0 && is_word(chars[start - 1]) {
+        start -= 1;
+    }
+    let mut end = start;
+    while end < chars.len() && is_word(chars[end]) {
+        end += 1;
+    }
+    let word: String = chars[start..end].iter().collect();
+    DOCS.iter().find(|(w, _, _)| *w == word).map(|(w, doc, _)| format!("**{w}** — {doc}"))
 }
 
 // ---- framing ---------------------------------------------------------------

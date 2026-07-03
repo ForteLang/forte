@@ -63,6 +63,27 @@ pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
                     i += 1;
                 }
             }
+            '/' if i + 1 < b.len() && b[i + 1] == '*' => {
+                i += 2;
+                col += 2;
+                loop {
+                    if i >= b.len() {
+                        return Err(Diag::new("E-LEX-005", p, "ブロックコメントが閉じていません(*/ が必要)"));
+                    }
+                    if b[i] == '*' && i + 1 < b.len() && b[i + 1] == '/' {
+                        i += 2;
+                        col += 2;
+                        break;
+                    }
+                    if b[i] == '\n' {
+                        line += 1;
+                        col = 1;
+                    } else {
+                        col += 1;
+                    }
+                    i += 1;
+                }
+            }
             '/' => {
                 out.push(Spanned { tok: Tok::Slash, pos: p });
                 i += 1;

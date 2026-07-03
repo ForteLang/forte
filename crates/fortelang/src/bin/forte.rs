@@ -19,6 +19,37 @@ fn main() -> ExitCode {
                 .cloned();
             build(&args[1], out)
         }
+        Some("fmt") if args.len() >= 2 => {
+            let check = args.iter().any(|a| a == "--check");
+            let path = &args[1];
+            let src = match load(path) {
+                Ok(s) => s,
+                Err(c) => return c,
+            };
+            match fortelang::fmt::format(&src) {
+                Ok(out) if out == src => {
+                    println!("OK: {path} は正規形です");
+                    ExitCode::SUCCESS
+                }
+                Ok(out) if check => {
+                    eprintln!("{path}: 正規形ではありません(forte fmt で整形されます)");
+                    let _ = out;
+                    ExitCode::FAILURE
+                }
+                Ok(out) => {
+                    if let Err(e) = std::fs::write(path, out) {
+                        eprintln!("{path}: 書き込めません: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                    println!("formatted: {path}");
+                    ExitCode::SUCCESS
+                }
+                Err(d) => {
+                    eprintln!("{path}:{d}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("lsp") => ExitCode::from(fortelang::lsp::run() as u8),
         #[cfg(not(target_family = "wasm"))]
         Some("hub") if args.len() >= 2 => hub_cmd(&args[1..]),
@@ -35,6 +66,7 @@ fn main() -> ExitCode {
             eprintln!("usage: forte check <song.forte>");
             eprintln!("       forte build <song.forte> [-o out.wav]");
             eprintln!("       forte play  <song.forte> [--for SECS]");
+            eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte lsp");
             eprintln!("       forte hub publish <file.forte> [--as NAME] [--hub DIR]");
             eprintln!("       forte hub fork <NAME> <DEST-DIR>   [--hub DIR]");

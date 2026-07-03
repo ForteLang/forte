@@ -7,6 +7,7 @@ pub mod ast;
 pub mod audio;
 pub mod compile;
 pub mod diag;
+pub mod fmt;
 pub mod frec;
 pub mod grid_build;
 #[cfg(not(target_family = "wasm"))]
