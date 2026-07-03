@@ -3,3 +3,4 @@
 *.wav
 .DS_Store
 /web/forte.wasm
+*.manifest.json

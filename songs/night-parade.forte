@@ -1,5 +1,6 @@
 // Night Parade — Forte v0 リファレンス曲 3。
-// コード進行(prog)、セクション、send/return、chords/arp/bass を行使する。
+// コード進行(prog)、セクション、send/return、chords/arp/bass、
+// automate/modulate を行使する。
 // 再生: forte play songs/night-parade.forte
 
 song "Night Parade" {
@@ -54,8 +55,9 @@ song "Night Parade" {
     instrument polymer(wave: "tri", cutoff: 0.65, release: 0.2)
     insert delay(time: 0.3, fdbk: 0.35, mix: 0.25)
     send Space 0.3
-    volume 0.45
     pan 0.25
     play arp(theme, rate: 0.25, style: "updown") at main
+    automate volume from 0.1 to 0.5 over main       // 8 小節かけてせり上がる
+    modulate cutoff with lfo(rate: 0.25, amount: 0.3, shape: "tri")  // ゆっくり開閉
   }
 }

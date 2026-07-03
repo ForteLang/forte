@@ -269,6 +269,8 @@ impl Parser {
             pan: None,
             sends: Vec::new(),
             audios: Vec::new(),
+            automations: Vec::new(),
+            modulations: Vec::new(),
         };
         loop {
             match self.peek().clone() {
@@ -319,6 +321,48 @@ impl Parser {
                         if let Some((level, _, _)) = self.number("send レベル") {
                             t.sends.push((dest, level, spos));
                         }
+                    }
+                    "automate" => {
+                        self.bump();
+                        let apos = self.pos();
+                        let target = self.ident("automate 対象(volume)")?;
+                        if !self.keyword("from") {
+                            self.err("E-PARSE-020", "automate は `from A to B over 区間` で書きます");
+                        }
+                        let from = self.number("開始値")?;
+                        if !self.keyword("to") {
+                            self.err("E-PARSE-020", "`to` が必要です");
+                        }
+                        let to = self.number("終了値")?;
+                        if !self.keyword("over") {
+                            self.err("E-PARSE-020", "`over bars(a..b)` か `over セクション名` が必要です");
+                        }
+                        let at = if self.keyword("bars") {
+                            self.expect(Tok::LParen, "`(`");
+                            let a = self.number("開始小節")?;
+                            self.expect(Tok::DotDot, "`..`");
+                            let b = self.number("終了小節")?;
+                            self.expect(Tok::RParen, "`)`");
+                            AtRef::Bars(a.0 as u32, b.0 as u32)
+                        } else {
+                            let spos = self.pos();
+                            let name = self.ident("区間(bars(a..b) かセクション名)")?;
+                            AtRef::Section(name, spos)
+                        };
+                        t.automations.push(AutomateAst { target, from: from.0, to: to.0, at, pos: apos });
+                    }
+                    "modulate" => {
+                        self.bump();
+                        let mpos = self.pos();
+                        let param = self.ident("modulate 対象のパラメータ名")?;
+                        if !self.keyword("with") {
+                            self.err("E-PARSE-021", "modulate は `with lfo(rate: …, amount: …)` で書きます");
+                        }
+                        let call = self.call()?;
+                        if call.name != "lfo" {
+                            self.err("E-PARSE-021", format!("v1 の modulate は lfo のみです(見つかったのは {})", call.name));
+                        }
+                        t.modulations.push(ModulateAst { param, args: call.args, pos: mpos });
                     }
                     "volume" => {
                         self.bump();

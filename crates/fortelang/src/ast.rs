@@ -125,6 +125,26 @@ pub struct TrackAst {
     pub sends: Vec<(String, f64, Pos)>,
     /// `audio take at bars(2..3)` — recorded assets placed on the timeline.
     pub audios: Vec<AudioPlayAst>,
+    /// `automate volume from 0.2 to 0.8 over bars(1..8)`
+    pub automations: Vec<AutomateAst>,
+    /// `modulate cutoff with lfo(rate: 0.3, amount: 0.4)`
+    pub modulations: Vec<ModulateAst>,
+}
+
+#[derive(Clone, Debug)]
+pub struct AutomateAst {
+    pub target: String,
+    pub from: f64,
+    pub to: f64,
+    pub at: AtRef,
+    pub pos: Pos,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModulateAst {
+    pub param: String,
+    pub args: Vec<(String, Arg)>,
+    pub pos: Pos,
 }
 
 #[derive(Clone, Debug)]

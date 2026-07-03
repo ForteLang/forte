@@ -108,7 +108,7 @@ async function tryMonaco(initial) {
       tokenizer: {
         root: [
           [/\/\/.*/, 'comment'],
-          [/\b(song|track|return|section|let|instrument|insert|play|at|send|volume|pan|tempo|meter|key|bars)\b/, 'keyword'],
+          [/\b(song|track|return|section|let|instrument|insert|play|at|send|volume|pan|tempo|meter|key|bars|automate|modulate|from|to|over|with)\b/, 'keyword'],
           [/\b(chords|arp|bass|sampler|polymer|grid|filter|eq|drive|delay|reverb|beat|notes|prog)\b/, 'type'],
           [/"[^"]*"/, 'string'],
           [/`[^`]*`/, 'string.backtick'],

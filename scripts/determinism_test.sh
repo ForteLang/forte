@@ -2,7 +2,8 @@
 # Determinism gate (Forte rule D-11 / roadmap Phase 0.4): the same sources must
 # render bit-identical audio on native x86_64 and wasm32-wasip1.
 #   Gate 1: dawcore demo project (engine-level)
-#   Gate 2: forte build of the reference song (language-level, end to end)
+#   Gate 2: forte build of reference songs (language-level, end to end;
+#           night-parade exercises prog/sends/automate/modulate)
 # Needs: rustup target wasm32-wasip1, Node >= 20.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -27,21 +28,23 @@ else
   fail=1
 fi
 
-echo "== gate 2: forte build (songs/first-light.forte) =="
-cargo run --release -q -p fortelang --bin forte -- \
-  build songs/first-light.forte -o "$SCRATCH/native.wav" > "$SCRATCH/forte-native.txt"
 cargo build --release -q -p fortelang --bin forte --target wasm32-wasip1
-node --no-warnings scripts/run-wasi.mjs \
-  target/wasm32-wasip1/release/forte.wasm \
-  "{\"/proj\":\".\",\"/scratch\":\"$SCRATCH\"}" \
-  '["forte","build","/proj/songs/first-light.forte","-o","/scratch/wasm.wav"]' > "$SCRATCH/forte-wasm.txt"
-n=$(grep 'digest' "$SCRATCH/forte-native.txt" | awk '{print $3}')
-w=$(grep 'digest' "$SCRATCH/forte-wasm.txt" | awk '{print $3}')
-if [ "$n" = "$w" ]; then
-  echo "   OK: forte build bit-identical ($n)"
-else
-  echo "   FAIL: native=$n wasm=$w" >&2
-  fail=1
-fi
+for song in first-light night-parade; do
+  echo "== gate 2: forte build (songs/$song.forte) =="
+  cargo run --release -q -p fortelang --bin forte -- \
+    build "songs/$song.forte" -o "$SCRATCH/native.wav" > "$SCRATCH/forte-native.txt"
+  node --no-warnings scripts/run-wasi.mjs \
+    target/wasm32-wasip1/release/forte.wasm \
+    "{\"/proj\":\".\",\"/scratch\":\"$SCRATCH\"}" \
+    "[\"forte\",\"build\",\"/proj/songs/$song.forte\",\"-o\",\"/scratch/wasm.wav\"]" > "$SCRATCH/forte-wasm.txt"
+  n=$(grep 'digest' "$SCRATCH/forte-native.txt" | awk '{print $3}')
+  w=$(grep 'digest' "$SCRATCH/forte-wasm.txt" | awk '{print $3}')
+  if [ "$n" = "$w" ]; then
+    echo "   OK: forte build bit-identical ($n)"
+  else
+    echo "   FAIL: native=$n wasm=$w" >&2
+    fail=1
+  fi
+done
 
 exit $fail

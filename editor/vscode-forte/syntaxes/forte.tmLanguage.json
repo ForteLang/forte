@@ -40,7 +40,7 @@
       "patterns": [
         {
           "name": "keyword.control.forte",
-          "match": "\\b(song|track|return|section|let|instrument|insert|play|at|send|volume|pan|tempo|meter|key|bars)\\b"
+          "match": "\\b(song|track|return|section|let|instrument|insert|play|at|send|volume|pan|tempo|meter|key|bars|automate|modulate|from|to|over|with)\\b"
         }
       ]
     },

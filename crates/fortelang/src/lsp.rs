@@ -166,6 +166,8 @@ const DOCS: &[(&str, &str, &str)] = &[
     ("play", "配置: `play パターン at bars(1..8)` / `at セクション名`", "keyword"),
     ("audio", "録音テイクの配置: `audio take at bars(2..3)`(要 `import take from \"./t.frec\"`)", "keyword"),
     ("send", "ポストフェーダーセンド: `send Space 0.35`", "keyword"),
+    ("automate", "ボリュームオートメーション: `automate volume from 0.2 to 0.8 over bars(1..8)`(over にセクション名も可)", "keyword"),
+    ("modulate", "LFO モジュレーション: `modulate cutoff with lfo(rate: 0.3, amount: 0.4, shape: \"sine\")`", "keyword"),
     ("sampler", "ビルトインサンプラー: `sampler(sample: \"Kick\"|\"Snare\"|\"Hat\")`", "instrument"),
     ("polymer", "2osc 減算シンセ: wave(sine/saw/square/tri), cutoff, reso, attack, decay, sustain, release, detune, sub, filtenv", "instrument"),
     ("grid", "モジュラー音源(既定パッチ): `grid()`", "instrument"),

@@ -9,8 +9,8 @@ use crate::diag::{Diag, Pos};
 use crate::grid_build;
 use crate::music;
 use dawcore::model::{
-    ArrangerClip, AudioClip, Clip, Device, DeviceKind, KeySignature, Note, Project, SampleSource,
-    Scale, Track, TrackKind, TRACK_COLORS,
+    ArrangerClip, AudioClip, AutomationPoint, Clip, Device, DeviceKind, KeySignature, ModKind,
+    ModRoute, Modulator, Note, Project, SampleSource, Scale, Track, TrackKind, TRACK_COLORS,
 };
 
 pub fn compile(
@@ -144,6 +144,64 @@ pub fn compile(
                 diags.push(Diag::new("E-TYPE-003", pos, format!("pan {v} は -1..1 の範囲外です")));
             } else {
                 track.pan = v as f32;
+            }
+        }
+
+        // automation lanes (v1: volume)
+        for auto in &tast.automations {
+            if auto.target != "volume" {
+                diags.push(Diag::new(
+                    "E-AUTO-001",
+                    auto.pos,
+                    format!("automate できる対象は volume です(見つかったのは {})", auto.target),
+                ));
+                continue;
+            }
+            if !(0.0..=1.0).contains(&auto.from) || !(0.0..=1.0).contains(&auto.to) {
+                diags.push(Diag::new(
+                    "E-TYPE-002",
+                    auto.pos,
+                    format!("automate volume の値 {} → {} は 0..1 の範囲外です", auto.from, auto.to),
+                ));
+                continue;
+            }
+            let (a, b) = match &auto.at {
+                AtRef::Bars(a, b) => (*a, *b),
+                AtRef::Section(name, pos) => match sections.get(name.as_str()) {
+                    Some(r) => *r,
+                    None => {
+                        diags.push(Diag::new("E-MOD-003", *pos, format!("section '{name}' が定義されていません")));
+                        continue;
+                    }
+                },
+            };
+            if a == 0 || b < a {
+                diags.push(Diag::new(
+                    "E-TIME-001",
+                    auto.pos,
+                    format!("bars({a}..{b}) が不正です(小節は 1 始まり、開始 ≤ 終了)"),
+                ));
+                continue;
+            }
+            // ramp across the range; the last point holds so the value stays put
+            track.volume_automation.push(AutomationPoint {
+                beat: (a - 1) as f64 * beats_per_bar,
+                value: auto.from as f32,
+                hold: false,
+            });
+            track.volume_automation.push(AutomationPoint {
+                beat: b as f64 * beats_per_bar,
+                value: auto.to as f32,
+                hold: true,
+            });
+        }
+        track.volume_automation.sort_by(|x, y| x.beat.total_cmp(&y.beat));
+
+        // LFO modulation of instrument parameters
+        for m in &tast.modulations {
+            match build_lfo(m, &track) {
+                Ok(lfo) => track.devices[0].modulators.push(lfo),
+                Err(d) => diags.push(d),
             }
         }
 
@@ -522,6 +580,81 @@ fn build_instrument(
             ),
         )),
     }
+}
+
+/// Lower `modulate cutoff with lfo(rate: 0.3, amount: 0.4)` to an engine
+/// [`Modulator`] routed at the track's instrument (device 0).
+fn build_lfo(m: &ModulateAst, track: &Track) -> Result<Modulator, Diag> {
+    let Some(dev) = track.devices.first() else {
+        return Err(Diag::new("E-LFO-002", m.pos, "modulate には instrument が必要です"));
+    };
+    let params = dev.kind.params();
+    if params.is_empty() {
+        return Err(Diag::new(
+            "E-LFO-002",
+            m.pos,
+            "この instrument は modulate に対応していません(名前付きパラメータを持つのは polymer / sampler です)",
+        ));
+    }
+    let Some(idx) = params.iter().position(|p| p.eq_ignore_ascii_case(&m.param)) else {
+        return Err(Diag::new(
+            "E-LFO-001",
+            m.pos,
+            format!(
+                "パラメータ '{}' はありません(使えるもの: {})",
+                m.param,
+                params.join(", ").to_ascii_lowercase()
+            ),
+        ));
+    };
+    let mut lfo = Modulator::new(ModKind::Lfo);
+    let mut amount: Option<f32> = None;
+    for (key, arg) in &m.args {
+        match (key.as_str(), arg) {
+            ("rate", Arg::Num(n, pos)) => {
+                if !(0.0..=1.0).contains(n) {
+                    return Err(Diag::new("E-TYPE-002", *pos, format!("lfo.rate = {n} は 0..1 の範囲外です")));
+                }
+                lfo.rate = *n as f32;
+            }
+            ("amount", Arg::Num(n, pos)) => {
+                if !(-1.0..=1.0).contains(n) {
+                    return Err(Diag::new("E-TYPE-003", *pos, format!("lfo.amount = {n} は -1..1 の範囲外です")));
+                }
+                amount = Some(*n as f32);
+            }
+            ("shape", Arg::Str(s, pos)) => {
+                lfo.shape = match s.to_ascii_lowercase().as_str() {
+                    "sine" => 0,
+                    "tri" => 1,
+                    "saw" => 2,
+                    "square" => 3,
+                    other => {
+                        return Err(Diag::new(
+                            "E-TYPE-005",
+                            *pos,
+                            format!("lfo.shape に '{other}' は使えません(sine / tri / saw / square)"),
+                        ))
+                    }
+                };
+            }
+            (other, arg) => {
+                let pos = match arg {
+                    Arg::Num(_, p) | Arg::Str(_, p) => *p,
+                };
+                return Err(Diag::new(
+                    "E-LFO-003",
+                    pos,
+                    format!("lfo に '{other}' という引数はありません(rate, amount, shape)"),
+                ));
+            }
+        }
+    }
+    let Some(amount) = amount else {
+        return Err(Diag::new("E-LFO-003", m.pos, "lfo には amount(-1..1)が必要です"));
+    };
+    lfo.routes.push(ModRoute { param: idx, amount });
+    Ok(lfo)
 }
 
 fn build_effect(call: &Call) -> Result<Device, Diag> {

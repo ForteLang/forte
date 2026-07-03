@@ -130,11 +130,17 @@ song "名前" {
     send Space 0.35                        // ポストフェーダーセンド
     play chords(theme) at verse            // ブロックコード
     play arp(theme, rate: 0.25, style: "updown") at hook  // アルペジオ
+
+    // ---- 音を時間で動かす ----
+    automate volume from 0.2 to 0.8 over verse   // フェードイン(over bars(1..8) も可)
+    modulate cutoff with lfo(rate: 0.4, amount: 0.5, shape: "tri")  // ワブル
   }
 }
 ```
 
 - 小節は **1 始まり・両端含む**。パターンが区間より短ければループします。
+- `automate volume` は区間の頭から末尾への線形ランプ。`modulate` は
+  polymer / sampler の名前付きパラメータに LFO を掛けます(amount は -1..1)。
 - ノブ系の数値はぜんぶ **0..1 に正規化**(volume も cutoff も)。pan だけ -1..1。
 - ビルトイン音源: `sampler(sample: "Kick"/"Snare"/"Hat")`, `polymer(…)`, `grid()`。
   エフェクト: `filter, eq, drive, delay, reverb`。パラメータ名を間違えると

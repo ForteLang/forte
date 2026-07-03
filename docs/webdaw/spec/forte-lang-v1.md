@@ -50,7 +50,10 @@ trackItem = "instrument" call | "insert" call
           | "play" patternExpr atRef
           | "audio" ident atRef
           | "send" ident num
+          | "automate" ident "from" num "to" num "over" overRef
+          | "modulate" ident "with" call
           | "volume" num | "pan" num ;
+overRef   = "bars" "(" num ".." num ")" | ident ;                   (* セクション名 *)
 return    = "return" ident "{" { "insert" call | "volume" num | "pan" num } "}" ;
 call      = ident [ "(" [ ident ":" ( num | string ) { "," … } ] ")" ] ;
 patternExpr = musicLit | ident
@@ -148,6 +151,22 @@ send レベル 0..1。
 - 名前がない場合はライブラリの実エクスポートを列挙(E-MOD-006)。
 - 環境: CLI/LSP=ファイルシステム、ブラウザ=エディタのファイルマップ(OPFS+同梱)。
 
+### 4.9 オートメーションとモジュレーション
+
+- `automate volume from 0.2 to 0.8 over bars(1..8)` — 区間の頭から末尾へ
+  線形ランプ(`over` にはセクション名も可)。v1 の対象は **volume のみ**
+  (E-AUTO-001)、値は 0..1(E-TYPE-002)。オートメーションレーンがある
+  トラックではフェーダー値はレーンに置き換わる: ランプ開始前は `from`、
+  終了後は `to` を保持する。複数の `automate` はひとつのレーンに拍順で
+  マージされる。
+- `modulate cutoff with lfo(rate: 0.4, amount: 0.5, shape: "tri")` —
+  instrument のパラメータを LFO で揺らす。対象は名前付きパラメータを持つ
+  instrument(polymer / sampler。パラメータ名は大文字小文字を区別しない)。
+  未知のパラメータは使えるものを列挙して E-LFO-001、grid / 自作 device は
+  E-LFO-002。引数: `rate` 0..1(省略時 0.3)、`amount` -1..1(**必須**、
+  E-LFO-003)、`shape` sine / tri / saw / square(省略時 sine)。v1 の
+  モジュレータは `lfo` のみ(E-PARSE-021)。
+
 ## 5. 決定論の契約
 
 1. 同一ソース+同一アセット → **ビット同一のビルド**(native x86_64 / wasm32-wasip1 /
@@ -170,7 +189,7 @@ send レベル 0..1。
 | 系列 | 意味 |
 | --- | --- |
 | E-LEX-001..005 | 字句(未閉の文字列/リテラル/ブロックコメント、不正文字) |
-| E-PARSE-001..019 | 構文(各構文要素の期待と実際) |
+| E-PARSE-001..021 | 構文(各構文要素の期待と実際、automate/modulate の形) |
 | E-TYPE-001..005 | 値(単位、0..1 範囲、文字列/数値の取り違え、選択肢外) |
 | E-TIME-001..004 | 時間(小節範囲、rate、tempo、拍子) |
 | E-SONG-001..004 | 曲構造(tempo 必須、キー、track なし、song なし) |
@@ -180,6 +199,8 @@ send レベル 0..1。
 | E-PAT-001..003 | パターン関数(prog 必須、引数、入れ子) |
 | E-BEAT / E-NOTE / E-PROG | 各リテラルの内容 |
 | E-PROV-001..003 | 録音来歴(必須ブロック、.frec 限定、未 import) |
+| E-AUTO-001 | automate(v1 の対象は volume のみ) |
+| E-LFO-001..003 | modulate(パラメータ名、非対応 instrument、lfo 引数) |
 | E-FMT-001 | フォーマッタの安全弁 |
 
 メッセージは音楽家の語彙・日本語・位置付き。「使えるもの」を必ず列挙する。
@@ -188,7 +209,9 @@ send レベル 0..1。
 
 - 実装済みで v0 から確定: send/return 構文(DECISION-S1)、prog クオリティ集合、
   デバイス DSL はノードグラフ形式(任意式 `process` は将来)。
-- 未実装(v2 候補): ユーザー定義ジェネリクス、`automate`(オートメーション)、
+- 実装済み(v1.1): `automate volume`(§4.9)、`modulate … with lfo`(§4.9)。
+- 未実装(v2 候補): ユーザー定義ジェネリクス、automate の volume 以外の対象
+  (pan / デバイスパラメータ)、lfo 以外のモジュレータ(steps / random)、
   3 連符 beat リテラル(DECISION-S2)、セクション反復の一級表現(DECISION-S3)、
   単位型の完全な検査(Hz/dB/ms)、`route` 明示ルーティング、エフェクトの
   device DSL(現状 Instrument のみ)、ed25519 署名の実検証。

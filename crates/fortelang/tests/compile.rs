@@ -219,3 +219,105 @@ fn chords_and_fraction_durations_parse() {
     assert_eq!(clip.length, 2.0);
     assert_eq!(clip.notes[3].start, 1.0); // after chord (0.5) + rest (0.5)
 }
+
+// ---------------------------------------------------------------------------
+// automate / modulate
+// ---------------------------------------------------------------------------
+
+/// Render the arrangement (no tail) and return the RMS of each half — enough
+/// to hear a volume ramp without inspecting samples by hand.
+fn half_rms(p: &dawcore::model::Project) -> (f64, f64) {
+    let sr = 48_000.0f32;
+    let (mut engine, mut handle) = dawcore::engine::Engine::new(sr);
+    dawcore::sync::full_sync(&mut handle, p);
+    handle.send(dawcore::command::Command::SetLoop { enabled: false, start: 0.0, end: f64::MAX / 4.0 });
+    handle.send(dawcore::command::Command::SetLaunchQuant(0.0));
+    handle.send(dawcore::command::Command::Play);
+    let beats = dawcore::bounce::arrangement_len(p);
+    let total = ((beats * 60.0 / p.tempo) * sr as f64) as usize;
+    let mut bl = vec![0.0f32; 512];
+    let mut br = vec![0.0f32; 512];
+    let (mut sq, mut done) = ([0.0f64; 2], 0usize);
+    while done < total {
+        let n = 512.min(total - done);
+        engine.process(&mut bl, &mut br, n);
+        for i in 0..n {
+            let half = if done + i < total / 2 { 0 } else { 1 };
+            sq[half] += (bl[i] as f64).powi(2) + (br[i] as f64).powi(2);
+        }
+        done += n;
+    }
+    let half_n = (total as f64).max(1.0); // both halves ~equal length
+    ((sq[0] / half_n).sqrt(), (sq[1] / half_n).sqrt())
+}
+
+#[test]
+fn automate_volume_ramps_audibly() {
+    let src = r#"song "X" {
+        tempo 120bpm
+        section all = bars(1..8)
+        track A {
+            instrument polymer(wave: "saw")
+            play notes`C3:4` at all
+            automate volume from 0.05 to 0.9 over all
+        }
+    }"#;
+    let p = fortelang::compile_str(src).unwrap();
+    let lane = &p.tracks[0].volume_automation;
+    assert_eq!(lane.len(), 2);
+    assert_eq!((lane[0].beat, lane[0].value), (0.0, 0.05));
+    assert_eq!((lane[1].beat, lane[1].value), (32.0, 0.9));
+    let (first, second) = half_rms(&p);
+    assert!(
+        second > first * 2.0,
+        "ramp 0.05 → 0.9 must get audibly louder (rms {first:.4} → {second:.4})"
+    );
+}
+
+#[test]
+fn modulate_routes_an_lfo_at_the_instrument() {
+    let with = r#"song "X" {
+        tempo 120bpm
+        track A {
+            instrument polymer(wave: "saw", cutoff: 0.4)
+            play notes`C3:4` at bars(1..4)
+            modulate cutoff with lfo(rate: 0.4, amount: 0.5, shape: "tri")
+        }
+    }"#;
+    let p = fortelang::compile_str(with).unwrap();
+    let mods = &p.tracks[0].devices[0].modulators;
+    assert_eq!(mods.len(), 1);
+    assert_eq!(mods[0].kind, dawcore::model::ModKind::Lfo);
+    assert_eq!(mods[0].shape, 1); // tri
+    assert_eq!(mods[0].rate, 0.4);
+    assert_eq!(mods[0].routes.len(), 1);
+    assert_eq!(mods[0].routes[0].param, 1); // Polymer "Cutoff"
+    assert_eq!(mods[0].routes[0].amount, 0.5);
+    // the LFO must change the rendered audio
+    let without = with.replace("modulate cutoff with lfo(rate: 0.4, amount: 0.5, shape: \"tri\")", "");
+    let q = fortelang::compile_str(&without).unwrap();
+    assert_ne!(
+        fortelang::render_digest(&p, 2.0).f32_digest,
+        fortelang::render_digest(&q, 2.0).f32_digest,
+        "modulate must be audible in the build digest"
+    );
+}
+
+#[test]
+fn automate_and_modulate_errors_are_reported() {
+    // only volume can be automated in v1
+    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) automate pan from 0.0 to 1.0 over bars(1..2) } }"#;
+    assert!(err_codes(src).contains(&"E-AUTO-001"));
+    // unknown modulate parameter lists what exists
+    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutof with lfo(rate: 0.3, amount: 0.4) } }"#;
+    assert!(err_codes(src).contains(&"E-LFO-001"));
+    // grid instruments expose no named params
+    let src = r#"song "X" { tempo 120bpm track A { instrument grid() play beat`x---` at bars(1..2) modulate cutoff with lfo(rate: 0.3, amount: 0.4) } }"#;
+    assert!(err_codes(src).contains(&"E-LFO-002"));
+    // amount is required
+    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutoff with lfo(rate: 0.3) } }"#;
+    assert!(err_codes(src).contains(&"E-LFO-003"));
+    // only lfo modulators exist in v1
+    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutoff with random(amount: 0.4) } }"#;
+    assert!(err_codes(src).contains(&"E-PARSE-021"));
+}
