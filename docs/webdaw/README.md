@@ -23,7 +23,8 @@ IEC 62304 のプロセス規律(要求→アーキテクチャ→詳細設計の
   無音バックエンドで走行)。
 - **`songs/`** — リファレンス曲 4 曲(`first-light` 4/4、`slow-circles` 6/8、
   `night-parade`: prog/section/send-return、`handmade`: **`device` 構文で音源を
-  コード定義** — シンセ自体が fork できるコードであることの最小実証)。
+  コード定義し、`songs/devices/warm.forte` ライブラリから `import`** —
+  シンセが fork できるコードであり、モジュールとして流通することの最小実証)。
 - **`editor/vscode-forte`** — VSCode 拡張: シンタックスハイライト、`forte lsp` に
   よるリアルタイム診断、Play(ホットリロード)/Build/Stop コマンド。
 - **`web/` + `crates/forteweb`** — ブラウザエディタのプロトタイプ:

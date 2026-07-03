@@ -68,11 +68,16 @@ fn third_reference_song_uses_prog_sections_and_sends() {
     assert!(info.rms > 0.01, "render must contain signal (rms {})", info.rms);
 }
 
-const REFERENCE4: &str = include_str!("../../../songs/handmade.forte");
+fn compile_song_file(rel: &str) -> Result<dawcore::model::Project, Vec<fortelang::diag::Diag>> {
+    let path = format!("{}/../../songs/{rel}", env!("CARGO_MANIFEST_DIR"));
+    let src = std::fs::read_to_string(&path).expect("read song");
+    let base = std::path::Path::new(&path).parent().unwrap().to_string_lossy().into_owned();
+    fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base)
+}
 
 #[test]
 fn user_defined_devices_compile_to_grid_graphs() {
-    let p = fortelang::compile_str(REFERENCE4).expect("handmade must compile");
+    let p = compile_song_file("handmade.forte").expect("handmade must compile");
     let lead = p.tracks.iter().find(|t| t.name == "Lead").unwrap();
     let dev = &lead.devices[0];
     assert_eq!(dev.kind, dawcore::model::DeviceKind::PolyGrid);
@@ -91,6 +96,34 @@ fn user_defined_devices_compile_to_grid_graphs() {
     // and it makes sound
     let info = fortelang::render_digest(&p, 4.0);
     assert!(info.rms > 0.01, "custom devices must produce signal (rms {})", info.rms);
+}
+
+#[test]
+fn import_resolution_and_errors() {
+    // a missing name in an existing library
+    let path = format!("{}/../../songs", env!("CARGO_MANIFEST_DIR"));
+    let src = r#"import { Nope } from "./devices/warm.forte"
+song "S" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..1) } }"#;
+    let err = fortelang::compile_with_loader(src, &fortelang::FsLoader, &path).err().expect("expected errors");
+    assert!(err.iter().any(|d| d.code == "E-MOD-006"), "{err:?}");
+    assert!(err[0].message.contains("WarmLead"), "should list available devices: {}", err[0].message);
+
+    // unreadable path
+    let src2 = r#"import { X } from "./nowhere.forte"
+song "S" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..1) } }"#;
+    let err2 = fortelang::compile_with_loader(src2, &fortelang::FsLoader, &path).err().expect("expected errors");
+    assert!(err2.iter().any(|d| d.code == "E-MOD-005"), "{err2:?}");
+
+    // browser environment (NoLoader): imports are a polite error
+    let err3 = fortelang::compile_str(src2).err().expect("expected errors");
+    assert!(err3.iter().any(|d| d.code == "E-MOD-005"));
+
+    // a device library validates standalone
+    let lib = std::fs::read_to_string(format!("{path}/devices/warm.forte")).unwrap();
+    match fortelang::check_with_loader(&lib, &fortelang::FsLoader, &path).unwrap() {
+        fortelang::Checked::DeviceLibrary { devices } => assert_eq!(devices, 2),
+        _ => panic!("expected device library"),
+    }
 }
 
 #[test]

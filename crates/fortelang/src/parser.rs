@@ -21,17 +21,33 @@ use crate::lexer::{lex, Spanned, Tok};
 pub fn parse(src: &str) -> Result<FileAst, Vec<Diag>> {
     let toks = lex(src).map_err(|d| vec![d])?;
     let mut p = Parser { toks, i: 0, diags: Vec::new() };
+    let mut imports = Vec::new();
     let mut devices = Vec::new();
-    while matches!(p.peek(), Tok::Ident(s) if s == "device") {
-        if let Some(d) = p.device() {
-            devices.push(d);
-        } else {
-            break;
+    loop {
+        match p.peek().clone() {
+            Tok::Ident(s) if s == "import" => {
+                if let Some(im) = p.import() {
+                    imports.push(im);
+                } else {
+                    break;
+                }
+            }
+            Tok::Ident(s) if s == "device" => {
+                if let Some(d) = p.device() {
+                    devices.push(d);
+                } else {
+                    break;
+                }
+            }
+            _ => break,
         }
     }
-    match p.song() {
-        Some(song) if p.diags.is_empty() => Ok(FileAst { devices, song }),
-        _ => Err(p.diags),
+    // a file may be a pure device library (no song)
+    let song = if *p.peek() == Tok::Eof { None } else { p.song() };
+    if p.diags.is_empty() {
+        Ok(FileAst { imports, devices, song })
+    } else {
+        Err(p.diags)
     }
 }
 
@@ -335,6 +351,44 @@ impl Parser {
             }
         }
         Some(t)
+    }
+
+    /// `import { A, B } from "./path.forte"`
+    fn import(&mut self) -> Option<ImportAst> {
+        let pos = self.pos();
+        self.bump(); // "import"
+        self.expect(Tok::LBrace, "`{`(import { 名前, … } from \"…\")");
+        let mut names = Vec::new();
+        loop {
+            match self.peek().clone() {
+                Tok::RBrace => {
+                    self.bump();
+                    break;
+                }
+                Tok::Ident(n) => {
+                    self.bump();
+                    names.push(n);
+                    if *self.peek() == Tok::Comma {
+                        self.bump();
+                    }
+                }
+                _ => {
+                    self.err("E-PARSE-019", "import する名前が必要です");
+                    return None;
+                }
+            }
+        }
+        if !self.keyword("from") {
+            self.err("E-PARSE-019", "import には from \"パス\" が必要です");
+        }
+        let path = if let Tok::Str(s) = self.peek().clone() {
+            self.bump();
+            s
+        } else {
+            self.err("E-PARSE-019", "import 元のパス(文字列)が必要です");
+            return None;
+        };
+        Some(ImportAst { names, path, pos })
     }
 
     /// `device Name : Instrument { param … / node … / out … }`

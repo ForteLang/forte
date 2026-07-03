@@ -16,7 +16,7 @@ Status: Draft v0.1 / 2026-07-02
 
 | # | 成果物 | 対応要求 |
 | --- | --- | --- |
-| 0.1 | Forte lang 仕様書 v0(構文・型・決定論規約)+パーサ/型検査 — **🔶 v0 スライス実装済(crates/fortelang: lexer/parser/検査、診断コード付き)** | SRS-LANG-001..006 |
+| 0.1 | Forte lang 仕様書 v0(構文・型・決定論規約)+パーサ/型検査 — **🔶 v0 スライス実装済(crates/fortelang: lexer/parser/検査、診断コード付き)。ローカル `import { X } from "./lib.forte"`(循環検出・再帰解決・ライブラリ単体検証)も実装済** | SRS-LANG-001..006 |
 | 0.2 | forte-core: dawcore の engine/dsp/bounce をレンダーグラフ化して移植(単スレッド) — 🔶 v0 は dawcore を直接ターゲットにコンパイル(グラフ IR は次段) | SRS-CORE-001/003/005 |
 | 0.3 | `forte build`(WAV+build.manifest.json)と `forte play`(CLI 再生) — **✅ `forte check/build/play` 実装済。play はファイル監視ホットリロード付き(再生を止めずに再コンパイル反映、エラー時は直前版を維持)** | SRS-BLD-001/002 |
 | 0.4 | **決定論 CI**: native/wasm の出力ハッシュ一致ゲート — **✅ スパイク成功(07-determinism-spike.md)。`scripts/determinism_test.sh` がゲートの原型** | SYS-ENG-001 |

@@ -1,27 +1,9 @@
 // Handmade — Forte v0 リファレンス曲 4。
-// 音源そのものをコードで定義する(device 構文 → ボイス毎ノードグラフに展開)。
-// これが「プラグイン = import できるコード」というホワイトボックス原則の最小形。
+// 音源はコードであり、ライブラリとして分割して import できる。
+// (エコシステムでは import 元が fork 系譜として記録される — 02-system-requirements.md)
 // 再生: cargo run -p fortelang --bin forte -- play songs/handmade.forte
 
-device WarmLead : Instrument {
-  param cutoff = 0.6 in 0.0..1.0
-  param vib    = 0.25
-
-  node o    = osc(shape: "saw")                       // freq は既定で note.freq
-  node env  = adsr(a: 0.03, d: 0.25, s: 0.6, r: 0.3)  // gate は既定で note.gate
-  node wob  = lfo(rate: vib, shape: "sine")
-  node f    = svf(in: o, cutoff: cutoff, reso: 0.3, mod: wob)
-  out gain(in: f, mod: env, level: 0.9)
-}
-
-device SubBass : Instrument {
-  param drivein = 0.7
-
-  node o   = osc(shape: "square")
-  node env = adsr(a: 0.01, d: 0.2, s: 0.7, r: 0.15)
-  node f   = svf(in: o, cutoff: 0.25, reso: 0.15)
-  out gain(in: f, mod: env, level: drivein)
-}
+import { WarmLead, SubBass } from "./devices/warm.forte"
 
 song "Handmade" {
   tempo 100bpm

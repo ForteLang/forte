@@ -79,7 +79,16 @@ pub fn run() -> i32 {
 }
 
 fn publish(writer: &mut impl Write, uri: &str, text: &str) {
-    let diags: Vec<Value> = match crate::compile_str(text) {
+    // resolve imports relative to the document when it lives on disk
+    let base_dir = uri
+        .strip_prefix("file://")
+        .and_then(|p| std::path::Path::new(p).parent())
+        .map(|p| p.to_string_lossy().into_owned());
+    let result = match &base_dir {
+        Some(dir) => crate::check_with_loader(text, &crate::FsLoader, dir),
+        None => crate::check_with_loader(text, &crate::NoLoader, ""),
+    };
+    let diags: Vec<Value> = match result {
         Ok(_) => Vec::new(),
         Err(ds) => ds
             .iter()

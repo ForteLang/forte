@@ -46,19 +46,30 @@ fn load(path: &str) -> Result<String, ExitCode> {
     })
 }
 
+fn base_dir(path: &str) -> String {
+    PathBuf::from(path)
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
 fn check(path: &str) -> ExitCode {
     let src = match load(path) {
         Ok(s) => s,
         Err(c) => return c,
     };
-    match fortelang::compile_str(&src) {
-        Ok(p) => {
+    match fortelang::check_with_loader(&src, &fortelang::FsLoader, &base_dir(path)) {
+        Ok(fortelang::Checked::Song(p)) => {
             println!(
                 "OK: song をコンパイルしました({} tracks, tempo {} bpm, {} 小節)",
                 p.tracks.len(),
                 p.tempo,
                 (dawcore::bounce::arrangement_len(&p) / (p.time_sig.0 as f64 * 4.0 / p.time_sig.1 as f64)).ceil()
             );
+            ExitCode::SUCCESS
+        }
+        Ok(fortelang::Checked::DeviceLibrary { devices }) => {
+            println!("OK: デバイスライブラリを検証しました({devices} devices)");
             ExitCode::SUCCESS
         }
         Err(diags) => {
@@ -76,7 +87,7 @@ fn build(path: &str, out: Option<String>) -> ExitCode {
         Ok(s) => s,
         Err(c) => return c,
     };
-    let project = match fortelang::compile_str(&src) {
+    let project = match fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base_dir(path)) {
         Ok(p) => p,
         Err(diags) => {
             for d in &diags {
@@ -136,12 +147,14 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
 
     fn compile_file(path: &str) -> Result<Project, ExitCode> {
         let src = load(path)?;
-        fortelang::compile_str(&src).map_err(|diags| {
-            for d in &diags {
-                eprintln!("{path}:{d}");
-            }
-            ExitCode::FAILURE
-        })
+        fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base_dir(path)).map_err(
+            |diags| {
+                for d in &diags {
+                    eprintln!("{path}:{d}");
+                }
+                ExitCode::FAILURE
+            },
+        )
     }
     fn apply(handle: &mut dawcore::engine::EngineHandle, p: &Project, prev_slots: usize) {
         full_sync(handle, p);

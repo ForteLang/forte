@@ -2,11 +2,21 @@
 
 use crate::diag::Pos;
 
-/// A whole `.forte` file: user device definitions followed by one song.
+/// A whole `.forte` file: imports, device definitions, then (optionally) one
+/// song. A file without a song is a device library, importable from songs.
 #[derive(Clone, Debug)]
 pub struct FileAst {
+    pub imports: Vec<ImportAst>,
     pub devices: Vec<DeviceAst>,
-    pub song: SongAst,
+    pub song: Option<SongAst>,
+}
+
+/// `import { WarmLead, SubBass } from "./devices/warm.forte"`
+#[derive(Clone, Debug)]
+pub struct ImportAst {
+    pub names: Vec<String>,
+    pub path: String,
+    pub pos: Pos,
 }
 
 /// `device WarmLead : Instrument { param … / node … / out … }` — a synth

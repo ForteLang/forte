@@ -14,25 +14,19 @@ use dawcore::model::{
 };
 
 pub fn compile(file: &FileAst) -> Result<Project, Vec<Diag>> {
-    let song = &file.song;
+    let Some(song) = &file.song else {
+        return Err(vec![Diag::new(
+            "E-SONG-004",
+            Pos { line: 1, col: 1 },
+            "song がありません(このファイルはデバイスライブラリです — 検証は forte check)",
+        )]);
+    };
     let mut diags: Vec<Diag> = Vec::new();
     let mut p = Project::empty();
 
     // ---- user-defined devices ----------------------------------------------
     let mut user_devices: HashMap<&str, &DeviceAst> = HashMap::new();
-    for d in &file.devices {
-        if INSTRUMENTS.contains(&d.name.as_str()) || EFFECTS.contains(&d.name.as_str()) {
-            diags.push(Diag::new(
-                "E-DEV-008",
-                d.pos,
-                format!("device '{}' はビルトイン名と衝突しています", d.name),
-            ));
-            continue;
-        }
-        if user_devices.insert(d.name.as_str(), d).is_some() {
-            diags.push(Diag::new("E-MOD-002", d.pos, format!("device '{}' が重複しています", d.name)));
-        }
-    }
+    collect_devices(file, &mut user_devices, &mut diags);
 
     // ---- song header ------------------------------------------------------
     match song.tempo {
@@ -252,6 +246,42 @@ pub fn compile(file: &FileAst) -> Result<Project, Vec<Diag>> {
     } else {
         Err(diags)
     }
+}
+
+fn collect_devices<'a>(
+    file: &'a FileAst,
+    user_devices: &mut HashMap<&'a str, &'a DeviceAst>,
+    diags: &mut Vec<Diag>,
+) {
+    for d in &file.devices {
+        if INSTRUMENTS.contains(&d.name.as_str()) || EFFECTS.contains(&d.name.as_str()) {
+            diags.push(Diag::new(
+                "E-DEV-008",
+                d.pos,
+                format!("device '{}' はビルトイン名と衝突しています", d.name),
+            ));
+            continue;
+        }
+        if user_devices.insert(d.name.as_str(), d).is_some() {
+            diags.push(Diag::new("E-MOD-002", d.pos, format!("device '{}' が重複しています", d.name)));
+        }
+    }
+}
+
+/// Validate a device library (a file without a song): registry rules plus a
+/// default instantiation of every device, so `forte check lib.forte` means
+/// something.
+pub fn validate_devices(file: &FileAst) -> Vec<Diag> {
+    let mut diags = Vec::new();
+    let mut user_devices: HashMap<&str, &DeviceAst> = HashMap::new();
+    collect_devices(file, &mut user_devices, &mut diags);
+    for d in file.devices.iter() {
+        let probe = Call { name: d.name.clone(), args: Vec::new(), pos: d.pos };
+        if let Err(e) = grid_build::instantiate(d, &probe) {
+            diags.push(e);
+        }
+    }
+    diags
 }
 
 /// Evaluate a pattern expression to notes. Returns (notes, length in beats,
