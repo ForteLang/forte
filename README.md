@@ -6,8 +6,10 @@
 ブラウザのどこでも**ビット同一のオーディオ**が再現される。リリースの正しさは
 誰でも(ブラウザのタブからでも)再検証できる。
 
-ビジョン・要求仕様・アーキテクチャは [docs/webdaw/](docs/webdaw/README.md) に
-IEC 62304 型のドキュメント体系で整備している。
+**📖 使い方ガイド(チュートリアル): [docs/GUIDE.md](docs/GUIDE.md)** /
+言語リファレンス: [docs/webdaw/spec/forte-lang-v1.md](docs/webdaw/spec/forte-lang-v1.md) /
+ビジョン・要求仕様・アーキテクチャ: [docs/webdaw/](docs/webdaw/README.md)
+(IEC 62304 型のドキュメント体系)。
 
 ```forte
 import { WarmLead, SubBass } from "./devices/warm.forte"
