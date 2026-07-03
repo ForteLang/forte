@@ -7,6 +7,7 @@ use crate::diag::Pos;
 #[derive(Clone, Debug)]
 pub struct FileAst {
     pub imports: Vec<ImportAst>,
+    pub assets: Vec<AssetImportAst>,
     pub devices: Vec<DeviceAst>,
     pub song: Option<SongAst>,
 }
@@ -15,6 +16,15 @@ pub struct FileAst {
 #[derive(Clone, Debug)]
 pub struct ImportAst {
     pub names: Vec<String>,
+    pub path: String,
+    pub pos: Pos,
+}
+
+/// `import take from "./take1.frec"` — a recorded-audio asset (provenance
+/// is validated when the bytes are loaded).
+#[derive(Clone, Debug)]
+pub struct AssetImportAst {
+    pub name: String,
     pub path: String,
     pub pos: Pos,
 }
@@ -113,6 +123,15 @@ pub struct TrackAst {
     pub pan: Option<(f64, Pos)>,
     /// `send Space 0.3` — (return name, level).
     pub sends: Vec<(String, f64, Pos)>,
+    /// `audio take at bars(2..3)` — recorded assets placed on the timeline.
+    pub audios: Vec<AudioPlayAst>,
+}
+
+#[derive(Clone, Debug)]
+pub struct AudioPlayAst {
+    pub name: String,
+    pub at: AtRef,
+    pub pos: Pos,
 }
 
 #[derive(Clone, Debug)]

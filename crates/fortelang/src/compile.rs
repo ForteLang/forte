@@ -9,11 +9,14 @@ use crate::diag::{Diag, Pos};
 use crate::grid_build;
 use crate::music;
 use dawcore::model::{
-    ArrangerClip, Clip, Device, DeviceKind, KeySignature, Note, Project, SampleSource, Scale,
-    Track, TrackKind, TRACK_COLORS,
+    ArrangerClip, AudioClip, Clip, Device, DeviceKind, KeySignature, Note, Project, SampleSource,
+    Scale, Track, TrackKind, TRACK_COLORS,
 };
 
-pub fn compile(file: &FileAst) -> Result<Project, Vec<Diag>> {
+pub fn compile(
+    file: &FileAst,
+    assets: &HashMap<String, crate::AssetInfo>,
+) -> Result<Project, Vec<Diag>> {
     let Some(song) = &file.song else {
         return Err(vec![Diag::new(
             "E-SONG-004",
@@ -100,7 +103,7 @@ pub fn compile(file: &FileAst) -> Result<Project, Vec<Diag>> {
         let color = TRACK_COLORS[ti % TRACK_COLORS.len()];
         let mut track = Track::new(id, tast.name.clone(), TrackKind::Instrument, color);
 
-        // instrument (required)
+        // instrument (required unless the track only places recorded audio)
         let mut beat_pitch = 36u8; // C2 default; samplers use their sample root
         match &tast.instrument {
             Some(call) => match build_instrument(call, &user_devices) {
@@ -110,6 +113,9 @@ pub fn compile(file: &FileAst) -> Result<Project, Vec<Diag>> {
                 }
                 Err(d) => diags.push(d),
             },
+            None if !tast.audios.is_empty() && tast.plays.is_empty() => {
+                track.devices.clear(); // pure audio track
+            }
             None => diags.push(Diag::new(
                 "E-TRACK-001",
                 tast.pos,
@@ -182,6 +188,42 @@ pub fn compile(file: &FileAst) -> Result<Project, Vec<Diag>> {
                 clip,
                 start: (a - 1) as f64 * beats_per_bar,
                 duration: (b - a + 1) as f64 * beats_per_bar,
+            });
+        }
+
+        // recorded audio placements
+        for ap in &tast.audios {
+            let Some(info) = assets.get(&ap.name) else {
+                let mut names: Vec<&str> = assets.keys().map(String::as_str).collect();
+                names.sort();
+                diags.push(Diag::new(
+                    "E-PROV-003",
+                    ap.pos,
+                    format!("録音アセット '{}' が import されていません(あるもの: {})", ap.name, names.join(", ")),
+                ));
+                continue;
+            };
+            let (a, b) = match &ap.at {
+                AtRef::Bars(a, b) => (*a, *b),
+                AtRef::Section(name, pos) => match sections.get(name.as_str()) {
+                    Some(r) => *r,
+                    None => {
+                        diags.push(Diag::new("E-MOD-003", *pos, format!("section '{name}' が定義されていません")));
+                        continue;
+                    }
+                },
+            };
+            if a == 0 || b < a {
+                diags.push(Diag::new("E-TIME-001", ap.pos, format!("bars({a}..{b}) が不正です")));
+                continue;
+            }
+            track.audio_clips.push(AudioClip {
+                name: ap.name.clone(),
+                color,
+                source: SampleSource::Asset(info.key.clone()),
+                start: (a - 1) as f64 * beats_per_bar,
+                duration: (b - a + 1) as f64 * beats_per_bar,
+                gain: 0.9,
             });
         }
 

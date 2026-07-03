@@ -7,6 +7,7 @@ pub mod ast;
 pub mod audio;
 pub mod compile;
 pub mod diag;
+pub mod frec;
 pub mod grid_build;
 #[cfg(not(target_family = "wasm"))]
 pub mod hub;
@@ -29,6 +30,10 @@ use diag::Diag;
 /// [`NoLoader`].
 pub trait ModuleLoader {
     fn load(&self, path: &str) -> Result<String, String>;
+    /// Binary loads (recorded `.frec` assets). Text-only environments reject.
+    fn load_bytes(&self, _path: &str) -> Result<Vec<u8>, String> {
+        Err("この環境では録音アセットを読み込めません".into())
+    }
 }
 
 /// Loader for environments without module resolution: every import errors.
@@ -44,6 +49,9 @@ pub struct FsLoader;
 impl ModuleLoader for FsLoader {
     fn load(&self, path: &str) -> Result<String, String> {
         std::fs::read_to_string(path).map_err(|e| e.to_string())
+    }
+    fn load_bytes(&self, path: &str) -> Result<Vec<u8>, String> {
+        std::fs::read(path).map_err(|e| e.to_string())
     }
 }
 
@@ -140,6 +148,58 @@ pub enum Checked {
 
 /// Parse, resolve imports, and compile or validate. `base_dir` is the
 /// directory of the source file (for relative imports).
+/// A resolved recorded asset: registered in the engine's sample registry
+/// under its content-hash key.
+pub struct AssetInfo {
+    pub key: String,
+    pub seconds: f64,
+}
+
+/// Load, validate (provenance!) and register the file's recorded assets.
+fn resolve_assets(
+    file: &ast::FileAst,
+    base_dir: &str,
+    loader: &dyn ModuleLoader,
+    diags: &mut Vec<Diag>,
+) -> std::collections::HashMap<String, AssetInfo> {
+    let mut out = std::collections::HashMap::new();
+    for a in &file.assets {
+        let full = join_path(base_dir, &a.path);
+        let bytes = match loader.load_bytes(&full) {
+            Ok(b) => b,
+            Err(e) => {
+                diags.push(Diag::new("E-MOD-005", a.pos, format!("{} を読み込めません: {e}", a.path)));
+                continue;
+            }
+        };
+        let rec = match frec::decode(&bytes, a.pos) {
+            Ok(r) => r,
+            Err(d) => {
+                diags.push(d);
+                continue;
+            }
+        };
+        let key = format!("{:016x}", fnv1a64(&bytes));
+        let seconds = rec.pcm.len() as f64 / rec.channels as f64 / rec.rate as f64;
+        // mono-mix for the engine's shared sample buffer (v0: mono clips)
+        let mono: Vec<f32> = if rec.channels == 2 {
+            rec.pcm.chunks_exact(2).map(|c| (c[0] + c[1]) * 0.5).collect()
+        } else {
+            rec.pcm.clone()
+        };
+        dawcore::samples::register_asset(
+            &key,
+            std::sync::Arc::new(dawcore::dsp::sampler::Sample::one_shot(
+                mono.into(),
+                rec.rate as f32,
+                60,
+            )),
+        );
+        out.insert(a.name.clone(), AssetInfo { key, seconds });
+    }
+    out
+}
+
 pub fn check_with_loader(
     src: &str,
     loader: &dyn ModuleLoader,
@@ -148,11 +208,12 @@ pub fn check_with_loader(
     let mut file = parser::parse(src)?;
     let mut diags = Vec::new();
     resolve_imports(&mut file, base_dir, loader, &mut Vec::new(), &mut diags);
+    let assets = resolve_assets(&file, base_dir, loader, &mut diags);
     if !diags.is_empty() {
         return Err(diags);
     }
     if file.song.is_some() {
-        compile::compile(&file).map(Checked::Song)
+        compile::compile(&file, &assets).map(Checked::Song)
     } else {
         let diags = compile::validate_devices(&file);
         if diags.is_empty() {

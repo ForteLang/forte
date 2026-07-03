@@ -106,6 +106,7 @@ pub fn resolve_sample(src: &SampleSource) -> Option<Arc<Sample>> {
             _ => None,
         },
         SampleSource::File(path) => samples::load_wav(std::path::Path::new(path), 60).ok(),
+        SampleSource::Asset(key) => samples::get_asset(key),
     }
 }
 

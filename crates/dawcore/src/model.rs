@@ -158,6 +158,8 @@ pub enum SampleSource {
     None,
     Builtin(String), // "Kick" / "Snare" / "Hat"
     File(String),    // path on disk
+    /// In-memory registered asset (recorded audio), keyed by content hash.
+    Asset(String),
 }
 
 impl Default for SampleSource {
@@ -175,6 +177,7 @@ impl SampleSource {
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_else(|| p.clone()),
+            SampleSource::Asset(k) => format!("rec:{}", &k[..k.len().min(8)]),
         }
     }
 }

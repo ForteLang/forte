@@ -22,16 +22,15 @@ pub fn parse(src: &str) -> Result<FileAst, Vec<Diag>> {
     let toks = lex(src).map_err(|d| vec![d])?;
     let mut p = Parser { toks, i: 0, diags: Vec::new() };
     let mut imports = Vec::new();
+    let mut assets = Vec::new();
     let mut devices = Vec::new();
     loop {
         match p.peek().clone() {
-            Tok::Ident(s) if s == "import" => {
-                if let Some(im) = p.import() {
-                    imports.push(im);
-                } else {
-                    break;
-                }
-            }
+            Tok::Ident(s) if s == "import" => match p.import() {
+                Some(ImportKind::Module(im)) => imports.push(im),
+                Some(ImportKind::Asset(a)) => assets.push(a),
+                None => break,
+            },
             Tok::Ident(s) if s == "device" => {
                 if let Some(d) = p.device() {
                     devices.push(d);
@@ -45,10 +44,15 @@ pub fn parse(src: &str) -> Result<FileAst, Vec<Diag>> {
     // a file may be a pure device library (no song)
     let song = if *p.peek() == Tok::Eof { None } else { p.song() };
     if p.diags.is_empty() {
-        Ok(FileAst { imports, devices, song })
+        Ok(FileAst { imports, assets, devices, song })
     } else {
         Err(p.diags)
     }
+}
+
+enum ImportKind {
+    Module(ImportAst),
+    Asset(AssetImportAst),
 }
 
 struct Parser {
@@ -264,6 +268,7 @@ impl Parser {
             volume: None,
             pan: None,
             sends: Vec::new(),
+            audios: Vec::new(),
         };
         loop {
             match self.peek().clone() {
@@ -297,22 +302,15 @@ impl Parser {
                         self.bump();
                         let ppos = self.pos();
                         let pattern = self.pattern_expr()?;
-                        if !self.keyword("at") {
-                            self.err("E-PARSE-012", "play には `at bars(a..b)` か `at セクション名` が必要です");
-                        }
-                        let at = if self.keyword("bars") {
-                            self.expect(Tok::LParen, "`(`");
-                            let a = self.number("開始小節")?;
-                            self.expect(Tok::DotDot, "`..`");
-                            let b = self.number("終了小節")?;
-                            self.expect(Tok::RParen, "`)`");
-                            AtRef::Bars(a.0 as u32, b.0 as u32)
-                        } else {
-                            let spos = self.pos();
-                            let name = self.ident("配置先(bars(a..b) かセクション名)")?;
-                            AtRef::Section(name, spos)
-                        };
+                        let at = self.at_ref("play")?;
                         t.plays.push(PlayAst { pattern, at, pos: ppos });
+                    }
+                    "audio" => {
+                        self.bump();
+                        let apos = self.pos();
+                        let name = self.ident("録音アセット名(import した名前)")?;
+                        let at = self.at_ref("audio")?;
+                        t.audios.push(AudioPlayAst { name, at, pos: apos });
                     }
                     "send" => {
                         self.bump();
@@ -353,10 +351,29 @@ impl Parser {
         Some(t)
     }
 
-    /// `import { A, B } from "./path.forte"`
-    fn import(&mut self) -> Option<ImportAst> {
+    /// `import { A, B } from "./lib.forte"` or `import take from "./t.frec"`
+    fn import(&mut self) -> Option<ImportKind> {
         let pos = self.pos();
         self.bump(); // "import"
+        // default import = recorded asset
+        if let Tok::Ident(name) = self.peek().clone() {
+            self.bump();
+            if !self.keyword("from") {
+                self.err("E-PARSE-019", "import には from \"パス\" が必要です");
+            }
+            let Tok::Str(path) = self.peek().clone() else {
+                self.err("E-PARSE-019", "import 元のパス(文字列)が必要です");
+                return None;
+            };
+            self.bump();
+            if !path.ends_with(".frec") {
+                self.err(
+                    "E-PROV-002",
+                    "デフォルト import は録音アセット(.frec)専用です(モジュールは import { 名前 } from …)",
+                );
+            }
+            return Some(ImportKind::Asset(AssetImportAst { name, path, pos }));
+        }
         self.expect(Tok::LBrace, "`{`(import { 名前, … } from \"…\")");
         let mut names = Vec::new();
         loop {
@@ -388,7 +405,7 @@ impl Parser {
             self.err("E-PARSE-019", "import 元のパス(文字列)が必要です");
             return None;
         };
-        Some(ImportAst { names, path, pos })
+        Some(ImportKind::Module(ImportAst { names, path, pos }))
     }
 
     /// `device Name : Instrument { param … / node … / out … }`
@@ -511,6 +528,25 @@ impl Parser {
             return Some(NodeExpr::Call { name, args, pos });
         }
         Some(NodeExpr::Ref(name, pos))
+    }
+
+    /// `at bars(a..b)` or `at <section-name>`.
+    fn at_ref(&mut self, what: &str) -> Option<AtRef> {
+        if !self.keyword("at") {
+            self.err("E-PARSE-012", format!("{what} には `at bars(a..b)` か `at セクション名` が必要です"));
+        }
+        if self.keyword("bars") {
+            self.expect(Tok::LParen, "`(`");
+            let a = self.number("開始小節")?;
+            self.expect(Tok::DotDot, "`..`");
+            let b = self.number("終了小節")?;
+            self.expect(Tok::RParen, "`)`");
+            Some(AtRef::Bars(a.0 as u32, b.0 as u32))
+        } else {
+            let spos = self.pos();
+            let name = self.ident("配置先(bars(a..b) かセクション名)")?;
+            Some(AtRef::Section(name, spos))
+        }
     }
 
     /// Pattern expression: a literal, a `let` name, or a pattern function

@@ -67,6 +67,24 @@ pub fn hat() -> Arc<Sample> {
 }
 
 /// Load a mono (or down-mixed) sample from a WAV file on disk.
+/// Registry of in-memory recorded assets, keyed by content hash. Populated by
+/// the compiler front-end on the UI thread; `resolve_sample` reads it while
+/// building tracks (never on the audio thread).
+fn asset_registry() -> &'static std::sync::Mutex<std::collections::HashMap<String, Arc<Sample>>> {
+    static REG: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, Arc<Sample>>>,
+    > = std::sync::OnceLock::new();
+    REG.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+pub fn register_asset(key: &str, sample: Arc<Sample>) {
+    asset_registry().lock().unwrap().insert(key.to_string(), sample);
+}
+
+pub fn get_asset(key: &str) -> Option<Arc<Sample>> {
+    asset_registry().lock().unwrap().get(key).cloned()
+}
+
 pub fn load_wav(path: &Path, root: u8) -> Result<Arc<Sample>, String> {
     let mut reader = hound::WavReader::open(path).map_err(|e| e.to_string())?;
     let spec = reader.spec();
