@@ -17,7 +17,7 @@ fn main() -> ExitCode {
                 .position(|a| a == "-o")
                 .and_then(|i| args.get(i + 1))
                 .cloned();
-            build(&args[1], out)
+            build(&args[1], out, args.iter().any(|a| a == "--stems"))
         }
         Some("viz") if args.len() >= 2 => {
             let path = &args[1];
@@ -123,7 +123,7 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!("usage: forte check <song.forte>");
-            eprintln!("       forte build <song.forte> [-o out.wav]");
+            eprintln!("       forte build <song.forte> [-o out.wav] [--stems]");
             eprintln!("       forte play  <song.forte> [--for SECS]");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
             eprintln!("       forte fmt   <song.forte> [--check]");
@@ -192,7 +192,7 @@ fn check(path: &str) -> ExitCode {
     }
 }
 
-fn build(path: &str, out: Option<String>) -> ExitCode {
+fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
     let src = match load(path) {
         Ok(s) => s,
         Err(c) => return c,
@@ -219,6 +219,39 @@ fn build(path: &str, out: Option<String>) -> ExitCode {
     }
     let info = fortelang::render_digest(&project, TAIL_BEATS);
 
+    // open-stems: each non-effect track rendered soloed (sends included) —
+    // a fork can rehearse against any subset, and every stem has a digest
+    let mut stem_digests = serde_json::Map::new();
+    if stems {
+        let dir = PathBuf::from(&out).with_extension("").to_string_lossy().into_owned() + "-stems";
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            eprintln!("stems ディレクトリ作成失敗: {e}");
+            return ExitCode::FAILURE;
+        }
+        for t in &project.tracks {
+            if t.kind == dawcore::model::TrackKind::Effect {
+                continue;
+            }
+            let soloed = fortelang::solo_project(&project, t.id);
+            let safe: String = t.name.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+            let wav = PathBuf::from(&dir).join(format!("{safe}.wav"));
+            if let Err(e) = dawcore::bounce::render_wav(&soloed, &wav, TAIL_BEATS) {
+                eprintln!("stem {} のレンダリング失敗: {e}", t.name);
+                return ExitCode::FAILURE;
+            }
+            let sinfo = fortelang::render_digest(&soloed, TAIL_BEATS);
+            stem_digests.insert(
+                t.name.clone(),
+                serde_json::json!({
+                    "output": wav.to_string_lossy(),
+                    "f32_digest_fnv1a64": format!("{:016x}", sinfo.f32_digest),
+                    "rms": sinfo.rms,
+                }),
+            );
+            println!("stem   : {} → {} ({:016x})", t.name, wav.display(), sinfo.f32_digest);
+        }
+    }
+
     let manifest = serde_json::json!({
         "forte_manifest": 0,
         "source": { "path": path, "fnv1a64": format!("{:016x}", fortelang::fnv1a64(src.as_bytes())) },
@@ -231,6 +264,7 @@ fn build(path: &str, out: Option<String>) -> ExitCode {
             "rms": info.rms,
         },
         "output": out,
+        "stems": stem_digests,
     });
     let mpath = PathBuf::from(&out).with_extension("manifest.json");
     if let Err(e) = std::fs::write(&mpath, serde_json::to_string_pretty(&manifest).unwrap()) {

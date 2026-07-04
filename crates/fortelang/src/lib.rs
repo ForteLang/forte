@@ -266,6 +266,16 @@ pub struct RenderInfo {
 /// Render the arrangement offline (same engine as playback) and digest the
 /// exact f32 bit stream — the build proof recorded in build.manifest.json
 /// (SRS-BLD-001). FNV-1a 64 stands in for SHA-256 in the v0 slice.
+/// Clone the project with one track soloed (returns stay soloed too, so the
+/// stem keeps its sends) — how `forte build --stems` isolates a part.
+pub fn solo_project(project: &Project, track_id: usize) -> Project {
+    let mut p = project.clone();
+    for t in &mut p.tracks {
+        t.solo = t.id == track_id || t.kind == dawcore::model::TrackKind::Effect;
+    }
+    p
+}
+
 pub fn render_digest(project: &Project, tail_beats: f64) -> RenderInfo {
     const BLOCK: usize = 512;
     let sr = 48_000.0f32;

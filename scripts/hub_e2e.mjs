@@ -72,6 +72,16 @@ try {
   );
   check('listen plays from sources', true, await page.textContent('#status'));
 
+  // 3.5) open-stems: per-track M/S controls exist and drive the live engine
+  const stemRows = await page.$$eval('#stems .stem', (rows) =>
+    rows.map((r) => r.querySelector('span').textContent)
+  );
+  check('stem controls list the tracks', stemRows.length >= 2, stemRows.join(', '));
+  await page.click('#stems .stem button'); // mute the first track
+  await page.waitForFunction(() => document.body.dataset.stems === '1m0s', null, { timeout: 5000 });
+  check('mute toggles apply while playing', true);
+  await page.click('#stems .stem button'); // unmute for the rest of the test
+
   // 4) verify in tab: digest reproduces
   await page.click('#verify');
   await page.waitForSelector('body[data-verify]', { timeout: 120000 });

@@ -240,6 +240,17 @@ pub unsafe extern "C" fn fw_position(ptr: *mut Ctx) -> f64 {
     ctx(ptr).handle.shared.position_beats()
 }
 
+/// Listener-side stem controls (open-stems): mute / solo an engine track.
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_mute(ptr: *mut Ctx, track: usize, on: i32) {
+    ctx(ptr).handle.send(Command::SetTrackMute { track, value: on != 0 });
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_solo(ptr: *mut Ctx, track: usize, on: i32) {
+    ctx(ptr).handle.send(Command::SetTrackSolo { track, value: on != 0 });
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn fw_master_peak(ptr: *mut Ctx) -> f32 {
     ctx(ptr).handle.shared.master_peak()

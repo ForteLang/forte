@@ -95,6 +95,10 @@ forte build my-song.forte
 `manifest.json` の digest は「このコードからこの音が生まれた」証明で、
 誰がどのマシン(ブラウザ含む)でビルドしても同じ値になります。
 
+`--stems` を付けるとトラック別の WAV(ソロ、センドのリバーブ込み)も
+書き出され、ステムごとの digest が manifest に記録されます —
+open-stems リリースの素材です。
+
 ## 2. 言語チートシート
 
 ```forte
@@ -383,6 +387,10 @@ forte hub verify  my-song            # 誰でも再現検証できる(改竄は 
 forte hub lineage my-song            # 系譜: fork 元/先、リリース、検証回数
 forte hub similar my-song            # 同じコード進行の曲(キーが違っても見つかる)
 ```
+
+曲ページにはトラックごとの **M / S ボタン**があり、聴きながらパートを
+抜き差しできます(ボーカルを M にすればカラオケ、ベースだけ S にすれば
+耳コピ用 — 系譜をディグる聴き方)。
 
 **演奏 fork はブラウザで一周します**: hub ページで聴く → Fork(系譜スタンプ
 付きでエディタへ)→ ● Rec で歌入れ → 差し込み → ⇪ Publish。公開された

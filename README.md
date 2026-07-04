@@ -49,6 +49,7 @@ forte repl                              # ★打った行がその場で鳴る
 forte check songs/first-light.forte     # 検証(エラーは音楽の語彙+行番号)
 forte play  songs/first-light.forte     # ライブ再生。保存するたび即反映
 forte build songs/first-light.forte     # WAV + ビルド証明(digest 入り)
+forte build songs/handmade-kit.forte --stems  # トラック別 WAV+ステム別 digest
 ```
 
 REPL はこんな感じ:

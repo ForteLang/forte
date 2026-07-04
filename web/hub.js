@@ -49,12 +49,67 @@ async function showList() {
 // ---- detail view ---------------------------------------------------------------
 let current = null; // { repo detail, files, entrySrc }
 let ac, node;
+// open-stems: listener-side stem states (applied live to the worklet)
+let muted = new Set();
+let soloed = new Set();
+
+function sendStem(cmd, track, on) {
+  node?.port.postMessage({ cmd, track, on });
+}
+
+function renderStems() {
+  const el = $('stems');
+  el.innerHTML = '';
+  muted = new Set();
+  soloed = new Set();
+  const viz = current?.viz;
+  if (!viz?.tracks) return;
+  viz.tracks.forEach((t, i) => {
+    if (t.fx) return; // returns follow their senders
+    const row = document.createElement('div');
+    row.className = 'stem';
+    const m = document.createElement('button');
+    m.textContent = 'M';
+    m.title = 'ミュート';
+    m.onclick = () => {
+      muted.has(i) ? muted.delete(i) : muted.add(i);
+      m.classList.toggle('on', muted.has(i));
+      sendStem('mute', i, muted.has(i));
+      document.body.dataset.stems = `${muted.size}m${soloed.size}s`;
+    };
+    const s = document.createElement('button');
+    s.textContent = 'S';
+    s.title = 'ソロ(歌入れ練習: Vocal を M、または自分のパートを S)';
+    s.onclick = () => {
+      soloed.has(i) ? soloed.delete(i) : soloed.add(i);
+      s.classList.toggle('on', soloed.has(i));
+      sendStem('solo', i, soloed.has(i));
+      document.body.dataset.stems = `${muted.size}m${soloed.size}s`;
+    };
+    const label = document.createElement('span');
+    label.textContent = t.name;
+    row.append(m, s, label);
+    el.append(row);
+  });
+}
 
 async function showDetail(name) {
   const repo = await (await fetch(`${API}/api/repos/${name}`)).json();
   const { files, assets } = await (await fetch(`${API}/api/repos/${name}/files`)).json();
   const entrySrc = files[repo.entry];
   current = { repo, files, assets: assets || {}, entrySrc };
+
+  // compile once on the main thread for the track list (stem controls)
+  try {
+    const inst = await wasm();
+    if (compileIn(inst, entrySrc, files, current.assets) === 0) {
+      const vp = inst.e.fw_viz_ptr(inst.ctx);
+      const vl = inst.e.fw_viz_len(inst.ctx);
+      current.viz = JSON.parse(
+        new TextDecoder().decode(new Uint8Array(inst.e.memory.buffer, vp, vl))
+      );
+    }
+  } catch { /* stem controls are optional */ }
 
   $('list').style.display = 'none';
   $('detail').style.display = 'block';
@@ -71,6 +126,7 @@ async function showDetail(name) {
   lin.push(`fork events: ${repo.fork_events}`);
   $('d-lineage').innerHTML = lin.join('<br>');
 
+  renderStems();
   $('d-code').innerHTML = '';
   for (const [rel, text] of Object.entries(files)) {
     const pre = document.createElement('pre');
@@ -118,6 +174,9 @@ $('listen').onclick = async () => {
     assets: JSON.stringify(current.assets),
   });
   await ac.resume();
+  // re-apply the listener's stem states to the fresh engine
+  for (const i of muted) sendStem('mute', i, true);
+  for (const i of soloed) sendStem('solo', i, true);
   node.port.postMessage({ cmd: 'play' });
   // listens are ledger events — the raw data the contribution economy
   // will be computed from (SRS-HUB-007)

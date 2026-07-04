@@ -461,3 +461,23 @@ song "X" { tempo 100bpm track A { instrument I() play beat`x---` at bars(1..1) }
 song "X" { tempo 100bpm track A { instrument polymer() insert E() play beat`x---` at bars(1..1) } }"#;
     assert!(codes(src).contains(&"E-GRID-001"));
 }
+
+#[test]
+fn stems_are_isolated_deterministic_and_keep_sends() {
+    let p = fortelang::compile_str(include_str!("../../../songs/night-parade.forte")).unwrap();
+    let mix = fortelang::render_digest(&p, 2.0);
+    let mut seen = std::collections::HashSet::new();
+    for t in p.tracks.iter().filter(|t| t.kind != dawcore::model::TrackKind::Effect) {
+        let solo = fortelang::solo_project(&p, t.id);
+        // returns stay audible so a stem keeps its reverb sends
+        assert!(solo.tracks.iter().all(|x| {
+            x.solo == (x.id == t.id || x.kind == dawcore::model::TrackKind::Effect)
+        }));
+        let a = fortelang::render_digest(&solo, 2.0);
+        let b = fortelang::render_digest(&solo, 2.0);
+        assert_eq!(a.f32_digest, b.f32_digest, "stem {} must be deterministic", t.name);
+        assert_ne!(a.f32_digest, mix.f32_digest, "stem {} must differ from the mix", t.name);
+        assert!(seen.insert(a.f32_digest), "stem {} must differ from other stems", t.name);
+        assert!(a.rms > 0.0005, "stem {} must be audible (rms {})", t.name, a.rms);
+    }
+}
