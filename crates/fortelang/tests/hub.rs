@@ -360,3 +360,25 @@ fn lineage_forest_nests_forks_under_their_origin() {
     assert_eq!(gen1["children"].as_array().unwrap()[0]["name"], "gen2", "grandchild nests");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn cross_module_dig_links_devices_to_songs() {
+    let hub_dir = temp_dir("dig");
+    let hub = Hub::open(&hub_dir).unwrap();
+    hub.publish(&format!("{}/devices/warm.forte", songs_dir()), Some("warm")).unwrap();
+    hub.publish(&format!("{}/handmade.forte", songs_dir()), Some("handmade")).unwrap();
+
+    // the song knows which instruments it plays, and where they come from
+    let song = hub.repo_json("handmade").unwrap();
+    let uses: Vec<&str> =
+        song["uses"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
+    assert_eq!(uses, vec!["SubBass", "WarmLead"], "{uses:?}");
+    assert_eq!(song["device_sources"]["WarmLead"], "warm");
+
+    // the library answers 「この楽器を使う曲」
+    let lib = hub.repo_json("warm").unwrap();
+    let used_by: Vec<&str> =
+        lib["used_by"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
+    assert!(used_by.contains(&"handmade"), "{used_by:?}");
+    let _ = std::fs::remove_dir_all(&hub_dir);
+}

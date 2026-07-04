@@ -28,6 +28,8 @@ function compileIn(inst, entrySrc, files, assets) {
   return inst.e.fw_compile(inst.ctx);
 }
 
+let filterAuthor = null; // performer cross-cut
+
 // ---- list view ---------------------------------------------------------------
 function treeNode(n, prefix, isLast, out) {
   const conn = prefix === '' ? '' : prefix + (isLast ? '└─ ' : '├─ ');
@@ -67,9 +69,32 @@ async function showList() {
     div.innerHTML = `<h2>${r.name} <span class="badge ${r.kind}">${r.kind}</span>
       ${r.forked_from ? `<span class="badge">⑂ ${r.forked_from.repo} v${r.forked_from.v}</span>` : ''}
       ${r.releases ? `<span class="badge">releases: ${r.releases}</span>` : ''}</h2>
-      <div class="meta">v${r.v} by ${r.author}${r.devices.length ? ` — devices: ${r.devices.join(', ')}` : ''}</div>`;
-    div.onclick = () => showDetail(r.name);
+      <div class="meta">v${r.v} by <a href="#" class="author" data-author="${r.author}">${r.author}</a>${r.devices.length ? ` — devices: ${r.devices.join(', ')}` : ''}</div>`;
+    div.onclick = (e) => {
+      // performer cross-cut: clicking an author filters the list to them
+      if (e.target.classList?.contains('author')) {
+        e.preventDefault();
+        e.stopPropagation();
+        filterAuthor = filterAuthor === r.author ? null : r.author;
+        showList();
+        return;
+      }
+      showDetail(r.name);
+    };
+    if (filterAuthor && r.author !== filterAuthor) div.style.display = 'none';
     $('list').appendChild(div);
+  }
+  document.body.dataset.authorFilter = filterAuthor || '';
+  if (filterAuthor) {
+    const note = document.createElement('div');
+    note.className = 'meta';
+    note.innerHTML = `by ${filterAuthor} で絞り込み中 — <a href="#" id="clear-author">解除</a>`;
+    note.querySelector('#clear-author').onclick = (e) => {
+      e.preventDefault();
+      filterAuthor = null;
+      showList();
+    };
+    $('list').prepend(note);
   }
 }
 
@@ -148,6 +173,18 @@ async function showDetail(name) {
   if (repo.plays) lin.push(`▶ plays: ${repo.plays}`);
   for (const s of repo.similar ?? [])
     lin.push(`♪ 同じ進行: <a href="#" class="similar" data-name="${s.name}">${s.name}</a> (キー非依存)`);
+  // cross-module dig: instruments link to the library that defines them,
+  // libraries list the songs that play them
+  if (repo.uses?.length) {
+    const parts = repo.uses.map((u) =>
+      repo.device_sources?.[u]
+        ? `<a href="#" class="similar" data-name="${repo.device_sources[u]}">${u}</a>`
+        : u
+    );
+    lin.push(`🎛 使っている楽器: ${parts.join(', ')}`);
+  }
+  for (const user of repo.used_by ?? [])
+    lin.push(`🎛 この楽器を使う曲: <a href="#" class="similar" data-name="${user}">${user}</a>`);
   for (const rel of repo.releases)
     lin.push(`release v${rel.v}: digest ${rel.digest} (${rel.seconds.toFixed(1)}s, verified ${rel.verified}回) <span id="vbadge-${rel.v}"></span>`);
   lin.push(`fork events: ${repo.fork_events}`);

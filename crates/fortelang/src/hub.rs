@@ -55,6 +55,10 @@ pub struct Version {
     /// receive it.
     #[serde(default)]
     pub commit: Option<String>,
+    /// non-builtin device names this song plays (cross-module dig:
+    /// 「この楽器を使う曲」 is answered from these)
+    #[serde(default)]
+    pub uses: Vec<String>,
 }
 
 /// A deterministic build of a song version: anyone can `verify` that the
@@ -195,6 +199,7 @@ impl Hub {
         let file = crate::parser::parse(&src).map_err(|_| "parse".to_string())?;
         let devices: Vec<String> = file.devices.iter().map(|d| d.name.clone()).collect();
         let progressions = extract_progressions(&file);
+        let uses = extract_uses(&file);
         let forked_from: Option<Origin> = files
             .get(LINEAGE_FILE)
             .and_then(|b| serde_json::from_slice(b).ok());
@@ -226,6 +231,7 @@ impl Hub {
             forked_from: forked_from.clone(),
             progressions,
             commit: None,
+            uses,
         });
         reg.events.push(Event { seq: reg.seq, kind: "publish".into(), repo: name.into(), v, by });
         self.save(&reg)?;
@@ -591,12 +597,39 @@ impl Hub {
             .into_iter()
             .map(|(other, sig)| serde_json::json!({ "name": other, "progression": sig }))
             .collect();
+        // cross-module dig: which songs play the devices this repo defines,
+        // and which library defines each device this song plays
+        let used_by: Vec<&String> = reg
+            .repos
+            .iter()
+            .filter(|(other, r)| {
+                *other != name
+                    && r.versions.last().map_or(false, |v| {
+                        v.uses.iter().any(|u| latest.devices.contains(u))
+                    })
+            })
+            .map(|(other, _)| other)
+            .collect();
+        let device_sources: BTreeMap<&String, &String> = latest
+            .uses
+            .iter()
+            .filter_map(|u| {
+                reg.repos
+                    .iter()
+                    .find(|(other, r)| {
+                        *other != name
+                            && r.versions.last().map_or(false, |v| v.devices.contains(u))
+                    })
+                    .map(|(other, _)| (u, other))
+            })
+            .collect();
         Ok(serde_json::json!({
             "name": name, "v": latest.v, "kind": latest.kind, "author": latest.author,
             "entry": latest.entry, "devices": latest.devices,
             "forked_from": latest.forked_from,
             "forks": forks, "fork_events": fork_events, "releases": releases,
             "plays": plays, "similar": similar,
+            "uses": latest.uses, "used_by": used_by, "device_sources": device_sources,
         }))
     }
 
@@ -674,6 +707,29 @@ impl Hub {
         }
         Ok(out)
     }
+}
+
+/// Non-builtin device names the song's tracks play (instruments + inserts).
+fn extract_uses(file: &crate::ast::FileAst) -> Vec<String> {
+    const BUILTIN: &[&str] =
+        &["sampler", "polymer", "grid", "filter", "eq", "drive", "delay", "reverb"];
+    let Some(song) = &file.song else { return Vec::new() };
+    let mut out: Vec<String> = Vec::new();
+    let mut push = |name: &str| {
+        if !BUILTIN.contains(&name) && !out.iter().any(|u| u == name) {
+            out.push(name.to_string());
+        }
+    };
+    for t in &song.tracks {
+        if let Some(call) = &t.instrument {
+            push(&call.name);
+        }
+        for ins in &t.inserts {
+            push(&ins.name);
+        }
+    }
+    out.sort();
+    out
 }
 
 /// Pull the transposition-invariant signatures out of every prog literal in

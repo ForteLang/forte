@@ -181,6 +181,16 @@ try {
     tree.includes('handmade-voice') && tree.includes('└─'),
     tree.replace(/\n/g, ' | ').slice(0, 120)
   );
+
+  // 8) cross-module dig: the library page lists the songs that play it
+  await page.click('.repo:has-text("warm")');
+  await page.waitForSelector('#detail', { state: 'visible' });
+  const libLineage = await page.textContent('#d-lineage');
+  check(
+    'library page answers 「この楽器を使う曲」',
+    libLineage.includes('この楽器を使う曲') && libLineage.includes('handmade'),
+    libLineage.split('\n').find((l) => l.includes('楽器')) ?? ''
+  );
 } finally {
   await browser.close();
   api.kill();
