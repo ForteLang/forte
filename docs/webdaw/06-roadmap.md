@@ -117,5 +117,5 @@ Status: Draft v0.1 / 2026-07-02
 2. ~~決定論スパイク: dawcore の bounce を wasm32 でビルドし native とハッシュ比較~~
    ✅ 成功 — libm 統一でビット同一(07-determinism-spike.md)
 3. 言語仕様 v0 のドラフト(spec/forte-lang-v0.md に着手済)+リファレンス曲 1 曲の手書き移植
-4. ~~プロジェクト名の決定~~ ✅ **Forte** で正式化(リポジトリも fcuro-shusukeinoue/forte に改名、MIT ライセンス)
+4. ~~プロジェクト名の決定~~ ✅ **Forte** で正式化(MIT ライセンス。2026-07-04 に公開リポジトリ [ForteLang/forte](https://github.com/ForteLang/forte) へ移行し、以後の開発はそちらで行う)
 5. forte-lang パーサ/型検査の実装開始(0.1)
