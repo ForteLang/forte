@@ -127,17 +127,25 @@ forte hub verify handmade                # 誰でも再現検証できる
 forte hub serve                          # → http://localhost:8000/web/hub.html で系譜をディグる
 ```
 
-サーバーとして立てれば**複数人の hub** になります(認証付き push/pull):
+複数人で使うなら **GitHub がそのまま hub になります**(サーバー不要):
 
 ```bash
-forte hub serve --port 9377                              # ホスト側
-forte hub signup shusuke --hub http://host:9377          # トークン発行(表示は 1 回だけ)
-export FORTE_HUB_TOKEN=<token>
-forte hub publish songs/handmade.forte --hub http://host:9377  # VCS 履歴ごと push。
-                                                               # author はトークンから(なりすまし不可)
-forte hub fork handmade ./my-take --hub http://host:9377       # 履歴ごと降ってくるのも同じ
-forte hub list --hub http://host:9377
+# GitHub に空リポジトリ(例: you/forte-hub)を作っておくだけ
+forte hub publish songs/handmade.forte --hub github:you/forte-hub   # 履歴ごと push
+forte hub fork handmade ./my-take --hub github:you/forte-hub        # 履歴ごと fork
+forte hub list --hub github:you/forte-hub
+forte hub serve --hub github:you/forte-hub   # 同期した checkout をローカル配信
+                                             # → ブラウザ系譜ページがそのまま動く
 ```
+
+hub はただの git リポジトリ(registry.json + store/)なので、認証は普段の
+git 資格情報(SSH 鍵 / gh auth)、作者名は `git config user.name`、台帳の
+変更履歴も git に残ります。GitHub に限らず GitLab や NAS の bare repo でも
+同じです。並行 publish は push の compare-and-swap で解決されます
+(先を越されたら同期して自動リプレイ)。
+
+自前サーバー派には認証付き HTTP サーバーもあります(`forte hub serve` +
+`forte hub signup` — トークン発行、author はトークンから導出)。
 
 fork したフォルダで `forte log` すると**元作者のコミットの上に自分の履歴が積まれ**、
 `forte diff <元作者のコミット> HEAD` で「原曲から何を変えたか」が音楽の言葉で出ます。

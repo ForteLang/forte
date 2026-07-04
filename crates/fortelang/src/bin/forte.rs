@@ -174,7 +174,8 @@ fn main() -> ExitCode {
             eprintln!("       forte diff [REV [REV]]      (音楽の言葉で差分。既定 HEAD↔作業)");
             eprintln!("       forte hub publish <file.forte> [--as NAME] [--hub DIR|URL]");
             eprintln!("       forte hub fork <NAME> <DEST-DIR>   [--hub DIR|URL]");
-            eprintln!("       forte hub signup <AUTHOR> --hub http://HOST:PORT  (トークン発行)");
+            eprintln!("         --hub github:you/hub | git@github.com:you/hub.git — GitHub が hub になる");
+            eprintln!("       forte hub signup <AUTHOR> --hub http://HOST:PORT  (自前サーバー時のみ)");
             eprintln!("       forte hub release <NAME>           [--hub DIR]");
             eprintln!("       forte hub verify <NAME>            [--hub DIR]");
             eprintln!("       forte hub lineage <NAME>           [--hub DIR]");
@@ -323,6 +324,51 @@ fn hub_cmd(args: &[String]) -> ExitCode {
         .and_then(|i| args.get(i + 1).cloned())
         .or_else(|| std::env::var("FORTE_HUB").ok())
         .unwrap_or_else(|| ".forte-hub".into());
+
+    // --hub git@github.com:you/hub.git / github:you/hub / *.git — the hub is
+    // a git repository (GitHub hosts it; no server to run)
+    if fortelang::hub_git::is_git_url(&hub_dir) {
+        let open = || fortelang::hub_git::GitHub::open(&hub_dir, None);
+        let result = match args.first().map(String::as_str) {
+            Some("publish") if args.len() >= 2 => {
+                let name = args
+                    .iter()
+                    .position(|a| a == "--as")
+                    .and_then(|i| args.get(i + 1))
+                    .map(String::as_str);
+                open().and_then(|h| h.publish(&args[1], name))
+            }
+            Some("fork") if args.len() >= 3 => open().and_then(|h| h.fork(&args[1], &args[2])),
+            Some("release") if args.len() >= 2 => open().and_then(|h| h.release(&args[1])),
+            Some("verify") if args.len() >= 2 => open().and_then(|h| h.verify(&args[1])),
+            Some("lineage") if args.len() >= 2 => open().and_then(|h| h.lineage(&args[1])),
+            Some("entry") if args.len() >= 2 => open().and_then(|h| h.entry_path(&args[1])),
+            Some("list") => {
+                let json = args.iter().any(|a| a == "--json");
+                open().and_then(|h| h.list(json))
+            }
+            Some("serve") => {
+                let port = args
+                    .iter()
+                    .position(|a| a == "--port")
+                    .and_then(|i| args.get(i + 1))
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(9377);
+                open().and_then(|h| h.serve(port)).map(|_| String::new())
+            }
+            _ => Err("usage: forte hub <publish|fork|release|verify|lineage|list|entry|serve> … --hub <git-URL>".into()),
+        };
+        return match result {
+            Ok(msg) => {
+                println!("{msg}");
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("hub: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
 
     // --hub http://host:9377 (or FORTE_HUB=http://…) targets a served hub
     if fortelang::hub_remote::is_url(&hub_dir) {

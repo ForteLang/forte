@@ -490,10 +490,37 @@ forte hub serve                      # API: http://127.0.0.1:9377
 (リリースの digest を自分のタブで再現検証)、**Fork → エディタへ**
 (fork が台帳に記録され、ファイルがエディタに入る)ができます。
 
-### みんなで使う(リモート hub)
+### みんなで使う その1: GitHub を hub にする(おすすめ)
 
-`forte hub serve` した hub は、そのまま**複数人の hub** です。
-`--hub` に URL を渡すと同じコマンドがリモートに向きます:
+サーバーは要りません。**hub はただの git リポジトリ**なので、GitHub に
+空リポジトリをひとつ作れば、それが複数人の hub になります:
+
+```bash
+# 1. github.com で空リポジトリを作る(例: you/forte-hub)
+# 2. あとは --hub に渡すだけ
+forte hub publish my-song.forte --hub github:you/forte-hub   # 履歴ごと push
+forte hub fork handmade ./my-take --hub github:you/forte-hub # 履歴ごと fork
+forte hub list --hub github:you/forte-hub
+forte hub serve --hub github:you/forte-hub  # ブラウザで系譜をディグる
+```
+
+`github:you/forte-hub` は `https://github.com/you/forte-hub.git` の略記です。
+SSH 派は `git@github.com:you/forte-hub.git` をそのまま渡せます(GitLab や
+NAS の bare repo など、git が話せる場所ならどこでも hub になります)。
+
+- **認証**: 普段の git 資格情報(SSH 鍵 / gh auth)がそのまま使われます
+- **作者名**: `git config user.name`(≒ GitHub の名前)
+- **並行 publish**: push が compare-and-swap になっていて、先を越されたら
+  自動で同期→リプレイします。二人同時に publish しても両方入ります
+- **台帳も versioned**: `git log` すると publish / fork がそのまま並びます
+
+release / verify / lineage も同じように `--hub github:…` で使えます。
+
+### みんなで使う その2: 自前サーバー(認証付き)
+
+構造的に「取得は fork のみ」を強制したい本気の公開 hub 向けに、
+認証付き HTTP サーバーもあります。
+`forte hub serve` した hub に `--hub` の URL を渡します:
 
 ```bash
 # 参加者: 名前を登録してトークンをもらう(表示は 1 回だけ)

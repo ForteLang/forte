@@ -183,6 +183,17 @@ impl Hub {
     /// Publish a `.forte` file (song or device library) plus its transitive
     /// local imports as a new version of `name`.
     pub fn publish(&self, entry: &str, name: Option<&str>) -> Result<String, String> {
+        self.publish_as(entry, name, None)
+    }
+
+    /// [`publish`] with an explicit author (the git-backed hub names the
+    /// publisher from `git config user.name`).
+    pub fn publish_as(
+        &self,
+        entry: &str,
+        name: Option<&str>,
+        author_override: Option<&str>,
+    ) -> Result<String, String> {
         let entry_path = Path::new(entry);
         let base = entry_path.parent().unwrap_or(Path::new("")).to_string_lossy().into_owned();
         let file_name = entry_path
@@ -197,7 +208,7 @@ impl Hub {
         let name = name
             .unwrap_or(entry_path.file_stem().ok_or("ファイル名がありません")?.to_str().unwrap_or("song"))
             .to_string();
-        let mut msg = self.publish_map(&file_name, files, &name, None)?;
+        let mut msg = self.publish_map(&file_name, files, &name, author_override)?;
 
         // if the song lives in a VCS repo with a clean tree, the publish
         // carries the full history (this is what makes a hub fork a real fork)
@@ -294,6 +305,11 @@ impl Hub {
     /// The only way to take content out of the hub. Copies the latest version
     /// into `dest` and records the fork in the lineage ledger.
     pub fn fork(&self, name: &str, dest: &str) -> Result<String, String> {
+        self.fork_as(name, dest, None)
+    }
+
+    /// [`fork`] with an explicit forker name in the ledger.
+    pub fn fork_as(&self, name: &str, dest: &str, by: Option<&str>) -> Result<String, String> {
         let mut reg = self.registry()?;
         let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
         let ver = repo.versions.last().ok_or("バージョンがありません")?.clone();
@@ -338,9 +354,30 @@ impl Hub {
         };
 
         reg.seq += 1;
-        reg.events.push(Event { seq: reg.seq, kind: "fork".into(), repo: name.into(), v: ver.v, by: author() });
+        reg.events.push(Event {
+            seq: reg.seq,
+            kind: "fork".into(),
+            repo: name.into(),
+            v: ver.v,
+            by: by.map(String::from).unwrap_or_else(author),
+        });
         self.save(&reg)?;
         Ok(format!("forked: {name} v{} -> {dest} (系譜に記録済み{history_note})", ver.v))
+    }
+
+    /// Append a ledger event (the git-backed hub replays events after a
+    /// push conflict resets its checkout).
+    pub fn record_event(&self, kind: &str, repo: &str, v: u32, by: &str) -> Result<(), String> {
+        let mut reg = self.registry()?;
+        reg.seq += 1;
+        reg.events.push(Event {
+            seq: reg.seq,
+            kind: kind.into(),
+            repo: repo.into(),
+            v,
+            by: by.into(),
+        });
+        self.save(&reg)
     }
 
     /// Compile the stored snapshot of `name` (latest version). The hub store
