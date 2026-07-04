@@ -265,7 +265,7 @@ fn project_json_roundtrip() {
 #[test]
 fn bounce_writes_wav() {
     let project = Project::demo();
-    let path = std::env::temp_dir().join("bitwig_clone_bounce_test.wav");
+    let path = std::env::temp_dir().join("forte_bounce_test.wav");
     let secs = dawcore::bounce::render_wav(&project, &path, 4.0).expect("bounce");
     assert!(secs > 1.0);
     let meta = std::fs::metadata(&path).expect("wav written");
