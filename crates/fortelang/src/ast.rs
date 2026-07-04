@@ -78,6 +78,7 @@ pub enum NodeArg {
 pub struct SongAst {
     pub name: String,
     pub tempo: Option<(f64, Pos)>,
+    pub swing: Option<(f64, Pos)>,
     pub meter: Option<((u32, u32), Pos)>,
     pub key: Option<((String, String), Pos)>, // (root, scale) as written
     pub lets: Vec<LetAst>,

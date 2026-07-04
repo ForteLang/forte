@@ -10,7 +10,7 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 
-const NATIVE_DIGEST = '10a443f96fc027cf'; // forte build songs/first-light.forte
+const NATIVE_DIGEST = '1f1e8e0e873a42fc'; // forte build songs/first-light.forte
 const NATIVE_DIGEST_HANDMADE = 'd66a3103bcf1cad1'; // forte build songs/handmade.forte
 const PORT = 8329;
 const ROOT = new URL('..', import.meta.url).pathname;

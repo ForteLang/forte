@@ -3,7 +3,7 @@
 //! ```text
 //! file   := song
 //! song   := "song" STRING "{" { songItem } "}"
-//! item   := "tempo" NUM["bpm"] | "meter" NUM "/" NUM | "key" IDENT IDENT
+//! item   := "tempo" NUM["bpm"] | "swing" NUM | "meter" NUM "/" NUM | "key" IDENT IDENT
 //!         | "let" IDENT "=" musicLit | track
 //! track  := "track" IDENT "{" { trackItem } "}"
 //! titem  := "instrument" call | "insert" call
@@ -138,6 +138,7 @@ impl Parser {
         let mut song = SongAst {
             name,
             tempo: None,
+            swing: None,
             meter: None,
             key: None,
             lets: Vec::new(),
@@ -170,6 +171,12 @@ impl Parser {
                                 }
                             }
                             song.tempo = Some((n, pos));
+                        }
+                    }
+                    "swing" => {
+                        self.bump();
+                        if let Some((n, _unit, pos)) = self.number("swing") {
+                            song.swing = Some((n, pos));
                         }
                     }
                     "meter" => {

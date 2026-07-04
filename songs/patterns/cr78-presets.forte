@@ -1,0 +1,47 @@
+// Pattern: CR-78 Presets (100bpm) — 実機はプリセットパターンこそが文化。
+// Rock / Disco / Bossa Nova の内蔵リズム風を 8 小節ずつ。
+import { BD78, SD78, HH78, CY78, Tamb78, Bongo78, Claves78, Cowbell78 } from "../../lib/std/cr78.forte"
+
+song "Pattern: CR-78 Presets" {
+  tempo 100bpm
+  meter 4/4
+  key C minor
+
+  section rock  = bars(1..8)
+  section disco = bars(9..16)
+  section bossa = bars(17..24)
+
+  let rockbd  = beat`x--- ---- x-x- ----`
+  let rocksd  = beat`---- x--- ---- x---`
+  let rockhh  = beat`x-x- x-x- x-x- x-x-`
+  let discobd = beat`x--- x--- x--- x---`
+  let discohh = beat`x.x. x.x. x.x. x.xX`
+  let discotb = beat`---- x--- ---- x---`
+  let bossabd = beat`x--- --x- x--- --x-`
+  let clave   = beat`x--x --x- --x- -x-- x--x --x- --x- -x--`
+  let bongo   = beat`x-x- -xx- x-x- -xx-`
+
+  track BD {
+    instrument BD78() volume 0.9
+    play rockbd at rock
+    play discobd at disco
+    play bossabd at bossa
+  }
+  track SD { instrument SD78() volume 0.65 play rocksd at rock play rocksd at disco }
+  track HH {
+    instrument HH78() volume 0.5 pan 0.15
+    play rockhh at rock
+    play discohh at disco
+    play rockhh at bossa
+  }
+  track CY   { instrument CY78() volume 0.3 send Tape 0.3 play beat`x--- ---- ---- ----` at bars(9..9) }
+  track Tamb { instrument Tamb78() volume 0.4 pan -0.2 play discotb at disco }
+  track Clv  { instrument Claves78() volume 0.55 pan 0.2 play clave at bossa }
+  track Bng  { instrument Bongo78() volume 0.5 pan -0.25 play bongo at bossa }
+  track Bell { instrument Cowbell78() volume 0.3 pan 0.3 play beat`x--- x--- x--- x---` at disco }
+
+  return Tape {
+    insert reverb(size: 0.4, decay: 0.35, mix: 1.0)
+    volume 0.5
+  }
+}

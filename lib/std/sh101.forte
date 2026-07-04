@@ -1,0 +1,34 @@
+// std/sh101 — 1 VCO のモノシンセ。saw / pulse / サブのミキサー構成と
+// glide が本体。抜けの良さは「1 本の VCO を濁らせない」ことから来る。
+// 使い方: import { SH101Bass, SH101Lead } from "lib/std/sh101.forte"
+
+device SH101Bass : Instrument {
+  param cutoff = 0.35 in 0.0..1.0
+  param glide  = 0.03 in 0.0..0.3
+
+  node env  = adsr(a: 0.002, d: 0.28, s: 0.35, r: 0.08)
+  node fenv = adsr(a: 0.001, d: 0.16, s: 0.1, r: 0.06)
+  node saw  = osc(shape: "saw")
+  node sub  = osc(freq: gain(in: note.freq, level: 0.5), shape: "square")
+  node mixr = mix(a: saw, b: gain(in: sub, level: 0.6))
+  node f    = svf(in: mixr, cutoff: cutoff, reso: 0.35, mod: gain(in: fenv, level: 0.3))
+  out gain(in: f, mod: env, level: 0.85)
+}
+
+device SH101Lead : Instrument {
+  param glide = 0.08 in 0.0..0.4
+
+  node env = adsr(a: 0.01, d: 0.25, s: 0.75, r: 0.2)
+  node vib = lfo(rate: 0.3, shape: "tri")
+  node pls = osc(shape: "pulse", pw: 0.4, mod: gain(in: vib, level: 0.008))
+  node f   = svf(in: pls, cutoff: 0.55, reso: 0.3)
+  out gain(in: f, mod: env, level: 0.65)
+}
+
+device SH101Zap : Instrument {
+  node env  = adsr(a: 0.001, d: 0.12, s: 0.0, r: 0.05)
+  node penv = adsr(a: 0.001, d: 0.05, s: 0.0, r: 0.02)
+  node saw  = osc(shape: "saw", mod: gain(in: penv, level: 0.6))
+  node f    = svf(in: saw, cutoff: 0.45, reso: 0.7, mod: gain(in: penv, level: 0.4))
+  out gain(in: f, mod: env, level: 0.7)
+}

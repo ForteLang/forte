@@ -1,0 +1,60 @@
+// Freeway Electro — エレクトロ 32 小節。808 の骨格に SH101 のザップ、
+// P5 のコードヒット。ブレイクでタムの会話が入る。
+import { BD808, SD808, CH808, OH808, CP808, CB808, LT808, MT808, HT808 } from "../../lib/std/tr808.forte"
+import { SH101Bass, SH101Zap } from "../../lib/std/sh101.forte"
+import { P5Brass } from "../../lib/std/prophet5.forte"
+
+song "Freeway Electro" {
+  tempo 118bpm
+  swing 0.52
+  meter 4/4
+  key G minor
+
+  section roll  = bars(1..12)
+  section brk   = bars(13..16)
+  section roll2 = bars(17..28)
+  section out   = bars(29..32)
+
+  let kick  = beat`X--- --x- --x- x--- X--- --x- ---- x-.-`
+  let snare = beat`---- X--- ---- X--- ---- X--- ---- X.--`
+  let chh   = beat`x.x. x.x. x.x. x.xX`
+  let ohh   = beat`--x- ---- --x- ----`
+  let clap  = beat`---- x--- ---- ----`
+  let bell  = beat`x--- ---- -x-- --x-`
+  let toms  = beat`x-x- ---- ---- x--- ---- x-x- ---- ---- x--- -x-- x-x- ---- --x- ---- x-x- X---`
+  let zap   = beat`---- ---x ---- ----`
+
+  track BD { instrument BD808(tone: 0.45, decay: 0.55) insert comp(thresh: 0.4, ratio: 0.6) volume 0.95 play kick at roll play kick at roll2 play kick at out }
+  track SD { instrument SD808(snappy: 0.7) volume 0.8 play snare at roll play snare at roll2 play snare at out }
+  track CH { instrument CH808() volume 0.45 pan 0.15 play chh at roll play chh at roll2 }
+  track OH { instrument OH808(decay: 0.3) volume 0.35 play ohh at roll2 }
+  track CP { instrument CP808(room: 0.5) volume 0.5 play clap at bars(5..28) }
+  track CB { instrument CB808() volume 0.3 pan -0.25 play bell at roll2 }
+  track LT { instrument LT808() volume 0.7 pan -0.2 play toms at brk }
+  track MT { instrument MT808() volume 0.65 play toms at brk }
+  track HT { instrument HT808() volume 0.6 pan 0.2 play zap at brk }
+
+  track Bass {
+    instrument SH101Bass(cutoff: 0.38, glide: 0.04)
+    insert drive(drive: 0.15)
+    volume 0.8
+    play notes`G1:0.25 _:0.25 G1:0.25 G2~:0.25 _:0.25 G1:0.25 _:0.25 Bb1:0.25 _:0.25 G1:0.25 F1:0.25 _:0.25 G1:0.25 D2~:0.25 G1:0.25 _:0.25` at roll
+    play notes`G1:0.25 _:0.25 G1:0.25 G2~:0.25 _:0.25 G1:0.25 _:0.25 Bb1:0.25 _:0.25 G1:0.25 F1:0.25 _:0.25 G1:0.25 D2~:0.25 G1:0.25 _:0.25` at roll2
+  }
+
+  track Zap {
+    instrument SH101Zap()
+    insert delay(time: 0.25, fdbk: 0.4, mix: 0.35)
+    volume 0.45
+    pan 0.3
+    play zap at roll2
+  }
+
+  track Hits {
+    instrument P5Brass(blow: 0.6)
+    insert chorus(rate: 0.3, depth: 0.4, mix: 0.4)
+    volume 0.45
+    pan -0.1
+    play notes`_:3 [G3 Bb3 D4]:0.5 _:0.5 _:3.5 [F3 A3 C4]:0.5` at roll2
+  }
+}

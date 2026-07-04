@@ -1,0 +1,37 @@
+// std/prophet5 — 2 VCO ポリ。デチューンした saw + pulse、ポリモッド風に
+// エンベロープでピッチ/フィルタを揺らすのが実機の署名。
+// 使い方: import { P5Brass, P5Strings } from "lib/std/prophet5.forte"
+
+device P5Brass : Instrument {
+  param blow = 0.5 in 0.0..1.0
+
+  node env  = adsr(a: 0.03, d: 0.25, s: 0.7, r: 0.18)
+  node fenv = adsr(a: 0.05, d: 0.3, s: 0.45, r: 0.12)
+  node o1   = osc(shape: "saw")
+  node o2   = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.008)), shape: "pulse", pw: 0.4)
+  node vco  = mix(a: o1, b: o2)
+  node f    = svf(in: vco, cutoff: blow, reso: 0.2, mod: gain(in: fenv, level: 0.35))
+  out gain(in: f, mod: env, level: 0.55)
+}
+
+device P5Strings : Instrument {
+  node env = adsr(a: 0.3, d: 0.3, s: 0.85, r: 0.6)
+  node pwm = lfo(rate: 0.2, shape: "sine")
+  node o1  = osc(shape: "saw")
+  node o2  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.006)),
+                 shape: "pulse", pw: 0.5, pwm: gain(in: pwm, level: 0.4))
+  node f   = svf(in: mix(a: o1, b: o2), cutoff: 0.5, reso: 0.12)
+  out gain(in: f, mod: env, level: 0.45)
+}
+
+device P5Sweep : Instrument {
+  // ポリモッド風: フィルタエンベロープが osc2 のピッチも引っ張る
+  node env  = adsr(a: 0.02, d: 0.5, s: 0.6, r: 0.4)
+  node fenv = adsr(a: 0.01, d: 0.6, s: 0.2, r: 0.3)
+  node o1   = osc(shape: "saw")
+  node o2   = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.01)),
+                  shape: "saw", mod: gain(in: fenv, level: 0.06))
+  node f    = svf(in: mix(a: o1, b: o2), cutoff: 0.25, reso: 0.5,
+                  mod: gain(in: fenv, level: 0.5))
+  out gain(in: f, mod: env, level: 0.5)
+}

@@ -1,0 +1,65 @@
+// Smiley Acid — アシッドハウス 32 小節。303 のラインが 8 小節ごとに
+// フィルタの開きを変えながら変奏し、pump がフロアの呼吸を作る。
+import { Bass303 } from "../../lib/std/tb303.forte"
+import { Kick909, HatClosed, HatOpen, Clap, Crash } from "../../lib/std/drums.forte"
+import { Stab } from "../../lib/std/fx.forte"
+import { DarkPad } from "../../lib/std/pads.forte"
+
+song "Smiley Acid" {
+  tempo 126bpm
+  swing 0.53
+  meter 4/4
+  key A minor
+
+  section warmup = bars(1..8)
+  section open   = bars(9..16)
+  section deep   = bars(17..24)
+  section peak   = bars(25..32)
+
+  let four = beat`X--- x--- x--- x---`
+  let off  = beat`--x- --x- --x- --x-`
+  let hat  = beat`x.x. x.x. x.x. x.xX`
+  let clap = beat`---- x--- ---- x---`
+  let rave = prog`Am | Am | C | G`
+
+  return Warehouse {
+    insert reverb(size: 0.7, decay: 0.5, mix: 1.0)
+    volume 0.7
+  }
+
+  track Kick { instrument Kick909(click: 0.6) insert comp(thresh: 0.4, ratio: 0.6) volume 0.95 play four at bars(1..31) }
+  track Off  { instrument HatOpen(decay: 0.2) volume 0.45 play off at bars(5..30) }
+  track Hat  { instrument HatClosed(bright: 0.95) volume 0.35 pan 0.2 play hat at bars(9..30) }
+  track Clap { instrument Clap(tone: 0.6) volume 0.55 send Warehouse 0.25 play clap at bars(9..30) }
+  track Cym  { instrument Crash(decay: 0.85) volume 0.4 send Warehouse 0.3 play beat`x--- ---- ---- ----` at bars(25..25) }
+
+  track Acid {
+    instrument Bass303(cutoff: 0.24, reso: 0.82, envmod: 0.5, decay: 0.2)
+    insert drive(drive: 0.3)
+    insert delay(time: 0.238, fdbk: 0.3, mix: 0.12)
+    volume 0.75
+    play notes`A1:0.25 A1:0.25 A2:0.25 A1:0.25 C2~:0.25 D2:0.25 A1:0.25 G2~:0.25 A2:0.25 A1:0.25 E2:0.25 A1:0.25 D2~:0.25 C2:0.25 A1:0.25 G1~:0.25` at warmup
+    play notes`A1!:0.25 A1:0.25 A2:0.25 A1:0.25 C2~:0.25 D2!:0.25 A1:0.25 G2~:0.25 A2:0.25 A1:0.25 E2!:0.25 A1:0.25 D2~:0.25 C2:0.25 A1!:0.25 G1~:0.25` at open
+    play notes`A1!:0.25 E2~:0.25 A2!:0.25 G2~:0.25 E2:0.25 D2~:0.25 C2!:0.25 A1:0.25 A1:0.25 C2~:0.25 D2:0.25 E2!:0.25 G2~:0.25 A2:0.25 G2~:0.25 E2~:0.25` at peak
+    automate volume from 0.4 to 0.75 over warmup
+  }
+
+  track Pad {
+    instrument DarkPad()
+    insert pump(amount: 0.65)
+    send Warehouse 0.5
+    volume 0.45
+    play chords(rave) at deep
+    play chords(rave) at peak
+  }
+
+  track Stab {
+    instrument Stab()
+    insert pump(amount: 0.5)
+    send Warehouse 0.4
+    volume 0.5
+    pan 0.2
+    play chords(rave) at open
+    play chords(rave) at peak
+  }
+}
