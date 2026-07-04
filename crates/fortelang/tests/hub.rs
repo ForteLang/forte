@@ -70,7 +70,7 @@ fn publishing_a_song_snapshots_its_imports() {
     hub.fork("handmade", &dest).unwrap();
     let entry = format!("{dest}/handmade.forte");
     let src = std::fs::read_to_string(&entry).unwrap();
-    let base = format!("{dest}");
+    let base = dest.to_string();
     fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base)
         .expect("forked snapshot must compile standalone");
 }
@@ -117,7 +117,7 @@ fn verify_detects_tampered_sources() {
     assert!(src.contains("reso: 0.3"));
     std::fs::write(&stored, src.replace("reso: 0.3", "reso: 0.9")).unwrap();
 
-    let err = hub.verify("handmade").err().expect("tampering must be detected");
+    let err = hub.verify("handmade").expect_err("tampering must be detected");
     assert!(err.contains("MISMATCH"), "{err}");
 }
 
@@ -151,7 +151,7 @@ fn broken_sources_cannot_be_published() {
     let hub = Hub::open(&hub_dir).unwrap();
     let bad = format!("{work}/bad.forte");
     std::fs::write(&bad, "song \"X\" { track A { } }").unwrap();
-    let err = hub.publish(&bad, None).err().expect("must fail");
+    let err = hub.publish(&bad, None).expect_err("must fail");
     assert!(err.contains("E-"), "diagnostics surface in the error: {err}");
 }
 
@@ -321,7 +321,7 @@ song "Vocal" {
     let mut bad = std::collections::BTreeMap::new();
     bad.insert("song.forte".to_string(), b"song \"X\" {".to_vec());
     assert!(hub.publish_map("song.forte", bad, "broken", None).is_err());
-    assert!(hub.registry().unwrap().repos.get("broken").is_none());
+    assert!(!hub.registry().unwrap().repos.contains_key("broken"));
 
     let _ = std::fs::remove_dir_all(&dir);
 }

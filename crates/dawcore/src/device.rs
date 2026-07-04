@@ -156,6 +156,12 @@ pub struct NoteTranspose {
     map: [i16; 128], // input pitch -> emitted pitch (-1 = not held)
 }
 
+impl Default for NoteTranspose {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NoteTranspose {
     pub fn new() -> Self {
         Self { semitones: 0, map: [-1; 128] }
@@ -199,6 +205,12 @@ pub struct NoteRepeat {
     held: [f32; 128], // velocity while held, 0 = not held
     pending_offs: Vec<(f64, u8)>, // (beat, pitch)
     free_beat: f64,
+}
+
+impl Default for NoteRepeat {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NoteRepeat {
@@ -282,6 +294,12 @@ pub struct Arpeggiator {
     sounding: Option<u8>,
     pending_off: Option<(f64, u8)>,
     free_beat: f64,
+}
+
+impl Default for Arpeggiator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Arpeggiator {

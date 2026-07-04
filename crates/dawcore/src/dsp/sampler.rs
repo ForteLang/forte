@@ -159,6 +159,7 @@ impl Sampler {
     }
 
     #[inline]
+    #[allow(clippy::should_implement_trait)] // audio-rate tick, not an Iterator
     pub fn next(&mut self) -> f32 {
         let Some(sample) = &self.sample else { return 0.0 };
         let data = &sample.data;

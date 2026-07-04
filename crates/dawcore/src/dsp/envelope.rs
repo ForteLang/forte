@@ -65,6 +65,7 @@ impl Adsr {
     }
 
     #[inline]
+    #[allow(clippy::should_implement_trait)] // audio-rate tick, not an Iterator
     pub fn next(&mut self) -> f32 {
         match self.stage {
             Stage::Idle => {}

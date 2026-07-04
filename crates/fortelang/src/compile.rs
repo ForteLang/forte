@@ -455,7 +455,7 @@ fn eval_pattern(
                     ))
                 }
             };
-            Ok((notes, len, format!("{name}")))
+            Ok((notes, len, name.to_string()))
         }
     }
 }
@@ -822,6 +822,7 @@ fn build_effect(call: &Call, user_devices: &HashMap<&str, &DeviceAst>) -> Result
         dev.grid = Some(graph);
         return Ok(dev);
     }
+    #[allow(clippy::type_complexity)]
     let (kind, params, opts): (DeviceKind, &[(&str, usize)], &[(&str, usize, &[&str])]) =
         match call.name.as_str() {
             "filter" => (

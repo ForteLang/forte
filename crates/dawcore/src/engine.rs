@@ -742,7 +742,7 @@ impl Engine {
             };
 
             // mix into master with gain / pan / mute / solo
-            let audible = track.solo || (!track.mute && !(any_solo && !track.solo));
+            let audible = track.solo || (!track.mute && !any_solo);
             let g = if audible { vol * vol } else { 0.0 };
             let theta = (track.pan + 1.0) * 0.5 * std::f32::consts::FRAC_PI_2;
             let (pl, pr) = (crate::dmath::cos(theta), crate::dmath::sin(theta));
@@ -776,6 +776,7 @@ impl Engine {
         }
 
         // ---- pass 2: effect (return) tracks ---------------------------------
+        #[allow(clippy::needless_range_loop)] // slot indexes parallel arrays (is_fx, send_l/r)
         for slot in 0..self.tracks.len() {
             if !is_fx[slot] {
                 continue;
@@ -790,7 +791,7 @@ impl Engine {
                 frames,
             );
 
-            let audible = track.solo || (!track.mute && !(any_solo && !track.solo));
+            let audible = track.solo || (!track.mute && !any_solo);
             let g = if audible { track.gain * track.gain } else { 0.0 };
             let theta = (track.pan + 1.0) * 0.5 * std::f32::consts::FRAC_PI_2;
             let (pl, pr) = (crate::dmath::cos(theta), crate::dmath::sin(theta));

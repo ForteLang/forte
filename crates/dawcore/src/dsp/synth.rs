@@ -66,6 +66,7 @@ impl PolySynth {
     }
 
     #[inline]
+    #[allow(clippy::should_implement_trait)] // audio-rate tick, not an Iterator
     pub fn next(&mut self) -> f32 {
         let mut sum = 0.0;
         let p = self.params;

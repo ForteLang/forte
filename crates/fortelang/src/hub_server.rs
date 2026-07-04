@@ -62,7 +62,7 @@ fn handle(hub: &Hub, mut stream: TcpStream) -> std::io::Result<()> {
     let token: Option<String> = head.lines().find_map(|l| {
         l.to_ascii_lowercase()
             .strip_prefix("authorization:")
-            .map(|_| l.splitn(2, ':').nth(1).unwrap_or("").trim())
+            .map(|_| l.split_once(':').map_or("", |(_, v)| v).trim())
             .and_then(|v| v.strip_prefix("Bearer ").or_else(|| v.strip_prefix("bearer ")))
             .map(str::trim)
             .map(String::from)

@@ -379,6 +379,7 @@ impl GridSynth {
     }
 
     #[inline]
+    #[allow(clippy::should_implement_trait)] // audio-rate tick, not an Iterator
     pub fn next(&mut self) -> f32 {
         let Some(out_node) = self.out_node else { return 0.0 };
         let mut sum = 0.0f32;

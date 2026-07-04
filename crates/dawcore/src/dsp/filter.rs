@@ -94,6 +94,12 @@ pub struct OnePole {
     z1: f32,
 }
 
+impl Default for OnePole {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OnePole {
     pub fn new() -> Self {
         Self { a0: 1.0, b1: 0.0, z1: 0.0 }

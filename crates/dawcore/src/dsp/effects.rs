@@ -101,12 +101,12 @@ impl FdnReverb {
         let g = 0.5 + self.decay * 0.49; // feedback gain
 
         let mut out = [0.0f32; 4];
-        for i in 0..4 {
+        for (i, o) in out.iter_mut().enumerate() {
             let buf = &self.lines[i];
             let n = ((self.delays[i] as f32) * size_scale) as usize;
             let n = n.min(buf.len() - 1).max(1);
             let read = (self.idx[i] + buf.len() - n) % buf.len();
-            out[i] = buf[read];
+            *o = buf[read];
         }
 
         // Householder feedback matrix mixing for diffusion
@@ -135,6 +135,12 @@ impl FdnReverb {
 /// Soft-clipping waveshaper drive.
 pub struct Drive {
     pub amount: f32, // 0..1
+}
+
+impl Default for Drive {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Drive {

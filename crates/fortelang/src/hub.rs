@@ -690,7 +690,7 @@ impl Hub {
             .iter()
             .filter(|(other, r)| {
                 *other != name
-                    && r.versions.last().map_or(false, |v| {
+                    && r.versions.last().is_some_and(|v| {
                         v.uses.iter().any(|u| latest.devices.contains(u))
                     })
             })
@@ -704,7 +704,7 @@ impl Hub {
                     .iter()
                     .find(|(other, r)| {
                         *other != name
-                            && r.versions.last().map_or(false, |v| v.devices.contains(u))
+                            && r.versions.last().is_some_and(|v| v.devices.contains(u))
                     })
                     .map(|(other, _)| (u, other))
             })
@@ -721,6 +721,7 @@ impl Hub {
 
     /// Latest snapshot's file contents (what the browser player compiles).
     /// (text files, binary assets as base64) of the latest version.
+    #[allow(clippy::type_complexity)]
     pub fn snapshot_files(
         &self,
         name: &str,
@@ -984,10 +985,10 @@ fn collect_files(
     // publishable — the take IS the point of a performance fork)
     for asset in &file.assets {
         let child_rel = normalize(&format!("{rel_dir}/{}", asset.path));
-        if !files.contains_key(&child_rel) {
-            let bytes = std::fs::read(Path::new(base).join(&child_rel))
-                .map_err(|e| format!("{child_rel}: {e}"))?;
-            files.insert(child_rel, bytes);
+        if let std::collections::btree_map::Entry::Vacant(e) = files.entry(child_rel) {
+            let bytes = std::fs::read(Path::new(base).join(e.key()))
+                .map_err(|err| format!("{}: {err}", e.key()))?;
+            e.insert(bytes);
         }
     }
     Ok(())

@@ -101,6 +101,7 @@ impl KitSampler {
     }
 
     #[inline]
+    #[allow(clippy::should_implement_trait)] // audio-rate tick, not an Iterator
     pub fn next(&mut self) -> f32 {
         let mut sum = 0.0f32;
         for v in &mut self.voices {

@@ -230,7 +230,7 @@ fn conflicting_edits_leave_markers_and_resolution_records_both_parents() {
     std::fs::write(dir.join("song.forte"), SONG_A.replace("volume 0.5", "volume 0.2")).unwrap();
     repo.commit("quiet").unwrap();
 
-    let err = repo.merge("loud").err().expect("same-line edits must conflict");
+    let err = repo.merge("loud").expect_err("same-line edits must conflict");
     assert!(err.contains("同じ行を両方で編集"), "{err}");
     let marked = std::fs::read_to_string(dir.join("song.forte")).unwrap();
     assert!(marked.contains("<<<<<<< main") && marked.contains(">>>>>>> loud"), "{marked}");

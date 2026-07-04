@@ -168,19 +168,14 @@ impl DeviceKind {
 
 /// Where a sample comes from. Kept serialisable; the engine resolves it into a
 /// shared audio buffer.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SampleSource {
+    #[default]
     None,
     Builtin(String), // "Kick" / "Snare" / "Hat"
     File(String),    // path on disk
     /// In-memory registered asset (recorded audio), keyed by content hash.
     Asset(String),
-}
-
-impl Default for SampleSource {
-    fn default() -> Self {
-        SampleSource::None
-    }
 }
 
 impl SampleSource {
