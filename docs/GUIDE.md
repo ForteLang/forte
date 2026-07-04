@@ -490,6 +490,29 @@ forte hub serve                      # API: http://127.0.0.1:9377
 (リリースの digest を自分のタブで再現検証)、**Fork → エディタへ**
 (fork が台帳に記録され、ファイルがエディタに入る)ができます。
 
+### みんなで使う(リモート hub)
+
+`forte hub serve` した hub は、そのまま**複数人の hub** です。
+`--hub` に URL を渡すと同じコマンドがリモートに向きます:
+
+```bash
+# 参加者: 名前を登録してトークンをもらう(表示は 1 回だけ)
+forte hub signup shusuke --hub http://host:9377
+export FORTE_HUB_TOKEN=<もらったトークン>
+
+forte hub publish my-song.forte --hub http://host:9377   # 履歴ごと push
+forte hub fork handmade ./my-take --hub http://host:9377 # 履歴ごと fork
+forte hub list --hub http://host:9377
+```
+
+誰かひとりでも登録した hub は publish に**トークン必須**になり、
+作者名はトークンから決まります(body の author は無視 — なりすまし不可)。
+push された履歴オブジェクトはサーバー側で内容ハッシュを検証してから
+保存されるので、ストアは誰が push しても content-addressed のままです。
+トークンはサーバーに SHA-256 ハッシュでしか保存されません。
+v1 は素の HTTP なので、インターネットに出すなら TLS リバースプロキシを
+前段に(README 参照)。
+
 ## 9. 困ったとき
 
 | 症状 | 対処 |

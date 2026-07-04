@@ -101,6 +101,13 @@ fn author() -> String {
         .unwrap_or_else(|_| "anonymous".into())
 }
 
+/// Registered users: author name → SHA-256 of their token. The hub never
+/// stores the token itself; losing it means signing up under a new name.
+#[derive(Serialize, Deserialize, Default)]
+pub struct Users {
+    pub users: BTreeMap<String, String>,
+}
+
 impl Hub {
     pub fn open(root: &str) -> Result<Hub, String> {
         let root = PathBuf::from(root);
@@ -110,6 +117,52 @@ impl Hub {
 
     fn registry_path(&self) -> PathBuf {
         self.root.join("registry.json")
+    }
+
+    // -----------------------------------------------------------------------
+    // users & tokens (multi-user hub: publish is authenticated)
+    // -----------------------------------------------------------------------
+
+    fn users_path(&self) -> PathBuf {
+        self.root.join("users.json")
+    }
+
+    pub fn users(&self) -> Users {
+        std::fs::read_to_string(self.users_path())
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    /// Register `author` and hand back their token (shown exactly once).
+    pub fn signup(&self, author: &str) -> Result<String, String> {
+        if author.is_empty() || !author.chars().all(|c| c.is_alphanumeric() || "-_".contains(c)) {
+            return Err(format!("author '{author}' が不正です(英数字と -_)"));
+        }
+        let mut users = self.users();
+        if users.users.contains_key(author) {
+            return Err(format!("'{author}' は登録済みです(トークンを失くした場合は別名で登録)"));
+        }
+        let token = fresh_token();
+        users.users.insert(author.into(), crate::sha::sha256_hex(token.as_bytes()));
+        std::fs::write(
+            self.users_path(),
+            serde_json::to_string_pretty(&users).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(token)
+    }
+
+    /// Who does this token belong to?
+    pub fn auth(&self, token: &str) -> Option<String> {
+        let hash = crate::sha::sha256_hex(token.as_bytes());
+        self.users().users.into_iter().find(|(_, h)| *h == hash).map(|(a, _)| a)
+    }
+
+    /// A hub with registered users requires a token to publish; an empty hub
+    /// stays open (the local/demo mode the browser E2E uses).
+    pub fn requires_auth(&self) -> bool {
+        !self.users().users.is_empty()
     }
 
     pub fn registry(&self) -> Result<Registry, String> {
@@ -653,7 +706,8 @@ impl Hub {
     }
 
     /// Remote fork: record the ledger event and hand back the files plus the
-    /// lineage stamp the client must keep with its copy.
+    /// lineage stamp the client must keep with its copy. When the version
+    /// carries history, the whole object store comes along (base64).
     pub fn fork_remote(&self, name: &str, by: &str) -> Result<serde_json::Value, String> {
         let mut reg = self.registry()?;
         let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
@@ -668,12 +722,85 @@ impl Hub {
             by: if by.is_empty() { "anonymous".into() } else { by.into() },
         });
         self.save(&reg)?;
-        Ok(serde_json::json!({
+        let mut out = serde_json::json!({
             "origin": Origin { repo: name.into(), v: ver.v, commit: ver.commit.clone() },
             "entry": ver.entry,
             "files": files,
             "assets": assets,
-        }))
+        });
+        if ver.commit.is_some() {
+            if let Some(objects) = self.objects_b64(name)? {
+                out["objects"] = serde_json::json!(objects);
+                out["head"] = serde_json::json!(ver.commit);
+            }
+        }
+        Ok(out)
+    }
+
+    /// The published history of `name` as {hash: base64(raw object)}.
+    pub fn objects_b64(&self, name: &str) -> Result<Option<BTreeMap<String, String>>, String> {
+        let dir = self.root.join("store").join(name).join("objects");
+        if !dir.is_dir() {
+            return Ok(None);
+        }
+        let mut out = BTreeMap::new();
+        for prefix in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
+            let prefix = prefix.map_err(|e| e.to_string())?;
+            if !prefix.path().is_dir() {
+                continue;
+            }
+            let p = prefix.file_name().to_string_lossy().into_owned();
+            for f in std::fs::read_dir(prefix.path()).map_err(|e| e.to_string())? {
+                let f = f.map_err(|e| e.to_string())?;
+                let rest = f.file_name().to_string_lossy().into_owned();
+                let bytes = std::fs::read(f.path()).map_err(|e| e.to_string())?;
+                out.insert(format!("{p}{rest}"), base64_encode(&bytes));
+            }
+        }
+        Ok(Some(out))
+    }
+
+    /// Accept pushed history objects (remote publish). Every object is
+    /// verified against its content hash before it is stored — the store
+    /// stays content-addressed no matter who pushes.
+    pub fn import_objects(
+        &self,
+        name: &str,
+        objects: &BTreeMap<String, Vec<u8>>,
+        head: &str,
+    ) -> Result<usize, String> {
+        if !objects.contains_key(head) {
+            let head_path =
+                self.root.join("store").join(name).join("objects").join(&head[..2.min(head.len())]);
+            let already = head.len() > 2 && head_path.join(&head[2..]).is_file();
+            if !already {
+                return Err(format!("head {head} が push されたオブジェクトにありません"));
+            }
+        }
+        let dir = self.root.join("store").join(name).join("objects");
+        let mut copied = 0;
+        for (hash, bytes) in objects {
+            if hash.len() < 3 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Err(format!("オブジェクト名 '{hash}' が不正です"));
+            }
+            if crate::sha::sha256_hex(bytes) != *hash {
+                return Err(format!("オブジェクト {hash} の内容がハッシュと一致しません(改竄?)"));
+            }
+            let dest = dir.join(&hash[..2]).join(&hash[2..]);
+            if dest.exists() {
+                continue;
+            }
+            std::fs::create_dir_all(dest.parent().unwrap()).map_err(|e| e.to_string())?;
+            std::fs::write(dest, bytes).map_err(|e| e.to_string())?;
+            copied += 1;
+        }
+        // stamp the newest version with its head commit
+        let mut reg = self.registry()?;
+        if let Some(v) = reg.repos.get_mut(name).and_then(|r| r.versions.last_mut()) {
+            v.commit = Some(head.to_string());
+        }
+        self.save(&reg)?;
+        Ok(copied)
     }
 
     /// Absolute path of the latest version's entry file inside the store —
@@ -846,6 +973,26 @@ fn normalize(p: &str) -> String {
 // ---------------------------------------------------------------------------
 // base64 (standard alphabet, padded) — recorded takes cross HTTP/JSON as text
 // ---------------------------------------------------------------------------
+
+/// 32 random bytes as hex. /dev/urandom where available; a time/pid mix as
+/// the fallback (token quality, not cryptographic protocol material).
+fn fresh_token() -> String {
+    use std::io::Read as _;
+    let mut buf = [0u8; 32];
+    let ok = std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut buf))
+        .is_ok();
+    let bytes: Vec<u8> = if ok {
+        buf.to_vec()
+    } else {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let seed = format!("{}:{}:{}", now.as_nanos(), std::process::id(), author());
+        crate::sha::sha256(seed.as_bytes()).to_vec()
+    };
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
 
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 

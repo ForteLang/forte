@@ -127,6 +127,18 @@ forte hub verify handmade                # 誰でも再現検証できる
 forte hub serve                          # → http://localhost:8000/web/hub.html で系譜をディグる
 ```
 
+サーバーとして立てれば**複数人の hub** になります(認証付き push/pull):
+
+```bash
+forte hub serve --port 9377                              # ホスト側
+forte hub signup shusuke --hub http://host:9377          # トークン発行(表示は 1 回だけ)
+export FORTE_HUB_TOKEN=<token>
+forte hub publish songs/handmade.forte --hub http://host:9377  # VCS 履歴ごと push。
+                                                               # author はトークンから(なりすまし不可)
+forte hub fork handmade ./my-take --hub http://host:9377       # 履歴ごと降ってくるのも同じ
+forte hub list --hub http://host:9377
+```
+
 fork したフォルダで `forte log` すると**元作者のコミットの上に自分の履歴が積まれ**、
 `forte diff <元作者のコミット> HEAD` で「原曲から何を変えたか」が音楽の言葉で出ます。
 
