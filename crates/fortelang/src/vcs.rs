@@ -406,6 +406,94 @@ impl Repo {
         self.read_tree(&self.commit_obj(&hash)?.tree)
     }
 
+    // ---- history transport (hub push / fork) ---------------------------------
+
+    /// Every object hash reachable from a commit: the commit chain plus all
+    /// trees and blobs. This is what "publishing the history" means.
+    pub fn reachable(&self, from: &str) -> Result<Vec<String>, String> {
+        let mut out = std::collections::BTreeSet::new();
+        let mut commits = vec![from.to_string()];
+        while let Some(h) = commits.pop() {
+            if !out.insert(h.clone()) {
+                continue;
+            }
+            let c = self.commit_obj(&h)?;
+            commits.extend(c.parents.clone());
+            self.collect_tree(&c.tree, &mut out)?;
+        }
+        Ok(out.into_iter().collect())
+    }
+
+    fn collect_tree(
+        &self,
+        hash: &str,
+        out: &mut std::collections::BTreeSet<String>,
+    ) -> Result<(), String> {
+        if !out.insert(hash.to_string()) {
+            return Ok(());
+        }
+        let (kind, body) = self.get(hash)?;
+        if kind != "tree" {
+            return Ok(()); // blob
+        }
+        let entries: Vec<serde_json::Value> =
+            serde_json::from_slice(&body).map_err(|e| e.to_string())?;
+        for e in &entries {
+            let h = e["hash"].as_str().unwrap_or_default();
+            match e["kind"].as_str() {
+                Some("tree") => self.collect_tree(h, out)?,
+                _ => {
+                    out.insert(h.to_string());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Copy all objects reachable from `from` into `dest` (an objects/-style
+    /// directory). Content addressing makes this idempotent and incremental.
+    pub fn export_objects(&self, from: &str, dest: &Path) -> Result<usize, String> {
+        let mut copied = 0;
+        for hash in self.reachable(from)? {
+            let target = dest.join(&hash[..2]).join(&hash[2..]);
+            if target.exists() {
+                continue;
+            }
+            std::fs::create_dir_all(target.parent().unwrap()).map_err(|e| e.to_string())?;
+            std::fs::copy(self.object_path(&hash), &target).map_err(|e| e.to_string())?;
+            copied += 1;
+        }
+        Ok(copied)
+    }
+
+    /// Create a repository at `dir` whose `main` is `head`, importing objects
+    /// from an exported objects directory, and restore the working tree.
+    /// This is the mechanics of a fork: full history, new home.
+    pub fn clone_into(dir: &str, objects_src: &Path, head: &str) -> Result<Repo, String> {
+        Repo::init(dir)?;
+        let repo = Repo::open(dir)?;
+        let rd = std::fs::read_dir(objects_src).map_err(|e| e.to_string())?;
+        for sub in rd.flatten() {
+            let prefix = sub.file_name().to_string_lossy().into_owned();
+            if let Ok(files) = std::fs::read_dir(sub.path()) {
+                for f in files.flatten() {
+                    let dest = repo.store.join("objects").join(&prefix).join(f.file_name());
+                    if !dest.exists() {
+                        std::fs::create_dir_all(dest.parent().unwrap())
+                            .map_err(|e| e.to_string())?;
+                        std::fs::copy(f.path(), &dest).map_err(|e| e.to_string())?;
+                    }
+                }
+            }
+        }
+        repo.commit_obj(head)
+            .map_err(|_| format!("履歴に commit {} がありません", &head[..head.len().min(8)]))?;
+        std::fs::write(repo.branch_path("main"), format!("{head}\n")).map_err(|e| e.to_string())?;
+        let files = repo.read_tree(&repo.commit_obj(head)?.tree)?;
+        repo.restore(&files)?;
+        Ok(repo)
+    }
+
     // ---- merge ---------------------------------------------------------------
 
     /// Nearest common ancestor (good enough for the fork-and-jam histories the

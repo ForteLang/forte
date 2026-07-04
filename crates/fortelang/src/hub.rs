@@ -50,6 +50,11 @@ pub struct Version {
     /// transposition-invariant chord-progression signatures found in the song
     #[serde(default)]
     pub progressions: Vec<String>,
+    /// VCS commit this version was published from (None: no repo / dirty tree).
+    /// When present, the full history is in store/<name>/objects and forks
+    /// receive it.
+    #[serde(default)]
+    pub commit: Option<String>,
 }
 
 /// A deterministic build of a song version: anyone can `verify` that the
@@ -67,6 +72,9 @@ pub struct Release {
 pub struct Origin {
     pub repo: String,
     pub v: u32,
+    /// exact commit forked from (when the origin published with history)
+    #[serde(default)]
+    pub commit: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -142,6 +150,13 @@ impl Hub {
         let mut files: BTreeMap<String, String> = BTreeMap::new();
         collect_files(&file_name, &base, &mut files, 0)?;
 
+        // if the song lives in a VCS repo with a clean tree, the publish
+        // carries the full history (this is what makes a hub fork a real fork)
+        let vcs_head: Option<(crate::vcs::Repo, String)> = crate::vcs::Repo::open(if base.is_empty() { "." } else { &base })
+            .ok()
+            .filter(|r| r.is_clean().unwrap_or(false))
+            .and_then(|r| r.head().ok().flatten().map(|h| (r, h)));
+
         let name = name.unwrap_or(
             entry_path.file_stem().ok_or("ファイル名がありません")?.to_str().unwrap_or("song"),
         );
@@ -166,6 +181,16 @@ impl Hub {
             hashes.insert(rel.clone(), format!("{:016x}", crate::fnv1a64(content.as_bytes())));
         }
 
+        // push the reachable history alongside the snapshot
+        let mut history_note = String::new();
+        let mut commit = None;
+        if let Some((vcs_repo, head)) = &vcs_head {
+            let objdir = self.root.join("store").join(name).join("objects");
+            let copied = vcs_repo.export_objects(head, &objdir)?;
+            commit = Some(head.clone());
+            history_note = format!(" 履歴 push: {} ({copied} objects)", &head[..8]);
+        }
+
         repo.versions.push(Version {
             v,
             seq: reg.seq,
@@ -176,6 +201,7 @@ impl Hub {
             files: hashes,
             forked_from: forked_from.clone(),
             progressions,
+            commit,
         });
         reg.events.push(Event { seq: reg.seq, kind: "publish".into(), repo: name.into(), v, by: author() });
         self.save(&reg)?;
@@ -183,7 +209,7 @@ impl Hub {
         let lineage_note = forked_from
             .map(|o| format!("(forked from {} v{})", o.repo, o.v))
             .unwrap_or_default();
-        Ok(format!("published: {name} v{v} [{kind}, {} files] {lineage_note}", files.len()))
+        Ok(format!("published: {name} v{v} [{kind}, {} files] {lineage_note}{history_note}", files.len()))
     }
 
     /// The only way to take content out of the hub. Copies the latest version
@@ -200,25 +226,43 @@ impl Hub {
         }
         std::fs::create_dir_all(dest_dir).map_err(|e| e.to_string())?;
 
-        let src_dir = self.root.join("store").join(name).join(format!("v{}", ver.v));
-        for rel in ver.files.keys() {
-            let content = std::fs::read_to_string(src_dir.join(rel)).map_err(|e| e.to_string())?;
-            let out = dest_dir.join(rel);
-            if let Some(dir) = out.parent() {
-                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        let origin = Origin { repo: name.into(), v: ver.v, commit: ver.commit.clone() };
+        let objects = self.root.join("store").join(name).join("objects");
+        let history_note = if let (Some(head), true) = (&ver.commit, objects.is_dir()) {
+            // real fork: the whole history moves in, and the provenance stamp
+            // itself becomes a commit — lineage is part of the history
+            let vrepo = crate::vcs::Repo::clone_into(dest, &objects, head)?;
+            std::fs::write(
+                dest_dir.join(LINEAGE_FILE),
+                serde_json::to_string_pretty(&origin).unwrap(),
+            )
+            .map_err(|e| e.to_string())?;
+            vrepo.commit(&format!("fork {name} v{}", ver.v))?;
+            format!("、履歴ごと({} から)", &head[..8])
+        } else {
+            // no history published: plain snapshot + stamp
+            let src_dir = self.root.join("store").join(name).join(format!("v{}", ver.v));
+            for rel in ver.files.keys() {
+                let content =
+                    std::fs::read_to_string(src_dir.join(rel)).map_err(|e| e.to_string())?;
+                let out = dest_dir.join(rel);
+                if let Some(dir) = out.parent() {
+                    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+                }
+                std::fs::write(out, content).map_err(|e| e.to_string())?;
             }
-            std::fs::write(out, content).map_err(|e| e.to_string())?;
-        }
-        std::fs::write(
-            dest_dir.join(LINEAGE_FILE),
-            serde_json::to_string_pretty(&Origin { repo: name.into(), v: ver.v }).unwrap(),
-        )
-        .map_err(|e| e.to_string())?;
+            std::fs::write(
+                dest_dir.join(LINEAGE_FILE),
+                serde_json::to_string_pretty(&origin).unwrap(),
+            )
+            .map_err(|e| e.to_string())?;
+            String::new()
+        };
 
         reg.seq += 1;
         reg.events.push(Event { seq: reg.seq, kind: "fork".into(), repo: name.into(), v: ver.v, by: author() });
         self.save(&reg)?;
-        Ok(format!("forked: {name} v{} -> {dest} (系譜に記録済み)", ver.v))
+        Ok(format!("forked: {name} v{} -> {dest} (系譜に記録済み{history_note})", ver.v))
     }
 
     /// Compile the stored snapshot of `name` (latest version). The hub store
@@ -326,7 +370,8 @@ impl Hub {
         let mut origin = latest.forked_from.clone();
         let mut depth = 1;
         while let Some(o) = origin {
-            out.push_str(&format!("{}└─ forked from: {} v{}\n", "  ".repeat(depth), o.repo, o.v));
+            let at = o.commit.as_deref().map(|c| format!(" @ {}", &c[..8])).unwrap_or_default();
+            out.push_str(&format!("{}└─ forked from: {} v{}{at}\n", "  ".repeat(depth), o.repo, o.v));
             origin = reg
                 .repos
                 .get(&o.repo)
@@ -506,7 +551,7 @@ impl Hub {
         });
         self.save(&reg)?;
         Ok(serde_json::json!({
-            "origin": Origin { repo: name.into(), v: ver.v },
+            "origin": Origin { repo: name.into(), v: ver.v, commit: ver.commit.clone() },
             "entry": ver.entry,
             "files": files,
         }))

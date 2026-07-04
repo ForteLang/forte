@@ -154,3 +154,85 @@ fn broken_sources_cannot_be_published() {
     let err = hub.publish(&bad, None).err().expect("must fail");
     assert!(err.contains("E-"), "diagnostics surface in the error: {err}");
 }
+
+// ---------------------------------------------------------------------------
+// hub × VCS: publish carries history, fork receives it
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fork_carries_the_full_history() {
+    let dir = std::path::PathBuf::from(temp_dir("history"));
+    let origin = dir.join("origin");
+    std::fs::create_dir_all(&origin).unwrap();
+    std::fs::write(
+        origin.join("song.forte"),
+        "song \"H\" {\n  tempo 100bpm\n  track A {\n    instrument polymer()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
+    )
+    .unwrap();
+
+    // two commits of history at the origin
+    let root = origin.to_str().unwrap();
+    fortelang::vcs::Repo::init(root).unwrap();
+    let repo = fortelang::vcs::Repo::open(root).unwrap();
+    repo.commit("最初のスケッチ").unwrap();
+    let src = std::fs::read_to_string(origin.join("song.forte")).unwrap();
+    std::fs::write(origin.join("song.forte"), src.replace("100bpm", "112bpm")).unwrap();
+    repo.commit("テンポ調整").unwrap();
+    let origin_head = repo.head().unwrap().unwrap();
+
+    let hub = Hub::open(dir.join("hub").to_str().unwrap()).unwrap();
+    let msg = hub.publish(origin.join("song.forte").to_str().unwrap(), Some("hist")).unwrap();
+    assert!(msg.contains("履歴 push"), "{msg}");
+
+    // fork: history moves in, the stamp is a commit, work continues on top
+    let fork_dir = dir.join("fork");
+    let msg = hub.fork("hist", fork_dir.to_str().unwrap()).unwrap();
+    assert!(msg.contains("履歴ごと"), "{msg}");
+    let fork = fortelang::vcs::Repo::open(fork_dir.to_str().unwrap()).unwrap();
+    assert!(fork.is_clean().unwrap(), "fork must land committed");
+    let head = fork.head().unwrap().unwrap();
+    let log = fork.log(&head).unwrap();
+    assert_eq!(log.len(), 3, "2 origin commits + fork stamp");
+    assert!(log[0].1.message.contains("fork hist v1"), "{}", log[0].1.message);
+    assert_eq!(log[0].1.parents[0], origin_head, "fork commit sits on the origin head");
+    assert_eq!(log[2].1.message, "最初のスケッチ");
+
+    // the fork can diff back into the origin author's history
+    let old = fork.snapshot_of(&log[2].0).unwrap();
+    let new = fork.snapshot_of("HEAD").unwrap();
+    let report = fortelang::semdiff::diff_snapshots(&old, &new);
+    assert!(report.contains("tempo: 100 → 112 bpm"), "{report}");
+
+    // registry remembers the exact commit; re-publish records forked_from
+    let reg = hub.registry().unwrap();
+    assert_eq!(reg.repos["hist"].versions[0].commit.as_deref(), Some(origin_head.as_str()));
+    let msg = hub
+        .publish(fork_dir.join("song.forte").to_str().unwrap(), Some("hist-fork"))
+        .unwrap();
+    assert!(msg.contains("forked from hist v1"), "{msg}");
+    let reg = hub.registry().unwrap();
+    let origin_rec = reg.repos["hist-fork"].versions[0].forked_from.clone().unwrap();
+    assert_eq!(origin_rec.commit.as_deref(), Some(origin_head.as_str()));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn publish_without_a_repo_still_works_snapshot_only() {
+    let dir = std::path::PathBuf::from(temp_dir("nohistory"));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("song.forte"),
+        "song \"N\" {\n  tempo 100bpm\n  track A {\n    instrument polymer()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
+    )
+    .unwrap();
+    let hub = Hub::open(dir.join("hub").to_str().unwrap()).unwrap();
+    let msg = hub.publish(dir.join("song.forte").to_str().unwrap(), Some("plain")).unwrap();
+    assert!(!msg.contains("履歴 push"), "{msg}");
+    let fork_dir = dir.join("fork");
+    let msg = hub.fork("plain", fork_dir.to_str().unwrap()).unwrap();
+    assert!(!msg.contains("履歴ごと"), "{msg}");
+    assert!(fork_dir.join("song.forte").exists());
+    assert!(fortelang::vcs::Repo::open(fork_dir.to_str().unwrap()).is_err(), "no repo expected");
+    let _ = std::fs::remove_dir_all(&dir);
+}

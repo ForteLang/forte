@@ -330,11 +330,15 @@ $ forte diff
 ```bash
 export FORTE_HUB=~/.forte-hub        # 置き場所(なければ ./.forte-hub)
 
-forte hub publish my-song.forte      # import したライブラリごとスナップショット
+forte hub publish my-song.forte      # import したライブラリごとスナップショット。
+#   曲が VCS リポジトリ内(forte init 済み・クリーン)なら履歴ごと push される
 forte hub list
 forte hub fork mylib ./work/mylib    # ★取得はこれだけ。DL コマンドは存在しない
-#   → 手元に来歴スタンプ(.forte-lineage.json)付きでコピーされる
-#   → 改変して publish --as newname すると "forked from mylib v1" が自動記録
+#   → 履歴が publish されていれば .forte リポジトリごと降ってくる:
+#     元作者のコミットの上に「fork mylib v1」というコミットが積まれ、
+#     以後のあなたの commit はその続きになる(系譜が履歴そのものに残る)
+#   → forte diff <元作者のコミット> HEAD で「原曲から何を変えたか」が読める
+#   → 改変して publish --as newname すると "forked from mylib v1 @ コミット" が自動記録
 
 forte hub release my-song            # 決定論ビルド → digest を台帳に記録
 forte hub verify  my-song            # 誰でも再現検証できる(改竄は MISMATCH)
