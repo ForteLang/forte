@@ -450,6 +450,11 @@ impl Repo {
         Ok(())
     }
 
+    /// Raw stored bytes of one object (for export archives).
+    pub fn object_raw(&self, hash: &str) -> Result<Vec<u8>, String> {
+        std::fs::read(self.object_path(hash)).map_err(|e| e.to_string())
+    }
+
     /// Copy all objects reachable from `from` into `dest` (an objects/-style
     /// directory). Content addressing makes this idempotent and incremental.
     pub fn export_objects(&self, from: &str, dest: &Path) -> Result<usize, String> {

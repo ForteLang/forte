@@ -54,6 +54,7 @@ forte check songs/first-light.forte     # 検証(エラーは音楽の語彙+行
 forte play  songs/first-light.forte     # ライブ再生。保存するたび即反映
 forte build songs/first-light.forte     # WAV + ビルド証明(digest 入り)
 forte build songs/handmade-kit.forte --stems  # トラック別 WAV+ステム別 digest
+forte export songs/first-light.forte    # 自己完結 zip(曲+テイク+証明+履歴)
 ```
 
 REPL はこんな感じ:

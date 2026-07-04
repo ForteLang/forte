@@ -8,6 +8,8 @@ pub mod audio;
 pub mod calib;
 pub mod compile;
 pub mod diag;
+#[cfg(not(target_family = "wasm"))]
+pub mod export;
 pub mod fmt;
 pub mod frec;
 pub mod grid_build;
@@ -26,6 +28,7 @@ pub mod semdiff;
 pub mod sha;
 pub mod vcs;
 pub mod viz;
+pub mod zip;
 
 use dawcore::command::Command;
 use dawcore::engine::Engine;

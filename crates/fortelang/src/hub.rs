@@ -139,11 +139,7 @@ impl Hub {
             .into_owned();
 
         // snapshot the entry + transitive local imports and recorded takes
-        let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-        collect_files(&file_name, &base, &mut files, 0)?;
-        if let Ok(stamp) = std::fs::read(entry_path.parent().unwrap_or(Path::new("")).join(LINEAGE_FILE)) {
-            files.insert(LINEAGE_FILE.into(), stamp);
-        }
+        let (_, files) = collect_snapshot(entry)?;
 
         let name = name
             .unwrap_or(entry_path.file_stem().ok_or("ファイル名がありません")?.to_str().unwrap_or("song"))
@@ -707,6 +703,28 @@ impl Hub {
         }
         Ok(out)
     }
+}
+
+/// Snapshot an entry from disk: the file itself, transitive local imports,
+/// recorded takes and (if present) the lineage stamp. Returns
+/// `(entry_name, path → bytes)` — the self-contained unit that publish and
+/// `forte export` both operate on.
+pub fn collect_snapshot(entry: &str) -> Result<(String, BTreeMap<String, Vec<u8>>), String> {
+    let entry_path = Path::new(entry);
+    let base = entry_path.parent().unwrap_or(Path::new("")).to_string_lossy().into_owned();
+    let file_name = entry_path
+        .file_name()
+        .ok_or("ファイル名がありません")?
+        .to_string_lossy()
+        .into_owned();
+    let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    collect_files(&file_name, &base, &mut files, 0)?;
+    if let Ok(stamp) =
+        std::fs::read(entry_path.parent().unwrap_or(Path::new("")).join(LINEAGE_FILE))
+    {
+        files.insert(LINEAGE_FILE.into(), stamp);
+    }
+    Ok((file_name, files))
 }
 
 /// Non-builtin device names the song's tracks play (instruments + inserts).

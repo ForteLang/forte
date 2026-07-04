@@ -99,6 +99,19 @@ forte build my-song.forte
 書き出され、ステムごとの digest が manifest に記録されます —
 open-stems リリースの素材です。
 
+曲を丸ごと持ち出すには:
+
+```bash
+forte export my-song.forte
+# my-song.zip — エントリ+import+録音テイク+ビルド証明+VCS 履歴
+```
+
+zip には `export.manifest.json`(レンダー digest 入り)が同梱され、
+クリーンなリポジトリ内なら `.forte/` の履歴オブジェクトごと入ります。
+展開した先でそのままビルドでき、`forte log` で過去も辿れます。
+zip 自体も決定論的で、同じソースからはバイト単位で同一 —
+ロックインはありません。
+
 ## 2. 言語チートシート
 
 ```forte

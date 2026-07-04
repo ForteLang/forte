@@ -19,6 +19,39 @@ fn main() -> ExitCode {
                 .cloned();
             build(&args[1], out, args.iter().any(|a| a == "--stems"))
         }
+        Some("export") if args.len() >= 2 => {
+            let out = args
+                .iter()
+                .position(|a| a == "-o")
+                .and_then(|i| args.get(i + 1))
+                .cloned()
+                .unwrap_or_else(|| {
+                    PathBuf::from(&args[1]).with_extension("zip").to_string_lossy().into_owned()
+                });
+            match fortelang::export::export(&args[1]) {
+                Ok(info) => {
+                    if let Err(e) = std::fs::write(&out, &info.bytes) {
+                        eprintln!("{out}: 書き込めません: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                    println!(
+                        "exported: {out} ({} sources{}{})",
+                        info.files,
+                        if info.history_objects > 0 {
+                            format!(" + 履歴 {} objects", info.history_objects)
+                        } else {
+                            String::new()
+                        },
+                        info.digest.map(|d| format!(", digest {d}")).unwrap_or_default(),
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("export: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("viz") if args.len() >= 2 => {
             let path = &args[1];
             let src = match load(path) {
@@ -124,6 +157,7 @@ fn main() -> ExitCode {
         _ => {
             eprintln!("usage: forte check <song.forte>");
             eprintln!("       forte build <song.forte> [-o out.wav] [--stems]");
+            eprintln!("       forte export <song.forte> [-o out.zip]  (曲+履歴+証明の自己完結 zip)");
             eprintln!("       forte play  <song.forte> [--for SECS]");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
             eprintln!("       forte fmt   <song.forte> [--check]");

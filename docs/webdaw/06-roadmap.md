@@ -71,7 +71,7 @@ Status: Draft v0.1 / 2026-07-02
 | 3.2 | open-stems リリース+**演奏 fork モード**(最小録音 GUI) — **🔶 ブラウザで「聴く→fork→歌入れ→publish」が一周: hub の POST /api/publish(スナップショットをコンパイル検証してから登録、CORS 対応)、publish/fork の .frec バイナリ同梱(クリーンルーム release/verify もテイク込みで成立)、ブラウザ fork に系譜スタンプ書込(来歴の穴を修正)、録音停止→ワンタップで import+Voice トラック自動追記、エディタの ⇪ Publish。E2E で全周検証(fake mic 録音→差し込み→publish→forked_from+テイク同梱を確認)。**open-stems**: `forte build --stems`(トラック別 WAV をソロ+センド込みでレンダ、ステム別 digest を manifest に記録 — 決定論テスト済)と Hub 試聴のトラック M/S(fw_set_mute/solo → worklet、再生中に抜き差し、E2E 検証)** | SRS-BLD-003, SRS-REC-006 |
 | 3.3 | Safari/Firefox 縮退モード実装 | SRS-WEB-004 |
 | 3.4 | 指紋照合+通報モデレーション v1 | SRS-HUB-006 |
-| 3.5 | エクスポート(zip/git bundle)・データ可搬性 | SRS-WEB-005 |
+| 3.5 | エクスポート(zip/git bundle)・データ可搬性 — **🔶 `forte export <song.forte>`: 自己完結 zip(エントリ+import+録音テイク+レンダー digest 入り `export.manifest.json`+クリーンリポジトリなら `.forte/` 履歴オブジェクト+refs+HEAD)。zip ライター自作(store-only、CRC-32、タイムスタンプ固定)で **zip 自体がバイト単位に決定論的**。往復テスト: 展開→コンパイル→digest が manifest と一致、復元した `.forte/` で `forte log` が動くところまで検証済** | SRS-WEB-005 |
 
 **Exit 基準**: 「有名曲の open-stems に 10 人が歌入れ fork する」イベントが成立する。
 これがバイラルの型(§聴き手体験)の最初の実証になる。
