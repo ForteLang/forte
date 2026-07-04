@@ -1,0 +1,119 @@
+// std/tr909 — 909 系リズムマシンの 11 音色。アナログ+サンプル併用機:
+// キックの「ドッ」というアタック矩形、スネアの 2 発ノイズ、
+// 金物のざらつき(実機はサンプルだがノイズ帯域で性格を模す)。
+// トリガーは C2。使い方: import { BD909, SD909, OH909 } from "lib/std/tr909.forte"
+
+device BD909 : Instrument {
+  param attack = 0.5 in 0.0..1.0   // アタックのクリック量
+  param decay  = 0.45 in 0.1..1.0
+
+  node env  = adsr(a: 0.001, d: decay, s: 0.0, r: 0.18)
+  node penv = adsr(a: 0.001, d: 0.05, s: 0.0, r: 0.02)
+  node body = osc(shape: "sine", mod: gain(in: penv, level: 0.5))
+  node cenv = adsr(a: 0.001, d: 0.01, s: 0.0, r: 0.006)
+  node clk  = gain(in: osc(freq: mix(a: note.freq, b: note.freq), shape: "square"),
+                   mod: cenv, level: attack)
+  node sum  = mix(a: shaper(in: body, drive: 0.5, mode: "tanh"), b: clk)
+  out gain(in: sum, mod: env, level: 1.0)
+}
+
+device SD909 : Instrument {
+  param tone   = 0.55 in 0.0..1.0
+  param snappy = 0.65 in 0.0..1.0
+
+  node env  = adsr(a: 0.001, d: 0.14, s: 0.0, r: 0.07)
+  node penv = adsr(a: 0.001, d: 0.02, s: 0.0, r: 0.01)
+  node b1   = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.85)),
+                  shape: "sine", mod: gain(in: penv, level: 0.2))
+  node b2   = osc(freq: mix(a: mix(a: note.freq, b: note.freq), b: gain(in: note.freq, level: 0.4)), shape: "sine")
+  node body = mix(a: b1, b: gain(in: b2, level: tone))
+  node nz   = gain(in: svf(in: noise(), cutoff: 0.8, reso: 0.15), level: snappy)
+  out gain(in: mix(a: gain(in: body, level: 0.45), b: nz), mod: env, level: 0.9)
+}
+
+device LT909 : Instrument {
+  node env  = adsr(a: 0.001, d: 0.3, s: 0.0, r: 0.12)
+  node penv = adsr(a: 0.001, d: 0.11, s: 0.0, r: 0.05)
+  node o    = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.3)),
+                  shape: "sine", mod: gain(in: penv, level: 0.35))
+  node sh   = shaper(in: o, drive: 0.25, mode: "tanh")
+  out gain(in: sh, mod: env, level: 0.9)
+}
+
+device MT909 : Instrument {
+  node env  = adsr(a: 0.001, d: 0.26, s: 0.0, r: 0.1)
+  node penv = adsr(a: 0.001, d: 0.1, s: 0.0, r: 0.04)
+  node o    = osc(freq: mix(a: note.freq, b: note.freq), shape: "sine",
+                  mod: gain(in: penv, level: 0.35))
+  node sh   = shaper(in: o, drive: 0.22, mode: "tanh")
+  out gain(in: sh, mod: env, level: 0.85)
+}
+
+device HT909 : Instrument {
+  node env  = adsr(a: 0.001, d: 0.22, s: 0.0, r: 0.09)
+  node penv = adsr(a: 0.001, d: 0.09, s: 0.0, r: 0.04)
+  node f27  = mix(a: mix(a: note.freq, b: note.freq), b: gain(in: note.freq, level: 0.7))
+  node o    = osc(freq: f27, shape: "sine", mod: gain(in: penv, level: 0.35))
+  out gain(in: o, mod: env, level: 0.8)
+}
+
+device RS909 : Instrument {
+  node env = adsr(a: 0.001, d: 0.03, s: 0.0, r: 0.015)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node f13 = mix(a: mix(a: mix(a: f2, b: f2), b: mix(a: f2, b: f2)), b: gain(in: note.freq, level: 0.6))
+  node o   = osc(freq: f13, shape: "tri")
+  node bp  = svf(in: o, cutoff: 0.75, reso: 0.75)
+  out gain(in: bp, mod: env, level: 0.9)
+}
+
+device CP909 : Instrument {
+  param room = 0.45 in 0.0..1.0
+
+  node burst = adsr(a: 0.001, d: 0.03, s: 0.0, r: 0.012)
+  node rate  = lfo(rate: 0.985, shape: "square")
+  node nz    = svf(in: noise(), cutoff: 0.58, reso: 0.6, mod: gain(in: rate, level: 0.05))
+  node head  = gain(in: nz, mod: burst, level: 1.0)
+  node tenv  = adsr(a: 0.015, d: 0.25, s: 0.0, r: 0.14)
+  node tail  = gain(in: svf(in: noise(), cutoff: 0.5, reso: 0.45), mod: tenv, level: room)
+  out mix(a: head, b: tail)
+}
+
+device CH909 : Instrument {
+  node env = adsr(a: 0.001, d: 0.05, s: 0.0, r: 0.03)
+  node nz  = svf(in: noise(), cutoff: 0.9, reso: 0.45)
+  node fz  = shaper(in: nz, drive: 0.35, mode: "clip")   // 909 金物のざらつき
+  node hp  = svf(in: fz, cutoff: 0.95, reso: 0.2)
+  out gain(in: hp, mod: env, level: 0.5)
+}
+
+device OH909 : Instrument {
+  param decay = 0.4 in 0.15..0.8
+
+  node env = adsr(a: 0.001, d: decay, s: 0.0, r: 0.25)
+  node nz  = svf(in: noise(), cutoff: 0.88, reso: 0.4)
+  node fz  = shaper(in: nz, drive: 0.3, mode: "clip")
+  node hp  = svf(in: fz, cutoff: 0.93, reso: 0.2)
+  out gain(in: hp, mod: env, level: 0.5)
+}
+
+device CC909 : Instrument {
+  param decay = 0.85 in 0.4..1.0
+
+  node env = adsr(a: 0.001, d: decay, s: 0.0, r: 1.0)
+  node nz  = svf(in: noise(), cutoff: 0.93, reso: 0.2)
+  node fz  = shaper(in: nz, drive: 0.4, mode: "clip")
+  out gain(in: fz, mod: env, level: 0.5)
+}
+
+device RC909 : Instrument {
+  param ping = 0.35 in 0.0..1.0
+
+  node env = adsr(a: 0.001, d: 0.8, s: 0.05, r: 1.0)
+  node f6  = mix(a: mix(a: mix(a: note.freq, b: note.freq), b: mix(a: note.freq, b: note.freq)),
+                 b: mix(a: note.freq, b: note.freq))
+  node o   = osc(freq: mix(a: f6, b: gain(in: note.freq, level: 0.4)), shape: "tri")
+  node nz  = svf(in: noise(), cutoff: 0.9, reso: 0.2)
+  node sum = mix(a: gain(in: o, level: ping), b: gain(in: nz, level: 0.4))
+  node hp  = svf(in: sum, cutoff: 0.85, reso: 0.25)
+  out gain(in: hp, mod: env, level: 0.45)
+}
