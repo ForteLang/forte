@@ -3,21 +3,23 @@
 </p>
 
 <h1 align="center">Forte</h1>
-<p align="center"><b>compose music as code</b></p>
-<p align="center">曲も、音源も、エフェクトも、演奏も — ぜんぶ読める・直せる・fork できるソースコード。</p>
+<p align="center"><b>Compose music as code.</b></p>
+<p align="center">
+  Songs, instruments, effects, performances — all readable, hackable, forkable source code.
+</p>
+
+<p align="center">
+  <a href="https://github.com/ForteLang/forte/actions/workflows/ci.yml"><img src="https://github.com/ForteLang/forte/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+</p>
 
 ---
 
-**音楽制作を「コード・fork・ビルド・リリース」によるオープン開発の世界へ。**
-曲も、パターンも、コード進行も、そして音源そのものも、読める・直せる・fork できる
-ソースコード(`.forte`)。ビルドは決定論的で、同じコミットからは native / wasm /
-ブラウザのどこでも**ビット同一のオーディオ**が再現される。リリースの正しさは
-誰でも(ブラウザのタブからでも)再検証できる。
-
-**📖 使い方ガイド(チュートリアル): [docs/GUIDE.md](docs/GUIDE.md)** /
-言語リファレンス: [docs/webdaw/spec/forte-lang-v1.md](docs/webdaw/spec/forte-lang-v1.md) /
-ビジョン・要求仕様・アーキテクチャ: [docs/webdaw/](docs/webdaw/README.md)
-(IEC 62304 型のドキュメント体系)。
+Forte brings music production into the world of open development: **code, fork,
+build, release**. A song, its patterns, its chord progressions — and the
+instruments themselves — are source code (`.forte`). Builds are deterministic:
+the same commit renders **bit-identical audio** on native, wasm, and in the
+browser, so anyone can re-verify a release from a browser tab.
 
 ```forte
 import { WarmLead, SubBass } from "./devices/warm.forte"
@@ -35,154 +37,178 @@ song "Handmade" {
 }
 ```
 
-| ブラウザエディタ(History パネルで音楽語彙 diff) | Hub の系譜ページ |
+| Browser editor (musical-vocabulary diff in the History panel) | Hub lineage page |
 | --- | --- |
 | ![editor](docs/images/ui-editor.png) | ![hub](docs/images/ui-hub.png) |
 
-**fork の家系図** — 誰の曲から誰のリミックスが生まれたかを一望(クリックで曲ページへ):
+**The fork family tree** — see at a glance whose remix grew out of whose song:
 
 ![lineage tree](docs/images/ui-tree.png)
 
-## Quickstart
+## Getting started
 
 ```bash
-# Linux は音を出すのに libasound2-dev が必要: sudo apt install libasound2-dev
-cargo install --path crates/fortelang   # `forte` コマンドが入る(~/.cargo/bin)
+# Linux needs ALSA headers for audio output: sudo apt install libasound2-dev
+cargo install --path crates/fortelang   # installs the `forte` command
 
-forte repl                              # ★打った行がその場で鳴る
-forte check songs/first-light.forte     # 検証(エラーは音楽の語彙+行番号)
-forte play  songs/first-light.forte     # ライブ再生。保存するたび即反映
-forte build songs/first-light.forte     # WAV + ビルド証明(digest 入り)
-forte build songs/handmade-kit.forte --stems  # トラック別 WAV+ステム別 digest
-forte export songs/first-light.forte    # 自己完結 zip(曲+テイク+証明+履歴)
+forte repl                              # type a line, hear it immediately
+forte check songs/first-light.forte     # validate (errors in musical terms + line numbers)
+forte play  songs/first-light.forte     # live playback; every save hot-reloads
+forte build songs/first-light.forte     # WAV + build proof (digest included)
+forte build songs/handmade-kit.forte --stems  # per-track WAVs + per-stem digests
+forte export songs/first-light.forte    # self-contained zip (song + takes + proof + history)
 ```
 
-REPL はこんな感じ:
+The REPL is a loop station:
 
 ```
-forte> beat`x--- x-x-`                     ← 即ループ再生
+forte> beat`x--- x-x-`                     ← loops instantly
 ♪ playing (120 bpm, loop 32 beats)
 forte> let theme = prog`Am | F | C | G`
 forte> arp(theme, rate: 0.25, style: "updown")
 ♪ playing
-forte> :inst polymer(wave: "saw")          ← 音色を差し替え(鳴りっぱなし)
+forte> :inst polymer(wave: "saw")          ← swap the instrument while it plays
 forte> :fx reverb(mix: 0.3)
-forte> :save jam.forte                     ← ジャムがそのまま曲ファイルになる
+forte> :save jam.forte                     ← the jam becomes a song file
 ```
 
-| REPL コマンド | 効果 |
+| REPL command | Effect |
 | --- | --- |
-| (パターンを入力) | **現在のトラック**で即ループ再生。`beat` / `notes` / `prog` / `chords()` / `arp()` / `bass()` |
-| `:track Bass` / `:tracks` / `:drop Bass` | トラックを重ねる(ループステーション)。以後のパターン・`:inst`・`:fx` はそのトラックへ |
-| `:vol 0.7` / `:pan -0.3` / `:undo` | 現在トラックの音量/パン、一手戻る |
-| `let 名前 = …` / `device … { … }` / `import …` | セッションに積む(複数行 OK、エラーはロールバック) |
-| `:tempo 140` / `:inst polymer(…)` / `:fx reverb(…)` / `:fx clear` | 鳴らしたまま変更 |
-| `:show` / `:save jam.forte` / `:stop` / `:quit` / `:help` | ソース表示 / 曲として保存 / 停止 / 終了 |
+| (type a pattern) | Loops instantly on the **current track**: `beat` / `notes` / `prog` / `chords()` / `arp()` / `bass()` |
+| `:track Bass` / `:tracks` / `:drop Bass` | Layer tracks; subsequent patterns, `:inst`, `:fx` target that track |
+| `:vol 0.7` / `:pan -0.3` / `:undo` | Volume/pan of the current track, undo one step |
+| `let name = …` / `device … { … }` / `import …` | Add to the session (multi-line OK; errors roll back) |
+| `:tempo 140` / `:inst polymer(…)` / `:fx reverb(…)` / `:fx clear` | Change everything without stopping |
+| `:show` / `:save jam.forte` / `:stop` / `:quit` / `:help` | Show source / save as a song / stop / quit |
 
-**ブラウザエディタ**(タイプ中診断・AudioWorklet 再生・OPFS 自動保存・完全オフライン PWA):
+### Browser editor
+
+Diagnostics as you type, AudioWorklet playback, OPFS autosave, fully offline PWA:
 
 ```bash
 scripts/build_web.sh
-python3 -m http.server 8000   # リポジトリルートで
+python3 -m http.server 8000   # from the repo root
 # → http://localhost:8000/web/
 ```
 
-**バージョン管理**(曲のリポジトリ。diff は行番号ではなく**音楽の言葉**で出る):
+### Version control for music
+
+Songs get repositories, and diffs speak **music, not line numbers**:
 
 ```bash
-cd my-song/ && forte init          # .forte/ リポジトリを作る
-forte commit -m "最初のスケッチ"    # *.forte / *.frec をスナップショット
-forte log                          # 履歴
-forte branch idea && forte checkout idea   # 別アイデアを試す
-forte diff                         # 例: tempo: 108 → 116 bpm
-                                   #     track Keys: Polymer の wave: square → saw
-                                   #     track Hats: 小節 13..16: 配置を削除
-forte checkout main                # いつでも聴き比べに戻れる
-forte merge idea                   # 競合しない編集は自動合流。マージ結果は
-                                   # コンパイル検証され、音が壊れていれば警告
+cd my-song/ && forte init          # create the .forte/ repository
+forte commit -m "first sketch"     # snapshot *.forte / *.frec
+forte log                          # history
+forte branch idea && forte checkout idea   # try another idea
+forte diff                         # e.g.  tempo: 108 → 116 bpm
+                                   #       track Keys: Polymer wave: square → saw
+                                   #       track Hats: bars 13..16: pattern removed
+forte checkout main                # switch back for an A/B listen anytime
+forte merge idea                   # non-conflicting edits merge automatically;
+                                   # the result is compile-checked, and you get a
+                                   # warning if the music broke
 ```
 
-音源ライブラリだけ編集した場合も、それを import している曲側に
-「import 経由で音が変わります」と差分が出ます(全てがコードだからできる芸当)。
+Edit only an instrument library and every song importing it reports
+"the sound changes via this import" — possible because everything is code.
 
-**楽器**: 標準ライブラリ `lib/std/` に device DSL 製の楽器 29 種
-(drums 10 / bass 5 / keys 5 / pads 4 / leads 5)。全部コードなので fork して
-一字単位で作り替えられます(デモ: `forte play songs/std-tour.forte`)。
-録音テイクは `sampler(take: voice, start: 0.25, end: 0.6, loop: "on",
-reverse: "on")` で刻む・伸ばす・裏返す — 1 本の録音が何種類もの楽器になります。
-さらに `kit(C2: kickTake, D2: snareTake)` で口ドラムがキットに、device DSL の
-`take` スロット+`sample()` ノードで**録音そのものを素材にした楽器**が書けます
-(デバイスはテイクを持たないので、楽器として publish して誰でも自分の録音を差せる)。
+### Instruments
 
-**Hub**(fork 系譜レジストリ: 取得は fork のみ、来歴は構造的に記録される):
+The standard library `lib/std/` ships 29 instruments written in the device DSL
+(10 drums / 5 bass / 5 keys / 4 pads / 5 leads). They are plain code: fork one
+and rewrite it character by character (demo: `forte play songs/std-tour.forte`).
+
+Recorded takes become instruments too: slice, stretch, and reverse one recording
+into many instruments with `sampler(take: voice, start: 0.25, end: 0.6,
+loop: "on", reverse: "on")`, turn beatboxing into a drum kit with
+`kit(C2: kickTake, D2: snareTake)`, or write devices that use recordings as raw
+material via the `take` slot + `sample()` node. Devices don't own takes, so an
+instrument can be published and anyone can plug their own recording into it.
+
+### The Hub
+
+A fork-lineage registry: the only way to take is to fork, so provenance is
+recorded structurally.
 
 ```bash
 export FORTE_HUB=~/.forte-hub
-forte hub publish songs/handmade.forte   # import ごとスナップショット。
-                                         # VCS リポジトリ内なら履歴ごと push される
-forte hub fork handmade ./my-take        # 取得は fork のみ。履歴ごと降ってきて、
-                                         # fork スタンプ自体がコミットとして系譜に残る
-forte hub release handmade               # 決定論ビルド → ダイジェストを台帳へ
-forte hub verify handmade                # 誰でも再現検証できる
-forte hub serve                          # → http://localhost:8000/web/hub.html で系譜をディグる
+forte hub publish songs/handmade.forte   # snapshots imports too; inside a VCS
+                                         # repository the full history is pushed
+forte hub fork handmade ./my-take        # forking brings the history down, and the
+                                         # fork stamp itself becomes a commit in the lineage
+forte hub release handmade               # deterministic build → digest into the ledger
+forte hub verify handmade                # anyone can re-verify the release
+forte hub serve                          # → http://localhost:8000/web/hub.html to dig the lineage
 ```
 
-複数人で使うなら **GitHub がそのまま hub になります**(サーバー不要):
+For collaboration, **any git host is a hub** — no server required:
 
 ```bash
-# GitHub に空リポジトリ(例: you/forte-hub)を作っておくだけ
-forte hub publish songs/handmade.forte --hub github:you/forte-hub   # 履歴ごと push
-forte hub fork handmade ./my-take --hub github:you/forte-hub        # 履歴ごと fork
+# create an empty repository (e.g. you/forte-hub) on your git host
+forte hub publish songs/handmade.forte --hub github:you/forte-hub   # pushes with history
+forte hub fork handmade ./my-take --hub github:you/forte-hub        # forks with history
 forte hub list --hub github:you/forte-hub
-forte hub serve --hub github:you/forte-hub   # 同期した checkout をローカル配信
-                                             # → ブラウザ系譜ページがそのまま動く
+forte hub serve --hub github:you/forte-hub   # serves a synced checkout locally,
+                                             # so the browser lineage page just works
 ```
 
-hub はただの git リポジトリ(registry.json + store/)なので、認証は普段の
-git 資格情報(SSH 鍵 / gh auth)、作者名は `git config user.name`、台帳の
-変更履歴も git に残ります。GitHub に限らず GitLab や NAS の bare repo でも
-同じです。並行 publish は push の compare-and-swap で解決されます
-(先を越されたら同期して自動リプレイ)。
+A hub is just a git repository (`registry.json` + `store/`): authentication is
+your usual git credentials (SSH keys / `gh auth`), the author is
+`git config user.name`, and the ledger's change history lives in git. GitLab or
+a bare repo on a NAS work the same way. Concurrent publishes resolve via push
+compare-and-swap (lose the race → sync and replay automatically).
 
-自前サーバー派には認証付き HTTP サーバーもあります(`forte hub serve` +
-`forte hub signup` — トークン発行、author はトークンから導出)。
+Prefer your own server? An authenticated HTTP server is built in
+(`forte hub serve` + `forte hub signup` — token-based, the author is derived
+from the token).
 
-fork したフォルダで `forte log` すると**元作者のコミットの上に自分の履歴が積まれ**、
-`forte diff <元作者のコミット> HEAD` で「原曲から何を変えたか」が音楽の言葉で出ます。
+Inside a forked folder, `forte log` shows **your commits stacked on top of the
+original author's**, and `forte diff <their-commit> HEAD` answers "what did I
+change from the original?" in musical terms.
 
-**Forte Studio**(VSCode): `editor/vscode-forte/` — 診断・Play/Build・REPL に加え、
-サイドバーに **History**(コミット/音楽語彙 diff/checkout)と **Hub**
-(一覧 → ▶ 試聴 / Fork / Publish / 検証 / 系譜)。UI は全部 `forte` CLI の薄いラッパー。
+### Forte Studio (VSCode)
 
-## リポジトリ構成
+`editor/vscode-forte/` — diagnostics, Play/Build, REPL (Shift+Enter), plus a
+sidebar with **History** (commits / musical diff / checkout) and **Hub**
+(browse → ▶ listen / fork / publish / verify / lineage). The UI is a thin
+wrapper around the `forte` CLI.
+
+## Repository layout
 
 ```
-crates/dawcore    リアルタイムエンジン+DSP(ロックフリー、決定論、no GUI)
-crates/fortelang  言語: lexer/parser/検査、コンパイラ、CLI(check/build/play/lsp/hub)
-crates/forteweb   ブラウザ用 C-ABI wasm(コンパイル・再生・ビルド証明)
-web/              ブラウザエディタ+Hub 系譜ページ(PWA)
-editor/           Forte Studio(VSCode 拡張)
-lib/std/          標準楽器ライブラリ(device DSL 製 29 楽器: drums/bass/keys/pads/leads)
-songs/            リファレンス曲 7 曲+デバイスライブラリ
-docs/webdaw/      ビジョン/SYS/SRS/SAD/SDD/ロードマップ+調査レポート
-scripts/          決定論ゲート・ブラウザ E2E
+crates/dawcore    real-time engine + DSP (lock-free, deterministic, no GUI)
+crates/fortelang  the language: lexer/parser/checker, compiler, CLI (check/build/play/lsp/hub)
+crates/forteweb   C-ABI wasm for the browser (compile, play, build proof)
+web/              browser editor + Hub lineage page (PWA)
+editor/           Forte Studio (VSCode extension)
+lib/std/          standard instrument library (29 instruments in the device DSL)
+songs/            reference songs + device libraries
+docs/webdaw/      vision / system & software requirements / architecture / roadmap
+scripts/          determinism gate, browser E2E
 ```
 
-## テスト
+## Documentation
+
+- **[User guide](docs/GUIDE.md)** — hands-on tutorial (Japanese)
+- **[Language reference](docs/webdaw/spec/forte-lang-v1.md)** — the `.forte` language, v1 (Japanese)
+- **[Vision, requirements, architecture](docs/webdaw/README.md)** — full design docs (Japanese)
+
+## Testing
 
 ```bash
-cargo test -p dawcore -p fortelang     # エンジン+言語+Hub+REPL
-scripts/determinism_test.sh            # native/wasm ビット同一ゲート(3 本)
-node scripts/web_e2e.mjs               # ブラウザ E2E(要 playwright)
-node scripts/hub_e2e.mjs               # Hub E2E
+cargo test -p dawcore -p fortelang     # engine + language + hub + REPL
+scripts/determinism_test.sh            # native/wasm bit-identity gate
+node scripts/web_e2e.mjs               # browser E2E (needs playwright)
+node scripts/hub_e2e.mjs               # hub E2E
 ```
 
----
+## Contributing
 
-エンジン(`dawcore`)は本リポジトリの前身である Bitwig Studio 風 DAW の実装から
-流用しており、その規律(音声スレッドで割り当てない・ロックしない、UI→audio は
-ロックフリーリング、オフラインとリアルタイムが同一エンジン)が Forte の決定論
-ビルドの土台になっている。
+Issues and PRs are welcome. Setup and the PR rules — especially the
+**determinism gate**: if a change that shouldn't affect the sound moves a digest
+by even one bit, CI fails — are in [CONTRIBUTING.md](CONTRIBUTING.md).
+Roadmap-derived tasks live in the
+[issues](https://github.com/ForteLang/forte/issues).
 
 ## License
 
