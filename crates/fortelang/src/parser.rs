@@ -468,8 +468,15 @@ impl Parser {
             }
         }
         self.expect(Tok::LBrace, "`{`");
-        let mut d =
-            DeviceAst { name, pos, kind: dkind, params: Vec::new(), nodes: Vec::new(), out: None };
+        let mut d = DeviceAst {
+            name,
+            pos,
+            kind: dkind,
+            params: Vec::new(),
+            takes: Vec::new(),
+            nodes: Vec::new(),
+            out: None,
+        };
         loop {
             match self.peek().clone() {
                 Tok::RBrace => {
@@ -496,6 +503,12 @@ impl Parser {
                         }
                         d.params.push(DevParam { name, default, range, pos: ppos });
                     }
+                    "take" => {
+                        self.bump();
+                        let tpos = self.pos();
+                        let name = self.ident("take の名前")?;
+                        d.takes.push((name, tpos));
+                    }
                     "node" => {
                         self.bump();
                         let npos = self.pos();
@@ -515,7 +528,7 @@ impl Parser {
                     other => {
                         self.err(
                             "E-PARSE-018",
-                            format!("device 内で使えない要素です: {other}(param/node/out)"),
+                            format!("device 内で使えない要素です: {other}(param/take/node/out)"),
                         );
                         self.bump();
                     }

@@ -114,6 +114,16 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
             s.sample = resolve_sample(&dev.sample);
             Dsp::Inst(Box::new(s))
         }
+        DeviceKind::Kit => {
+            let mut k = crate::dsp::kit::KitSampler::new(sr);
+            k.map = dev
+                .kit
+                .iter()
+                .filter_map(|(p, src)| resolve_sample(src).map(|s| (*p, s)))
+                .collect();
+            k.map.sort_by_key(|(p, _)| *p);
+            Dsp::Inst(Box::new(k))
+        }
         DeviceKind::PolyGrid => {
             let graph = dev.grid.clone().unwrap_or_else(GridGraph::default_patch);
             Dsp::Inst(Box::new(GridSynth::compile(&graph, sr)))
@@ -456,6 +466,30 @@ impl Instrument for Sampler {
             self.end = p[7];
             self.loop_on = p[8] > 0.5;
             self.reverse = p[9] > 0.5;
+        }
+    }
+    fn voices(&self) -> usize {
+        self.active_voices()
+    }
+    fn reset(&mut self) {
+        self.all_notes_off();
+    }
+}
+
+impl Instrument for crate::dsp::kit::KitSampler {
+    fn handle(&mut self, on: bool, pitch: u8, velocity: f32) {
+        if on { self.note_on(pitch, velocity) } else { self.note_off(pitch) }
+    }
+    fn next(&mut self) -> f32 {
+        crate::dsp::kit::KitSampler::next(self)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 5 {
+            self.gain = p[0];
+            self.attack = 0.001 + p[1] * p[1] * 2.0;
+            self.decay = 0.001 + p[2] * p[2] * 2.0;
+            self.sustain = p[3];
+            self.release = 0.001 + p[4] * p[4] * 2.5;
         }
     }
     fn voices(&self) -> usize {

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use crate::ast::{Arg, Call, DeviceAst, NodeArg, NodeExpr};
 use crate::diag::{Diag, Pos};
-use dawcore::model::{GridConn, GridGraph, GridModule, GridModuleKind};
+use dawcore::model::{GridConn, GridGraph, GridModule, GridModuleKind, SampleSource};
 
 /// NoteIn output ports.
 const NOTE_PORTS: &[(&str, usize)] = &[("freq", 0), ("gate", 1), ("vel", 2)];
@@ -61,6 +61,17 @@ fn prim(name: &str) -> Option<Prim> {
             params: &[],
             options: &[],
         },
+        // the soundnote: a recorded take as a graph source. `take:` binds a
+        // slot declared with `take voice` (handled before the generic args).
+        "sample" => Prim {
+            kind: GridModuleKind::Sample,
+            inputs: &[],
+            params: &[("start", 0, 0.0), ("end", 1, 1.0)],
+            options: &[
+                ("loop", 2, &["off", "on"], &[0.0, 1.0]),
+                ("reverse", 3, &["off", "on"], &[0.0, 1.0]),
+            ],
+        },
         "shaper" => Prim {
             kind: GridModuleKind::Shaper,
             inputs: &[("in", 0, None), ("mod", 1, None)],
@@ -94,12 +105,20 @@ struct Builder<'a> {
     graph: GridGraph,
     named: HashMap<&'a str, usize>,
     params: HashMap<&'a str, f32>,
+    /// Declared `take` slots → resolved asset key (None while probing a
+    /// library without call-site bindings).
+    takes: &'a HashMap<String, Option<String>>,
     /// Effect devices: node 0 is AudioIn and note.* is unavailable.
     effect: bool,
 }
 
 /// Instantiate `dev` with the arguments given at the `instrument` call site.
-pub fn instantiate(dev: &DeviceAst, call: &Call) -> Result<GridGraph, Diag> {
+/// `takes` maps each declared `take` slot to its resolved asset key.
+pub fn instantiate(
+    dev: &DeviceAst,
+    call: &Call,
+    takes: &HashMap<String, Option<String>>,
+) -> Result<GridGraph, Diag> {
     // resolve param values: defaults, then call-site overrides (range-checked)
     let mut params: HashMap<&str, f32> = HashMap::new();
     for p in &dev.params {
@@ -114,8 +133,12 @@ pub fn instantiate(dev: &DeviceAst, call: &Call) -> Result<GridGraph, Diag> {
         params.insert(p.name.as_str(), p.default as f32);
     }
     for (key, arg) in &call.args {
+        if takes.contains_key(key) {
+            continue; // take bindings are resolved by the caller
+        }
         let Some(p) = dev.params.iter().find(|p| p.name == *key) else {
-            let names: Vec<&str> = dev.params.iter().map(|p| p.name.as_str()).collect();
+            let mut names: Vec<&str> = dev.params.iter().map(|p| p.name.as_str()).collect();
+            names.extend(dev.takes.iter().map(|(n, _)| n.as_str()));
             return Err(Diag::new(
                 "E-DEV-002",
                 call.pos,
@@ -143,11 +166,13 @@ pub fn instantiate(dev: &DeviceAst, call: &Call) -> Result<GridGraph, Diag> {
                 kind: if effect { GridModuleKind::AudioIn } else { GridModuleKind::NoteIn },
                 pos: (20.0, 60.0),
                 params: Vec::new(),
+                sample: None,
             }],
             conns: Vec::new(),
         },
         named: HashMap::new(),
         params,
+        takes,
         effect,
     };
 
@@ -184,6 +209,7 @@ impl<'a> Builder<'a> {
             kind,
             pos: (140.0 + 130.0 * i as f32, 40.0 + 70.0 * (i % 3) as f32),
             params,
+            sample: None,
         });
         i
     }
@@ -240,9 +266,16 @@ impl<'a> Builder<'a> {
                     return Err(Diag::new(
                         "E-GRID-004",
                         *pos,
-                        format!("DSP プリミティブ '{name}' はありません(osc / noise / lfo / adsr / svf / shaper / gain / mix)"),
+                        format!("DSP プリミティブ '{name}' はありません(osc / noise / sample / lfo / adsr / svf / shaper / gain / mix)"),
                     ));
                 };
+                if spec.kind == GridModuleKind::Sample && self.effect {
+                    return Err(Diag::new(
+                        "E-GRID-003",
+                        *pos,
+                        "Effect では sample は使えません(ノートで発音する Instrument 専用)",
+                    ));
+                }
                 // params first (defaults), then wire inputs
                 let mut pvals: Vec<f32> = {
                     let max_idx = spec
@@ -264,8 +297,40 @@ impl<'a> Builder<'a> {
 
                 let mut pending_inputs: Vec<(usize, (usize, usize))> = Vec::new();
                 let mut seen_inputs: Vec<usize> = Vec::new();
+                let mut sample_src: Option<SampleSource> = None;
+                let mut take_seen = false;
 
                 for (key, arg) in args {
+                    // sample(take: voice) — bind a declared take slot
+                    if spec.kind == GridModuleKind::Sample && key == "take" {
+                        let NodeArg::Expr(NodeExpr::Ref(tname, tpos)) = arg else {
+                            return Err(Diag::new(
+                                "E-TYPE-004",
+                                *pos,
+                                "sample.take は device 冒頭で宣言した take 名で指定します",
+                            ));
+                        };
+                        let Some(binding) = self.takes.get(tname.as_str()) else {
+                            let names: Vec<&str> =
+                                self.takes.keys().map(String::as_str).collect();
+                            return Err(Diag::new(
+                                "E-GRID-002",
+                                *tpos,
+                                format!(
+                                    "take '{tname}' が宣言されていません(device 冒頭に `take {tname}` を書きます{})",
+                                    if names.is_empty() {
+                                        String::new()
+                                    } else {
+                                        format!("。宣言済み: {}", names.join(", "))
+                                    }
+                                ),
+                            ));
+                        };
+                        sample_src =
+                            binding.as_ref().map(|k| SampleSource::Asset(k.clone()));
+                        take_seen = true;
+                        continue;
+                    }
                     if let Some((_, port, _)) = spec.inputs.iter().find(|(n, _, _)| n == key) {
                         let src = match arg {
                             NodeArg::Expr(e) => self.build_expr(e, dev)?,
@@ -312,7 +377,15 @@ impl<'a> Builder<'a> {
                     }
                 }
 
+                if spec.kind == GridModuleKind::Sample && !take_seen {
+                    return Err(Diag::new(
+                        "E-GRID-001",
+                        *pos,
+                        "sample には take: <宣言した take 名> が必要です",
+                    ));
+                }
                 let idx = self.add_module(spec.kind, pvals);
+                self.graph.modules[idx].sample = sample_src;
                 for (port, src) in pending_inputs {
                     self.graph.conns.push(GridConn { from: src, to: (idx, port) });
                 }

@@ -24,6 +24,8 @@ pub enum DeviceKind {
     // Note -> Audio
     Polymer,
     Sampler,
+    /// Pitch → sample map (drum kit built from recorded takes).
+    Kit,
     PolyGrid,
     // Audio -> Audio
     Filter,
@@ -56,12 +58,13 @@ impl DeviceStage {
 impl DeviceKind {
     /// Every device, in stage order. The browser and factories iterate this —
     /// adding a device here is the only registration step the UI needs.
-    pub const ALL: [DeviceKind; 11] = [
+    pub const ALL: [DeviceKind; 12] = [
         DeviceKind::Arpeggiator,
         DeviceKind::NoteTranspose,
         DeviceKind::NoteRepeat,
         DeviceKind::Polymer,
         DeviceKind::Sampler,
+        DeviceKind::Kit,
         DeviceKind::PolyGrid,
         DeviceKind::Filter,
         DeviceKind::Eq,
@@ -77,6 +80,7 @@ impl DeviceKind {
             DeviceKind::NoteRepeat => "Note Repeat",
             DeviceKind::Polymer => "Polymer",
             DeviceKind::Sampler => "Sampler",
+            DeviceKind::Kit => "Kit",
             DeviceKind::PolyGrid => "Poly Grid",
             DeviceKind::Filter => "Filter+",
             DeviceKind::Delay => "Delay-4",
@@ -92,7 +96,7 @@ impl DeviceKind {
             DeviceKind::Arpeggiator | DeviceKind::NoteTranspose | DeviceKind::NoteRepeat => {
                 DeviceStage::NoteFx
             }
-            DeviceKind::Polymer | DeviceKind::Sampler | DeviceKind::PolyGrid => {
+            DeviceKind::Polymer | DeviceKind::Sampler | DeviceKind::Kit | DeviceKind::PolyGrid => {
                 DeviceStage::Instrument
             }
             _ => DeviceStage::AudioFx,
@@ -114,6 +118,7 @@ impl DeviceKind {
                 "Gain", "Attack", "Decay", "Sustain", "Release", "Pitch", "Start", "End",
                 "Loop", "Reverse",
             ],
+            DeviceKind::Kit => &["Gain", "Attack", "Decay", "Sustain", "Release"],
             DeviceKind::PolyGrid => &[],
             DeviceKind::Arpeggiator => &["Rate", "Octaves", "Mode"],
             DeviceKind::NoteTranspose => &["Semi"],
@@ -136,6 +141,7 @@ impl DeviceKind {
             // Pitch 0.5 == centre (no transpose); ±24 semitones across the range.
             // Start/End trim the play region; Loop/Reverse are 0/1 switches.
             DeviceKind::Sampler => vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5, 0.0, 1.0, 0.0, 0.0],
+            DeviceKind::Kit => vec![0.8, 0.01, 0.3, 1.0, 0.25],
             DeviceKind::PolyGrid => Vec::new(),
             DeviceKind::Arpeggiator => vec![0.55, 0.0, 0.0], // 1/8, 1 octave, up
             DeviceKind::NoteTranspose => vec![0.5],          // centre = 0 semitones
@@ -202,6 +208,8 @@ pub enum GridModuleKind {
     AudioIn, // incoming signal (effect graphs)
     Osc,
     Noise, // deterministic white noise (per-voice xorshift PRNG)
+    /// Recorded audio as a graph source — the soundnote: a take inside a patch.
+    Sample,
     Lfo,
     Adsr,
     Filter,
@@ -222,6 +230,7 @@ impl GridModuleKind {
             GridModuleKind::AudioIn => "Audio In",
             GridModuleKind::Osc => "Osc",
             GridModuleKind::Noise => "Noise",
+            GridModuleKind::Sample => "Sample",
             GridModuleKind::Shaper => "Shaper",
             GridModuleKind::Lfo => "LFO",
             GridModuleKind::Adsr => "ADSR",
@@ -237,6 +246,7 @@ impl GridModuleKind {
             GridModuleKind::AudioIn => &[],
             GridModuleKind::Osc => &["Pitch", "Mod"],
             GridModuleKind::Noise => &[],
+            GridModuleKind::Sample => &[],
             GridModuleKind::Lfo => &[],
             GridModuleKind::Adsr => &["Gate"],
             GridModuleKind::Filter => &["In", "Cutoff"],
@@ -252,6 +262,7 @@ impl GridModuleKind {
             GridModuleKind::AudioIn => &["In"],
             GridModuleKind::Osc => &["Out"],
             GridModuleKind::Noise => &["Out"],
+            GridModuleKind::Sample => &["Out"],
             GridModuleKind::Shaper => &["Out"],
             GridModuleKind::Lfo => &["Out"],
             GridModuleKind::Adsr => &["Env"],
@@ -264,6 +275,7 @@ impl GridModuleKind {
     pub fn params(self) -> &'static [&'static str] {
         match self {
             GridModuleKind::Osc => &["Shape"],
+            GridModuleKind::Sample => &["Start", "End", "Loop", "Reverse"],
             GridModuleKind::Lfo => &["Rate", "Shape"],
             GridModuleKind::Adsr => &["A", "D", "S", "R"],
             GridModuleKind::Filter => &["Cutoff", "Reso"],
@@ -275,6 +287,7 @@ impl GridModuleKind {
     pub fn defaults(self) -> Vec<f32> {
         match self {
             GridModuleKind::Osc => vec![0.25], // saw
+            GridModuleKind::Sample => vec![0.0, 1.0, 0.0, 0.0],
             GridModuleKind::Lfo => vec![0.3, 0.0],
             GridModuleKind::Adsr => vec![0.05, 0.3, 0.6, 0.25],
             GridModuleKind::Filter => vec![0.65, 0.2],
@@ -290,6 +303,9 @@ pub struct GridModule {
     pub kind: GridModuleKind,
     pub pos: (f32, f32), // canvas position (UI only)
     pub params: Vec<f32>,
+    /// Audio source for a Sample node (None for every other kind).
+    #[serde(default)]
+    pub sample: Option<SampleSource>,
 }
 
 /// A wire: (from module, output port) → (to module, input port).
@@ -312,6 +328,7 @@ impl GridGraph {
             kind,
             pos: (x, y),
             params: kind.defaults(),
+            sample: None,
         };
         GridGraph {
             modules: vec![
@@ -347,6 +364,9 @@ pub struct Device {
     /// Node graph for a Poly Grid device.
     #[serde(default)]
     pub grid: Option<GridGraph>,
+    /// Pitch → sample map for a Kit device.
+    #[serde(default)]
+    pub kit: Vec<(u8, SampleSource)>,
 }
 
 impl Device {
@@ -358,6 +378,7 @@ impl Device {
             modulators: Vec::new(),
             sample: SampleSource::None,
             grid: None,
+            kit: Vec::new(),
         }
     }
 

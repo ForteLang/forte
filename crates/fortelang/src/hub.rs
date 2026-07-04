@@ -730,7 +730,7 @@ pub fn collect_snapshot(entry: &str) -> Result<(String, BTreeMap<String, Vec<u8>
 /// Non-builtin device names the song's tracks play (instruments + inserts).
 fn extract_uses(file: &crate::ast::FileAst) -> Vec<String> {
     const BUILTIN: &[&str] =
-        &["sampler", "polymer", "grid", "filter", "eq", "drive", "delay", "reverb"];
+        &["sampler", "kit", "polymer", "grid", "filter", "eq", "drive", "delay", "reverb"];
     let Some(song) = &file.song else { return Vec::new() };
     let mut out: Vec<String> = Vec::new();
     let mut push = |name: &str| {

@@ -326,6 +326,51 @@ instrument sampler(take: voice, reverse: "on")           // 逆再生 → ライ
 いる間その範囲をループ(短い範囲なら持続音になる)、`reverse: "on"` は
 逆再生です。全部ノートオン時に確定するので、レンダーは決定論のままです。
 
+### 録音でドラムキットを組む(kit)
+
+複数のテイクを鍵盤に割り当てると、口ドラムがキットになります:
+
+```forte
+import kickTake from "./kick.frec"
+import snareTake from "./snare.frec"
+
+track Drums {
+  instrument kit(C2: kickTake, D2: snareTake, gain: 0.9)
+  play notes`C2:1/2 D2:1/2 C2:1/2 D2:1/2` at bars(1..8)
+}
+```
+
+各パッドは**原速再生**(再ピッチなし)。`beat` リテラルは一番低い
+パッドを叩きます。gain / attack / decay / sustain / release も効きます。
+
+### 録音を device の中で加工する(soundnote)
+
+いちばん深い音作り: テイクを **device のノードグラフの音源**にして、
+フィルタやシェイパーの後段で加工できます。
+
+```forte
+device VoxKeys : Instrument {
+  take voice                                  // 使う側が録音を差し込むスロット
+  param cutoff = 0.55 in 0.0..1.0
+
+  node s   = sample(take: voice, loop: "on", end: 0.3)
+  node f   = svf(in: s, cutoff: cutoff, reso: 0.25)
+  node env = adsr(a: 0.005, d: 0.3, s: 0.6, r: 0.2)
+  out gain(in: f, mod: env, level: 0.9)
+}
+
+track Keys {
+  instrument VoxKeys(voice: myTake, cutoff: 0.6)   // 録音はここで束縛
+  play notes`C4:1 E4:1 G4:2` at bars(1..8)
+}
+```
+
+`take voice` は「使う側が録音を渡す」宣言です。デバイス自体はテイクを
+持たないので、**Hub に publish しても楽器として誰でも fork でき**、
+それぞれが自分の録音を差して鳴らせます。`sample()` は演奏ノートに
+合わせて再ピッチされ(テイクの基準は C4)、start/end/loop/reverse も
+sampler と同じに使えます。
+
 ## 7. Forte Studio(VSCode)で書く
 
 ```bash

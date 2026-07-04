@@ -3,11 +3,14 @@
 //! order + summed input wiring); the audio thread evaluates it per sample for
 //! each active voice. No allocation happens after compilation.
 
+use std::sync::Arc;
+
 use crate::model::{GridConn, GridGraph, GridModuleKind};
 
 use super::envelope::Adsr;
 use super::filter::{FilterMode, Svf};
 use super::oscillator::{Oscillator, Waveform};
+use super::sampler::Sample;
 use super::voice::midi_to_freq;
 
 pub const GRID_VOICES: usize = 8;
@@ -19,10 +22,12 @@ struct NodeSpec {
     params: Vec<f32>,
     /// For each input port: the list of source (node, output port) pairs (summed).
     inputs: Vec<Vec<(usize, usize)>>,
+    /// Resolved audio buffer for a Sample node (None for every other kind).
+    sample: Option<Arc<Sample>>,
 }
 
 /// Per-voice, per-node runtime state.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum NodeState {
     None,
     Osc(Oscillator),
@@ -32,6 +37,8 @@ enum NodeState {
     /// xorshift32 state — deterministic noise, reseeded per note-on so the
     /// same source renders the same bits everywhere.
     Noise(u32),
+    /// read head into the node's sample; pos < 0 = playback finished
+    Sample { pos: f64, started: bool },
 }
 
 struct GridVoice {
@@ -98,6 +105,7 @@ fn fresh_state(kind: GridModuleKind, sr: f32, node_idx: usize) -> NodeState {
         GridModuleKind::Noise => {
             NodeState::Noise(0x9e37_79b9 ^ (node_idx as u32).wrapping_mul(0x85eb_ca6b))
         }
+        GridModuleKind::Sample => NodeState::Sample { pos: 0.0, started: false },
         _ => NodeState::None,
     }
 }
@@ -115,7 +123,12 @@ fn build_specs(graph: &GridGraph) -> (Vec<NodeSpec>, Vec<usize>, Option<usize>) 
                 inputs[c.to.1].push((c.from.0, c.from.1.min(MAX_OUTPUTS - 1)));
             }
         }
-        nodes.push(NodeSpec { kind: m.kind, params: m.params.clone(), inputs });
+        nodes.push(NodeSpec {
+            kind: m.kind,
+            params: m.params.clone(),
+            inputs,
+            sample: m.sample.as_ref().and_then(crate::engine::resolve_sample),
+        });
     }
     let order = topo_order(n, &graph.conns);
     let out_node = graph.modules.iter().position(|m| m.kind == GridModuleKind::Out);
@@ -136,8 +149,50 @@ fn eval_node(
     sr: f32,
     note: (f32, f32, f32),
     audio_in: f32,
+    sample: Option<&Arc<Sample>>,
 ) {
     match kind {
+        GridModuleKind::Sample => {
+            out[0] = 0.0;
+            let (NodeState::Sample { pos, started }, Some(smp)) = (state, sample) else {
+                return;
+            };
+            let len = smp.data.len() as f64;
+            if len < 1.0 {
+                return;
+            }
+            // region [s, e) from Start/End params; direction and loop as flags
+            let s = (params[0].clamp(0.0, 1.0) as f64 * len).floor();
+            let e = ((params[1].clamp(0.0, 1.0) as f64 * len).floor()).clamp(s + 1.0, len);
+            let looping = params[2] > 0.5;
+            let reverse = params[3] > 0.5;
+            if !*started {
+                *pos = if reverse { e - 1.0 } else { s };
+                *started = true;
+            }
+            if *pos < 0.0 {
+                return; // one-shot playback finished
+            }
+            let i = pos.floor() as usize;
+            let frac = (*pos - i as f64) as f32;
+            let a = smp.data.get(i).copied().unwrap_or(0.0);
+            let b = smp.data.get(i + 1).copied().unwrap_or(0.0);
+            out[0] = a + (b - a) * frac;
+            // repitch against the sample's root (assets root at C4); in an
+            // effect graph note.freq is 0 → play at natural speed
+            let ratio =
+                if note.0 > 0.0 { (note.0 / midi_to_freq(smp.root)) as f64 } else { 1.0 };
+            let step = ratio * (smp.sample_rate as f64 / sr as f64);
+            *pos += if reverse { -step } else { step };
+            let span = e - s;
+            if reverse {
+                if *pos < s {
+                    *pos = if looping { *pos + span } else { -1.0 };
+                }
+            } else if *pos >= e {
+                *pos = if looping { *pos - span } else { -1.0 };
+            }
+        }
         GridModuleKind::NoteIn => {
             out[0] = note.0;
             out[1] = note.1;
@@ -361,6 +416,7 @@ impl GridSynth {
                     sr,
                     note,
                     0.0,
+                    self.nodes[ni].sample.as_ref(),
                 );
             }
 
@@ -447,6 +503,7 @@ impl GridFx {
                 self.sample_rate,
                 (0.0, 0.0, 0.0),
                 x,
+                self.nodes[ni].sample.as_ref(),
             );
             self.values[ni] = out;
         }

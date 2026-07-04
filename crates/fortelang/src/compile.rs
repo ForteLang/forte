@@ -377,7 +377,10 @@ pub fn validate_devices(file: &FileAst) -> Vec<Diag> {
     collect_devices(file, &mut user_devices, &mut diags);
     for d in file.devices.iter() {
         let probe = Call { name: d.name.clone(), args: Vec::new(), pos: d.pos };
-        if let Err(e) = grid_build::instantiate(d, &probe) {
+        // probe with unbound take slots — the caller binds real takes later
+        let takes: HashMap<String, Option<String>> =
+            d.takes.iter().map(|(n, _)| (n.clone(), None)).collect();
+        if let Err(e) = grid_build::instantiate(d, &probe, &takes) {
             diags.push(e);
         }
     }
@@ -494,7 +497,7 @@ fn eval_lit(lit: &PatternLit, beats_per_bar: f64, beat_pitch: u8) -> Result<(Vec
 // device registry (v0: fixed builtin set; @std packages arrive with forte-pkg)
 // ---------------------------------------------------------------------------
 
-const INSTRUMENTS: &[&str] = &["sampler", "polymer", "grid"];
+const INSTRUMENTS: &[&str] = &["sampler", "kit", "polymer", "grid"];
 const EFFECTS: &[&str] = &["filter", "eq", "drive", "delay", "reverb"];
 
 /// Build an instrument device. Returns the device plus the root pitch that
@@ -512,7 +515,45 @@ fn build_instrument(
                 format!("'{}' は Effect です(instrument ではなく insert で使います)", call.name),
             ));
         }
-        let graph = grid_build::instantiate(dev_ast, call)?;
+        // bind declared take slots from call-site args (take: myTake)
+        let mut takes: HashMap<String, Option<String>> = HashMap::new();
+        for (tname, _) in &dev_ast.takes {
+            match call.args.iter().find(|(k, _)| k == tname) {
+                Some((_, Arg::Ident(aname, apos))) => {
+                    let Some(info) = assets.get(aname) else {
+                        let mut names: Vec<&str> = assets.keys().map(String::as_str).collect();
+                        names.sort();
+                        return Err(Diag::new(
+                            "E-PROV-003",
+                            *apos,
+                            format!(
+                                "録音アセット '{aname}' が import されていません(あるもの: {})",
+                                names.join(", ")
+                            ),
+                        ));
+                    };
+                    takes.insert(tname.clone(), Some(info.key.clone()));
+                }
+                Some((_, arg)) => {
+                    return Err(Diag::new(
+                        "E-TYPE-004",
+                        arg.pos(),
+                        format!("{}.{tname} は import した録音の名前で渡します", call.name),
+                    ))
+                }
+                None => {
+                    return Err(Diag::new(
+                        "E-DEV-002",
+                        call.pos,
+                        format!(
+                            "{} に take '{tname}' を渡してください(例: {tname}: <import した録音>)",
+                            call.name
+                        ),
+                    ))
+                }
+            }
+        }
+        let graph = grid_build::instantiate(dev_ast, call, &takes)?;
         let mut dev = Device::new(DeviceKind::PolyGrid);
         dev.grid = Some(graph);
         return Ok((dev, 36));
@@ -610,6 +651,55 @@ fn build_instrument(
                     "sampler には sample: \"Kick\" か take: <import した録音> の指定が必要です",
                 ));
             }
+            Ok((dev, root))
+        }
+        // pitch → take map: a drum kit built from recordings.
+        // kit(C2: kickTake, D2: snareTake, gain: 0.9)
+        "kit" => {
+            let mut dev = Device::new(DeviceKind::Kit);
+            for (key, arg) in &call.args {
+                if let Ok(p) = music::parse_pitch(key, arg.pos()) {
+                    let Arg::Ident(name, pos) = arg else {
+                        return Err(Diag::new(
+                            "E-TYPE-004",
+                            arg.pos(),
+                            format!("kit.{key} は import した録音の名前で指定します"),
+                        ));
+                    };
+                    let Some(info) = assets.get(name) else {
+                        let mut names: Vec<&str> = assets.keys().map(String::as_str).collect();
+                        names.sort();
+                        return Err(Diag::new(
+                            "E-PROV-003",
+                            *pos,
+                            format!(
+                                "録音アセット '{name}' が import されていません(あるもの: {})",
+                                names.join(", ")
+                            ),
+                        ));
+                    };
+                    dev.kit.push((p, SampleSource::Asset(info.key.clone())));
+                } else {
+                    set_param(
+                        &mut dev,
+                        key,
+                        arg,
+                        &[("gain", 0), ("attack", 1), ("decay", 2), ("sustain", 3), ("release", 4)],
+                        &[],
+                        call,
+                    )?;
+                }
+            }
+            if dev.kit.is_empty() {
+                return Err(Diag::new(
+                    "E-DEV-004",
+                    call.pos,
+                    "kit には少なくとも 1 つのパッドが必要です(例: kit(C2: kickTake))",
+                ));
+            }
+            dev.kit.sort_by_key(|(p, _)| *p);
+            // beat literals trigger the lowest pad
+            let root = dev.kit[0].0;
             Ok((dev, root))
         }
         "polymer" => {
@@ -724,7 +814,10 @@ fn build_effect(call: &Call, user_devices: &HashMap<&str, &DeviceAst>) -> Result
                 format!("'{}' は Instrument です(insert ではなく instrument で使います)", call.name),
             ));
         }
-        let graph = grid_build::instantiate(dev_ast, call)?;
+        // Effect graphs reject sample nodes, so take slots stay unbound
+        let takes: HashMap<String, Option<String>> =
+            dev_ast.takes.iter().map(|(n, _)| (n.clone(), None)).collect();
+        let graph = grid_build::instantiate(dev_ast, call, &takes)?;
         let mut dev = Device::new(DeviceKind::GridFx);
         dev.grid = Some(graph);
         return Ok(dev);

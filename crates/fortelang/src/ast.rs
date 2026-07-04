@@ -39,6 +39,9 @@ pub struct DeviceAst {
     /// "Instrument" | "Effect"
     pub kind: String,
     pub params: Vec<DevParam>,
+    /// `take voice` — recorded-audio slots the caller binds with an imported
+    /// take (`instrument MyVox(voice: myTake)`); used by `sample()` nodes.
+    pub takes: Vec<(String, Pos)>,
     pub nodes: Vec<(String, NodeExpr, Pos)>,
     pub out: Option<NodeExpr>,
 }
