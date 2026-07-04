@@ -41,6 +41,13 @@
   #diags { flex: 1; overflow: auto; padding: 0 14px 10px; font: 12px/1.5 ui-monospace, monospace; }
   #diags .d { color: #e06c75; margin-bottom: 8px; cursor: pointer; }
   #diags .ok { color: #7fbf7f; }
+  #vcs { padding: 0 14px 10px; font: 12px/1.5 ui-monospace, monospace; max-height: 220px; overflow: auto; }
+  #vcs-bar { display: flex; gap: 6px; margin-bottom: 8px; }
+  #commit-msg { flex: 1; min-width: 0; background: #1b1e24; border: 1px solid #2b2f38; color: #d6d9de; border-radius: 4px; padding: 3px 8px; font: inherit; }
+  #vcs-log .commit { display: flex; gap: 8px; align-items: baseline; margin-bottom: 3px; color: #8a919e; }
+  #vcs-log .commit b { color: #d6d9de; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #vcs-log .commit a { color: #6f9fd8; cursor: pointer; }
+  #vcs-diff { background: #14161b; border: 1px solid #2b2f38; border-radius: 4px; padding: 8px; margin-top: 6px; white-space: pre-wrap; color: #b6bcc6; max-height: 140px; overflow: auto; }
   #proof { padding: 10px 14px; border-top: 1px solid #2b2f38; font: 11px/1.6 ui-monospace, monospace; color: #8a919e; word-break: break-all; }
   #proof b { color: #e8b34c; }
   #viz-wrap { height: 190px; border-top: 1px solid #2b2f38; background: #14161b; position: relative; }
@@ -68,6 +75,15 @@
   <div id="side">
     <h2>Diagnostics</h2>
     <div id="diags"><div class="ok">—</div></div>
+    <h2>History</h2>
+    <div id="vcs">
+      <div id="vcs-bar">
+        <input id="commit-msg" placeholder="コミットメッセージ" spellcheck="false">
+        <button id="commit" title="全ローカルファイルをスナップショット">Commit</button>
+      </div>
+      <div id="vcs-log"></div>
+      <pre id="vcs-diff" hidden></pre>
+    </div>
     <div id="proof">build digest: <b id="digest-out">—</b><br>
       native/wasip1/browser が同じ値なら、この曲はどこでもビット同一にビルドされる。</div>
   </div>

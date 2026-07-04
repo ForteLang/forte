@@ -31,6 +31,7 @@ pub struct Ctx {
     transcription: Vec<u8>,
     diags_json: Vec<u8>,
     viz_json: Vec<u8>,
+    semdiff_out: Vec<u8>,
     out_l: Vec<f32>,
     out_r: Vec<f32>,
     prev_tracks: usize,
@@ -109,6 +110,7 @@ pub extern "C" fn fw_new(sample_rate: f32) -> *mut Ctx {
         transcription: Vec::new(),
         diags_json: b"[]".to_vec(),
         viz_json: b"null".to_vec(),
+        semdiff_out: Vec::new(),
         out_l: vec![0.0; MAX_FRAMES],
         out_r: vec![0.0; MAX_FRAMES],
         prev_tracks: 0,
@@ -265,6 +267,45 @@ pub unsafe extern "C" fn fw_process(ptr: *mut Ctx, frames: usize) {
 /// Read-only visualization data (shared implementation in fortelang::viz).
 fn viz_json(p: &Project) -> Vec<u8> {
     serde_json::to_vec(&fortelang::viz::viz_json(p)).unwrap_or_else(|_| b"null".to_vec())
+}
+
+/// Semantic diff of two staged snapshots `{"old": {path: text}, "new": {path:
+/// text}}` — the same music-vocabulary report as `forte diff`. Returns 0 and
+/// stores the report (fw_semdiff_ptr/len), or -1 on bad JSON.
+#[no_mangle]
+pub unsafe extern "C" fn fw_semdiff(ptr: *mut Ctx) -> i32 {
+    let c = ctx(ptr);
+    fn conv(v: Option<&serde_json::Value>) -> Option<fortelang::vcs::Snapshot> {
+        let map = v?.as_object()?;
+        let mut snap = fortelang::vcs::Snapshot::new();
+        for (k, val) in map {
+            snap.insert(k.clone(), val.as_str()?.as_bytes().to_vec());
+        }
+        Some(snap)
+    }
+    let parsed: Option<(fortelang::vcs::Snapshot, fortelang::vcs::Snapshot)> =
+        serde_json::from_slice::<serde_json::Value>(&c.stage)
+            .ok()
+            .and_then(|v| Some((conv(v.get("old"))?, conv(v.get("new"))?)));
+    match parsed {
+        Some((old, new)) => {
+            let report = fortelang::semdiff::diff_snapshots(&old, &new);
+            c.semdiff_out =
+                if report.is_empty() { "変更なし".as_bytes().to_vec() } else { report.into_bytes() };
+            0
+        }
+        None => -1,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_semdiff_ptr(ptr: *mut Ctx) -> *const u8 {
+    ctx(ptr).semdiff_out.as_ptr()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_semdiff_len(ptr: *mut Ctx) -> usize {
+    ctx(ptr).semdiff_out.len()
 }
 
 #[no_mangle]

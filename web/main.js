@@ -5,6 +5,7 @@
 import { Viz } from './viz.js';
 import { Store } from './storage.js';
 import { encodeFrec, toBase64 } from './frec.js';
+import { Vcs } from './vcs.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t) => ($('status').textContent = t);
@@ -326,6 +327,90 @@ function autosave() {
   }, 500);
 }
 
+// ---- history: the .forte repository lives in the browser too -----------------
+// Commit snapshots every local file; the diff between any commit and the
+// working tree is computed by the wasm compiler — in music vocabulary.
+let vcs = null;
+
+async function workingSnapshot() {
+  const snap = {};
+  if (store) {
+    for (const name of await store.list()) snap[name] = await store.read(name);
+  }
+  snap[currentName] = getText(); // the buffer wins over the last autosave
+  return snap;
+}
+
+function semdiff(oldSnap, newSnap) {
+  stage(main, JSON.stringify({ old: oldSnap, new: newSnap }), main.e.fw_semdiff);
+  const p = main.e.fw_semdiff_ptr(main.ctx);
+  const l = main.e.fw_semdiff_len(main.ctx);
+  return new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, p, l));
+}
+
+async function refreshVcsLog() {
+  if (!vcs) return;
+  const log = await vcs.log();
+  const el = $('vcs-log');
+  el.textContent = '';
+  for (const c of log) {
+    const row = document.createElement('div');
+    row.className = 'commit';
+    const label = document.createElement('b');
+    label.textContent = `#${c.n} ${c.message}`;
+    label.title = c.hash;
+    const diff = document.createElement('a');
+    diff.textContent = 'diff';
+    diff.title = 'このコミットと現在の作業内容の差分(音楽の言葉で)';
+    diff.onclick = async () => {
+      const report = semdiff(await vcs.snapshotOf(c.hash), await workingSnapshot());
+      const pre = $('vcs-diff');
+      pre.hidden = false;
+      pre.textContent = `#${c.n} → 現在\n${report}`;
+    };
+    const restore = document.createElement('a');
+    restore.textContent = '戻す';
+    restore.title = 'このコミットのファイルを作業コピーへ復元';
+    restore.onclick = async () => {
+      if (!confirm(`#${c.n}「${c.message}」の状態に戻しますか?(未コミットの変更は失われます)`)) return;
+      const snap = await vcs.snapshotOf(c.hash);
+      for (const [path, text] of Object.entries(snap)) await store.write(path, text);
+      await refreshModules();
+      await refreshFileList();
+      if (snap[currentName] !== undefined) setText(snap[currentName]);
+      recompile(0);
+      status(`#${c.n} を復元しました`);
+    };
+    row.append(label, diff, restore);
+    el.append(row);
+  }
+  document.body.dataset.commits = String(log.length);
+}
+
+async function initVcs() {
+  if (!store) return;
+  try {
+    vcs = await new Vcs().init();
+    await refreshVcsLog();
+  } catch {
+    vcs = null; // OPFS unavailable: the panel stays empty
+  }
+  $('commit').onclick = async () => {
+    if (!vcs) return;
+    const msg = $('commit-msg').value.trim() || `edit ${currentName}`;
+    try {
+      await store.write(currentName, getText()); // commit what you hear
+      const { n } = await vcs.commit(msg, await workingSnapshot());
+      $('commit-msg').value = '';
+      $('vcs-diff').hidden = true;
+      await refreshVcsLog();
+      status(`commit #${n}: ${msg}`);
+    } catch (e) {
+      status(e.message);
+    }
+  };
+}
+
 // ---- performance capture: play keys/MIDI, get code back (roadmap 1.4) --------
 // A performance in Forte is not an opaque event recording — it comes back as
 // a notes literal you can read, edit and commit.
@@ -541,6 +626,8 @@ async function boot() {
   recompile(0);
   status('ready');
   await recoverCrashedTake();
+
+  await initVcs();
 
   $('file').onchange = (e) => loadSong(e.target.value);
   $('new').onclick = async () => {

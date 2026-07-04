@@ -98,6 +98,57 @@ try {
   const persisted = await page.evaluate(() => window.__forteGetText());
   check('OPFS persistence across reload', persisted.includes('persisted-marker'));
 
+  // 5.6) the repository lives in the browser: commit → musical diff → restore
+  page.on('dialog', (d) => d.accept());
+  await page.evaluate(async () => {
+    // repair the deliberate typo from the diagnostics test: the semantic diff
+    // only speaks music when both versions compile
+    const edit = (t) => t.replace('cutof:', 'cutoff:');
+    const ta = document.getElementById('fallback');
+    if (ta) {
+      ta.value = edit(ta.value);
+      ta.dispatchEvent(new Event('input'));
+    } else {
+      const ed = monaco.editor.getModels()[0];
+      ed.setValue(edit(ed.getValue()));
+    }
+    await new Promise((r) => setTimeout(r, 1000)); // autosave debounce
+  });
+  await page.fill('#commit-msg', '最初のスケッチ');
+  await page.click('#commit');
+  await page
+    .waitForFunction(() => document.body.dataset.commits === '1', null, { timeout: 15000 })
+    .catch(async (e) => {
+      console.log('DEBUG status:', await page.textContent('#status'));
+      console.log('DEBUG commits:', await page.evaluate(() => document.body.dataset.commits));
+      throw e;
+    });
+  await page.evaluate(() => {
+    const edit = (t) => t.replace('tempo 96bpm', 'tempo 132bpm');
+    const ta = document.getElementById('fallback');
+    if (ta) {
+      ta.value = edit(ta.value);
+      ta.dispatchEvent(new Event('input'));
+    } else {
+      const ed = monaco.editor.getModels()[0];
+      ed.setValue(edit(ed.getValue()));
+    }
+  });
+  await page.click('#vcs-log .commit a'); // "diff" of commit #1
+  await page.waitForFunction(
+    () => document.getElementById('vcs-diff').textContent.includes('tempo: 96 → 132 bpm'),
+    null,
+    { timeout: 15000 }
+  );
+  check('browser commit + semantic diff', true);
+  await page.click('#vcs-log .commit a:nth-of-type(2)'); // "戻す" (restore)
+  await page.waitForFunction(
+    () => window.__forteGetText().includes('tempo 96bpm'),
+    null,
+    { timeout: 15000 }
+  );
+  check('restore returns the committed take', true);
+
   // 6) offline PWA: with the service worker active, the editor still boots,
   //    compiles and plays with the network cut
   await page.evaluate(() => navigator.serviceWorker.ready);
