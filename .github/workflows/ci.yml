@@ -1,0 +1,53 @@
+# 決定論 CI(ロードマップ横断ワークストリーム): 全 PR ゲート。
+# 「同じソースからはどこでもビット同一のオーディオ」が Forte の約束なので、
+# native/wasm の digest 一致がテストと同格のゲートになっている。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: cargo test + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p dawcore -p fortelang --release
+      - run: cargo clippy -p dawcore -p fortelang --all-targets --release -- -D warnings
+
+  determinism:
+    name: determinism gate (native/wasm bit-identity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - run: rustup target add wasm32-wasip1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/determinism_test.sh
+
+  browser-e2e:
+    name: web + hub E2E (Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - run: rustup target add wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p fortelang
+      - run: scripts/build_web.sh
+      - run: npm i playwright && npx playwright install --with-deps chromium
+      - run: node scripts/web_e2e.mjs
+      - run: node scripts/hub_e2e.mjs
