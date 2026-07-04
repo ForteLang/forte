@@ -1,0 +1,36 @@
+name: Bug report
+description: Something is broken, sounds wrong, or digests don't match
+type: Bug
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: If possible, paste a minimal .forte source and the command.
+      placeholder: |
+        1. `forte build songs/xxx.forte`
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS / CLI or web / browser name and version (if web)
+      placeholder: "Ubuntu 24.04, forte CLI (native)"
+    validations:
+      required: true
+  - type: textarea
+    id: digest
+    attributes:
+      label: Build digest (for audio issues)
+      description: >
+        Paste the digest printed by `forte build`. Determinism issues
+        (e.g. native and wasm digests differ) get top priority.

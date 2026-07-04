@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Usage questions
+    url: https://github.com/ForteLang/forte/blob/main/docs/GUIDE.md
+    about: Start with the user guide (hands-on tutorial).

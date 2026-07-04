@@ -1,0 +1,27 @@
+name: Feature request
+description: Propose a feature, language syntax, or UI improvement
+type: Feature
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What are you trying to do, and where does it hurt today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: >
+        If you have a concrete idea, sketch it. For language syntax,
+        a `.forte` code example makes the discussion much faster.
+      placeholder: |
+        track Lead {
+          ...
+        }
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives / related
+      description: Workarounds with existing features, related issues, prior art in other tools.
