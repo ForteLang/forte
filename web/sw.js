@@ -1,6 +1,6 @@
 // Service worker: precache the whole editor so it works fully offline
 // (SYS-NFR-001 — the Hub is for sharing, never a dependency for composing).
-const CACHE = 'forte-v6';
+const CACHE = 'forte-v7';
 const ASSETS = [
   './',
   './index.html',

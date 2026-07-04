@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <!-- Forte — compose music as code. The forte dynamic mark (f) over a
-       waveform crossbar; gold on the editor's night palette. -->
+  <!-- Forte — compose music as code. The forte "f" has no crossbar of its
+       own: the audio waveform passes straight through the stem and plays
+       that role, rippling outward as it leaves the letter. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#1b1e24"/>
@@ -9,21 +10,11 @@
   </defs>
   <rect x="4" y="4" width="120" height="120" rx="26" fill="url(#bg)" stroke="#2b2f38" stroke-width="2"/>
 
-  <!-- waveform crossbar -->
-  <path d="M 24 78 L 40 78 L 46 64 L 54 90 L 62 58 L 70 92 L 78 70 L 84 78 L 104 78"
-        fill="none" stroke="#4fb6c8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+  <!-- the f stem: a long italic stroke (no crossbar) -->
+  <path d="M 78 24 C 65 20 58 30 55 46 L 46 98 C 43 114 33 122 22 117"
+        fill="none" stroke="#e8b34c" stroke-width="9" stroke-linecap="round"/>
 
-  <!-- the forte "f": italic serif stroke drawn as a path so no font is needed -->
-  <path d="M 78 26
-           C 66 22 58 30 55 44
-           L 51 62 L 76 62
-           L 74.5 69 L 49.5 69
-           L 43 100
-           C 40 114 30 120 20 117
-           C 26 116 30 111 32 102
-           L 39 69 L 28 69 L 29.5 62 L 40.5 62
-           L 44 45
-           C 48 26 62 16 78 22
-           Z"
-        fill="#e8b34c"/>
+  <!-- the crossbar that becomes the waveform: flat through the stem, then audio -->
+  <path d="M 24 66 L 58 66 L 63 56 L 70 78 L 76 50 L 83 80 L 89 60 L 93 66 L 104 66"
+        fill="none" stroke="#4fb6c8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
