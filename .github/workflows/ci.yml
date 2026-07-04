@@ -60,4 +60,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release -p fortelang
-      - run: scripts/check_corpus.sh
+      # PRs render only changed songs (repo-wide when lib/ or crates/ moved);
+      # pushes to main always render the whole corpus (#19)
+      - if: github.event_name == 'pull_request'
+        run: git fetch origin main
+      - run: CORPUS_BASE="${{ github.event_name == 'pull_request' && 'origin/main' || '' }}" scripts/check_corpus.sh
