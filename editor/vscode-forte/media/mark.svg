@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="24" height="24">
+  <!-- Monochrome Forte mark for the activity bar: VSCode recolors it, so a
+       single currentColor works in every theme. -->
+  <path d="M 24 78 L 40 78 L 46 64 L 54 90 L 62 58 L 70 92 L 78 70 L 84 78 L 104 78"
+        fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 78 26
+           C 66 22 58 30 55 44
+           L 51 62 L 76 62
+           L 74.5 69 L 49.5 69
+           L 43 100
+           C 40 114 30 120 20 117
+           C 26 116 30 111 32 102
+           L 39 69 L 28 69 L 29.5 62 L 40.5 62
+           L 44 45
+           C 48 26 62 16 78 22
+           Z"
+        fill="currentColor"/>
+</svg>

@@ -396,8 +396,15 @@ const VIZ_HTML = /* html */ `<!DOCTYPE html>
   canvas { width: 100vw; height: 100vh; display: block; }
   #err { position: fixed; top: 8px; left: 12px; color: #e06c75;
     font: 12px/1.5 monospace; white-space: pre-wrap; }
+  #brand { position: fixed; top: 8px; right: 12px; display: flex; gap: 6px;
+    align-items: center; color: #e8b34c; font: 11px/1 sans-serif;
+    letter-spacing: 2px; opacity: 0.75; pointer-events: none; }
 </style></head>
 <body><canvas id="c"></canvas><div id="err"></div>
+<div id="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="18" height="18">
+<path d="M 24 78 L 40 78 L 46 64 L 54 90 L 62 58 L 70 92 L 78 70 L 84 78 L 104 78" fill="none" stroke="#4fb6c8" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 78 26 C 66 22 58 30 55 44 L 51 62 L 76 62 L 74.5 69 L 49.5 69 L 43 100 C 40 114 30 120 20 117 C 26 116 30 111 32 102 L 39 69 L 28 69 L 29.5 62 L 40.5 62 L 44 45 C 48 26 62 16 78 22 Z" fill="#e8b34c"/>
+</svg>FORTE</div>
 <script>
 const canvas = document.getElementById('c');
 const g = canvas.getContext('2d');

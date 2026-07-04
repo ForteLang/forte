@@ -31,7 +31,7 @@
         {
           "id": "forte-studio",
           "title": "Forte Studio",
-          "icon": "$(music)"
+          "icon": "media/mark.svg"
         }
       ]
     },
