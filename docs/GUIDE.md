@@ -287,7 +287,7 @@ track Choir {
 それ以外はサンプラーが再ピッチします。自分の声・口ドラム・鼻歌 — マイクで
 録れる音はぜんぶシンセの材料です。attack/decay などの ADSR も効きます。
 
-## 7. VSCode で書く
+## 7. Forte Studio(VSCode)で書く
 
 ```bash
 cd editor/vscode-forte
@@ -302,6 +302,19 @@ npm install && npm run compile
   **Shift+Enter** — 選択範囲(なければ現在行)が REPL に飛んで即鳴ります
 - **Forte: Show Arrangement** — アレンジビュー(読み取り専用)が横に開き、
   **保存するたびに更新**されます
+
+アクティビティバーの ♪ アイコンが **Forte Studio** サイドバーです:
+
+- **History** — 曲のコミット一覧。✓ でコミット(リポジトリがなければ
+  その場で `forte init`)、各コミットの **diff**(作業ツリーとの差分が
+  音楽の言葉で横に開く)と **戻す**(checkout)。マージはコマンド
+  パレットの **Forte: Merge Branch…**
+- **Hub** — hub の曲/ライブラリ一覧(fork 系譜 ⑂ 付き)。
+  **▶ 聴く**(ストアのソースからそのまま再生 — fork せず試聴)、
+  **Fork…**(フォルダを選んで履歴ごと fork → そのまま開ける)、
+  右クリックで **系譜を見る** / **リリースを検証**。
+  ↑ ツールバーの **Publish** で現在のファイルを hub に登録
+  (`forte.hub` 設定で hub の場所を指定、既定は FORTE_HUB / ./.forte-hub)
 
 ## 7.5 バージョン管理 — 曲の履歴を持つ
 

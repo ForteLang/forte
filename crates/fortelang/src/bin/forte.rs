@@ -85,7 +85,7 @@ fn main() -> ExitCode {
                 .unwrap_or_default();
             vcs_print(fortelang::vcs::Repo::open(".").and_then(|r| r.commit(&msg)))
         }
-        Some("log") => vcs_log(),
+        Some("log") => vcs_log(args.iter().any(|a| a == "--json")),
         Some("branch") => match fortelang::vcs::Repo::open(".") {
             Err(e) => vcs_print(Err(e)),
             Ok(repo) => match args.get(1) {
@@ -292,8 +292,12 @@ fn hub_cmd(args: &[String]) -> ExitCode {
                     .join("\n")
             }
         }),
+        Some("list") if args.iter().any(|a| a == "--json") => {
+            hub.repos_json().map(|v| v.to_string())
+        }
         Some("list") => hub.list(),
-        _ => Err("usage: forte hub <publish|fork|lineage|list> …".into()),
+        Some("entry") if args.len() >= 2 => hub.entry_path(&args[1]),
+        _ => Err("usage: forte hub <publish|fork|lineage|list|entry> …".into()),
     };
     match result {
         Ok(msg) => {
@@ -465,10 +469,23 @@ fn vcs_status() -> ExitCode {
     vcs_print(run())
 }
 
-fn vcs_log() -> ExitCode {
+fn vcs_log(json: bool) -> ExitCode {
     let run = || -> Result<String, String> {
         let repo = fortelang::vcs::Repo::open(".")?;
         let head = repo.head()?.ok_or("まだコミットがありません")?;
+        if json {
+            let entries: Vec<serde_json::Value> = repo
+                .log(&head)?
+                .into_iter()
+                .map(|(hash, c)| {
+                    serde_json::json!({
+                        "hash": hash, "n": c.n, "author": c.author,
+                        "message": c.message, "parents": c.parents,
+                    })
+                })
+                .collect();
+            return Ok(serde_json::Value::Array(entries).to_string());
+        }
         let mut out = String::new();
         for (hash, c) in repo.log(&head)? {
             let merge = if c.parents.len() > 1 { " (merge)" } else { "" };

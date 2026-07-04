@@ -103,8 +103,9 @@ forte hub serve                          # → http://localhost:8000/web/hub.htm
 fork したフォルダで `forte log` すると**元作者のコミットの上に自分の履歴が積まれ**、
 `forte diff <元作者のコミット> HEAD` で「原曲から何を変えたか」が音楽の言葉で出ます。
 
-**VSCode**: `editor/vscode-forte/`(シンタックスハイライト+ `forte lsp` 診断+
-Play/Build コマンド)。
+**Forte Studio**(VSCode): `editor/vscode-forte/` — 診断・Play/Build・REPL に加え、
+サイドバーに **History**(コミット/音楽語彙 diff/checkout)と **Hub**
+(一覧 → ▶ 試聴 / Fork / Publish / 検証 / 系譜)。UI は全部 `forte` CLI の薄いラッパー。
 
 ## リポジトリ構成
 

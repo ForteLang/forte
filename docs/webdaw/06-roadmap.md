@@ -34,7 +34,7 @@ Status: Draft v0.1 / 2026-07-02
 
 | # | 成果物 | 対応要求 |
 | --- | --- | --- |
-| 1.1 | forte-lsp(補完・診断・ホバー)+ VSCode 拡張(再生コントロール) — **🔶 診断 LSP(`forte lsp`、プロトコルテスト付)+ VSCode 拡張(`editor/vscode-forte`: ハイライト・診断・Play/Build/Stop コマンド)実装済。補完・ホバーは未** | SRS-LSP-001/002 |
+| 1.1 | forte-lsp(補完・診断・ホバー)+ VSCode 拡張(再生コントロール) — **🔶 LSP(診断・補完・ホバー・整形)+ **Forte Studio**(`editor/vscode-forte`): ハイライト・診断・Play/Build/Stop・REPL(Shift+Enter 送信)・アレンジビューに加え、サイドバーに **History**(commit / 音楽語彙 diff / checkout / merge — リポジトリがなければ commit 時に自動 init)と **Hub**(一覧 → ▶ ストア直接試聴 / 履歴ごと Fork / Publish / verify / lineage)。全 UI は `forte` CLI の薄いラッパー(`forte log --json` / `hub list --json` / `hub entry` を追加)** | SRS-LSP-001/002 |
 | 1.2 | 差分ビルド+ホットリロード(変更→音まで 1 秒以内) | SRS-LANG-007, SRS-CORE-006 |
 | 1.3 | 可視化 Webview(ピアノロール/アレンジ/メーター、読み取り専用+コードジャンプ) | SRS-VIS-001/002 |
 | 1.4 | MIDI 入力→パターン記録(演奏をコードとして書き起こす) — **✅ ブラウザ演奏モード(🎹): Web MIDI + PC キー鍵盤で live モニタしながら演奏 → 停止時に 1/16 量子化・和音グループ化・休符挿入で `notes` リテラルに書き起こし(Rust 実装+単体テスト、生成コードのコンパイル通過を E2E 検証)** | SRS-REC-001 |

@@ -557,6 +557,20 @@ impl Hub {
         }))
     }
 
+    /// Absolute path of the latest version's entry file inside the store —
+    /// how Forte Studio's "Listen" plays a hub song without forking it.
+    pub fn entry_path(&self, name: &str) -> Result<String, String> {
+        let reg = self.registry()?;
+        let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
+        let ver = repo.versions.last().ok_or("バージョンがありません")?;
+        if ver.entry.is_empty() {
+            return Err("エントリファイルが記録されていません(旧形式)".into());
+        }
+        let path = self.root.join("store").join(name).join(format!("v{}", ver.v)).join(&ver.entry);
+        let abs = std::path::absolute(&path).map_err(|e| e.to_string())?;
+        Ok(abs.to_string_lossy().into_owned())
+    }
+
     pub fn list(&self) -> Result<String, String> {
         let reg = self.registry()?;
         if reg.repos.is_empty() {

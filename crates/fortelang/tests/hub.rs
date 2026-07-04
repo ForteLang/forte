@@ -236,3 +236,25 @@ fn publish_without_a_repo_still_works_snapshot_only() {
     assert!(fortelang::vcs::Repo::open(fork_dir.to_str().unwrap()).is_err(), "no repo expected");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn entry_path_points_into_the_store() {
+    let dir = std::path::PathBuf::from(temp_dir("entry"));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("song.forte"),
+        "song \"E\" {\n  tempo 100bpm\n  track A {\n    instrument polymer()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
+    )
+    .unwrap();
+    let hub = Hub::open(dir.join("hub").to_str().unwrap()).unwrap();
+    hub.publish(dir.join("song.forte").to_str().unwrap(), Some("mine")).unwrap();
+    let entry = hub.entry_path("mine").unwrap();
+    assert!(entry.ends_with("song.forte"), "{entry}");
+    assert!(entry.contains("store"), "{entry}");
+    // Studio's Listen plays this path directly — it must compile as-is
+    let src = std::fs::read_to_string(&entry).unwrap();
+    let base = std::path::Path::new(&entry).parent().unwrap().to_string_lossy().into_owned();
+    assert!(fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base).is_ok());
+    assert!(hub.entry_path("nothere").is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+}

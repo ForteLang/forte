@@ -1,14 +1,14 @@
 {
-  "name": "forte-lang",
-  "displayName": "Forte",
-  "description": "Compose music as code: diagnostics, syntax highlighting, play/build for .forte songs.",
-  "version": "0.1.0",
+  "name": "forte-studio",
+  "displayName": "Forte Studio",
+  "description": "Compose music as code: diagnostics, play/build, song history and the fork-only Hub — all inside VSCode.",
+  "version": "0.2.0",
   "publisher": "forte",
   "license": "MIT",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages"],
   "main": "./out/extension.js",
-  "activationEvents": [],
+  "activationEvents": ["onStartupFinished"],
   "contributes": {
     "languages": [
       {
@@ -25,14 +25,56 @@
         "path": "./syntaxes/forte.tmLanguage.json"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "forte-studio",
+          "title": "Forte Studio",
+          "icon": "$(music)"
+        }
+      ]
+    },
+    "views": {
+      "forte-studio": [
+        { "id": "forteHistory", "name": "History" },
+        { "id": "forteHub", "name": "Hub" }
+      ]
+    },
     "commands": [
       { "command": "forte.play", "title": "Forte: Play (hot reload)" },
       { "command": "forte.build", "title": "Forte: Build" },
       { "command": "forte.stop", "title": "Forte: Stop Playback" },
       { "command": "forte.repl", "title": "Forte: REPL" },
       { "command": "forte.sendToRepl", "title": "Forte: Send Selection to REPL" },
-      { "command": "forte.showArrangement", "title": "Forte: Show Arrangement" }
+      { "command": "forte.showArrangement", "title": "Forte: Show Arrangement" },
+      { "command": "forte.commit", "title": "Forte: Commit", "icon": "$(check)" },
+      { "command": "forte.refreshHistory", "title": "Forte: Refresh History", "icon": "$(refresh)" },
+      { "command": "forte.diffCommit", "title": "Diff vs 作業ツリー", "icon": "$(diff)" },
+      { "command": "forte.checkoutCommit", "title": "この時点に戻す", "icon": "$(discard)" },
+      { "command": "forte.merge", "title": "Forte: Merge Branch…" },
+      { "command": "forte.refreshHub", "title": "Forte: Refresh Hub", "icon": "$(refresh)" },
+      { "command": "forte.hubListen", "title": "▶ 聴く", "icon": "$(play)" },
+      { "command": "forte.hubFork", "title": "Fork…", "icon": "$(repo-forked)" },
+      { "command": "forte.hubLineage", "title": "系譜を見る" },
+      { "command": "forte.hubVerify", "title": "リリースを検証" },
+      { "command": "forte.hubPublish", "title": "Forte: Publish to Hub…", "icon": "$(cloud-upload)" }
     ],
+    "menus": {
+      "view/title": [
+        { "command": "forte.commit", "when": "view == forteHistory", "group": "navigation@1" },
+        { "command": "forte.refreshHistory", "when": "view == forteHistory", "group": "navigation@2" },
+        { "command": "forte.hubPublish", "when": "view == forteHub", "group": "navigation@1" },
+        { "command": "forte.refreshHub", "when": "view == forteHub", "group": "navigation@2" }
+      ],
+      "view/item/context": [
+        { "command": "forte.diffCommit", "when": "view == forteHistory && viewItem == commit", "group": "inline@1" },
+        { "command": "forte.checkoutCommit", "when": "view == forteHistory && viewItem == commit", "group": "inline@2" },
+        { "command": "forte.hubListen", "when": "view == forteHub && viewItem == hubRepo", "group": "inline@1" },
+        { "command": "forte.hubFork", "when": "view == forteHub && viewItem == hubRepo", "group": "inline@2" },
+        { "command": "forte.hubLineage", "when": "view == forteHub && viewItem == hubRepo", "group": "context@1" },
+        { "command": "forte.hubVerify", "when": "view == forteHub && viewItem == hubRepo", "group": "context@2" }
+      ]
+    },
     "keybindings": [
       {
         "command": "forte.sendToRepl",
@@ -41,12 +83,17 @@
       }
     ],
     "configuration": {
-      "title": "Forte",
+      "title": "Forte Studio",
       "properties": {
         "forte.path": {
           "type": "string",
           "default": "forte",
-          "description": "Path to the forte CLI binary (built with `cargo build --release -p fortelang`)."
+          "description": "Path to the forte CLI binary (cargo install --path crates/fortelang)."
+        },
+        "forte.hub": {
+          "type": "string",
+          "default": "",
+          "description": "Hub directory (empty: FORTE_HUB env or ./.forte-hub)."
         }
       }
     }
