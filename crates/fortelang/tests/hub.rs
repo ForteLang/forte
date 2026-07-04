@@ -258,3 +258,70 @@ fn entry_path_points_into_the_store() {
     assert!(hub.entry_path("nothere").is_err());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ---------------------------------------------------------------------------
+// performance fork loop: songs with recorded takes publish / release / fork
+// ---------------------------------------------------------------------------
+
+#[test]
+fn songs_with_takes_publish_release_and_fork() {
+    let dir = std::path::PathBuf::from(temp_dir("takes"));
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    let tone: Vec<f32> =
+        (0..24_000).map(|i| (i as f32 * 330.0 * std::f32::consts::TAU / 48_000.0).sin() * 0.4).collect();
+    let prov = serde_json::json!({
+        "device_class": "microphone", "recorded_at": "2026-07-04T00:00:00Z",
+        "by": "user:test", "session": "s1", "sig": "ed25519:stub",
+    });
+    let frec = fortelang::frec::encode(48_000, 1, &tone, &prov);
+    std::fs::write(dir.join("assets/take-1.frec"), &frec).unwrap();
+    std::fs::write(
+        dir.join("song.forte"),
+        r#"import voice from "./assets/take-1.frec"
+song "Vocal" {
+  tempo 120bpm
+  track Beat { instrument sampler(sample: "Kick") play beat`x---` at bars(1..2) }
+  track Voice { audio voice at bars(1..2) }
+}"#,
+    )
+    .unwrap();
+
+    let hub = Hub::open(dir.join("hub").to_str().unwrap()).unwrap();
+    let msg = hub.publish(dir.join("song.forte").to_str().unwrap(), Some("vocal")).unwrap();
+    assert!(msg.contains("2 files") || msg.contains("3 files"), "take must ride along: {msg}");
+
+    // clean-room release: the stored snapshot must contain the take bytes
+    let rel = hub.release("vocal").unwrap();
+    assert!(rel.contains("digest"), "{rel}");
+    assert!(hub.verify("vocal").unwrap().contains("VERIFIED"), "release must reproduce");
+
+    // fork receives the identical take
+    let fork_dir = dir.join("fork");
+    hub.fork("vocal", fork_dir.to_str().unwrap()).unwrap();
+    let got = std::fs::read(fork_dir.join("assets/take-1.frec")).unwrap();
+    assert_eq!(got, frec, "take bytes must survive the round trip");
+
+    // in-memory publish (what the browser posts) with author override
+    let mut files = std::collections::BTreeMap::new();
+    files.insert(
+        "song.forte".to_string(),
+        std::fs::read(dir.join("song.forte")).unwrap(),
+    );
+    files.insert("assets/take-1.frec".to_string(), frec.clone());
+    files.insert(
+        fortelang::hub::LINEAGE_FILE.to_string(),
+        serde_json::to_vec(&serde_json::json!({"repo": "vocal", "v": 1})).unwrap(),
+    );
+    let msg = hub.publish_map("song.forte", files, "vocal-kenta", Some("kenta")).unwrap();
+    assert!(msg.contains("forked from vocal v1"), "{msg}");
+    let reg = hub.registry().unwrap();
+    assert_eq!(reg.repos["vocal-kenta"].versions[0].author, "kenta");
+
+    // a broken snapshot must be rejected before anything is stored
+    let mut bad = std::collections::BTreeMap::new();
+    bad.insert("song.forte".to_string(), b"song \"X\" {".to_vec());
+    assert!(hub.publish_map("song.forte", bad, "broken", None).is_err());
+    assert!(hub.registry().unwrap().repos.get("broken").is_none());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -243,7 +243,30 @@ async function recStop() {
   const name = await saveTake(pcm, rate, provenance);
   await store.remove('assets/.recording.pcm').catch(() => {});
   await store.remove('assets/.recording.json').catch(() => {});
-  status(`saved ${name} (${(pcm.length / rate).toFixed(1)}s) — import ${name.split('/')[1].replace('.frec', '').replace('-', '_')} from "./${name}"`);
+  status(`saved ${name} (${(pcm.length / rate).toFixed(1)}s)`);
+  // performance fork, closed: one tap drops the take into the song
+  if (confirm(`録音 ${name} をこの曲に差し込みますか?(import + Voice トラックを追記)`)) {
+    insertTake(name);
+  }
+}
+
+/// Append `import take from …` and a Voice track playing it — the textual
+/// equivalent of dragging a take onto the timeline.
+function insertTake(path) {
+  const ident = path.split('/').pop().replace('.frec', '').replace(/-/g, '');
+  let text = getText();
+  if (!text.includes(`from "./${path}"`)) {
+    text = `import ${ident} from "./${path}"\n` + text;
+  }
+  const end = text.lastIndexOf('}');
+  if (end >= 0) {
+    const track = `\n  track Voice_${ident} {\n    audio ${ident} at bars(1..4)\n  }\n`;
+    text = text.slice(0, end) + track + text.slice(end);
+  }
+  setText(text);
+  autosave();
+  recompile(0);
+  document.body.dataset.takeInserted = path;
 }
 
 /// A leftover .recording.* pair means the tab died mid-take: turn what was
@@ -409,6 +432,45 @@ async function initVcs() {
       status(e.message);
     }
   };
+}
+
+// ---- publish: the browser closes the loop back to the hub --------------------
+const HUB_API = new URLSearchParams(location.search).get('api') || 'http://127.0.0.1:9377';
+
+async function publishToHub() {
+  const suggested = currentName.replace(/\.forte$/, '');
+  const name = prompt('hub 上の名前', suggested);
+  if (!name) return;
+  status('publishing…');
+  try {
+    await store.write(currentName, getText()); // publish what you hear
+    const files = {};
+    const assets = {};
+    for (const rel of await store.list()) files[rel] = await store.read(rel);
+    for (const rel of await store.list('.frec')) {
+      assets[rel] = toBase64(await store.readBytes(rel));
+    }
+    for (const rel of await store.list('.json')) {
+      if (rel.endsWith('.forte-lineage.json') || rel === '.forte-lineage.json') {
+        files[rel] = await store.read(rel);
+      }
+    }
+    files[currentName] = getText();
+    const res = await fetch(`${HUB_API}/api/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, entry: currentName, author: 'browser', files, assets }),
+    });
+    const out = await res.json();
+    if (res.ok) {
+      status(out.ok);
+      document.body.dataset.published = name;
+    } else {
+      status(`publish 失敗: ${out.error}`);
+    }
+  } catch (e) {
+    status(`publish 失敗: ${e.message}(forte hub serve は起動していますか?)`);
+  }
 }
 
 // ---- performance capture: play keys/MIDI, get code back (roadmap 1.4) --------
@@ -660,6 +722,7 @@ async function boot() {
       status(`calib: ${e.message}`);
     });
   $('perform').onclick = () => performToggle().catch((e) => status(`perform: ${e.message}`));
+  $('publish').onclick = () => publishToHub().catch((e) => status(`publish: ${e.message}`));
   $('digest').onclick = () => {
     status('building…');
     setTimeout(() => {

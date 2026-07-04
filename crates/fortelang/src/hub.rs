@@ -133,10 +133,60 @@ impl Hub {
             .ok_or("ファイル名がありません")?
             .to_string_lossy()
             .into_owned();
-        let src = std::fs::read_to_string(entry).map_err(|e| format!("{entry}: {e}"))?;
 
-        // must compile / validate before it can be published
-        let checked = crate::check_with_loader(&src, &crate::FsLoader, &base)
+        // snapshot the entry + transitive local imports and recorded takes
+        let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+        collect_files(&file_name, &base, &mut files, 0)?;
+        if let Ok(stamp) = std::fs::read(entry_path.parent().unwrap_or(Path::new("")).join(LINEAGE_FILE)) {
+            files.insert(LINEAGE_FILE.into(), stamp);
+        }
+
+        let name = name
+            .unwrap_or(entry_path.file_stem().ok_or("ファイル名がありません")?.to_str().unwrap_or("song"))
+            .to_string();
+        let mut msg = self.publish_map(&file_name, files, &name, None)?;
+
+        // if the song lives in a VCS repo with a clean tree, the publish
+        // carries the full history (this is what makes a hub fork a real fork)
+        let vcs_head = crate::vcs::Repo::open(if base.is_empty() { "." } else { &base })
+            .ok()
+            .filter(|r| r.is_clean().unwrap_or(false))
+            .and_then(|r| r.head().ok().flatten().map(|h| (r, h)));
+        if let Some((vcs_repo, head)) = &vcs_head {
+            let objdir = self.root.join("store").join(&name).join("objects");
+            let copied = vcs_repo.export_objects(head, &objdir)?;
+            let mut reg = self.registry()?;
+            if let Some(v) = reg.repos.get_mut(&name).and_then(|r| r.versions.last_mut()) {
+                v.commit = Some(head.clone());
+            }
+            self.save(&reg)?;
+            msg.push_str(&format!(" 履歴 push: {} ({copied} objects)", &head[..8]));
+        }
+        Ok(msg)
+    }
+
+    /// Publish from an in-memory file map (the browser editor posts these).
+    /// `files` keys are entry-relative paths; recorded takes are raw bytes.
+    pub fn publish_map(
+        &self,
+        entry_name: &str,
+        files: BTreeMap<String, Vec<u8>>,
+        name: &str,
+        author_override: Option<&str>,
+    ) -> Result<String, String> {
+        let src = String::from_utf8_lossy(
+            files.get(entry_name).ok_or_else(|| format!("{entry_name} がありません"))?,
+        )
+        .into_owned();
+        let base = Path::new(entry_name)
+            .parent()
+            .unwrap_or(Path::new(""))
+            .to_string_lossy()
+            .into_owned();
+
+        // must compile / validate before it can be published — imports and
+        // takes resolve from the snapshot itself (the clean room)
+        let checked = crate::check_with_loader(&src, &crate::semdiff::SnapLoader(&files), &base)
             .map_err(|ds| ds.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n"))?;
         let kind = match &checked {
             crate::Checked::Song(_) => "song",
@@ -145,26 +195,10 @@ impl Hub {
         let file = crate::parser::parse(&src).map_err(|_| "parse".to_string())?;
         let devices: Vec<String> = file.devices.iter().map(|d| d.name.clone()).collect();
         let progressions = extract_progressions(&file);
-
-        // snapshot the entry + transitive local imports (self-contained repo)
-        let mut files: BTreeMap<String, String> = BTreeMap::new();
-        collect_files(&file_name, &base, &mut files, 0)?;
-
-        // if the song lives in a VCS repo with a clean tree, the publish
-        // carries the full history (this is what makes a hub fork a real fork)
-        let vcs_head: Option<(crate::vcs::Repo, String)> = crate::vcs::Repo::open(if base.is_empty() { "." } else { &base })
-            .ok()
-            .filter(|r| r.is_clean().unwrap_or(false))
-            .and_then(|r| r.head().ok().flatten().map(|h| (r, h)));
-
-        let name = name.unwrap_or(
-            entry_path.file_stem().ok_or("ファイル名がありません")?.to_str().unwrap_or("song"),
-        );
-        let forked_from: Option<Origin> = std::fs::read_to_string(
-            entry_path.parent().unwrap_or(Path::new("")).join(LINEAGE_FILE),
-        )
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok());
+        let forked_from: Option<Origin> = files
+            .get(LINEAGE_FILE)
+            .and_then(|b| serde_json::from_slice(b).ok());
+        let by = author_override.map(String::from).unwrap_or_else(author);
 
         let mut reg = self.registry()?;
         reg.seq += 1;
@@ -178,38 +212,28 @@ impl Hub {
                 std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
             }
             std::fs::write(&dest, content).map_err(|e| e.to_string())?;
-            hashes.insert(rel.clone(), format!("{:016x}", crate::fnv1a64(content.as_bytes())));
-        }
-
-        // push the reachable history alongside the snapshot
-        let mut history_note = String::new();
-        let mut commit = None;
-        if let Some((vcs_repo, head)) = &vcs_head {
-            let objdir = self.root.join("store").join(name).join("objects");
-            let copied = vcs_repo.export_objects(head, &objdir)?;
-            commit = Some(head.clone());
-            history_note = format!(" 履歴 push: {} ({copied} objects)", &head[..8]);
+            hashes.insert(rel.clone(), format!("{:016x}", crate::fnv1a64(content)));
         }
 
         repo.versions.push(Version {
             v,
             seq: reg.seq,
-            author: author(),
+            author: by.clone(),
             kind: kind.into(),
-            entry: file_name.clone(),
+            entry: entry_name.to_string(),
             devices,
             files: hashes,
             forked_from: forked_from.clone(),
             progressions,
-            commit,
+            commit: None,
         });
-        reg.events.push(Event { seq: reg.seq, kind: "publish".into(), repo: name.into(), v, by: author() });
+        reg.events.push(Event { seq: reg.seq, kind: "publish".into(), repo: name.into(), v, by });
         self.save(&reg)?;
 
         let lineage_note = forked_from
             .map(|o| format!("(forked from {} v{})", o.repo, o.v))
             .unwrap_or_default();
-        Ok(format!("published: {name} v{v} [{kind}, {} files] {lineage_note}{history_note}", files.len()))
+        Ok(format!("published: {name} v{v} [{kind}, {} files] {lineage_note}", files.len()))
     }
 
     /// The only way to take content out of the hub. Copies the latest version
@@ -243,8 +267,7 @@ impl Hub {
             // no history published: plain snapshot + stamp
             let src_dir = self.root.join("store").join(name).join(format!("v{}", ver.v));
             for rel in ver.files.keys() {
-                let content =
-                    std::fs::read_to_string(src_dir.join(rel)).map_err(|e| e.to_string())?;
+                let content = std::fs::read(src_dir.join(rel)).map_err(|e| e.to_string())?;
                 let out = dest_dir.join(rel);
                 if let Some(dir) = out.parent() {
                     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -519,19 +542,26 @@ impl Hub {
     }
 
     /// Latest snapshot's file contents (what the browser player compiles).
-    pub fn snapshot_files(&self, name: &str) -> Result<BTreeMap<String, String>, String> {
+    /// (text files, binary assets as base64) of the latest version.
+    pub fn snapshot_files(
+        &self,
+        name: &str,
+    ) -> Result<(BTreeMap<String, String>, BTreeMap<String, String>), String> {
         let reg = self.registry()?;
         let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
         let ver = repo.versions.last().ok_or("バージョンがありません")?;
         let dir = self.root.join("store").join(name).join(format!("v{}", ver.v));
-        let mut out = BTreeMap::new();
+        let mut text = BTreeMap::new();
+        let mut assets = BTreeMap::new();
         for rel in ver.files.keys() {
-            out.insert(
-                rel.clone(),
-                std::fs::read_to_string(dir.join(rel)).map_err(|e| e.to_string())?,
-            );
+            let bytes = std::fs::read(dir.join(rel)).map_err(|e| e.to_string())?;
+            if rel.ends_with(".frec") {
+                assets.insert(rel.clone(), base64_encode(&bytes));
+            } else {
+                text.insert(rel.clone(), String::from_utf8_lossy(&bytes).into_owned());
+            }
         }
-        Ok(out)
+        Ok((text, assets))
     }
 
     /// Remote fork: record the ledger event and hand back the files plus the
@@ -540,7 +570,7 @@ impl Hub {
         let mut reg = self.registry()?;
         let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;
         let ver = repo.versions.last().ok_or("バージョンがありません")?.clone();
-        let files = self.snapshot_files(name)?;
+        let (files, assets) = self.snapshot_files(name)?;
         reg.seq += 1;
         reg.events.push(Event {
             seq: reg.seq,
@@ -554,6 +584,7 @@ impl Hub {
             "origin": Origin { repo: name.into(), v: ver.v, commit: ver.commit.clone() },
             "entry": ver.entry,
             "files": files,
+            "assets": assets,
         }))
     }
 
@@ -632,7 +663,7 @@ fn extract_progressions(file: &crate::ast::FileAst) -> Vec<String> {
 fn collect_files(
     rel: &str,
     base: &str,
-    files: &mut BTreeMap<String, String>,
+    files: &mut BTreeMap<String, Vec<u8>>,
     depth: usize,
 ) -> Result<(), String> {
     if depth > 16 {
@@ -643,7 +674,7 @@ fn collect_files(
     }
     let full = Path::new(base).join(rel);
     let src = std::fs::read_to_string(&full).map_err(|e| format!("{}: {e}", full.display()))?;
-    files.insert(rel.to_string(), src.clone());
+    files.insert(rel.to_string(), src.clone().into_bytes());
 
     let file = crate::parser::parse(&src)
         .map_err(|ds| format!("{rel}: {}", ds.first().map(|d| d.to_string()).unwrap_or_default()))?;
@@ -651,6 +682,16 @@ fn collect_files(
     for im in &file.imports {
         let child_rel = normalize(&format!("{rel_dir}/{}", im.path));
         collect_files(&child_rel, base, files, depth + 1)?;
+    }
+    // recorded takes ride along as bytes (a song with vocals must be
+    // publishable — the take IS the point of a performance fork)
+    for asset in &file.assets {
+        let child_rel = normalize(&format!("{rel_dir}/{}", asset.path));
+        if !files.contains_key(&child_rel) {
+            let bytes = std::fs::read(Path::new(base).join(&child_rel))
+                .map_err(|e| format!("{child_rel}: {e}"))?;
+            files.insert(child_rel, bytes);
+        }
     }
     Ok(())
 }
@@ -667,4 +708,69 @@ fn normalize(p: &str) -> String {
         }
     }
     parts.join("/")
+}
+
+// ---------------------------------------------------------------------------
+// base64 (standard alphabet, padded) — recorded takes cross HTTP/JSON as text
+// ---------------------------------------------------------------------------
+
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+pub fn base64_encode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        out.push(B64[(n >> 18) as usize & 63] as char);
+        out.push(B64[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { B64[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { B64[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
+pub fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    let val = |c: u8| -> Option<u32> {
+        Some(match c {
+            b'A'..=b'Z' => (c - b'A') as u32,
+            b'a'..=b'z' => (c - b'a' + 26) as u32,
+            b'0'..=b'9' => (c - b'0' + 52) as u32,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        })
+    };
+    let raw: Vec<u8> = s.bytes().filter(|&b| b != b'\n' && b != b'\r').collect();
+    let mut out = Vec::with_capacity(raw.len() / 4 * 3);
+    for chunk in raw.chunks(4) {
+        if chunk.len() < 2 {
+            return None;
+        }
+        let pads = chunk.iter().filter(|&&c| c == b'=').count();
+        let mut n = 0u32;
+        for (i, &c) in chunk.iter().enumerate() {
+            n |= if c == b'=' { 0 } else { val(c)? } << (18 - 6 * i);
+        }
+        out.push((n >> 16) as u8);
+        if chunk.len() > 2 && pads < 2 {
+            out.push((n >> 8) as u8);
+        }
+        if chunk.len() > 3 && pads < 1 {
+            out.push(n as u8);
+        }
+    }
+    Some(out)
+}
+
+#[cfg(test)]
+mod b64_tests {
+    use super::*;
+    #[test]
+    fn roundtrip() {
+        for len in 0..40 {
+            let data: Vec<u8> = (0..len as u8).map(|i| i.wrapping_mul(37).wrapping_add(len as u8)).collect();
+            assert_eq!(base64_decode(&base64_encode(&data)).unwrap(), data, "len {len}");
+        }
+        assert_eq!(base64_encode(b"forte"), "Zm9ydGU=");
+    }
 }

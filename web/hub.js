@@ -2,6 +2,7 @@
 // sources, verify its digest in-tab, and fork it into the local editor.
 
 import { Store } from './storage.js';
+import { fromBase64 } from './frec.js';
 
 const API = new URLSearchParams(location.search).get('api') || 'http://127.0.0.1:9377';
 const $ = (id) => document.getElementById(id);
@@ -20,8 +21,9 @@ function put(inst, prepare, commit, text) {
   new Uint8Array(inst.e.memory.buffer, ptr, bytes.length).set(bytes);
   return commit ? commit(inst.ctx) : 0;
 }
-function compileIn(inst, entrySrc, files) {
+function compileIn(inst, entrySrc, files, assets) {
   put(inst, inst.e.fw_modules_prepare, inst.e.fw_modules_commit, JSON.stringify(files));
+  put(inst, inst.e.fw_modules_prepare, inst.e.fw_assets_commit, JSON.stringify(assets || {}));
   put(inst, inst.e.fw_src_prepare, null, entrySrc);
   return inst.e.fw_compile(inst.ctx);
 }
@@ -50,9 +52,9 @@ let ac, node;
 
 async function showDetail(name) {
   const repo = await (await fetch(`${API}/api/repos/${name}`)).json();
-  const { files } = await (await fetch(`${API}/api/repos/${name}/files`)).json();
+  const { files, assets } = await (await fetch(`${API}/api/repos/${name}/files`)).json();
   const entrySrc = files[repo.entry];
-  current = { repo, files, entrySrc };
+  current = { repo, files, assets: assets || {}, entrySrc };
 
   $('list').style.display = 'none';
   $('detail').style.display = 'block';
@@ -109,7 +111,12 @@ $('listen').onclick = async () => {
         status(`bar ${Math.floor(e.data.beats / 4) + 1}.${Math.floor(e.data.beats % 4) + 1}`);
     };
   }
-  node.port.postMessage({ cmd: 'src', text: current.entrySrc, modules: JSON.stringify(current.files) });
+  node.port.postMessage({
+    cmd: 'src',
+    text: current.entrySrc,
+    modules: JSON.stringify(current.files),
+    assets: JSON.stringify(current.assets),
+  });
   await ac.resume();
   node.port.postMessage({ cmd: 'play' });
   // listens are ledger events — the raw data the contribution economy
@@ -127,7 +134,7 @@ $('verify').onclick = async () => {
   status('rebuilding…');
   await new Promise((r) => setTimeout(r, 30));
   const inst = await wasm();
-  const n = compileIn(inst, current.entrySrc, current.files);
+  const n = compileIn(inst, current.entrySrc, current.files, current.assets);
   if (n !== 0) {
     status('コンパイル失敗');
     return;
@@ -155,6 +162,12 @@ $('fork').onclick = async () => {
     for (const [rel, text] of Object.entries(fork.files)) {
       await store.write(rel, text); // nested paths keep import structure
     }
+    for (const [rel, b64] of Object.entries(fork.assets || {})) {
+      await store.writeBytes(rel, fromBase64(b64)); // recorded takes
+    }
+    // provenance by construction: a re-publish of this copy must record
+    // forked_from — the stamp travels with the files
+    await store.write('.forte-lineage.json', JSON.stringify(fork.origin, null, 2));
     status(`forked — エディタ(index.html)の一覧に入りました`);
     document.body.dataset.forked = 'ok';
   } catch {
