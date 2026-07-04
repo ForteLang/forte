@@ -250,25 +250,31 @@ impl Repo {
         }
         let tree = self.write_tree(&snap)?;
         let parent = self.branch_hash(&branch);
+        let mid_merge = self.store.join("MERGE_HEAD").exists();
         if let Some(ref p) = parent {
-            if self.commit_obj(p)?.tree == tree {
+            // an unchanged tree still commits mid-merge: the point is parent #2
+            if !mid_merge && self.commit_obj(p)?.tree == tree {
                 return Err("変更がありません(nothing to commit)".into());
             }
         }
-        let n = match &parent {
-            Some(p) => self.commit_obj(p)?.n + 1,
-            None => 1,
-        };
-        let c = Commit {
-            tree,
-            parents: parent.clone().into_iter().collect(),
-            author: author(),
-            message: message.to_string(),
-            n,
-        };
+        // a conflict resolution finishes the merge: MERGE_HEAD becomes parent #2
+        let mut parents: Vec<String> = parent.clone().into_iter().collect();
+        let merge_head = self.store.join("MERGE_HEAD");
+        if let Ok(h) = std::fs::read_to_string(&merge_head) {
+            let h = h.trim().to_string();
+            if !h.is_empty() && !parents.contains(&h) {
+                parents.push(h);
+            }
+        }
+        let mut n = 1;
+        for p in &parents {
+            n = n.max(self.commit_obj(p)?.n + 1);
+        }
+        let c = Commit { tree, parents, author: author(), message: message.to_string(), n };
         let body = serde_json::to_vec(&c).map_err(|e| e.to_string())?;
         let hash = self.put("commit", &body)?;
         std::fs::write(self.branch_path(&branch), format!("{hash}\n")).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(&merge_head);
         Ok(format!("[{branch} #{n} {}] {message} ({} files)", &hash[..8], snap.len()))
     }
 
@@ -360,19 +366,7 @@ impl Repo {
         let is_branch = self.branch_hash(rev).is_some();
         let hash = self.resolve(rev)?;
         let target = self.read_tree(&self.commit_obj(&hash)?.tree)?;
-        let current = self.working_snapshot()?;
-        for path in current.keys() {
-            if !target.contains_key(path) {
-                std::fs::remove_file(self.root.join(path)).map_err(|e| e.to_string())?;
-            }
-        }
-        for (path, bytes) in &target {
-            let dest = self.root.join(path);
-            if let Some(dir) = dest.parent() {
-                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-            }
-            std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
-        }
+        self.restore(&target)?;
         if is_branch {
             std::fs::write(self.store.join("HEAD"), format!("ref: {rev}\n"))
                 .map_err(|e| e.to_string())?;
@@ -388,11 +382,314 @@ impl Repo {
         }
     }
 
+    /// Overwrite the working tree's tracked files with a snapshot.
+    fn restore(&self, target: &Snapshot) -> Result<(), String> {
+        let current = self.working_snapshot()?;
+        for path in current.keys() {
+            if !target.contains_key(path) {
+                std::fs::remove_file(self.root.join(path)).map_err(|e| e.to_string())?;
+            }
+        }
+        for (path, bytes) in target {
+            let dest = self.root.join(path);
+            if let Some(dir) = dest.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
     /// Snapshot of a revision (for diff).
     pub fn snapshot_of(&self, rev: &str) -> Result<Snapshot, String> {
         let hash = self.resolve(rev)?;
         self.read_tree(&self.commit_obj(&hash)?.tree)
     }
+
+    // ---- merge ---------------------------------------------------------------
+
+    /// Nearest common ancestor (good enough for the fork-and-jam histories the
+    /// tool produces; criss-cross merges pick the first hit).
+    fn merge_base(&self, a: &str, b: &str) -> Result<Option<String>, String> {
+        let mut ancestors = std::collections::BTreeSet::new();
+        let mut queue = vec![a.to_string()];
+        while let Some(h) = queue.pop() {
+            if ancestors.insert(h.clone()) {
+                queue.extend(self.commit_obj(&h)?.parents.clone());
+            }
+        }
+        let mut queue = std::collections::VecDeque::from([b.to_string()]);
+        let mut seen = std::collections::BTreeSet::new();
+        while let Some(h) = queue.pop_front() {
+            if ancestors.contains(&h) {
+                return Ok(Some(h));
+            }
+            if seen.insert(h.clone()) {
+                queue.extend(self.commit_obj(&h)?.parents.clone());
+            }
+        }
+        Ok(None)
+    }
+
+    /// Merge `other` (branch or hash) into the current branch. Disjoint edits
+    /// combine automatically (file level, then line level); overlapping edits
+    /// leave `<<<<<<<`-marked files in the working tree and no commit is made.
+    pub fn merge(&self, other: &str) -> Result<String, String> {
+        let branch = self.head_ref()?.ok_or("HEAD がブランチを指していません(checkout <branch> で戻る)")?;
+        if !self.is_clean()? {
+            return Err("作業ツリーに未コミットの変更があります(commit してから merge)".into());
+        }
+        let ours_hash = self.head()?.ok_or("まだコミットがありません")?;
+        let theirs_hash = self.resolve(other)?;
+        if ours_hash == theirs_hash {
+            return Err("同じコミットです(マージするものがありません)".into());
+        }
+        let base_hash = self
+            .merge_base(&ours_hash, &theirs_hash)?
+            .ok_or("共通の祖先がありません(別リポジトリの履歴?)")?;
+        if base_hash == theirs_hash {
+            return Err(format!("'{other}' は既に取り込み済みです"));
+        }
+        let theirs = self.read_tree(&self.commit_obj(&theirs_hash)?.tree)?;
+        if base_hash == ours_hash {
+            // fast-forward: we have nothing of our own, just move the branch
+            self.restore(&theirs)?;
+            std::fs::write(self.branch_path(&branch), format!("{theirs_hash}\n"))
+                .map_err(|e| e.to_string())?;
+            return Ok(format!("fast-forward: {branch} → {} ({} files)", &theirs_hash[..8], theirs.len()));
+        }
+        let base = self.read_tree(&self.commit_obj(&base_hash)?.tree)?;
+        let ours = self.read_tree(&self.commit_obj(&ours_hash)?.tree)?;
+
+        let mut merged = Snapshot::new();
+        let mut conflicts: Vec<String> = Vec::new();
+        let mut paths: std::collections::BTreeSet<&String> = std::collections::BTreeSet::new();
+        paths.extend(base.keys());
+        paths.extend(ours.keys());
+        paths.extend(theirs.keys());
+        for path in paths {
+            let (b, o, t) = (base.get(path), ours.get(path), theirs.get(path));
+            let take = |v: Option<&Vec<u8>>, m: &mut Snapshot| {
+                if let Some(v) = v {
+                    m.insert(path.clone(), v.clone());
+                }
+            };
+            if o == t {
+                take(o, &mut merged); // same on both sides (or both deleted)
+            } else if o == b {
+                take(t, &mut merged); // only theirs changed (or deleted)
+            } else if t == b {
+                take(o, &mut merged); // only ours changed (or deleted)
+            } else if o.is_none() || t.is_none() {
+                conflicts.push(format!("{path} (片方で編集、片方で削除)"));
+                take(o.or(t), &mut merged); // keep the surviving edit for repair
+            } else if !path.ends_with(".forte") && !path.ends_with(".json") {
+                conflicts.push(format!("{path} (バイナリが両方で変更)"));
+                take(o, &mut merged);
+            } else {
+                let (text, conflicted) = merge3(
+                    &String::from_utf8_lossy(b.map(Vec::as_slice).unwrap_or_default()),
+                    &String::from_utf8_lossy(o.unwrap()),
+                    &String::from_utf8_lossy(t.unwrap()),
+                    &branch,
+                    other,
+                );
+                if conflicted {
+                    conflicts.push(format!("{path} (同じ行を両方で編集)"));
+                }
+                merged.insert(path.clone(), text.into_bytes());
+            }
+        }
+
+        if !conflicts.is_empty() {
+            // leave the marked-up merge in the working tree for repair; the
+            // resolving commit picks up MERGE_HEAD as its second parent
+            self.restore(&merged)?;
+            std::fs::write(self.store.join("MERGE_HEAD"), format!("{theirs_hash}\n"))
+                .map_err(|e| e.to_string())?;
+            return Err(format!(
+                "競合があります — マーカー(<<<<<<<)を直して forte commit してください:\n  {}",
+                conflicts.join("\n  ")
+            ));
+        }
+
+        // merge commit with both parents
+        let tree = self.write_tree(&merged)?;
+        let n = self.commit_obj(&ours_hash)?.n.max(self.commit_obj(&theirs_hash)?.n) + 1;
+        let c = Commit {
+            tree,
+            parents: vec![ours_hash.clone(), theirs_hash.clone()],
+            author: author(),
+            message: format!("merge {other}"),
+            n,
+        };
+        let body = serde_json::to_vec(&c).map_err(|e| e.to_string())?;
+        let hash = self.put("commit", &body)?;
+        self.restore(&merged)?;
+        std::fs::write(self.branch_path(&branch), format!("{hash}\n")).map_err(|e| e.to_string())?;
+
+        // the musical safety net: does the merged song still compile?
+        let mut warnings = String::new();
+        for (path, bytes) in &merged {
+            if !path.ends_with(".forte") {
+                continue;
+            }
+            let src = String::from_utf8_lossy(bytes);
+            let dir = path.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+            if crate::check_with_loader(&src, &crate::semdiff::SnapLoader(&merged), dir).is_err() {
+                warnings.push_str(&format!("\n⚠ {path} がコンパイルできません(forte check で確認を)"));
+            }
+        }
+        Ok(format!(
+            "[{branch} #{n} {}] merge {other} ({} files){warnings}",
+            &hash[..8],
+            merged.len()
+        ))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// line-level three-way merge (diff3 over an LCS matching)
+// ---------------------------------------------------------------------------
+
+/// One side's rewrite of base lines `s..e` into `lines`.
+struct Edit {
+    s: usize,
+    e: usize,
+    lines: Vec<String>,
+}
+
+/// Longest-common-subsequence matching between two line arrays (O(n·m) DP —
+/// song sources are small).
+fn lcs_edits(base: &[&str], side: &[&str]) -> Vec<Edit> {
+    let (n, m) = (base.len(), side.len());
+    let mut dp = vec![0u32; (n + 1) * (m + 1)];
+    let at = |i: usize, j: usize| i * (m + 1) + j;
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            dp[at(i, j)] = if base[i] == side[j] {
+                dp[at(i + 1, j + 1)] + 1
+            } else {
+                dp[at(i + 1, j)].max(dp[at(i, j + 1)])
+            };
+        }
+    }
+    let mut edits = Vec::new();
+    let (mut i, mut j) = (0, 0);
+    let (mut es, mut lines): (Option<usize>, Vec<String>) = (None, Vec::new());
+    while i < n || j < m {
+        if i < n && j < m && base[i] == side[j] {
+            if let Some(s) = es.take() {
+                edits.push(Edit { s, e: i, lines: std::mem::take(&mut lines) });
+            }
+            i += 1;
+            j += 1;
+        } else if j < m && (i == n || dp[at(i, j + 1)] >= dp[at(i + 1, j)]) {
+            es.get_or_insert(i);
+            lines.push(side[j].to_string());
+            j += 1;
+        } else {
+            es.get_or_insert(i);
+            i += 1;
+        }
+    }
+    if let Some(s) = es {
+        edits.push(Edit { s, e: n, lines });
+    }
+    edits
+}
+
+/// Rebuild one side's text for base range `s..e` from its edit script.
+fn side_range(base: &[&str], edits: &[Edit], s: usize, e: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut i = s;
+    for ed in edits {
+        if ed.e < s || ed.s > e {
+            continue;
+        }
+        while i < ed.s {
+            out.push(base[i].to_string());
+            i += 1;
+        }
+        out.extend(ed.lines.iter().cloned());
+        i = ed.e;
+    }
+    while i < e {
+        out.push(base[i].to_string());
+        i += 1;
+    }
+    out
+}
+
+/// Three-way merge; returns (text, had_conflicts). Conflicting regions carry
+/// git-style markers labelled with the branch names.
+fn merge3(base: &str, ours: &str, theirs: &str, ours_name: &str, theirs_name: &str) -> (String, bool) {
+    let b: Vec<&str> = base.lines().collect();
+    let eo = lcs_edits(&b, &ours.lines().collect::<Vec<_>>());
+    let et = lcs_edits(&b, &theirs.lines().collect::<Vec<_>>());
+
+    // cluster overlapping edit regions from the two sides (closed intervals so
+    // an insertion at a point collides with an edit covering that point)
+    #[derive(Clone, Copy)]
+    struct Region {
+        s: usize,
+        e: usize,
+        ours: bool,
+        theirs: bool,
+    }
+    let mut regions: Vec<Region> = eo
+        .iter()
+        .map(|ed| Region { s: ed.s, e: ed.e.max(ed.s), ours: true, theirs: false })
+        .chain(et.iter().map(|ed| Region { s: ed.s, e: ed.e.max(ed.s), ours: false, theirs: true }))
+        .collect();
+    regions.sort_by_key(|r| (r.s, r.e));
+    // edits not separated by at least one unchanged base line share a cluster
+    // (git's rule: adjacent changes from both sides are a conflict candidate)
+    let mut clusters: Vec<Region> = Vec::new();
+    for r in regions {
+        match clusters.last_mut() {
+            Some(last) if r.s <= last.e => {
+                last.e = last.e.max(r.e);
+                last.ours |= r.ours;
+                last.theirs |= r.theirs;
+            }
+            _ => clusters.push(r),
+        }
+    }
+
+    let mut out: Vec<String> = Vec::new();
+    let mut conflicted = false;
+    let mut i = 0;
+    for c in &clusters {
+        while i < c.s.min(b.len()) {
+            out.push(b[i].to_string());
+            i += 1;
+        }
+        let e = c.e.min(b.len()).max(c.s.min(b.len()));
+        let o_lines = side_range(&b, &eo, c.s.min(b.len()), e);
+        let t_lines = side_range(&b, &et, c.s.min(b.len()), e);
+        match (c.ours, c.theirs) {
+            (true, false) => out.extend(o_lines),
+            (false, true) => out.extend(t_lines),
+            _ if o_lines == t_lines => out.extend(o_lines),
+            _ => {
+                conflicted = true;
+                out.push(format!("<<<<<<< {ours_name}"));
+                out.extend(o_lines);
+                out.push("=======".into());
+                out.extend(t_lines);
+                out.push(format!(">>>>>>> {theirs_name}"));
+            }
+        }
+        i = e;
+    }
+    while i < b.len() {
+        out.push(b[i].to_string());
+        i += 1;
+    }
+    let mut text = out.join("\n");
+    text.push('\n');
+    (text, conflicted)
 }
 
 /// Walk the project, collecting tracked files. Skips hidden directories,

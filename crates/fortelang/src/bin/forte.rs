@@ -108,6 +108,9 @@ fn main() -> ExitCode {
         Some("checkout") if args.len() >= 2 => {
             vcs_print(fortelang::vcs::Repo::open(".").and_then(|r| r.checkout(&args[1])))
         }
+        Some("merge") if args.len() >= 2 => {
+            vcs_print(fortelang::vcs::Repo::open(".").and_then(|r| r.merge(&args[1])))
+        }
         Some("diff") => vcs_diff(&args[1..]),
         #[cfg(not(target_family = "wasm"))]
         Some("play") if args.len() >= 2 => {
@@ -132,6 +135,7 @@ fn main() -> ExitCode {
             eprintln!("       forte log");
             eprintln!("       forte branch [NAME]");
             eprintln!("       forte checkout <branch|hash>");
+            eprintln!("       forte merge <branch>        (競合しない編集は自動で合流)");
             eprintln!("       forte diff [REV [REV]]      (音楽の言葉で差分。既定 HEAD↔作業)");
             eprintln!("       forte hub publish <file.forte> [--as NAME] [--hub DIR]");
             eprintln!("       forte hub fork <NAME> <DEST-DIR>   [--hub DIR]");
@@ -467,7 +471,8 @@ fn vcs_log() -> ExitCode {
         let head = repo.head()?.ok_or("まだコミットがありません")?;
         let mut out = String::new();
         for (hash, c) in repo.log(&head)? {
-            out.push_str(&format!("#{:<3} {} {} — {}\n", c.n, &hash[..8], c.author, c.message));
+            let merge = if c.parents.len() > 1 { " (merge)" } else { "" };
+            out.push_str(&format!("#{:<3} {} {} — {}{merge}\n", c.n, &hash[..8], c.author, c.message));
         }
         out.pop();
         Ok(out)

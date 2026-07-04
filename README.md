@@ -80,6 +80,8 @@ forte diff                         # 例: tempo: 108 → 116 bpm
                                    #     track Keys: Polymer の wave: square → saw
                                    #     track Hats: 小節 13..16: 配置を削除
 forte checkout main                # いつでも聴き比べに戻れる
+forte merge idea                   # 競合しない編集は自動合流。マージ結果は
+                                   # コンパイル検証され、音が壊れていれば警告
 ```
 
 音源ライブラリだけ編集した場合も、それを import している曲側に
