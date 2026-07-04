@@ -183,3 +183,179 @@ impl Eq3 {
         lo * lg + mid * mg + hi * hg
     }
 }
+
+/// Stereo-linked compressor. Level detection and gain computation stay in the
+/// linear domain (no log/exp per sample) so native and wasm agree bit-for-bit.
+pub struct Compressor {
+    sr: f32,
+    env: f32,
+    att_coef: f32,
+    rel_coef: f32,
+    pub thresh: f32,  // 0..1 → linear amplitude 0.05..1.0
+    pub ratio: f32,   // 0..1 → 1:1..20:1
+    pub attack: f32,  // 0..1 → 0.5ms..100ms
+    pub release: f32, // 0..1 → 20ms..800ms
+    pub makeup: f32,  // 0..1 → x1..x4
+}
+
+impl Compressor {
+    pub fn new(sr: f32) -> Self {
+        let mut c = Self {
+            sr,
+            env: 0.0,
+            att_coef: 0.0,
+            rel_coef: 0.0,
+            thresh: 0.5,
+            ratio: 0.5,
+            attack: 0.1,
+            release: 0.3,
+            makeup: 0.25,
+        };
+        c.update_coefs();
+        c
+    }
+
+    pub fn update_coefs(&mut self) {
+        let att_s = 0.0005 + self.attack * 0.0995;
+        let rel_s = 0.02 + self.release * 0.78;
+        self.att_coef = crate::dmath::exp(-1.0 / (att_s * self.sr));
+        self.rel_coef = crate::dmath::exp(-1.0 / (rel_s * self.sr));
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let level = l.abs().max(r.abs());
+        let coef = if level > self.env { self.att_coef } else { self.rel_coef };
+        self.env = coef * self.env + (1.0 - coef) * level;
+
+        let thr = 0.05 + self.thresh * 0.95;
+        let ratio = 1.0 + self.ratio * 19.0;
+        let g = if self.env > thr {
+            let target = thr + (self.env - thr) / ratio;
+            target / self.env
+        } else {
+            1.0
+        };
+        let mk = 1.0 + self.makeup * 3.0;
+        (l * g * mk, r * g * mk)
+    }
+}
+
+/// Stereo chorus: one short delay line per channel, modulated by LFOs in
+/// quadrature so the two sides move against each other (the width comes from
+/// the phase offset, not from random spread — deterministic by construction).
+pub struct Chorus {
+    sr: f32,
+    buf_l: Vec<f32>,
+    buf_r: Vec<f32>,
+    write: usize,
+    phase: f32,
+    pub rate: f32,  // 0..1 → 0.05..3 Hz
+    pub depth: f32, // 0..1 → 0..8ms of sweep
+    pub mix: f32,   // 0..1
+}
+
+impl Chorus {
+    pub fn new(sr: f32) -> Self {
+        let max = (sr * 0.06) as usize + 4; // 12ms base + 8ms sweep + headroom
+        Self {
+            sr,
+            buf_l: vec![0.0; max],
+            buf_r: vec![0.0; max],
+            write: 0,
+            phase: 0.0,
+            rate: 0.3,
+            depth: 0.5,
+            mix: 0.5,
+        }
+    }
+
+    #[inline]
+    fn read(buf: &[f32], write: usize, delay_samples: f32) -> f32 {
+        let len = buf.len() as f32;
+        let pos = (write as f32 - delay_samples).rem_euclid(len);
+        let i0 = pos as usize % buf.len();
+        let i1 = (i0 + 1) % buf.len();
+        let frac = pos - pos as usize as f32;
+        buf[i0] * (1.0 - frac) + buf[i1] * frac
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        self.buf_l[self.write] = l;
+        self.buf_r[self.write] = r;
+
+        let hz = 0.05 + self.rate * 2.95;
+        self.phase += hz / self.sr;
+        if self.phase >= 1.0 {
+            self.phase -= 1.0;
+        }
+        let tau = 2.0 * core::f32::consts::PI;
+        let lfo_l = crate::dmath::sin(self.phase * tau);
+        let lfo_r = crate::dmath::sin(self.phase * tau + core::f32::consts::FRAC_PI_2);
+
+        let base = 0.012 * self.sr;
+        let sweep = self.depth * 0.008 * self.sr;
+        let dl = Self::read(&self.buf_l, self.write, base + sweep * (0.5 + 0.5 * lfo_l));
+        let dr = Self::read(&self.buf_r, self.write, base + sweep * (0.5 + 0.5 * lfo_r));
+
+        self.write = (self.write + 1) % self.buf_l.len();
+
+        let m = self.mix;
+        (l * (1.0 - m * 0.5) + dl * m, r * (1.0 - m * 0.5) + dr * m)
+    }
+}
+
+/// Tempo-synced ducker: the deterministic take on sidechain pumping. Instead
+/// of following another track's level, it dips on a fixed beat grid (which is
+/// what the classic "pump" is musically — tied to the kick pattern).
+pub struct Pump {
+    sr: f32,
+    pos: f32,
+    pub amount: f32, // 0..1 → duck depth
+    pub period: f32, // seconds per duck cycle (compiler sets this from tempo)
+}
+
+impl Pump {
+    pub fn new(sr: f32) -> Self {
+        Self { sr, pos: 0.0, amount: 0.6, period: 0.5 }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let period_samples = (self.period.max(0.05)) * self.sr;
+        let t = self.pos / period_samples; // 0..1 through the cycle
+        // instant dip at the beat, smooth quadratic recovery
+        let g = 1.0 - self.amount * (1.0 - t) * (1.0 - t);
+        self.pos += 1.0;
+        if self.pos >= period_samples {
+            self.pos -= period_samples;
+        }
+        (l * g, r * g)
+    }
+}
+
+/// Mid/side stereo width. 0.5 is unity; below narrows towards mono, above
+/// pushes the sides up (capped ×2 so it cannot blow up the mix).
+pub struct Width {
+    pub amount: f32,
+}
+
+impl Width {
+    pub fn new() -> Self {
+        Self { amount: 0.5 }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let mid = (l + r) * 0.5;
+        let side = (l - r) * 0.5 * (self.amount * 2.0);
+        (mid + side, mid - side)
+    }
+}
+
+impl Default for Width {
+    fn default() -> Self {
+        Self::new()
+    }
+}

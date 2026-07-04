@@ -125,7 +125,7 @@ pub fn compile(
 
         // insert effects, in order
         for call in &tast.inserts {
-            match build_effect(call, &user_devices) {
+            match build_effect(call, &user_devices, p.tempo) {
                 Ok(dev) => track.devices.push(dev),
                 Err(d) => diags.push(d),
             }
@@ -295,7 +295,7 @@ pub fn compile(
         let color = TRACK_COLORS[(song.tracks.len() + ri) % TRACK_COLORS.len()];
         let mut track = Track::new(id, rast.name.clone(), TrackKind::Effect, color);
         for call in &rast.inserts {
-            match build_effect(call, &user_devices) {
+            match build_effect(call, &user_devices, p.tempo) {
                 Ok(dev) => track.devices.push(dev),
                 Err(d) => diags.push(d),
             }
@@ -498,7 +498,8 @@ fn eval_lit(lit: &PatternLit, beats_per_bar: f64, beat_pitch: u8) -> Result<(Vec
 // ---------------------------------------------------------------------------
 
 const INSTRUMENTS: &[&str] = &["sampler", "kit", "polymer", "grid"];
-const EFFECTS: &[&str] = &["filter", "eq", "drive", "delay", "reverb"];
+const EFFECTS: &[&str] =
+    &["filter", "eq", "drive", "delay", "reverb", "comp", "chorus", "pump", "width"];
 
 /// Build an instrument device. Returns the device plus the root pitch that
 /// `beat` literals on this track trigger.
@@ -805,7 +806,11 @@ fn build_lfo(m: &ModulateAst, track: &Track) -> Result<Modulator, Diag> {
     Ok(lfo)
 }
 
-fn build_effect(call: &Call, user_devices: &HashMap<&str, &DeviceAst>) -> Result<Device, Diag> {
+fn build_effect(
+    call: &Call,
+    user_devices: &HashMap<&str, &DeviceAst>,
+    bpm: f64,
+) -> Result<Device, Diag> {
     if let Some(dev_ast) = user_devices.get(call.name.as_str()) {
         if dev_ast.kind != "Effect" {
             return Err(Diag::new(
@@ -838,6 +843,14 @@ fn build_effect(call: &Call, user_devices: &HashMap<&str, &DeviceAst>) -> Result
                 &[],
             ),
             "reverb" => (DeviceKind::Reverb, &[("size", 0), ("decay", 1), ("mix", 2)], &[]),
+            "comp" => (
+                DeviceKind::Comp,
+                &[("thresh", 0), ("ratio", 1), ("attack", 2), ("release", 3), ("makeup", 4)],
+                &[],
+            ),
+            "chorus" => (DeviceKind::Chorus, &[("rate", 0), ("depth", 1), ("mix", 2)], &[]),
+            "pump" => (DeviceKind::Pump, &[("amount", 0), ("beats", 1)], &[]),
+            "width" => (DeviceKind::Width, &[("amount", 0)], &[]),
             other => {
                 return Err(Diag::new(
                     "E-DEV-001",
@@ -850,8 +863,15 @@ fn build_effect(call: &Call, user_devices: &HashMap<&str, &DeviceAst>) -> Result
             }
         };
     let mut dev = Device::new(kind);
+    if kind == DeviceKind::Pump {
+        dev.params[1] = 1.0; // default: duck once per beat
+    }
     for (key, arg) in &call.args {
         set_param(&mut dev, key, arg, params, opts, call)?;
+    }
+    if kind == DeviceKind::Pump {
+        // the knob is in beats; the engine wants seconds per duck cycle
+        dev.params[1] *= (60.0 / bpm) as f32;
     }
     Ok(dev)
 }

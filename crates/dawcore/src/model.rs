@@ -33,6 +33,12 @@ pub enum DeviceKind {
     Reverb,
     Eq,
     Drive,
+    Comp,
+    Chorus,
+    /// Tempo-synced ducker (deterministic sidechain pumping).
+    Pump,
+    /// Mid/side stereo width.
+    Width,
     /// A user-defined effect: a Grid graph fed by AudioIn (`device X : Effect`).
     GridFx,
 }
@@ -58,7 +64,7 @@ impl DeviceStage {
 impl DeviceKind {
     /// Every device, in stage order. The browser and factories iterate this —
     /// adding a device here is the only registration step the UI needs.
-    pub const ALL: [DeviceKind; 12] = [
+    pub const ALL: [DeviceKind; 16] = [
         DeviceKind::Arpeggiator,
         DeviceKind::NoteTranspose,
         DeviceKind::NoteRepeat,
@@ -71,6 +77,10 @@ impl DeviceKind {
         DeviceKind::Drive,
         DeviceKind::Delay,
         DeviceKind::Reverb,
+        DeviceKind::Comp,
+        DeviceKind::Chorus,
+        DeviceKind::Pump,
+        DeviceKind::Width,
     ];
 
     pub fn label(self) -> &'static str {
@@ -87,6 +97,10 @@ impl DeviceKind {
             DeviceKind::Reverb => "Reverb",
             DeviceKind::Eq => "EQ-5",
             DeviceKind::Drive => "Distortion",
+            DeviceKind::Comp => "Compressor",
+            DeviceKind::Chorus => "Chorus",
+            DeviceKind::Pump => "Pump",
+            DeviceKind::Width => "Width",
             DeviceKind::GridFx => "Grid FX",
         }
     }
@@ -128,6 +142,10 @@ impl DeviceKind {
             DeviceKind::Reverb => &["Size", "Decay", "Mix"],
             DeviceKind::Eq => &["Low", "Mid", "High"],
             DeviceKind::Drive => &["Drive"],
+            DeviceKind::Comp => &["Thresh", "Ratio", "Attack", "Release", "Makeup"],
+            DeviceKind::Chorus => &["Rate", "Depth", "Mix"],
+            DeviceKind::Pump => &["Amount", "Period"],
+            DeviceKind::Width => &["Amount"],
             DeviceKind::GridFx => &[],
         }
     }
@@ -151,6 +169,11 @@ impl DeviceKind {
             DeviceKind::Reverb => vec![0.5, 0.5, 0.25],
             DeviceKind::Eq => vec![0.5, 0.5, 0.5],
             DeviceKind::Drive => vec![0.3],
+            DeviceKind::Comp => vec![0.5, 0.5, 0.1, 0.3, 0.25],
+            DeviceKind::Chorus => vec![0.3, 0.5, 0.5],
+            // Period is seconds per duck; the compiler overwrites it from tempo
+            DeviceKind::Pump => vec![0.6, 0.5],
+            DeviceKind::Width => vec![0.75],
             DeviceKind::GridFx => Vec::new(),
         }
     }

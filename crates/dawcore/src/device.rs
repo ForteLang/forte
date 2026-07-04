@@ -17,7 +17,7 @@
 //! audio thread pre-boxed. `process`/`next` must not allocate; bounded pushes
 //! only (use [`push_bounded`]).
 
-use crate::dsp::effects::{Drive, Eq3, FdnReverb, StereoDelay};
+use crate::dsp::effects::{Chorus, Compressor, Drive, Eq3, FdnReverb, Pump, StereoDelay, Width};
 use crate::dsp::filter::{FilterMode, Svf};
 use crate::dsp::grid::GridSynth;
 use crate::dsp::sampler::Sampler;
@@ -138,6 +138,10 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
         DeviceKind::Reverb => Dsp::Audio(Box::new(FdnReverb::new(sr))),
         DeviceKind::Eq => Dsp::Audio(Box::new(EqFx { l: Eq3::new(sr), r: Eq3::new(sr) })),
         DeviceKind::Drive => Dsp::Audio(Box::new(Drive::new())),
+        DeviceKind::Comp => Dsp::Audio(Box::new(Compressor::new(sr))),
+        DeviceKind::Chorus => Dsp::Audio(Box::new(Chorus::new(sr))),
+        DeviceKind::Pump => Dsp::Audio(Box::new(Pump::new(sr))),
+        DeviceKind::Width => Dsp::Audio(Box::new(Width::new())),
     }
 }
 
@@ -603,6 +607,58 @@ impl AudioFx for FdnReverb {
             self.size = p[0];
             self.decay = p[1];
             self.mix = p[2];
+        }
+    }
+}
+
+impl AudioFx for Compressor {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Compressor::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 5 {
+            self.thresh = p[0];
+            self.ratio = p[1];
+            self.attack = p[2];
+            self.release = p[3];
+            self.makeup = p[4];
+            self.update_coefs();
+        }
+    }
+}
+
+impl AudioFx for Chorus {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Chorus::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 3 {
+            self.rate = p[0];
+            self.depth = p[1];
+            self.mix = p[2];
+        }
+    }
+}
+
+impl AudioFx for Pump {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Pump::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 2 {
+            self.amount = p[0];
+            self.period = p[1];
+        }
+    }
+}
+
+impl AudioFx for Width {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Width::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if !p.is_empty() {
+            self.amount = p[0];
         }
     }
 }

@@ -145,8 +145,8 @@ publish した楽器に各自が自分の録音を差せる。
 | `polymer` | wave(sine/saw/square/tri), cutoff, reso, attack, decay, sustain, release, detune, sub, filtenv |
 | `grid()` | 既定パッチのモジュラー音源 |
 
-ビルトインの他に、標準楽器ライブラリ `lib/std/`(drums 10 / bass 5 / keys 5 /
-pads 4 / leads 5 の計 29 楽器)が同梱される。これらは言語機能ではなく §4.5 の
+ビルトインの他に、標準楽器ライブラリ `lib/std/`(drums / percussion / bass /
+keys / leads / pads / synths / fx の計 103 楽器)が同梱される。これらは言語機能ではなく §4.5 の
 device DSL で書かれたユーザー空間のコードであり、通常の `import` で使う。
 
 | effect | パラメータ |
@@ -156,6 +156,10 @@ device DSL で書かれたユーザー空間のコードであり、通常の `i
 | `drive` | drive(別名 amount) |
 | `delay` | time, fdbk(別名 feedback), mix |
 | `reverb` | size, decay, mix |
+| `comp` | thresh, ratio, attack, release, makeup — ステレオリンク・コンプレッサ |
+| `chorus` | rate, depth, mix — L/R 直交位相の変調ディレイ |
+| `pump` | amount, beats — テンポ同期ダッキング(サイドチェイン・ポンピングの決定論版。beats は 1 サイクルの拍数、既定 1)|
+| `width` | amount — M/S ステレオ幅(0.5 が等倍。insert はパン前段なのでステレオ源に使う)|
 
 数値ノブはすべて正規化 0..1(範囲外は E-TYPE-002)。volume 0..1、pan -1..1、
 send レベル 0..1。
