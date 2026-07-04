@@ -1,0 +1,38 @@
+// Pattern: Halftime Dubstep (140bpm) — スネアは 3 拍目だけ。
+// ウォブルベースの揺れが主役。
+import { Kick909, SnareTight, HatClosed } from "../../lib/std/drums.forte"
+import { GrowlBass } from "../../lib/std/bass.forte"
+import { DarkPad } from "../../lib/std/pads.forte"
+
+song "Pattern: Halftime Dubstep" {
+  tempo 140bpm
+  meter 4/4
+  key E minor
+
+  let kick  = beat`x--- ---- ---- --x-`
+  let snare = beat`---- ---- X--- ----`
+  let hat   = beat`x-x- x-xx -xx- x-x-`
+  let wob   = prog`Em | Em | C | B7`
+
+  return Cave {
+    insert reverb(size: 0.75, decay: 0.55, mix: 1.0)
+    volume 0.6
+  }
+
+  track Kick  { instrument Kick909(click: 0.5) insert drive(drive: 0.2) volume 0.95 play kick at bars(1..8) }
+  track Snare { instrument SnareTight(snap: 0.85) volume 0.8 send Cave 0.25 play snare at bars(1..8) }
+  track Hat   { instrument HatClosed(bright: 0.85) volume 0.3 pan 0.25 play hat at bars(3..8) }
+
+  track Wobble {
+    instrument GrowlBass(growl: 0.65)
+    volume 0.8
+    play bass(wob, rate: 1) at bars(1..8)
+  }
+
+  track Pad {
+    instrument DarkPad()
+    send Cave 0.5
+    volume 0.35
+    play chords(wob) at bars(1..8)
+  }
+}

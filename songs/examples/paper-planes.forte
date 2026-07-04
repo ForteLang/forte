@@ -1,0 +1,69 @@
+// Paper Planes — ローファイヒップホップ 24 小節。maj7 のループに
+// フルートの口ずさみ。B セクションで和声が持ち上がる。
+import { Kick606, SnareBrush, HatClosed, Shaker } from "../../lib/std/drums.forte"
+import { UprightBass } from "../../lib/std/bass.forte"
+import { Wurli, Celesta } from "../../lib/std/keys.forte"
+import { FluteLead } from "../../lib/std/leads.forte"
+
+song "Paper Planes" {
+  tempo 80bpm
+  meter 4/4
+  key C minor
+
+  section aloop = bars(1..8)
+  section bloop = bars(9..16)
+  section aback = bars(17..24)
+
+  let kick  = beat`x--- ---- -x-- --x-`
+  let snare = beat`---- x--- ---- x---`
+  let hat   = beat`x--x --x- x--x --xx`
+  let shk   = beat`--x- --x- --x- --x-`
+  let homea = prog`Cm7 | Fm7 | Abmaj7 | G7`
+  let homeb = prog`Ebmaj7 | Abmaj7 | Dm7 | G7`
+
+  return Tape {
+    insert reverb(size: 0.55, decay: 0.45, mix: 1.0)
+    volume 0.6
+  }
+
+  track Kick  { instrument Kick606(decay: 0.3) volume 0.8 play kick at bars(1..24) }
+  track Brush { instrument SnareBrush(soft: 0.4) volume 0.6 send Tape 0.2 play snare at bars(1..24) }
+  track Hat   { instrument HatClosed(bright: 0.7) volume 0.35 pan 0.2 play hat at bars(1..24) }
+  track Shk   { instrument Shaker() volume 0.2 pan -0.25 play shk at bloop }
+
+  track Bass {
+    instrument UprightBass()
+    volume 0.75
+    play bass(homea, rate: 0.5) at aloop
+    play bass(homeb, rate: 0.5) at bloop
+    play bass(homea, rate: 0.5) at aback
+  }
+
+  track Keys {
+    instrument Wurli(bark: 0.25)
+    send Tape 0.35
+    volume 0.6
+    play chords(homea) at aloop
+    play chords(homeb) at bloop
+    play chords(homea) at aback
+  }
+
+  track Hum {
+    instrument FluteLead()
+    send Tape 0.4
+    volume 0.32
+    pan 0.15
+    play notes`_:2 G4:1 Eb4:0.5 C4:1.5 _:3 F4:0.5 G4:1 Ab4:0.5 G4:2` at aloop
+    play notes`_:1 Bb4:1 G4:1 Eb4:1 _:2 C5:0.5 Bb4:0.5 Ab4:1 G4:1 F4:1 Eb4:1` at bloop
+    play notes`_:2 G4:1 Eb4:0.5 C4:1.5 _:3 F4:0.5 G4:1 Ab4:0.5 G4:2` at aback
+  }
+
+  track Chime {
+    instrument Celesta()
+    insert delay(time: 0.375, fdbk: 0.4, mix: 0.3)
+    send Tape 0.4
+    volume 0.3
+    pan -0.2
+    play arp(homeb, rate: 0.5, style: "up") at bloop
+  }
+}

@@ -1,0 +1,24 @@
+// Pattern: Minimal Techno (128bpm) — 要素は 4 つだけ。
+// 間(ま)がグルーヴを作る、引き算の 8 小節。
+import { Kick909, Rim, HatClosed } from "../../lib/std/drums.forte"
+import { RubberBass } from "../../lib/std/bass.forte"
+
+song "Pattern: Minimal Techno" {
+  tempo 128bpm
+  meter 4/4
+  key C minor
+
+  let four = beat`x--- x--- x--- x---`
+  let rim  = beat`---- --x- ---- -x--`
+  let hat  = beat`--x- --x- --x- --xx`
+
+  track Kick { instrument Kick909(click: 0.4) volume 0.9 play four at bars(1..8) }
+  track Rim  { instrument Rim() volume 0.5 pan 0.3 play rim at bars(1..8) }
+  track Hat  { instrument HatClosed(bright: 0.85) volume 0.4 pan -0.15 play hat at bars(3..8) }
+
+  track Bass {
+    instrument RubberBass()
+    volume 0.8
+    play notes`C2:0.75 _:0.25 C2:0.5 _:0.5 Eb2:0.5 _:0.5 C2:0.75 _:0.25` at bars(1..8)
+  }
+}

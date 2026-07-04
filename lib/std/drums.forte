@@ -96,3 +96,108 @@ device Cowbell : Instrument {
   node sum = shaper(in: mix(a: lo, b: gain(in: hi, level: 0.8)), drive: drive, mode: "clip")
   out gain(in: sum, mod: env, level: 0.5)
 }
+
+// ---- classic kit 拡張(12 種): アコースティック寄り+シンバル類 ----
+
+device Kick606 : Instrument {
+  param decay = 0.22 in 0.05..0.6
+
+  node env  = adsr(a: 0.001, d: decay, s: 0.0, r: 0.06)
+  node penv = adsr(a: 0.001, d: 0.03, s: 0.0, r: 0.02)
+  node o    = osc(shape: "sine", mod: gain(in: penv, level: 0.28))
+  out gain(in: o, mod: env, level: 0.95)
+}
+
+device KickSub : Instrument {
+  param weight = 0.7 in 0.0..1.0
+
+  node env  = adsr(a: 0.002, d: 0.6, s: 0.0, r: 0.2)
+  node penv = adsr(a: 0.001, d: 0.08, s: 0.0, r: 0.04)
+  node o    = osc(freq: gain(in: note.freq, level: 0.5), shape: "sine",
+                  mod: gain(in: penv, level: 0.3))
+  node sh   = shaper(in: o, drive: weight, mode: "tanh")
+  out gain(in: sh, mod: env, level: 1.0)
+}
+
+device SnareTight : Instrument {
+  param snap = 0.7 in 0.0..1.0
+
+  node env  = adsr(a: 0.001, d: 0.08, s: 0.0, r: 0.05)
+  node nz   = gain(in: svf(in: noise(), cutoff: 0.85, reso: 0.4), level: snap)
+  node bde  = adsr(a: 0.001, d: 0.04, s: 0.0, r: 0.02)
+  node body = gain(in: osc(shape: "tri"), mod: bde, level: 0.45)
+  out gain(in: mix(a: nz, b: body), mod: env, level: 0.9)
+}
+
+device SnareBrush : Instrument {
+  param soft = 0.5 in 0.0..1.0
+
+  node env = adsr(a: 0.02, d: 0.18, s: 0.0, r: 0.12)   // 立ち上がりが擦れ
+  node nz  = svf(in: noise(), cutoff: 0.6, reso: 0.25)
+  node sh  = shaper(in: nz, drive: soft, mode: "tanh")
+  out gain(in: sh, mod: env, level: 0.65)
+}
+
+device HatPedal : Instrument {
+  node env = adsr(a: 0.001, d: 0.025, s: 0.0, r: 0.02)
+  node nz  = svf(in: noise(), cutoff: 0.8, reso: 0.3)
+  out gain(in: nz, mod: env, level: 0.45)
+}
+
+device Ride : Instrument {
+  param wash = 0.4 in 0.0..1.0
+
+  node env = adsr(a: 0.001, d: 0.7, s: 0.1, r: 0.9)
+  node nz  = svf(in: noise(), cutoff: 0.92, reso: 0.15)
+  node pin = gain(in: osc(freq: mix(a: note.freq, b: mix(a: note.freq, b: note.freq)),
+                          shape: "tri"), level: 0.2)
+  node sum = mix(a: gain(in: nz, level: wash), b: pin)
+  out gain(in: sum, mod: env, level: 0.5)
+}
+
+device RideBell : Instrument {
+  node env = adsr(a: 0.001, d: 0.4, s: 0.0, r: 0.5)
+  node f27 = mix(a: mix(a: note.freq, b: note.freq), b: gain(in: note.freq, level: 0.7))
+  node o   = osc(freq: f27, shape: "square")
+  node f   = svf(in: o, cutoff: 0.9, reso: 0.3)
+  out gain(in: f, mod: env, level: 0.5)
+}
+
+device Crash : Instrument {
+  param decay = 0.9 in 0.3..1.0
+
+  node env = adsr(a: 0.001, d: decay, s: 0.0, r: 1.0)
+  node nz  = svf(in: noise(), cutoff: 0.95, reso: 0.1)
+  node fz  = shaper(in: nz, drive: 0.3, mode: "clip")
+  out gain(in: fz, mod: env, level: 0.55)
+}
+
+device Splash : Instrument {
+  node env = adsr(a: 0.001, d: 0.35, s: 0.0, r: 0.4)
+  node nz  = svf(in: noise(), cutoff: 0.97, reso: 0.2)
+  out gain(in: nz, mod: env, level: 0.5)
+}
+
+device TomFloor : Instrument {
+  param decay = 0.4 in 0.1..0.8
+
+  node env  = adsr(a: 0.001, d: decay, s: 0.0, r: 0.15)
+  node penv = adsr(a: 0.001, d: 0.09, s: 0.0, r: 0.05)
+  node o    = osc(freq: gain(in: note.freq, level: 0.6), shape: "sine",
+                  mod: gain(in: penv, level: 0.25))
+  node nz   = gain(in: svf(in: noise(), cutoff: 0.4, reso: 0.2), level: 0.12)
+  out gain(in: mix(a: o, b: nz), mod: env, level: 0.85)
+}
+
+device Snap : Instrument {
+  node env = adsr(a: 0.001, d: 0.05, s: 0.0, r: 0.04)
+  node nz  = svf(in: noise(), cutoff: 0.55, reso: 0.75)   // 高レゾで指パッチン帯域
+  out gain(in: nz, mod: env, level: 0.8)
+}
+
+device Stick : Instrument {
+  node env = adsr(a: 0.001, d: 0.03, s: 0.0, r: 0.02)
+  node o   = osc(freq: mix(a: mix(a: note.freq, b: note.freq), b: note.freq), shape: "tri")
+  node nz  = gain(in: svf(in: noise(), cutoff: 0.7, reso: 0.5), level: 0.5)
+  out gain(in: mix(a: o, b: nz), mod: env, level: 0.7)
+}

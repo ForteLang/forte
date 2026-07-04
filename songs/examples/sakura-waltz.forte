@@ -1,0 +1,54 @@
+// Sakura Waltz — 3/4 のワルツ 24 小節。チェレスタの主題、
+// 中間部は短調に翳り、主題が帰って静かに終わる。
+import { StringPad } from "../../lib/std/pads.forte"
+import { Celesta, Vibraphone } from "../../lib/std/keys.forte"
+import { UprightBass } from "../../lib/std/bass.forte"
+import { HatClosed } from "../../lib/std/drums.forte"
+
+song "Sakura Waltz" {
+  tempo 88bpm
+  meter 3/4
+  key F minor
+
+  section themea = bars(1..8)
+  section middle = bars(9..16)
+  section themeb = bars(17..24)
+
+  let chat  = beat`---- x--- x---`
+  let bloom = prog`F | Dm7 | Gm7 | C7`
+  let shade = prog`Dm | Bbmaj7 | Gm7 | A7`
+
+  return Hall {
+    insert reverb(size: 0.7, decay: 0.55, mix: 1.0)
+    volume 0.7
+  }
+
+  track Bass { instrument UprightBass() volume 0.7 play bass(bloom, rate: 3) at themea play bass(shade, rate: 3) at middle play bass(bloom, rate: 3) at themeb }
+  track Chat { instrument HatClosed(bright: 0.7) volume 0.25 pan 0.2 play chat at bars(3..22) }
+
+  track Strings {
+    instrument StringPad(bright: 0.5)
+    send Hall 0.45
+    volume 0.45
+    play chords(bloom) at themea
+    play chords(shade) at middle
+    play chords(bloom) at themeb
+  }
+
+  track Celesta {
+    instrument Celesta()
+    send Hall 0.4
+    volume 0.55
+    pan 0.15
+    play notes`A4:1 C5:1 F5:1 E5:1.5 C5:0.5 A4:1 G4:1 Bb4:1 D5:1 C5:2 A4:1` at themea
+    play notes`A4:1 C5:1 F5:1 E5:1.5 C5:0.5 A4:1 G4:1 Bb4:1 D5:1 F5:2 F5:1` at themeb
+  }
+
+  track Vibes {
+    instrument Vibraphone(motor: 0.4)
+    send Hall 0.45
+    volume 0.45
+    pan -0.2
+    play notes`D5:1.5 E5:0.5 F5:1 A4:1.5 Bb4:0.5 D5:1 G4:1 Bb4:1 D5:1 C#5:2 A4:1` at middle
+  }
+}

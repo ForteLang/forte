@@ -1,0 +1,40 @@
+// Pattern: Downtempo (85bpm) — ゆったりしたブレイクの上に
+// FifthStack の霞んだスタブ。夕暮れの温度。
+import { Kick808, SnareBrush, HatClosed } from "../../lib/std/drums.forte"
+import { Tambourine } from "../../lib/std/percussion.forte"
+import { SubBass } from "../../lib/std/bass.forte"
+import { FifthStack } from "../../lib/std/synths.forte"
+
+song "Pattern: Downtempo" {
+  tempo 85bpm
+  meter 4/4
+  key G minor
+
+  let kick  = beat`x--- --x- ---- x---`
+  let snare = beat`---- x--- ---- x---`
+  let hat   = beat`x-x- x-xx x-x- x-x-`
+  let dusk  = prog`Gm7 | Ebmaj7 | Bbmaj7 | F7`
+
+  return Haze {
+    insert reverb(size: 0.7, decay: 0.55, mix: 1.0)
+    volume 0.7
+  }
+
+  track Kick  { instrument Kick808(punch: 0.45, decay: 0.5) volume 0.85 play kick at bars(1..8) }
+  track Snare { instrument SnareBrush(soft: 0.5) volume 0.6 send Haze 0.25 play snare at bars(1..8) }
+  track Hat   { instrument HatClosed(bright: 0.75) volume 0.35 pan 0.2 play hat at bars(3..8) }
+  track Tamb  { instrument Tambourine(jingle: 0.7) volume 0.25 pan -0.25 play beat`---- ---- --x- ----` at bars(5..8) }
+
+  track Bass {
+    instrument SubBass()
+    volume 0.8
+    play bass(dusk, rate: 0.5) at bars(1..8)
+  }
+
+  track Stab {
+    instrument FifthStack()
+    send Haze 0.45
+    volume 0.45
+    play chords(dusk) at bars(1..8)
+  }
+}

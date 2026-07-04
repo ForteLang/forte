@@ -1,0 +1,49 @@
+// Night Market — 2 ステップ 28 小節。スキップするビートに
+// ハープシコードの怪しい旋律。ブレイクで低音だけ残る。
+import { Kick909, SnareTight, HatClosed, Shaker } from "../../lib/std/drums.forte"
+import { PluckBass } from "../../lib/std/bass.forte"
+import { Harpsichord } from "../../lib/std/keys.forte"
+import { DarkPad } from "../../lib/std/pads.forte"
+
+song "Night Market" {
+  tempo 134bpm
+  meter 4/4
+  key A minor
+
+  section step1 = bars(1..12)
+  section lowend = bars(13..16)
+  section step2 = bars(17..28)
+
+  let kick  = beat`x--- ---- --x- -x--`
+  let snare = beat`---- x--- ---- x---`
+  let hat   = beat`x--x -xx- x-x- -xxX`
+  let shk   = beat`--x- --x- --x- --x-`
+  let bazaar = prog`Am | Dm7 | E7 | Am`
+
+  track Kick  { instrument Kick909(click: 0.5) volume 0.9 play kick at bars(1..28) }
+  track Snare { instrument SnareTight(snap: 0.75) volume 0.65 play snare at step1 play snare at step2 }
+  track Hat   { instrument HatClosed(bright: 0.95) volume 0.4 pan 0.2 play hat at step1 play hat at step2 }
+  track Shk   { instrument Shaker() volume 0.3 pan -0.25 play shk at bars(5..24) }
+
+  track Bass {
+    instrument PluckBass()
+    volume 0.8
+    play notes`A1:0.5 _:0.5 A1:0.25 C2:0.25 _:0.5 E2:0.5 _:0.5 D2:0.5 C2:0.5 A1:0.5` at bars(1..28)
+  }
+
+  track Harp {
+    instrument Harpsichord()
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.5
+    pan 0.15
+    play notes`_:2 E5:0.5 F5:0.5 E5:0.5 C5:0.5 A4:1 B4:0.5 C5:0.5 B4:0.5 G#4:0.5 E4:1` at step1
+    play arp(bazaar, rate: 0.25, style: "down") at step2
+  }
+
+  track Pad {
+    instrument DarkPad()
+    volume 0.4
+    play chords(bazaar) at lowend
+    automate volume from 0.1 to 0.45 over lowend
+  }
+}

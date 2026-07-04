@@ -1,0 +1,53 @@
+// Arcade Dawn — チップチューン 28 小節。A メロの主題が
+// B メロで転回し、ラストは 2 声のハモリで戻ってくる。
+import { BitLead } from "../../lib/std/leads.forte"
+import { HollowBass } from "../../lib/std/bass.forte"
+import { Kick606, SnareTight, HatClosed } from "../../lib/std/drums.forte"
+
+song "Arcade Dawn" {
+  tempo 148bpm
+  meter 4/4
+  key C minor
+
+  section theme  = bars(1..8)
+  section flip   = bars(9..16)
+  section duet   = bars(17..24)
+  section ending = bars(25..28)
+
+  let kick  = beat`x--- ---- x--- --x-`
+  let snare = beat`---- x--- ---- x---`
+  let hat   = beat`x-x- x-x- x-x- xxxx`
+  let runa  = prog`Cm | Ab | Eb | G7`
+  let runb  = prog`Fm | Cm | Ab | G7`
+
+  track Kick  { instrument Kick606(decay: 0.2) volume 0.8 play kick at bars(1..26) }
+  track Snare { instrument SnareTight(snap: 0.6) volume 0.6 play snare at bars(1..26) }
+  track Hat   { instrument HatClosed(bright: 1.0) volume 0.3 play hat at bars(9..24) }
+
+  track Lead {
+    instrument BitLead()
+    volume 0.55
+    pan 0.1
+    play notes`C5:0.5 Eb5:0.5 G5:0.5 C5:0.5 Ab4:0.5 C5:0.5 Eb5:1 Eb5:0.5 G5:0.5 Bb5:0.5 G5:0.5 D5:0.5 F5:0.5 G5:1` at theme
+    play notes`F5:0.5 Ab5:0.5 C6:0.5 Ab5:0.5 G5:0.5 Eb5:0.5 C5:1 Ab4:0.5 C5:0.5 Eb5:0.5 C5:0.5 B4:0.5 D5:0.5 G5:1` at flip
+    play notes`C5:0.5 Eb5:0.5 G5:0.5 C5:0.5 Ab4:0.5 C5:0.5 Eb5:1 Eb5:0.5 G5:0.5 Bb5:0.5 G5:0.5 D5:0.5 F5:0.5 G5:1` at duet
+    play notes`C6:2 G5:1 Eb5:1 C5:4` at ending
+  }
+
+  track Harmony {
+    instrument BitLead()
+    volume 0.35
+    pan -0.2
+    play notes`Eb4:0.5 G4:0.5 C5:0.5 Eb4:0.5 C4:0.5 Eb4:0.5 G4:1 G4:0.5 Bb4:0.5 Eb5:0.5 Bb4:0.5 B4:0.5 D5:0.5 D5:1` at duet
+    play notes`Eb5:2 D5:1 C5:1 G4:4` at ending
+  }
+
+  track Bass {
+    instrument HollowBass()
+    volume 0.6
+    play arp(runa, rate: 0.25, style: "up") at theme
+    play arp(runb, rate: 0.25, style: "up") at flip
+    play arp(runa, rate: 0.25, style: "up") at duet
+    play notes`C2:4 G1:2 C2:2` at ending
+  }
+}

@@ -1,0 +1,38 @@
+// Pattern: Reggae One Drop (74bpm) — キックとリムは 3 拍目、
+// スカンク(裏打ちオルガン)、深いダブベース。
+import { Kick808, Rim, HatClosed, HatOpen } from "../../lib/std/drums.forte"
+import { DubBass } from "../../lib/std/bass.forte"
+import { Organ } from "../../lib/std/keys.forte"
+
+song "Pattern: One Drop" {
+  tempo 74bpm
+  meter 4/4
+  key G minor
+
+  let drop  = beat`---- ---- x--- ----`
+  let hat   = beat`x-x- x-x- x-x- x-xx`
+  let skank = beat`--x- --x- --x- --x-`
+  let roots = prog`Gm | Gm | Cm | D7`
+
+  return Echo {
+    insert delay(time: 0.375, fdbk: 0.45, mix: 1.0)
+    volume 0.5
+  }
+
+  track Drop { instrument Kick808(punch: 0.4, decay: 0.6) volume 0.9 play drop at bars(1..8) }
+  track Rim  { instrument Rim() volume 0.6 send Echo 0.2 play drop at bars(1..8) }
+  track Hat  { instrument HatClosed(bright: 0.8) volume 0.35 pan 0.2 play hat at bars(1..8) }
+
+  track Bass {
+    instrument DubBass(depth: 0.85)
+    volume 0.9
+    play notes`G1:0.75 _:0.25 _:0.5 Bb1:0.5 _:1 G1:0.5 D2:0.5` at bars(1..8)
+  }
+
+  track Skank {
+    instrument Organ(drawbar: 0.4)
+    send Echo 0.3
+    volume 0.45
+    play chords(roots) at bars(1..8)
+  }
+}

@@ -1,0 +1,56 @@
+// Glass Garden — アンビエント 24 小節。ドラムレス。
+// ガラスの粒(アープ)が少しずつ密度を増し、また溶けていく。
+import { DronePad, GlassPad, ShimmerPad } from "../../lib/std/pads.forte"
+import { Bell, Kalimba } from "../../lib/std/keys.forte"
+
+song "Glass Garden" {
+  tempo 62bpm
+  meter 4/4
+  key E minor
+
+  section bloom = bars(1..8)
+  section full  = bars(9..16)
+  section fade  = bars(17..24)
+
+  let air = prog`Em7 | Cmaj7 | Gmaj7 | Dmaj7`
+
+  return Garden {
+    insert reverb(size: 0.9, decay: 0.8, mix: 1.0)
+    volume 0.85
+  }
+
+  track Drone {
+    instrument DronePad()
+    send Garden 0.5
+    volume 0.5
+    play chords(air) at bars(1..24)
+    automate volume from 0.2 to 0.5 over bloom
+    automate volume from 0.5 to 0.15 over fade
+  }
+
+  track Shimmer {
+    instrument ShimmerPad()
+    send Garden 0.6
+    volume 0.4
+    pan 0.15
+    play chords(air) at full
+  }
+
+  track Grain {
+    instrument Kalimba()
+    insert delay(time: 0.42, fdbk: 0.5, mix: 0.4)
+    send Garden 0.5
+    volume 0.4
+    pan -0.2
+    play arp(air, rate: 0.5, style: "up") at bars(5..20)
+  }
+
+  track Bell {
+    instrument Bell(decay: 0.75)
+    insert delay(time: 0.63, fdbk: 0.45, mix: 0.4)
+    send Garden 0.55
+    volume 0.35
+    pan 0.25
+    play notes`_:3 B4:2 G4:2 _:1 _:2 E5:2 D5:2 B4:2 _:2 G4:2 A4:2 B4:2` at full
+  }
+}
