@@ -98,6 +98,24 @@ pub fn compile(
             "track がひとつもありません",
         ));
     }
+
+    // song-level swing (MPC 表記: 0.5 = ストレート、2/3 = 完全シャッフル)
+    let swing = match song.swing {
+        Some((v, pos)) => {
+            if !(0.5..=0.8).contains(&v) {
+                diags.push(Diag::new(
+                    "E-TIME-004",
+                    pos,
+                    format!("swing {v} は 0.5..0.8 の範囲外です(0.5 = ストレート、0.66 ≒ シャッフル)"),
+                ));
+                0.5
+            } else {
+                v
+            }
+        }
+        None => 0.5,
+    };
+
     for (ti, tast) in song.tracks.iter().enumerate() {
         let id = p.alloc_id();
         let color = TRACK_COLORS[ti % TRACK_COLORS.len()];
@@ -207,7 +225,7 @@ pub fn compile(
 
         // plays → arranger clips
         for play in &tast.plays {
-            let (notes, len_beats, clip_name) =
+            let (mut notes, len_beats, clip_name) =
                 match eval_pattern(&play.pattern, &lets, beats_per_bar, beat_pitch) {
                     Ok(v) => v,
                     Err(d) => {
@@ -241,6 +259,18 @@ pub fn compile(
             }
             let mut clip = Clip::new(clip_name, color);
             clip.length = len_beats;
+            if swing > 0.5 {
+                // delay every off-beat 16th that sits exactly on the grid;
+                // freely-timed notes are left alone
+                let shift = (swing - 0.5) * 0.5;
+                for n in &mut notes {
+                    let idx = (n.start / 0.25).round();
+                    if (n.start - idx * 0.25).abs() < 1e-9 && (idx as i64) % 2 == 1 {
+                        n.start += shift;
+                        n.length = (n.length - shift).max(0.05);
+                    }
+                }
+            }
             clip.notes = notes;
             track.arranger.push(ArrangerClip {
                 clip,

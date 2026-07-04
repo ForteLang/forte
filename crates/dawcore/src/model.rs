@@ -262,7 +262,7 @@ impl GridModuleKind {
         match self {
             GridModuleKind::NoteIn => &[],
             GridModuleKind::AudioIn => &[],
-            GridModuleKind::Osc => &["Pitch", "Mod"],
+            GridModuleKind::Osc => &["Pitch", "Mod", "Pwm"],
             GridModuleKind::Noise => &[],
             GridModuleKind::Sample => &[],
             GridModuleKind::Lfo => &[],
@@ -337,6 +337,10 @@ pub struct GridConn {
 pub struct GridGraph {
     pub modules: Vec<GridModule>,
     pub conns: Vec<GridConn>,
+    /// Portamento time in seconds. > 0 switches the synth to mono/legato:
+    /// overlapping notes glide instead of retriggering (the 303 slide).
+    #[serde(default)]
+    pub glide: f32,
 }
 
 impl GridGraph {
@@ -365,6 +369,7 @@ impl GridGraph {
                 GridConn { from: (3, 0), to: (4, 1) }, // env → gain mod
                 GridConn { from: (4, 0), to: (5, 0) }, // gain → out
             ],
+            glide: 0.0,
         }
     }
 }

@@ -10,6 +10,8 @@ pub enum Waveform {
     Saw,
     Square,
     Triangle,
+    /// Variable-width pulse (PWM via [`Oscillator::next_pw`]).
+    Pulse,
 }
 
 impl Waveform {
@@ -18,6 +20,7 @@ impl Waveform {
             0 => Waveform::Sine,
             1 => Waveform::Saw,
             2 => Waveform::Square,
+            4 => Waveform::Pulse,
             _ => Waveform::Triangle,
         }
     }
@@ -63,6 +66,14 @@ impl Oscillator {
     /// Advance one sample at `freq` Hz given `sample_rate`.
     #[inline]
     pub fn next(&mut self, freq: f32, sample_rate: f32, wave: Waveform) -> f32 {
+        self.next_pw(freq, sample_rate, wave, 0.5)
+    }
+
+    /// Like [`next`], with an explicit pulse width for [`Waveform::Pulse`]
+    /// (other shapes ignore it — Square stays the fixed 50% wave so existing
+    /// renders are bit-identical).
+    #[inline]
+    pub fn next_pw(&mut self, freq: f32, sample_rate: f32, wave: Waveform, pw: f32) -> f32 {
         let dt = (freq / sample_rate).clamp(0.0, 0.5);
         let p = self.phase;
 
@@ -72,6 +83,13 @@ impl Oscillator {
                 // naive saw is 2t-1; subtract the BLEP residual at the wrap
                 let mut v = 2.0 * p - 1.0;
                 v -= poly_blep(p, dt);
+                v
+            }
+            Waveform::Pulse => {
+                let w = pw.clamp(0.05, 0.95);
+                let mut v = if p < w { 1.0 } else { -1.0 };
+                v += poly_blep(p, dt);
+                v -= poly_blep((p + 1.0 - w).rem_euclid(1.0), dt);
                 v
             }
             Waveform::Square => {

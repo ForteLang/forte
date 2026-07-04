@@ -1,0 +1,30 @@
+// Pattern: Acid Lines (126bpm) — 303 の文法: 16 分の反復に
+// スライド(~)とアクセント(!)を混ぜると、同じ 4 音でも別の生き物になる。
+import { Bass303 } from "../../lib/std/tb303.forte"
+import { Kick909, HatClosed, HatOpen, Clap } from "../../lib/std/drums.forte"
+
+song "Pattern: Acid Lines" {
+  tempo 126bpm
+  swing 0.53
+  meter 4/4
+  key A minor
+
+  let four = beat`X--- x--- x--- x---`
+  let off  = beat`--x- --x- --x- --x-`
+  let hat  = beat`x.x. x.x. x.x. x.xX`
+  let clap = beat`---- x--- ---- x---`
+
+  track Kick { instrument Kick909(click: 0.6) insert comp(thresh: 0.4, ratio: 0.6) volume 0.95 play four at bars(1..8) }
+  track Off  { instrument HatOpen(decay: 0.2) volume 0.45 play off at bars(1..8) }
+  track Hat  { instrument HatClosed(bright: 0.95) volume 0.35 pan 0.2 play hat at bars(3..8) }
+  track Clap { instrument Clap(tone: 0.6) volume 0.5 play clap at bars(5..8) }
+
+  track Acid {
+    instrument Bass303(cutoff: 0.3, reso: 0.8, envmod: 0.6, decay: 0.22)
+    insert drive(drive: 0.25)
+    insert delay(time: 0.238, fdbk: 0.3, mix: 0.15)
+    volume 0.75
+    // 定番の文法: オクターブ跳躍、スライドで駆け上がり、アクセントで開く
+    play notes`A1!:0.25 A1:0.25 A2:0.25 A1:0.25 C2~:0.25 D2!:0.25 A1:0.25 G2~:0.25 A2:0.25 A1:0.25 E2!:0.25 A1:0.25 D2~:0.25 C2:0.25 A1!:0.25 G1~:0.25` at bars(1..8)
+  }
+}

@@ -34,6 +34,9 @@ struct SampleVoice {
     note: u8,
     active: bool,
     env: Adsr,
+    /// note-on velocity as gain (1.0 at velocity 100, so accents lift and
+    /// ghosts duck around the nominal level)
+    vel: f32,
 }
 
 impl SampleVoice {
@@ -43,6 +46,7 @@ impl SampleVoice {
             step: 1.0,
             region: (0.0, 0.0),
             looping: false,
+            vel: 1.0,
             note: 0,
             active: false,
             env: Adsr::new(sr),
@@ -102,7 +106,7 @@ impl Sampler {
         }
     }
 
-    pub fn note_on(&mut self, note: u8, _velocity: f32) {
+    pub fn note_on(&mut self, note: u8, velocity: f32) {
         let Some(sample) = &self.sample else { return };
         self.clock += 1;
         let mut idx = 0;
@@ -133,6 +137,11 @@ impl Sampler {
         if self.reverse {
             v.step = -v.step;
         }
+        // velocity arrives 0..1 (127-normalised); 100/127 → unity so plain
+        // `x` hits keep their nominal level, `X` lifts, `.` ghosts duck
+        // reconstruct the 0..127 step so velocity 100 lands on exactly 1.0 —
+        // songs without accents/ghosts stay bit-identical
+        v.vel = ((velocity * 127.0 + 0.5) as u32 as f32 / 100.0).clamp(0.0, 1.27);
         v.note = note;
         v.active = true;
         v.env.set(self.attack, self.decay, self.sustain, self.release);
@@ -179,7 +188,7 @@ impl Sampler {
             let s = a + (b - a) * frac;
 
             let amp = v.env.next();
-            sum += s * amp;
+            sum += s * amp * v.vel;
 
             v.pos += v.step;
             let (rs, re) = v.region;

@@ -47,6 +47,8 @@ struct GridVoice {
     velocity: f32,
     gate: f32,
     active: bool,
+    /// current (possibly gliding) frequency; only meaningful in mono mode
+    freq_cur: f32,
 }
 
 pub struct GridSynth {
@@ -60,6 +62,9 @@ pub struct GridSynth {
     clock: u64,
     /// scratch: per-node output values, reused across voices each sample
     values: Vec<[f32; MAX_OUTPUTS]>,
+    /// mono/legato mode (graph.glide > 0): one voice, overlapping notes glide
+    mono: bool,
+    glide_coef: f32,
 }
 
 fn topo_order(n: usize, conns: &[GridConn]) -> Vec<usize> {
@@ -206,9 +211,12 @@ fn eval_node(
             // pitch mod shifts up to ±4 octaves (mirrors the SVF's
             // cutoff mod) — envelopes make kick drops, LFOs vibrato
             let freq = base * crate::dmath::powf(2.0, ins[1] * 4.0);
-            let shape = Waveform::from_index((params[0] * 3.999) as u8);
+            let shape = Waveform::from_index((params[0] * 4.999) as u8);
+            // pulse width: base param plus ±0.45 of modulation (PWM)
+            let pw_base = if params.len() > 1 { params[1] } else { 0.5 };
+            let pw = pw_base + ins[2] * 0.45;
             if let NodeState::Osc(osc) = state {
-                out[0] = osc.next(freq, sr, shape);
+                out[0] = osc.next_pw(freq, sr, shape, pw);
             }
         }
         GridModuleKind::Noise => {
@@ -303,10 +311,17 @@ impl GridSynth {
                 velocity: 0.0,
                 gate: 0.0,
                 active: false,
+                freq_cur: 0.0,
             })
             .collect();
 
         let n = nodes.len();
+        // one-pole coefficient for the mono glide (0 = poly, no smoothing)
+        let glide_coef = if graph.glide > 0.0 {
+            1.0 - crate::dmath::exp(-1.0 / (graph.glide.max(0.001) * sample_rate))
+        } else {
+            0.0
+        };
         GridSynth {
             sample_rate,
             nodes,
@@ -317,6 +332,8 @@ impl GridSynth {
             age: vec![0; GRID_VOICES],
             clock: 0,
             values: vec![[0.0; MAX_OUTPUTS]; n],
+            mono: graph.glide > 0.0,
+            glide_coef,
         }
     }
 
@@ -330,6 +347,27 @@ impl GridSynth {
 
     pub fn note_on(&mut self, note: u8, velocity: f32) {
         self.clock += 1;
+        if self.mono {
+            let v = &mut self.voices[0];
+            if v.active && v.gate > 0.0 {
+                // legato: retarget the pitch, keep envelopes running — the slide
+                v.note = note;
+                v.velocity = velocity.clamp(0.0, 1.0);
+                self.age[0] = self.clock;
+                return;
+            }
+            let sr = self.sample_rate;
+            for (si, st) in v.states.iter_mut().enumerate() {
+                *st = fresh_state(self.nodes[si].kind, sr, si);
+            }
+            v.note = note;
+            v.velocity = velocity.clamp(0.0, 1.0);
+            v.gate = 1.0;
+            v.active = true;
+            v.freq_cur = midi_to_freq(note);
+            self.age[0] = self.clock;
+            return;
+        }
         let mut idx = 0;
         let mut oldest = u64::MAX;
         for (i, v) in self.voices.iter().enumerate() {
@@ -355,6 +393,18 @@ impl GridSynth {
     }
 
     pub fn note_off(&mut self, note: u8) {
+        if self.mono {
+            let v = &mut self.voices[0];
+            // releases of already-superseded notes are ignored — that overlap
+            // IS the tie that makes a slide
+            if v.active && v.note == note {
+                v.gate = 0.0;
+                if !self.has_adsr {
+                    v.active = false;
+                }
+            }
+            return;
+        }
         for v in &mut self.voices {
             if v.active && v.note == note {
                 v.gate = 0.0;
@@ -389,6 +439,15 @@ impl GridSynth {
             if !self.voices[vi].active {
                 continue;
             }
+            // advance the mono glide once per voice per sample (not per node)
+            let voice_freq = if self.mono {
+                let v = &mut self.voices[vi];
+                let target = midi_to_freq(v.note);
+                v.freq_cur += (target - v.freq_cur) * self.glide_coef;
+                v.freq_cur
+            } else {
+                midi_to_freq(self.voices[vi].note)
+            };
             // evaluate graph in topological order
             for oi in 0..self.order.len() {
                 let ni = self.order[oi];
@@ -406,7 +465,7 @@ impl GridSynth {
                 }
 
                 let voice = &mut self.voices[vi];
-                let note = (midi_to_freq(voice.note), voice.gate, voice.velocity);
+                let note = (voice_freq, voice.gate, voice.velocity);
                 eval_node(
                     kind,
                     &self.nodes[ni].params,

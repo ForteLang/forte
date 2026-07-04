@@ -56,23 +56,23 @@ pub fn parse_beat(
         return Err(Diag::new("E-BEAT-001", pos, "beat リテラルが空です"));
     }
     for &c in &steps {
-        if c != 'x' && c != 'X' && c != '-' {
+        if c != 'x' && c != 'X' && c != '-' && c != '.' {
             return Err(Diag::new(
                 "E-BEAT-002",
                 pos,
-                format!("beat リテラルで使えるのは x / X / - です(見つかったのは '{c}')"),
+                format!("beat リテラルで使えるのは x(通常)/ X(アクセント)/ .(ゴースト)/ -(休符)です(見つかったのは '{c}')"),
             ));
         }
     }
     let step_len = beats_per_bar / steps.len() as f64;
     let mut notes = Vec::new();
     for (i, &c) in steps.iter().enumerate() {
-        if c == 'x' || c == 'X' {
+        if c == 'x' || c == 'X' || c == '.' {
             notes.push(Note {
                 pitch,
                 start: i as f64 * step_len,
                 length: step_len * 0.6,
-                velocity: if c == 'X' { 120 } else { 100 },
+                velocity: if c == 'X' { 120 } else if c == '.' { 55 } else { 100 },
             });
         }
     }
@@ -116,14 +116,27 @@ pub fn parse_notes(raw: &str, pos: Pos) -> Result<(Vec<Note>, f64), Diag> {
             cursor += dur;
             continue;
         }
+        // `C2~:0.5` — the tie: hold into the next note so a mono/glide
+        // instrument slides instead of retriggering (the 303 notation)
+        let (head, tied) = match head.strip_suffix('~') {
+            Some(h) => (h, true),
+            None => (head, false),
+        };
+        // accent: `C2!:0.5` lifts velocity (mirrors beat's X)
+        let (head, accent) = match head.strip_suffix('!') {
+            Some(h) => (h, true),
+            None => (head, false),
+        };
         let pitches: Vec<&str> = if head.starts_with('[') && head.ends_with(']') {
             head[1..head.len() - 1].split_whitespace().collect()
         } else {
             vec![head]
         };
+        let length = if tied { dur * 1.02 } else { dur * 0.95 };
+        let velocity = if accent { 120 } else { 100 };
         for ps in pitches {
             let pitch = parse_pitch(ps, pos)?;
-            notes.push(Note { pitch, start: cursor, length: dur * 0.95, velocity: 100 });
+            notes.push(Note { pitch, start: cursor, length, velocity });
         }
         cursor += dur;
     }

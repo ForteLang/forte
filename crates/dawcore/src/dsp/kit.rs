@@ -15,11 +15,21 @@ struct KitVoice {
     note: u8,
     active: bool,
     env: Adsr,
+    /// note-on velocity as gain (1.0 at velocity 100)
+    vel: f32,
 }
 
 impl KitVoice {
     fn new(sr: f32) -> Self {
-        Self { sample: None, pos: 0.0, step: 1.0, note: 0, active: false, env: Adsr::new(sr) }
+        Self {
+            sample: None,
+            pos: 0.0,
+            step: 1.0,
+            note: 0,
+            active: false,
+            env: Adsr::new(sr),
+            vel: 1.0,
+        }
     }
 }
 
@@ -55,7 +65,7 @@ impl KitSampler {
         }
     }
 
-    pub fn note_on(&mut self, note: u8, _velocity: f32) {
+    pub fn note_on(&mut self, note: u8, velocity: f32) {
         // a pad only fires on its exact pitch — no repitching in a kit
         let Some((_, sample)) = self.map.iter().find(|(p, _)| *p == note) else { return };
         self.clock += 1;
@@ -75,6 +85,9 @@ impl KitSampler {
         v.sample = Some(sample.clone());
         v.pos = 0.0;
         v.step = sample.sample_rate as f64 / self.sample_rate as f64;
+        // reconstruct the 0..127 step so velocity 100 lands on exactly 1.0 —
+        // songs without accents/ghosts stay bit-identical
+        v.vel = ((velocity * 127.0 + 0.5) as u32 as f32 / 100.0).clamp(0.0, 1.27);
         v.note = note;
         v.active = true;
         v.env.set(self.attack, self.decay, self.sustain, self.release);
@@ -117,7 +130,7 @@ impl KitSampler {
             let frac = (v.pos - i as f64) as f32;
             let a = data.get(i).copied().unwrap_or(0.0);
             let b = data.get(i + 1).copied().unwrap_or(0.0);
-            sum += (a + (b - a) * frac) * v.env.next();
+            sum += (a + (b - a) * frac) * v.env.next() * v.vel;
 
             v.pos += v.step;
             if v.pos >= data.len() as f64 || !v.env.is_active() {

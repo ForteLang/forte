@@ -114,9 +114,11 @@ Edit only an instrument library and every song importing it reports
 
 ### Instruments
 
-The standard library `lib/std/` ships 103 instruments written in the device DSL
-(22 drums / 12 percussion / 13 bass / 15 keys / 13 leads / 10 pads / 12 classic
-synths / 6 FX). They are plain code: fork one and rewrite it character by
+The standard library `lib/std/` ships 137 instruments written in the device DSL —
+including faithful classic-hardware recreations: the full 808 and CR-78 drum
+machines, the 303 bass (with real accent and slide), Juno-style DCO polys
+(PWM + chorus), Prophet-style two-oscillator polys, and SH-101-style monos
+with glide. They are plain code: fork one and rewrite it character by
 character (demo: `forte play songs/std-tour.forte`). For full arrangements to
 learn from, `songs/patterns/` holds genre grooves (house, DnB, bossa nova,
 afrobeat, trap, …) and `songs/examples/` holds complete songs with sections —
@@ -185,7 +187,7 @@ crates/fortelang  the language: lexer/parser/checker, compiler, CLI (check/build
 crates/forteweb   C-ABI wasm for the browser (compile, play, build proof)
 web/              browser editor + Hub lineage page (PWA)
 editor/           Forte Studio (VSCode extension)
-lib/std/          standard instrument library (103 instruments in the device DSL)
+lib/std/          standard instrument library (137 instruments incl. classic hardware clones)
 songs/            reference songs, genre patterns/, full example songs/
 docs/webdaw/      vision / system & software requirements / architecture / roadmap
 scripts/          determinism gate, browser E2E

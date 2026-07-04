@@ -29,13 +29,15 @@ fn prim(name: &str) -> Option<Prim> {
     Some(match name {
         "osc" => Prim {
             kind: GridModuleKind::Osc,
-            inputs: &[("freq", 0, Some(0)), ("mod", 1, None)], // freq defaults to note.freq
-            params: &[],
+            // freq defaults to note.freq; pwm sweeps the pulse width
+            inputs: &[("freq", 0, Some(0)), ("mod", 1, None), ("pwm", 2, None)],
+            params: &[("pw", 1, 0.5)],
+            // decoded with (v * 4.999) as u8 — five shapes
             options: &[(
                 "shape",
                 0,
-                &["sine", "saw", "square", "tri"],
-                &[IDX[0], IDX[1], IDX[2], IDX[3]],
+                &["sine", "saw", "square", "tri", "pulse"],
+                &[0.1, 0.25, 0.5, 0.75, 0.9],
             )],
         },
         "lfo" => Prim {
@@ -160,6 +162,9 @@ pub fn instantiate(
     }
 
     let effect = dev.kind == "Effect";
+    // reserved param name: `param glide = 0.06 in 0.0..0.5` turns the device
+    // into a mono/legato synth with that portamento time (seconds)
+    let glide = params.get("glide").copied().unwrap_or(0.0);
     let mut b = Builder {
         graph: GridGraph {
             modules: vec![GridModule {
@@ -169,6 +174,7 @@ pub fn instantiate(
                 sample: None,
             }],
             conns: Vec::new(),
+            glide,
         },
         named: HashMap::new(),
         params,
