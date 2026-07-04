@@ -49,3 +49,77 @@ device Wobble : Instrument {
   node f   = svf(in: mix(a: o, b: gain(in: sub, level: 0.6)), cutoff: 0.5, reso: 0.5, mod: gain(in: w, level: 0.7))
   out gain(in: f, mod: env, level: 0.8)
 }
+
+// ---- classic leads 拡張(8 種) ----
+
+device BrassLead : Instrument {
+  param blow = 0.5 in 0.0..1.0   // フィルタの開き=息の強さ
+
+  node env  = adsr(a: 0.04, d: 0.2, s: 0.75, r: 0.15)
+  node fenv = adsr(a: 0.06, d: 0.25, s: 0.5, r: 0.1)
+  node o    = osc(shape: "saw")
+  node o2   = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.008)), shape: "saw")
+  node f    = svf(in: mix(a: o, b: o2), cutoff: blow, reso: 0.2,
+                  mod: gain(in: fenv, level: 0.3))
+  out gain(in: f, mod: env, level: 0.7)
+}
+
+device FluteLead : Instrument {
+  node env = adsr(a: 0.06, d: 0.1, s: 0.85, r: 0.2)
+  node vib = lfo(rate: 0.3, shape: "sine")
+  node o   = osc(shape: "sine", mod: gain(in: vib, level: 0.015))
+  node br  = gain(in: svf(in: noise(), cutoff: 0.6, reso: 0.1), level: 0.05)  // 息
+  out gain(in: mix(a: o, b: br), mod: env, level: 0.7)
+}
+
+device VoxLead : Instrument {
+  node env = adsr(a: 0.05, d: 0.2, s: 0.8, r: 0.25)
+  node vib = lfo(rate: 0.28, shape: "sine")
+  node o   = osc(shape: "tri", mod: gain(in: vib, level: 0.012))
+  node f2  = osc(freq: mix(a: note.freq, b: note.freq), shape: "sine")
+  node f   = svf(in: mix(a: o, b: gain(in: f2, level: 0.25)), cutoff: 0.5, reso: 0.65)  // フォルマント風
+  out gain(in: f, mod: env, level: 0.65)
+}
+
+device BitLead : Instrument {
+  node env = adsr(a: 0.001, d: 0.12, s: 0.6, r: 0.05)
+  node o   = osc(shape: "square")
+  node fz  = shaper(in: o, drive: 0.7, mode: "clip")   // 硬いチップ感
+  out gain(in: fz, mod: env, level: 0.5)
+}
+
+device ScreamLead : Instrument {
+  param edge = 0.7 in 0.0..1.0
+
+  node env = adsr(a: 0.01, d: 0.15, s: 0.85, r: 0.12)
+  node vib = lfo(rate: 0.4, shape: "sine")
+  node o   = osc(shape: "saw", mod: gain(in: vib, level: 0.02))
+  node o2  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.015)), shape: "saw")
+  node sh  = shaper(in: mix(a: o, b: o2), drive: edge, mode: "fold")
+  node f   = svf(in: sh, cutoff: 0.7, reso: 0.4)
+  out gain(in: f, mod: env, level: 0.55)
+}
+
+device SoftLead : Instrument {
+  node env = adsr(a: 0.03, d: 0.25, s: 0.7, r: 0.3)
+  node o   = osc(shape: "tri")
+  node o2  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.005)), shape: "sine")
+  node f   = svf(in: mix(a: o, b: gain(in: o2, level: 0.5)), cutoff: 0.55, reso: 0.1)
+  out gain(in: f, mod: env, level: 0.7)
+}
+
+device GlideLead : Instrument {
+  node env = adsr(a: 0.12, d: 0.3, s: 0.8, r: 0.4)    // ゆっくり入る
+  node vib = lfo(rate: 0.25, shape: "sine")
+  node o   = osc(shape: "saw", mod: gain(in: vib, level: 0.01))
+  node f   = svf(in: o, cutoff: 0.45, reso: 0.3, mod: gain(in: vib, level: 0.1))
+  out gain(in: f, mod: env, level: 0.65)
+}
+
+device NightLead : Instrument {
+  node env = adsr(a: 0.01, d: 0.4, s: 0.5, r: 0.35)
+  node o   = osc(shape: "square")
+  node sub = osc(freq: gain(in: note.freq, level: 0.5), shape: "tri")
+  node f   = svf(in: mix(a: o, b: gain(in: sub, level: 0.35)), cutoff: 0.4, reso: 0.5)
+  out gain(in: f, mod: env, level: 0.6)
+}

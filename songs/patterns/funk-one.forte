@@ -1,0 +1,43 @@
+// Pattern: Funk (104bpm) — すべては「the one」のため。
+// 16 分のクラビとゴーストの利いたハットが跳ねる。
+import { Kick909, SnareTight, HatClosed, Cowbell } from "../../lib/std/drums.forte"
+import { PickBass } from "../../lib/std/bass.forte"
+import { Clav } from "../../lib/std/keys.forte"
+import { AnalogBrass } from "../../lib/std/synths.forte"
+
+song "Pattern: Funk" {
+  tempo 104bpm
+  meter 4/4
+  key E minor
+
+  let kick  = beat`X--- --x- x--- -x--`
+  let snare = beat`---- x--- ---- x--x`
+  let hat   = beat`x-xx -xx- xx-x -xxX`
+  let brass = beat`X--- ---- ---- --x-`
+  let vamp  = prog`E7 | E7 | A7 | E7`
+
+  track Kick  { instrument Kick909(click: 0.5) volume 0.9 play kick at bars(1..8) }
+  track Snare { instrument SnareTight(snap: 0.8) volume 0.7 play snare at bars(1..8) }
+  track Hat   { instrument HatClosed(bright: 0.9) volume 0.4 pan 0.2 play hat at bars(1..8) }
+  track Bell  { instrument Cowbell() volume 0.25 pan -0.3 play beat`x--- x--- x--- x---` at bars(5..8) }
+
+  track Bass {
+    instrument PickBass()
+    volume 0.8
+    play notes`E2:0.25 _:0.25 E2:0.25 G2:0.25 A2:0.5 _:0.5 E2:0.25 D2:0.25 E2:0.5 _:0.5 B1:0.25 D2:0.25` at bars(1..8)
+  }
+
+  track Clav {
+    instrument Clav(mute: 0.6)
+    insert drive(drive: 0.25)
+    volume 0.5
+    pan 0.15
+    play arp(vamp, rate: 0.25, style: "updown") at bars(1..8)
+  }
+
+  track Horns {
+    instrument AnalogBrass(blow: 0.6)
+    volume 0.45
+    play chords(vamp) at bars(7..8)
+  }
+}

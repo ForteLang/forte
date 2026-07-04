@@ -1,0 +1,41 @@
+// Pattern: Classic House (124bpm) — 4つ打ち+裏拍オープンハット+
+// ピアノスタブ。ハウスの背骨がこの 8 小節に全部入っている。
+import { Kick909, Clap, HatClosed, HatOpen } from "../../lib/std/drums.forte"
+import { OctaveBass } from "../../lib/std/bass.forte"
+import { EPiano } from "../../lib/std/keys.forte"
+
+song "Pattern: Classic House" {
+  tempo 124bpm
+  meter 4/4
+  key A minor
+
+  let four  = beat`x--- x--- x--- x---`
+  let clap  = beat`---- x--- ---- x---`
+  let hats  = beat`--x- --x- --x- --x-`
+  let ride  = beat`x-xx x-xx x-xx x-xX`
+  let jam   = prog`Am7 | F | C | G`
+
+  return Room {
+    insert reverb(size: 0.5, decay: 0.4, mix: 1.0)
+    volume 0.7
+  }
+
+  track Kick   { instrument Kick909(click: 0.5)      volume 0.9  play four at bars(1..8) }
+  track Clap   { instrument Clap(tone: 0.6)          volume 0.65 send Room 0.2 play clap at bars(1..8) }
+  track Open   { instrument HatOpen(decay: 0.25)     volume 0.5  pan 0.15 play hats at bars(1..8) }
+  track Hats   { instrument HatClosed(bright: 0.9)   volume 0.35 pan -0.1 play ride at bars(3..8) }
+
+  track Bass {
+    instrument OctaveBass(blend: 0.55)
+    volume 0.75
+    play bass(jam, rate: 0.5) at bars(1..8)
+  }
+
+  track Piano {
+    instrument EPiano(tine: 0.45)
+    insert drive(drive: 0.15)
+    send Room 0.35
+    volume 0.6
+    play chords(jam) at bars(1..8)
+  }
+}

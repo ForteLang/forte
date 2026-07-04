@@ -1,0 +1,48 @@
+// Pattern: Synthwave (105bpm) — RetroWave のベースが 16 分で走り、
+// 80s パッドとゲートスネアが夜のハイウェイを作る。
+import { Kick808, SnareTight, HatClosed } from "../../lib/std/drums.forte"
+import { RetroWave } from "../../lib/std/synths.forte"
+import { EightiesPad } from "../../lib/std/pads.forte"
+import { SoftLead } from "../../lib/std/leads.forte"
+
+song "Pattern: Synthwave" {
+  tempo 105bpm
+  meter 4/4
+  key B minor
+
+  let kick  = beat`x--- ---- x--- ----`
+  let snare = beat`---- X--- ---- X---`
+  let hat   = beat`x-x- x-x- x-x- x-x-`
+  let neon  = prog`Bm | G | D | A`
+
+  return Gate {
+    insert reverb(size: 0.7, decay: 0.35, mix: 1.0)
+    volume 0.75
+  }
+
+  track Kick  { instrument Kick808(punch: 0.5, decay: 0.45) volume 0.9 play kick at bars(1..8) }
+  track Snare { instrument SnareTight(snap: 0.7) volume 0.75 send Gate 0.4 play snare at bars(1..8) }
+  track Hat   { instrument HatClosed(bright: 0.85) volume 0.3 pan 0.15 play hat at bars(1..8) }
+
+  track Bass {
+    instrument RetroWave()
+    volume 0.7
+    play arp(neon, rate: 0.25, style: "up") at bars(1..8)
+  }
+
+  track Pad {
+    instrument EightiesPad(shimmer: 0.5)
+    send Gate 0.35
+    volume 0.5
+    play chords(neon) at bars(1..8)
+  }
+
+  track Lead {
+    instrument SoftLead()
+    insert delay(time: 0.375, fdbk: 0.35, mix: 0.3)
+    send Gate 0.3
+    volume 0.45
+    pan 0.1
+    play notes`_:2 F#4:1 D4:0.5 B3:0.5 _:2 G4:1 F#4:0.5 D4:1.5 _:2 A4:1 F#4:0.5 E4:0.5 D4:2` at bars(5..8)
+  }
+}

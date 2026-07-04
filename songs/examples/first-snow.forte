@@ -1,0 +1,65 @@
+// First Snow — エレクトリックグランドのバラード 24 小節。
+// ピアノ独奏で始まり、ストリングスとベルが静かに支える。
+import { ElectricGrand, StringMachine } from "../../lib/std/synths.forte"
+import { Celesta } from "../../lib/std/keys.forte"
+import { UprightBass } from "../../lib/std/bass.forte"
+
+song "First Snow" {
+  tempo 72bpm
+  meter 4/4
+  key G minor
+
+  section solo   = bars(1..8)
+  section warm   = bars(9..16)
+  section still  = bars(17..24)
+
+  let winter = prog`Gm | Ebmaj7 | Bb | F`
+  let turn   = prog`Cm7 | D7 | Gm | Gm`
+
+  return Snow {
+    insert reverb(size: 0.75, decay: 0.6, mix: 1.0)
+    volume 0.7
+  }
+
+  track Piano {
+    instrument ElectricGrand()
+    send Snow 0.35
+    volume 0.7
+    play chords(winter) at solo
+    play chords(winter) at warm
+    play chords(turn) at still
+  }
+
+  track Melody {
+    instrument ElectricGrand()
+    send Snow 0.4
+    volume 0.55
+    pan 0.1
+    play notes`_:2 D5:1 Bb4:0.5 G4:1.5 _:2 Eb5:1 D5:0.5 Bb4:1.5 _:2 F5:1 D5:0.5 C5:0.5 Bb4:2` at warm
+    play notes`_:1 G4:1 A4:1 Bb4:1 C5:1.5 D5:0.5 A4:2 G4:4 _:4` at still
+  }
+
+  track Strings {
+    instrument StringMachine()
+    send Snow 0.45
+    volume 0.4
+    play chords(winter) at warm
+    play chords(turn) at still
+    automate volume from 0.15 to 0.4 over warm
+  }
+
+  track Bass {
+    instrument UprightBass()
+    volume 0.6
+    play bass(winter, rate: 2) at warm
+    play bass(turn, rate: 2) at still
+  }
+
+  track Chime {
+    instrument Celesta()
+    send Snow 0.5
+    volume 0.3
+    pan -0.2
+    play arp(winter, rate: 1, style: "up") at still
+  }
+}

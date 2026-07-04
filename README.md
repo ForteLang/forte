@@ -114,9 +114,13 @@ Edit only an instrument library and every song importing it reports
 
 ### Instruments
 
-The standard library `lib/std/` ships 29 instruments written in the device DSL
-(10 drums / 5 bass / 5 keys / 4 pads / 5 leads). They are plain code: fork one
-and rewrite it character by character (demo: `forte play songs/std-tour.forte`).
+The standard library `lib/std/` ships 103 instruments written in the device DSL
+(22 drums / 12 percussion / 13 bass / 15 keys / 13 leads / 10 pads / 12 classic
+synths / 6 FX). They are plain code: fork one and rewrite it character by
+character (demo: `forte play songs/std-tour.forte`). For full arrangements to
+learn from, `songs/patterns/` holds genre grooves (house, DnB, bossa nova,
+afrobeat, trap, …) and `songs/examples/` holds complete songs with sections —
+every one of them compiles and renders under CI.
 
 Recorded takes become instruments too: slice, stretch, and reverse one recording
 into many instruments with `sampler(take: voice, start: 0.25, end: 0.6,
@@ -181,8 +185,8 @@ crates/fortelang  the language: lexer/parser/checker, compiler, CLI (check/build
 crates/forteweb   C-ABI wasm for the browser (compile, play, build proof)
 web/              browser editor + Hub lineage page (PWA)
 editor/           Forte Studio (VSCode extension)
-lib/std/          standard instrument library (29 instruments in the device DSL)
-songs/            reference songs + device libraries
+lib/std/          standard instrument library (103 instruments in the device DSL)
+songs/            reference songs, genre patterns/, full example songs/
 docs/webdaw/      vision / system & software requirements / architecture / roadmap
 scripts/          determinism gate, browser E2E
 ```
@@ -200,6 +204,7 @@ cargo test -p dawcore -p fortelang     # engine + language + hub + REPL
 scripts/determinism_test.sh            # native/wasm bit-identity gate
 node scripts/web_e2e.mjs               # browser E2E (needs playwright)
 node scripts/hub_e2e.mjs               # hub E2E
+scripts/check_corpus.sh                # every instrument & song compiles + renders
 ```
 
 ## Contributing

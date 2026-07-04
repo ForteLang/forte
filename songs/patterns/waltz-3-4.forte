@@ -1,0 +1,39 @@
+// Pattern: Waltz (90bpm, 3/4) — ブン・チャッ・チャッ。
+// チェレスタの旋律がワルツの回転を描く。
+import { KickSub, HatClosed } from "../../lib/std/drums.forte"
+import { StringPad } from "../../lib/std/pads.forte"
+import { Celesta } from "../../lib/std/keys.forte"
+import { UprightBass } from "../../lib/std/bass.forte"
+
+song "Pattern: Waltz" {
+  tempo 90bpm
+  meter 3/4
+  key C minor
+
+  let boom = beat`x--- ---- ----`
+  let chat = beat`---- x--- x---`
+  let sway = prog`Cm | Ab | Eb | G7`
+
+  return Salon {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.7
+  }
+
+  track Boom { instrument UprightBass() volume 0.75 play bass(sway, rate: 3) at bars(1..8) }
+  track Chat { instrument HatClosed(bright: 0.75) volume 0.35 pan 0.2 play chat at bars(1..8) }
+
+  track Strings {
+    instrument StringPad(bright: 0.5)
+    send Salon 0.4
+    volume 0.5
+    play chords(sway) at bars(1..8)
+  }
+
+  track Celesta {
+    instrument Celesta()
+    send Salon 0.35
+    volume 0.55
+    pan 0.15
+    play notes`G4:1 Eb5:1 D5:1 C5:1 G4:1 Ab4:1 B4:1 D5:1 F5:1 Eb5:1 C5:1 G4:1` at bars(3..8)
+  }
+}

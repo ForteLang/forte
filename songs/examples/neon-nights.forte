@@ -1,0 +1,69 @@
+// Neon Nights — シンセウェイヴ 32 小節。ゲートリバーブのスネア、
+// 走る 16 分ベース、サビでリードの旋律が入る。
+import { Kick808, SnareTight, HatClosed, Crash } from "../../lib/std/drums.forte"
+import { RetroWave, StringMachine } from "../../lib/std/synths.forte"
+import { EightiesPad } from "../../lib/std/pads.forte"
+import { SoftLead } from "../../lib/std/leads.forte"
+
+song "Neon Nights" {
+  tempo 106bpm
+  meter 4/4
+  key A minor
+
+  section intro  = bars(1..8)
+  section verse  = bars(9..16)
+  section chorus = bars(17..28)
+  section outro  = bars(29..32)
+
+  let kick  = beat`x--- ---- x--- ----`
+  let snare = beat`---- X--- ---- X---`
+  let hat   = beat`x-x- x-x- x-x- x-x-`
+  let night = prog`Am | F | C | G`
+  let lift  = prog`F | G | Am | Am`
+
+  return Gate {
+    insert reverb(size: 0.7, decay: 0.35, mix: 1.0)
+    volume 0.75
+  }
+
+  track Kick  { instrument Kick808(punch: 0.5, decay: 0.45) volume 0.9 play kick at bars(3..31) }
+  track Snare { instrument SnareTight(snap: 0.7) volume 0.75 send Gate 0.45 play snare at bars(9..30) }
+  track Hat   { instrument HatClosed(bright: 0.85) volume 0.3 pan 0.15 play hat at bars(9..28) }
+  track Cym   { instrument Crash(decay: 0.85) volume 0.4 send Gate 0.3 play beat`x--- ---- ---- ----` at bars(17..17) }
+
+  track Bass {
+    instrument RetroWave()
+    volume 0.7
+    play arp(night, rate: 0.25, style: "up") at verse
+    play arp(lift, rate: 0.25, style: "up") at chorus
+  }
+
+  track Pad {
+    instrument EightiesPad(shimmer: 0.45)
+    send Gate 0.35
+    volume 0.5
+    play chords(night) at intro
+    play chords(night) at verse
+    play chords(lift) at chorus
+    play chords(night) at outro
+    automate volume from 0.25 to 0.5 over intro
+  }
+
+  track Strings {
+    instrument StringMachine()
+    send Gate 0.4
+    volume 0.4
+    pan -0.15
+    play chords(lift) at chorus
+  }
+
+  track Lead {
+    instrument SoftLead()
+    insert delay(time: 0.35, fdbk: 0.4, mix: 0.3)
+    send Gate 0.35
+    volume 0.5
+    pan 0.1
+    play notes`_:2 E4:1 C4:0.5 A3:0.5 _:2 F4:1 E4:0.5 C4:1.5 _:2 G4:1 E4:0.5 D4:0.5 C4:2` at verse
+    play notes`A4:1.5 G4:0.5 E4:1 C4:1 F4:1.5 E4:0.5 D4:1 G4:1 A4:1.5 G4:0.5 E4:1 G4:1 A4:3 _:1` at chorus
+  }
+}

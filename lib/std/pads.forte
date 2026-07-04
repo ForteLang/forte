@@ -39,3 +39,65 @@ device DarkPad : Instrument {
   node f   = svf(in: o, cutoff: depth, reso: 0.25)
   out gain(in: f, mod: env, level: 0.65)
 }
+
+// ---- pads 拡張(6 種) ----
+
+device ChoirPad : Instrument {
+  node env = adsr(a: 0.6, d: 0.3, s: 0.85, r: 0.8)
+  node vib = lfo(rate: 0.22, shape: "sine")
+  node o   = osc(shape: "tri", mod: gain(in: vib, level: 0.008))
+  node o2  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.007)), shape: "tri")
+  node f   = svf(in: mix(a: o, b: o2), cutoff: 0.45, reso: 0.6)   // アー母音の帯域
+  out gain(in: f, mod: env, level: 0.55)
+}
+
+device GlassPad : Instrument {
+  node env = adsr(a: 0.4, d: 0.4, s: 0.8, r: 0.9)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node o   = osc(freq: f2, shape: "sine")
+  node p   = osc(freq: mix(a: f2, b: gain(in: f2, level: 0.76)), shape: "sine")
+  node sum = mix(a: o, b: gain(in: p, level: 0.3))
+  out gain(in: sum, mod: env, level: 0.5)
+}
+
+device EightiesPad : Instrument {
+  param shimmer = 0.4 in 0.0..1.0
+
+  node env = adsr(a: 0.25, d: 0.3, s: 0.85, r: 0.6)
+  node wob = lfo(rate: 0.18, shape: "tri")
+  node o   = osc(shape: "square")
+  node o2  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.009)), shape: "square")
+  node f   = svf(in: mix(a: o, b: o2), cutoff: 0.5, reso: 0.25,
+                 mod: gain(in: wob, level: shimmer))
+  out gain(in: f, mod: env, level: 0.5)
+}
+
+device HollowPad : Instrument {
+  node env = adsr(a: 0.5, d: 0.4, s: 0.75, r: 1.0)
+  node o   = osc(shape: "tri")
+  node o5  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.5)), shape: "tri")  // 5度上
+  node f   = svf(in: mix(a: o, b: gain(in: o5, level: 0.4)), cutoff: 0.35, reso: 0.2)
+  out gain(in: f, mod: env, level: 0.6)
+}
+
+device ShimmerPad : Instrument {
+  node env = adsr(a: 0.7, d: 0.4, s: 0.8, r: 1.0)
+  node spk = lfo(rate: 0.6, shape: "tri")
+  node f2  = mix(a: note.freq, b: note.freq)
+  node lo  = osc(shape: "saw")
+  node hi  = osc(freq: mix(a: f2, b: f2), shape: "sine")   // 2oct 上のきらめき
+  node hi2 = gain(in: hi, mod: spk, level: 0.25)
+  node f   = svf(in: mix(a: lo, b: mix(a: gain(in: hi, level: 0.15), b: hi2)),
+                 cutoff: 0.55, reso: 0.2)
+  out gain(in: f, mod: env, level: 0.5)
+}
+
+device DronePad : Instrument {
+  node env = adsr(a: 0.9, d: 0.3, s: 0.9, r: 1.0)
+  node o   = osc(shape: "saw")
+  node sub = osc(freq: gain(in: note.freq, level: 0.5), shape: "saw")
+  node wob = lfo(rate: 0.07, shape: "sine")
+  node f   = svf(in: mix(a: o, b: gain(in: sub, level: 0.6)), cutoff: 0.25, reso: 0.35,
+                 mod: gain(in: wob, level: 0.12))
+  out gain(in: f, mod: env, level: 0.6)
+}

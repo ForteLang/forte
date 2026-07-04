@@ -1,0 +1,64 @@
+// Deep Current — ディープハウス 32 小節。海面下のサブと
+// m9 的な積み。ブレイクでパッドが浮上して二度目の潜行へ。
+import { Kick808, Shaker, Rim, HatOpen } from "../../lib/std/drums.forte"
+import { SubBass } from "../../lib/std/bass.forte"
+import { WarmPad, HollowPad } from "../../lib/std/pads.forte"
+import { Pluck } from "../../lib/std/leads.forte"
+
+song "Deep Current" {
+  tempo 121bpm
+  meter 4/4
+  key B minor
+
+  section dive    = bars(1..12)
+  section surface = bars(13..20)
+  section deep    = bars(21..32)
+
+  let four = beat`x--- x--- x--- x---`
+  let shk  = beat`x-xX x-xx x-xX x-xx`
+  let rim  = beat`---- x--- --x- x---`
+  let off  = beat`--x- --x- --x- --x-`
+  let sea  = prog`Bm7 | Gmaj7 | Dmaj7 | Em7`
+
+  return Ocean {
+    insert reverb(size: 0.75, decay: 0.6, mix: 1.0)
+    volume 0.75
+  }
+
+  track Kick { instrument Kick808(punch: 0.35, decay: 0.5) volume 0.9 play four at dive play four at deep }
+  track Shk  { instrument Shaker() volume 0.35 pan 0.2 play shk at bars(5..30) }
+  track Rim  { instrument Rim() volume 0.4 pan -0.2 send Ocean 0.3 play rim at dive play rim at deep }
+  track Off  { instrument HatOpen(decay: 0.22) volume 0.4 play off at deep }
+
+  track Sub {
+    instrument SubBass()
+    volume 0.85
+    play bass(sea, rate: 0.5) at dive
+    play bass(sea, rate: 0.5) at deep
+  }
+
+  track Pad {
+    instrument WarmPad(cutoff: 0.4)
+    send Ocean 0.45
+    volume 0.5
+    play chords(sea) at surface
+    automate volume from 0.2 to 0.5 over bars(13..16)
+  }
+
+  track Hollow {
+    instrument HollowPad()
+    send Ocean 0.5
+    volume 0.35
+    play chords(sea) at deep
+  }
+
+  track Drops {
+    instrument Pluck()
+    insert delay(time: 0.375, fdbk: 0.45, mix: 0.35)
+    send Ocean 0.4
+    volume 0.4
+    pan 0.3
+    play arp(sea, rate: 0.25, style: "up") at bars(9..12)
+    play arp(sea, rate: 0.25, style: "updown") at deep
+  }
+}
