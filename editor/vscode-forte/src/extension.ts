@@ -403,7 +403,7 @@ const VIZ_HTML = /* html */ `<!DOCTYPE html>
 <body><canvas id="c"></canvas><div id="err"></div>
 <div id="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="18" height="18">
 <path d="M 78 24 C 65 20 58 30 55 46 L 46 98 C 43 114 33 122 22 117" fill="none" stroke="#e8b34c" stroke-width="9" stroke-linecap="round"/>
-<path d="M 24 66 L 58 66 L 63 56 L 70 78 L 76 50 L 83 80 L 89 60 L 93 66 L 104 66" fill="none" stroke="#4fb6c8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 24 66 L 58 66 L 63 56 L 70 78 L 76 50 L 83 80 L 89 60 L 93 66 L 104 66" fill="none" stroke="#e8b34c" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>FORTE</div>
 <script>
 const canvas = document.getElementById('c');

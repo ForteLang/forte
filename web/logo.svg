@@ -16,5 +16,5 @@
 
   <!-- the crossbar that becomes the waveform: flat through the stem, then audio -->
   <path d="M 24 66 L 58 66 L 63 56 L 70 78 L 76 50 L 83 80 L 89 60 L 93 66 L 104 66"
-        fill="none" stroke="#4fb6c8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+        fill="none" stroke="#e8b34c" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
