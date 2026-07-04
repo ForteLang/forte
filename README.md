@@ -27,6 +27,10 @@ song "Handmade" {
 }
 ```
 
+| ブラウザエディタ(History パネルで音楽語彙 diff) | Hub の系譜ページ |
+| --- | --- |
+| ![editor](docs/images/ui-editor.png) | ![hub](docs/images/ui-hub.png) |
+
 ## Quickstart
 
 ```bash
