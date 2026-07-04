@@ -19,6 +19,7 @@ fn main() -> ExitCode {
                 .cloned();
             build(&args[1], out, args.iter().any(|a| a == "--stems"))
         }
+        #[cfg(not(target_family = "wasm"))]
         Some("export") if args.len() >= 2 => {
             let out = args
                 .iter()

@@ -28,7 +28,9 @@ impl Sample {
 #[derive(Clone, Copy)]
 struct SampleVoice {
     pos: f64,   // fractional read position in source samples
-    step: f64,  // per-output-sample advance (pitch ratio)
+    step: f64,  // per-output-sample advance (pitch ratio; negative = reverse)
+    region: (f64, f64), // play region [start, end) in source samples
+    looping: bool,
     note: u8,
     active: bool,
     env: Adsr,
@@ -36,7 +38,15 @@ struct SampleVoice {
 
 impl SampleVoice {
     fn new(sr: f32) -> Self {
-        Self { pos: 0.0, step: 1.0, note: 0, active: false, env: Adsr::new(sr) }
+        Self {
+            pos: 0.0,
+            step: 1.0,
+            region: (0.0, 0.0),
+            looping: false,
+            note: 0,
+            active: false,
+            env: Adsr::new(sr),
+        }
     }
 }
 
@@ -55,6 +65,13 @@ pub struct Sampler {
     pub release: f32,
     /// extra transpose in semitones (param-controlled)
     pub transpose: f32,
+    /// play region as fractions of the sample (sound design: trim a take)
+    pub start: f32,
+    pub end: f32,
+    /// sustain-loop the region while the note is held
+    pub loop_on: bool,
+    /// play the region backwards
+    pub reverse: bool,
 }
 
 impl Sampler {
@@ -71,6 +88,10 @@ impl Sampler {
             sustain: 0.8,
             release: 0.15,
             transpose: 0.0,
+            start: 0.0,
+            end: 1.0,
+            loop_on: false,
+            reverse: false,
         }
     }
 
@@ -99,10 +120,19 @@ impl Sampler {
         // pitch ratio: target freq vs root freq, times source/host sample-rate.
         let semis = note as f32 + self.transpose;
         let ratio = midi_to_freq(semis.round() as u8) / midi_to_freq(sample.root);
+        // the trimmed play region, resolved at note-on (param changes don't
+        // yank running voices around)
+        let len = sample.data.len() as f64;
+        let s = (self.start.clamp(0.0, 1.0) as f64 * len).floor();
+        let e = ((self.end.clamp(0.0, 1.0) as f64 * len).floor()).clamp(s + 1.0, len);
         let v = &mut self.voices[idx];
-        v.pos = sample.loop_start as f64 * 0.0; // start at 0
-        v.pos = 0.0;
+        v.region = (s, e);
+        v.looping = sample.loop_enabled || self.loop_on;
+        v.pos = if self.reverse { e - 1.0 } else { s };
         v.step = ratio as f64 * (sample.sample_rate as f64 / self.sample_rate as f64);
+        if self.reverse {
+            v.step = -v.step;
+        }
         v.note = note;
         v.active = true;
         v.env.set(self.attack, self.decay, self.sustain, self.release);
@@ -151,11 +181,22 @@ impl Sampler {
             sum += s * amp;
 
             v.pos += v.step;
-            if sample.loop_enabled && v.pos >= sample.loop_end as f64 {
-                let span = (sample.loop_end - sample.loop_start).max(1) as f64;
-                v.pos -= span;
-            } else if v.pos >= data.len() as f64 {
-                v.active = false;
+            let (rs, re) = v.region;
+            let span = (re - rs).max(1.0);
+            if v.step >= 0.0 {
+                if v.pos >= re {
+                    if v.looping {
+                        v.pos -= span;
+                    } else {
+                        v.active = false;
+                    }
+                }
+            } else if v.pos < rs {
+                if v.looping {
+                    v.pos += span;
+                } else {
+                    v.active = false;
+                }
             }
             if !v.env.is_active() {
                 v.active = false;

@@ -29,7 +29,7 @@ else
 fi
 
 cargo build --release -q -p fortelang --bin forte --target wasm32-wasip1
-for song in first-light night-parade; do
+for song in first-light night-parade std-tour; do
   echo "== gate 2: forte build (songs/$song.forte) =="
   cargo run --release -q -p fortelang --bin forte -- \
     build "songs/$song.forte" -o "$SCRATCH/native.wav" > "$SCRATCH/forte-native.txt"

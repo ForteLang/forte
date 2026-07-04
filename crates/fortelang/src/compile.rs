@@ -588,12 +588,17 @@ fn build_instrument(
                         dev.sample = SampleSource::Builtin(canon.0.into());
                         root = canon.1;
                     }
+                    // start/end trim the take; loop sustains it; reverse flips it —
+                    // one recording becomes many instruments
                     _ => set_param(
                         &mut dev,
                         key,
                         arg,
-                        &[("gain", 0), ("attack", 1), ("decay", 2), ("sustain", 3), ("release", 4), ("pitch", 5)],
-                        &[],
+                        &[
+                            ("gain", 0), ("attack", 1), ("decay", 2), ("sustain", 3),
+                            ("release", 4), ("pitch", 5), ("start", 6), ("end", 7),
+                        ],
+                        &[("loop", 8, &["off", "on"]), ("reverse", 9, &["off", "on"])],
                         call,
                     )?,
                 }

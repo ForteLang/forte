@@ -1,0 +1,98 @@
+// std/drums — 打楽器 10 種。全部 device DSL 製(noise / osc / shaper /
+// svf / adsr の組み合わせ)なので、fork して一字単位で音を作り替えられる。
+// 使い方: import { Kick808, Snare908 } from "lib/std/drums.forte"
+
+device Kick808 : Instrument {
+  param punch = 0.5 in 0.0..1.0
+  param decay = 0.45 in 0.05..1.0
+
+  node env  = adsr(a: 0.001, d: decay, s: 0.0, r: 0.12)
+  node penv = adsr(a: 0.001, d: 0.06, s: 0.0, r: 0.03)   // ピッチドロップ
+  node o    = osc(shape: "sine", mod: gain(in: penv, level: 0.35))
+  node sh   = shaper(in: o, drive: punch, mode: "tanh")
+  out gain(in: sh, mod: env, level: 1.0)
+}
+
+device Kick909 : Instrument {
+  param click = 0.4 in 0.0..1.0
+
+  node env  = adsr(a: 0.001, d: 0.3, s: 0.0, r: 0.1)
+  node penv = adsr(a: 0.001, d: 0.045, s: 0.0, r: 0.02)
+  node body = osc(shape: "sine", mod: gain(in: penv, level: 0.45))
+  node cenv = adsr(a: 0.001, d: 0.02, s: 0.0, r: 0.01)   // アタックのクリック
+  node cl   = gain(in: svf(in: noise(), cutoff: 0.9, reso: 0.1), mod: cenv, level: click)
+  node sum  = mix(a: shaper(in: body, drive: 0.45, mode: "tanh"), b: cl)
+  out gain(in: sum, mod: env, level: 1.0)
+}
+
+device Snare908 : Instrument {
+  param tone = 0.72 in 0.0..1.0
+  param snap = 0.6 in 0.0..1.0
+
+  node env  = adsr(a: 0.001, d: 0.13, s: 0.0, r: 0.08)
+  node nz   = gain(in: svf(in: noise(), cutoff: tone, reso: 0.3), level: snap)
+  node bde  = adsr(a: 0.001, d: 0.055, s: 0.0, r: 0.04)
+  node body = gain(in: osc(shape: "sine"), mod: bde, level: 0.5)
+  out gain(in: mix(a: nz, b: body), mod: env, level: 0.9)
+}
+
+device Clap : Instrument {
+  param tone = 0.6 in 0.0..1.0
+
+  node env = adsr(a: 0.008, d: 0.16, s: 0.0, r: 0.1)   // 立ち上がりの鈍さがクラップ
+  node nz  = svf(in: noise(), cutoff: tone, reso: 0.5)
+  node fz  = shaper(in: nz, drive: 0.2, mode: "clip")
+  out gain(in: fz, mod: env, level: 0.8)
+}
+
+device HatClosed : Instrument {
+  param bright = 0.95 in 0.5..1.0
+
+  node env = adsr(a: 0.001, d: 0.04, s: 0.0, r: 0.03)
+  node nz  = svf(in: noise(), cutoff: bright, reso: 0.2)
+  node fz  = shaper(in: nz, drive: 0.25, mode: "clip")
+  out gain(in: fz, mod: env, level: 0.6)
+}
+
+device HatOpen : Instrument {
+  param decay = 0.28 in 0.05..1.0
+
+  node env = adsr(a: 0.001, d: decay, s: 0.0, r: 0.15)
+  node nz  = svf(in: noise(), cutoff: 0.95, reso: 0.2)
+  node fz  = shaper(in: nz, drive: 0.2, mode: "clip")
+  out gain(in: fz, mod: env, level: 0.55)
+}
+
+device Tom : Instrument {
+  param fall = 0.3 in 0.0..1.0    // ピッチの落ち幅
+
+  node env  = adsr(a: 0.001, d: 0.28, s: 0.0, r: 0.15)
+  node penv = adsr(a: 0.001, d: 0.09, s: 0.0, r: 0.05)
+  node o    = osc(shape: "sine", mod: gain(in: penv, level: fall))
+  out gain(in: shaper(in: o, drive: 0.3, mode: "tanh"), mod: env, level: 0.9)
+}
+
+device Rim : Instrument {
+  node env = adsr(a: 0.001, d: 0.025, s: 0.0, r: 0.02)
+  node o   = shaper(in: osc(shape: "square"), drive: 0.5, mode: "clip")
+  out gain(in: o, mod: env, level: 0.5)
+}
+
+device Shaker : Instrument {
+  param soft = 0.35 in 0.0..1.0   // アタックの丸さ
+
+  node env = adsr(a: soft, d: 0.07, s: 0.0, r: 0.05)
+  node nz  = svf(in: noise(), cutoff: 0.98, reso: 0.1)
+  out gain(in: nz, mod: env, level: 0.45)
+}
+
+device Cowbell : Instrument {
+  param drive = 0.5 in 0.0..1.0
+
+  node env = adsr(a: 0.001, d: 0.16, s: 0.0, r: 0.1)
+  // 2 本の矩形波を非整数比(1 : 1.48)で重ねるのが 808 カウベルの骨格
+  node hi  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.48)), shape: "square")
+  node lo  = osc(shape: "square")
+  node sum = shaper(in: mix(a: lo, b: gain(in: hi, level: 0.8)), drive: drive, mode: "clip")
+  out gain(in: sum, mod: env, level: 0.5)
+}

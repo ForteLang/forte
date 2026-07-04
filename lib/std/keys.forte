@@ -1,0 +1,60 @@
+// std/keys — 鍵盤系 5 種。加算(mix で倍音を組む)+波形整形で作る。
+// 使い方: import { Bell, Organ } from "lib/std/keys.forte"
+
+device Bell : Instrument {
+  param decay = 0.55 in 0.1..1.0
+
+  node env  = adsr(a: 0.001, d: decay, s: 0.0, r: 0.5)
+  node f2   = mix(a: note.freq, b: note.freq)                    // 2f
+  // 非整数倍音 2.76f がベルの金属感(FM 鐘の古典比)
+  node f276 = mix(a: f2, b: gain(in: note.freq, level: 0.76))
+  node fun  = osc(shape: "sine")
+  node p1   = osc(freq: f276, shape: "sine")
+  node sum  = mix(a: fun, b: gain(in: p1, level: 0.35))
+  out gain(in: sum, mod: env, level: 0.7)
+}
+
+device EPiano : Instrument {
+  param tine = 0.3 in 0.0..1.0   // ティーン(高次倍音)の量
+
+  node env = adsr(a: 0.002, d: 0.5, s: 0.35, r: 0.3)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node f4  = mix(a: f2, b: f2)
+  node fun = osc(shape: "sine")
+  node tn  = osc(freq: f4, shape: "sine")
+  node sum = shaper(in: mix(a: fun, b: gain(in: tn, level: tine)), drive: 0.15, mode: "tanh")
+  out gain(in: sum, mod: env, level: 0.8)
+}
+
+device Organ : Instrument {
+  param drawbar = 0.5 in 0.0..1.0   // 上部ドローバー(2f, 3f)の量
+
+  node env = adsr(a: 0.005, d: 0.05, s: 1.0, r: 0.08)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node f3  = mix(a: f2, b: note.freq)
+  node d1  = osc(shape: "sine")
+  node d2  = osc(freq: f2, shape: "sine")
+  node d3  = osc(freq: f3, shape: "sine")
+  node top = gain(in: mix(a: d2, b: gain(in: d3, level: 0.7)), level: drawbar)
+  out gain(in: mix(a: d1, b: top), mod: env, level: 0.65)
+}
+
+device MusicBox : Instrument {
+  node env = adsr(a: 0.001, d: 0.4, s: 0.0, r: 0.35)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node f4  = mix(a: f2, b: f2)
+  node fun = osc(shape: "sine")
+  node p   = osc(freq: f4, shape: "sine")
+  out gain(in: mix(a: fun, b: gain(in: p, level: 0.25)), mod: env, level: 0.6)
+}
+
+device Glass : Instrument {
+  param shimmer = 0.4 in 0.0..1.0
+
+  node env  = adsr(a: 0.18, d: 0.4, s: 0.6, r: 0.45)
+  node f2   = mix(a: note.freq, b: note.freq)
+  node f37  = mix(a: f2, b: gain(in: f2, level: 0.85))   // 3.7f
+  node p1   = osc(freq: f2, shape: "sine")
+  node p2   = osc(freq: f37, shape: "sine")
+  out gain(in: mix(a: p1, b: gain(in: p2, level: shimmer)), mod: env, level: 0.55)
+}

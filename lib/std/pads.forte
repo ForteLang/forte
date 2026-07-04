@@ -1,0 +1,41 @@
+// std/pads — パッド 4 種。遅いエンベロープ+フィルタの動きで面を作る。
+// 使い方: import { WarmPad, SweepPad } from "lib/std/pads.forte"
+
+device WarmPad : Instrument {
+  param cutoff = 0.45 in 0.0..1.0
+
+  node env = adsr(a: 0.5, d: 0.4, s: 0.8, r: 0.6)
+  node wob = lfo(rate: 0.05, shape: "sine")            // ごく遅い揺れ
+  node o   = osc(shape: "saw")
+  node f   = svf(in: o, cutoff: cutoff, reso: 0.15, mod: gain(in: wob, level: 0.08))
+  out gain(in: f, mod: env, level: 0.7)
+}
+
+device StringPad : Instrument {
+  param bright = 0.55 in 0.0..1.0
+
+  node env = adsr(a: 0.35, d: 0.3, s: 0.85, r: 0.55)
+  node lo  = osc(shape: "saw")
+  node hi  = osc(freq: mix(a: note.freq, b: note.freq), shape: "saw")  // 1oct 上
+  node f   = svf(in: mix(a: lo, b: gain(in: hi, level: 0.4)), cutoff: bright, reso: 0.2)
+  out gain(in: f, mod: env, level: 0.6)
+}
+
+device SweepPad : Instrument {
+  param rate = 0.08 in 0.0..1.0
+
+  node env = adsr(a: 0.4, d: 0.3, s: 0.85, r: 0.6)
+  node swp = lfo(rate: rate, shape: "tri")
+  node o   = osc(shape: "saw")
+  node f   = svf(in: o, cutoff: 0.4, reso: 0.45, mod: gain(in: swp, level: 0.5))
+  out gain(in: f, mod: env, level: 0.6)
+}
+
+device DarkPad : Instrument {
+  param depth = 0.35 in 0.0..1.0   // 低さ(カットオフの低さ)
+
+  node env = adsr(a: 0.45, d: 0.4, s: 0.85, r: 0.7)
+  node o   = osc(shape: "square")
+  node f   = svf(in: o, cutoff: depth, reso: 0.25)
+  out gain(in: f, mod: env, level: 0.65)
+}

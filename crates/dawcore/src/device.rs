@@ -451,6 +451,12 @@ impl Instrument for Sampler {
             self.release = 0.001 + p[4] * p[4] * 2.5;
             self.transpose = (p[5] - 0.5) * 48.0;
         }
+        if p.len() >= 10 {
+            self.start = p[6];
+            self.end = p[7];
+            self.loop_on = p[8] > 0.5;
+            self.reverse = p[9] > 0.5;
+        }
     }
     fn voices(&self) -> usize {
         self.active_voices()

@@ -1,0 +1,54 @@
+// std/bass — ベース 5 種。device DSL 製: fork して自分の低音に作り替える。
+// 使い方: import { SubBass, AcidBass } from "lib/std/bass.forte"
+
+device SubBass : Instrument {
+  param drive = 0.25 in 0.0..1.0
+
+  node env = adsr(a: 0.005, d: 0.2, s: 0.85, r: 0.18)
+  node fun = osc(shape: "sine")
+  node sub = osc(freq: gain(in: note.freq, level: 0.5), shape: "sine")  // 1oct 下
+  node sum = shaper(in: mix(a: fun, b: gain(in: sub, level: 0.7)), drive: drive, mode: "tanh")
+  out gain(in: sum, mod: env, level: 0.9)
+}
+
+device AcidBass : Instrument {
+  param cutoff = 0.42 in 0.0..1.0
+  param reso   = 0.75 in 0.0..1.0
+  param sweep  = 0.5 in 0.0..1.0   // フィルタエンベロープの深さ
+
+  node env  = adsr(a: 0.001, d: 0.25, s: 0.3, r: 0.12)
+  node fenv = adsr(a: 0.001, d: 0.16, s: 0.0, r: 0.1)
+  node o    = osc(shape: "saw")
+  node f    = svf(in: o, cutoff: cutoff, reso: reso, mod: gain(in: fenv, level: sweep))
+  out gain(in: f, mod: env, level: 0.85)
+}
+
+device ReeseBass : Instrument {
+  param cutoff = 0.45 in 0.0..1.0
+
+  node env = adsr(a: 0.01, d: 0.3, s: 0.8, r: 0.2)
+  node a1  = osc(shape: "saw")
+  node a2  = osc(freq: gain(in: note.freq, level: 0.5), shape: "square") // 1oct 下
+  node f   = svf(in: mix(a: a1, b: gain(in: a2, level: 0.8)), cutoff: cutoff, reso: 0.35)
+  out gain(in: f, mod: env, level: 0.85)
+}
+
+device PluckBass : Instrument {
+  param decay = 0.3 in 0.05..1.0
+
+  node env  = adsr(a: 0.001, d: decay, s: 0.0, r: 0.1)
+  node fenv = adsr(a: 0.001, d: 0.12, s: 0.0, r: 0.08)
+  node o    = osc(shape: "square")
+  node f    = svf(in: o, cutoff: 0.35, reso: 0.4, mod: gain(in: fenv, level: 0.6))
+  out gain(in: f, mod: env, level: 0.9)
+}
+
+device FMBass : Instrument {
+  param bite = 0.35 in 0.0..1.0   // アタックの噛みつき(ピッチ変調の深さ)
+
+  node env  = adsr(a: 0.001, d: 0.22, s: 0.6, r: 0.15)
+  node penv = adsr(a: 0.001, d: 0.05, s: 0.0, r: 0.03)
+  node o    = osc(shape: "sine", mod: gain(in: penv, level: bite))
+  node sh   = shaper(in: o, drive: 0.5, mode: "tanh")
+  out gain(in: sh, mod: env, level: 0.9)
+}

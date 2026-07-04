@@ -110,7 +110,10 @@ impl DeviceKind {
                 "Wave", "Cutoff", "Reso", "Attack", "Decay", "Sustain", "Release",
                 "Detune", "Sub", "FiltEnv",
             ],
-            DeviceKind::Sampler => &["Gain", "Attack", "Decay", "Sustain", "Release", "Pitch"],
+            DeviceKind::Sampler => &[
+                "Gain", "Attack", "Decay", "Sustain", "Release", "Pitch", "Start", "End",
+                "Loop", "Reverse",
+            ],
             DeviceKind::PolyGrid => &[],
             DeviceKind::Arpeggiator => &["Rate", "Octaves", "Mode"],
             DeviceKind::NoteTranspose => &["Semi"],
@@ -131,7 +134,8 @@ impl DeviceKind {
                 vec![1.0, 0.65, 0.15, 0.01, 0.3, 0.6, 0.25, 0.12, 0.3, 0.4]
             }
             // Pitch 0.5 == centre (no transpose); ±24 semitones across the range.
-            DeviceKind::Sampler => vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5],
+            // Start/End trim the play region; Loop/Reverse are 0/1 switches.
+            DeviceKind::Sampler => vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5, 0.0, 1.0, 0.0, 0.0],
             DeviceKind::PolyGrid => Vec::new(),
             DeviceKind::Arpeggiator => vec![0.55, 0.0, 0.0], // 1/8, 1 octave, up
             DeviceKind::NoteTranspose => vec![0.5],          // centre = 0 semitones

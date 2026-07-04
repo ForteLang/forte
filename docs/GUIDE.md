@@ -162,6 +162,11 @@ song "名前" {
 - ビルトイン音源: `sampler(sample: "Kick"/"Snare"/"Hat")`, `polymer(…)`, `grid()`。
   エフェクト: `filter, eq, drive, delay, reverb`。パラメータ名を間違えると
   「使えるもの」を列挙してくれるので、覚えなくても書けます。
+- **標準楽器ライブラリ(lib/std)**: device DSL 製の楽器 29 種が同梱です。
+  `import { Kick909, Clap } from "../lib/std/drums.forte"` のように import
+  して使います(パスは曲ファイルからの相対)。drums 10 / bass 5 / keys 5 /
+  pads 4 / leads 5 — 全部コードなので、気に入らなければ fork して一字単位で
+  作り替えられます。全 10 トラックのデモは `songs/std-tour.forte`。
 
 整形は `forte fmt my-song.forte`(意味を変えない保証付き)。
 
@@ -308,6 +313,18 @@ track Choir {
 `root` にはテイクを演奏した音名(C2..C6)を書きます。その音で弾くと原音、
 それ以外はサンプラーが再ピッチします。自分の声・口ドラム・鼻歌 — マイクで
 録れる音はぜんぶシンセの材料です。attack/decay などの ADSR も効きます。
+
+さらに **1 本のテイクを刻んで別の楽器に**できます:
+
+```forte
+instrument sampler(take: voice, start: 0.25, end: 0.6)   // 美味しい所だけ切り出す
+instrument sampler(take: voice, end: 0.1, loop: "on")    // 頭 10% をループ → パッド化
+instrument sampler(take: voice, reverse: "on")           // 逆再生 → ライザー
+```
+
+`start`/`end` は再生範囲(0..1 の割合)、`loop: "on"` はノートを押さえて
+いる間その範囲をループ(短い範囲なら持続音になる)、`reverse: "on"` は
+逆再生です。全部ノートオン時に確定するので、レンダーは決定論のままです。
 
 ## 7. Forte Studio(VSCode)で書く
 
