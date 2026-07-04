@@ -14,6 +14,12 @@
   header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
     background: #1e2128; border-bottom: 1px solid #2b2f38; }
   header h1 { font-size: 15px; margin: 0; letter-spacing: 2px; color: #e8b34c; }
+  .section-h { font-size: 11px; letter-spacing: 1px; color: #8a919e; text-transform: uppercase; margin: 18px 0 8px; }
+  #tree { font: 13px/1.9 ui-monospace, monospace; margin-bottom: 8px; }
+  #tree .tnode { cursor: pointer; color: #d6d9de; white-space: pre; }
+  #tree .tnode:hover { color: #e8b34c; }
+  #tree .tnode .who { color: #8a919e; }
+  #tree .tnode .badge { font-size: 10px; }
   #stems { margin: 10px 0 4px; font: 12px/1.7 ui-monospace, monospace; }
   #stems .stem { display: flex; gap: 8px; align-items: center; color: #b6bcc6; }
   #stems .stem button { padding: 0 8px; font-size: 11px; border-radius: 4px; }
@@ -50,7 +56,12 @@
   <span>リリースはコードから再現される。だからブラウザがプレイヤーであり監査人。</span>
 </header>
 <main>
-  <div id="list">loading…</div>
+  <div id="list-wrap">
+    <h2 class="section-h">系譜 — fork の家系図</h2>
+    <div id="tree"></div>
+    <h2 class="section-h">すべて</h2>
+    <div id="list">loading…</div>
+  </div>
   <div id="detail">
     <p><a href="#" id="back">← 一覧へ</a></p>
     <h2 id="d-name"></h2>

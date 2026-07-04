@@ -164,6 +164,23 @@ try {
     Object.keys(files.assets ?? {}).some((p) => p.endsWith('.frec')),
     Object.keys(files.assets ?? {}).join(', ')
   );
+
+  // 7) dig: the hub front page draws the fork family tree
+  await page.goto(
+    `http://127.0.0.1:${STATIC_PORT}/web/hub.html?api=http://127.0.0.1:${API_PORT}`,
+    { waitUntil: 'load' }
+  );
+  await page.waitForFunction(
+    () => Number(document.body.dataset.treeNodes || 0) >= 3,
+    null,
+    { timeout: 15000 }
+  );
+  const tree = await page.textContent('#tree');
+  check(
+    'lineage tree nests the performance fork under its origin',
+    tree.includes('handmade-voice') && tree.includes('└─'),
+    tree.replace(/\n/g, ' | ').slice(0, 120)
+  );
 } finally {
   await browser.close();
   api.kill();

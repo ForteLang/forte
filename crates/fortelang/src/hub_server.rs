@@ -96,6 +96,10 @@ fn route(
     }
     let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
     match (method, parts.as_slice()) {
+        ("GET", ["api", "lineage"]) => match hub.lineage_forest() {
+            Ok(v) => ("200 OK", v.to_string()),
+            Err(e) => err("500 Internal Server Error", &e),
+        },
         ("GET", ["api", "repos"]) => match hub.repos_json() {
             Ok(v) => ("200 OK", v.to_string()),
             Err(e) => err("500 Internal Server Error", &e),

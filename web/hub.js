@@ -29,9 +29,36 @@ function compileIn(inst, entrySrc, files, assets) {
 }
 
 // ---- list view ---------------------------------------------------------------
+function treeNode(n, prefix, isLast, out) {
+  const conn = prefix === '' ? '' : prefix + (isLast ? '└─ ' : '├─ ');
+  const row = document.createElement('div');
+  row.className = 'tnode';
+  const badges = [
+    n.kind === 'library' ? '📚' : '♪',
+    n.releases ? `<span class="badge">release×${n.releases}</span>` : '',
+    n.plays ? `<span class="badge">▶${n.plays}</span>` : '',
+  ].join(' ');
+  row.innerHTML = `${conn}${badges} ${n.name} <span class="who">v${n.v} by ${n.author}</span>`;
+  row.onclick = () => showDetail(n.name);
+  out.appendChild(row);
+  const childPrefix = prefix === '' ? '  ' : prefix + (isLast ? '   ' : '│  ');
+  (n.children || []).forEach((c, i) => treeNode(c, childPrefix, i === (n.children.length - 1), out));
+}
+
+async function showTree() {
+  try {
+    const { roots } = await (await fetch(`${API}/api/lineage`)).json();
+    const el = $('tree');
+    el.innerHTML = '';
+    roots.forEach((r) => treeNode(r, '', true, el));
+    document.body.dataset.treeNodes = String(el.querySelectorAll('.tnode').length);
+  } catch { /* older server: tree stays empty */ }
+}
+
 async function showList() {
   $('detail').style.display = 'none';
-  $('list').style.display = 'block';
+  $('list-wrap').style.display = 'block';
+  showTree();
   const { repos } = await (await fetch(`${API}/api/repos`)).json();
   $('list').innerHTML = repos.length ? '' : 'hub は空です';
   for (const r of repos) {
@@ -111,7 +138,7 @@ async function showDetail(name) {
     }
   } catch { /* stem controls are optional */ }
 
-  $('list').style.display = 'none';
+  $('list-wrap').style.display = 'none';
   $('detail').style.display = 'block';
   $('d-name').textContent = `${name} v${repo.v} [${repo.kind}] by ${repo.author}`;
 

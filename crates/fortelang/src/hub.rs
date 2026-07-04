@@ -493,6 +493,65 @@ impl Hub {
         Ok(serde_json::json!({ "repos": repos }))
     }
 
+    /// The fork forest: every repo as a node under the repo it forked from —
+    /// the listener's family tree of the music (Phase 4 dig experience).
+    pub fn lineage_forest(&self) -> Result<serde_json::Value, String> {
+        let reg = self.registry()?;
+        // name -> children names (a fork points at its origin's name)
+        let mut children: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        for (name, r) in &reg.repos {
+            if let Some(origin) = r.versions.last().and_then(|v| v.forked_from.as_ref()) {
+                if reg.repos.contains_key(&origin.repo) && origin.repo != *name {
+                    children.entry(origin.repo.as_str()).or_default().push(name);
+                }
+            }
+        }
+        let plays = |name: &str| {
+            reg.events.iter().filter(|e| e.kind == "play" && e.repo == name).count()
+        };
+        fn node(
+            reg: &Registry,
+            children: &BTreeMap<&str, Vec<&str>>,
+            plays: &dyn Fn(&str) -> usize,
+            name: &str,
+            seen: &mut std::collections::BTreeSet<String>,
+        ) -> serde_json::Value {
+            if !seen.insert(name.to_string()) {
+                return serde_json::json!({ "name": name, "cycle": true, "children": [] });
+            }
+            let r = &reg.repos[name];
+            let v = r.versions.last();
+            let kids: Vec<serde_json::Value> = children
+                .get(name)
+                .map(|ks| ks.iter().map(|k| node(reg, children, plays, k, seen)).collect())
+                .unwrap_or_default();
+            serde_json::json!({
+                "name": name,
+                "v": v.map(|v| v.v).unwrap_or(0),
+                "kind": v.map(|v| v.kind.clone()).unwrap_or_default(),
+                "author": v.map(|v| v.author.clone()).unwrap_or_default(),
+                "releases": r.releases.len(),
+                "plays": plays(name),
+                "children": kids,
+            })
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        let roots: Vec<serde_json::Value> = reg
+            .repos
+            .iter()
+            .filter(|(name, r)| {
+                // a root either never forked, or forked from something unknown
+                r.versions
+                    .last()
+                    .and_then(|v| v.forked_from.as_ref())
+                    .map(|o| !reg.repos.contains_key(&o.repo) || o.repo == **name)
+                    .unwrap_or(true)
+            })
+            .map(|(name, _)| node(&reg, &children, &plays, name, &mut seen))
+            .collect();
+        Ok(serde_json::json!({ "roots": roots }))
+    }
+
     pub fn repo_json(&self, name: &str) -> Result<serde_json::Value, String> {
         let reg = self.registry()?;
         let repo = reg.repos.get(name).ok_or_else(|| format!("'{name}' は hub にありません"))?;

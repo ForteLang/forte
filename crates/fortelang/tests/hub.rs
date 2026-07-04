@@ -325,3 +325,38 @@ song "Vocal" {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn lineage_forest_nests_forks_under_their_origin() {
+    let dir = std::path::PathBuf::from(temp_dir("forest"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let song = |name: &str| {
+        format!("song \"{name}\" {{\n  tempo 100bpm\n  track A {{\n    instrument polymer()\n    play beat`x---` at bars(1..2)\n  }}\n}}\n")
+    };
+    std::fs::write(dir.join("root.forte"), song("Root")).unwrap();
+    let hub = Hub::open(dir.join("hub").to_str().unwrap()).unwrap();
+    hub.publish(dir.join("root.forte").to_str().unwrap(), Some("root-song")).unwrap();
+
+    // two generations of forks
+    let f1 = dir.join("f1");
+    hub.fork("root-song", f1.to_str().unwrap()).unwrap();
+    hub.publish(f1.join("root.forte").to_str().unwrap(), Some("gen1")).unwrap();
+    let f2 = dir.join("f2");
+    hub.fork("gen1", f2.to_str().unwrap()).unwrap();
+    hub.publish(f2.join("root.forte").to_str().unwrap(), Some("gen2")).unwrap();
+    // and an unrelated root
+    std::fs::write(dir.join("solo.forte"), song("Solo")).unwrap();
+    hub.publish(dir.join("solo.forte").to_str().unwrap(), Some("lonely")).unwrap();
+
+    let forest = hub.lineage_forest().unwrap();
+    let roots = forest["roots"].as_array().unwrap();
+    let names: Vec<&str> = roots.iter().map(|r| r["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"root-song") && names.contains(&"lonely"), "{names:?}");
+    assert!(!names.contains(&"gen1"), "forks must not appear as roots: {names:?}");
+
+    let root = roots.iter().find(|r| r["name"] == "root-song").unwrap();
+    let gen1 = &root["children"].as_array().unwrap()[0];
+    assert_eq!(gen1["name"], "gen1");
+    assert_eq!(gen1["children"].as_array().unwrap()[0]["name"], "gen2", "grandchild nests");
+    let _ = std::fs::remove_dir_all(&dir);
+}
