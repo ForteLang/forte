@@ -1,4 +1,12 @@
-# Forte (仮称) — compose music as code
+<p align="center">
+  <img src="assets/logo.svg" width="112" alt="Forte">
+</p>
+
+<h1 align="center">Forte</h1>
+<p align="center"><b>compose music as code</b></p>
+<p align="center">曲も、音源も、エフェクトも、演奏も — ぜんぶ読める・直せる・fork できるソースコード。</p>
+
+---
 
 **音楽制作を「コード・fork・ビルド・リリース」によるオープン開発の世界へ。**
 曲も、パターンも、コード進行も、そして音源そのものも、読める・直せる・fork できる
@@ -118,8 +126,8 @@ crates/dawcore    リアルタイムエンジン+DSP(ロックフリー、決定
 crates/fortelang  言語: lexer/parser/検査、コンパイラ、CLI(check/build/play/lsp/hub)
 crates/forteweb   ブラウザ用 C-ABI wasm(コンパイル・再生・ビルド証明)
 web/              ブラウザエディタ+Hub 系譜ページ(PWA)
-editor/           VSCode 拡張
-songs/            リファレンス曲 4 曲+デバイスライブラリ
+editor/           Forte Studio(VSCode 拡張)
+songs/            リファレンス曲 6 曲+デバイスライブラリ
 docs/webdaw/      ビジョン/SYS/SRS/SAD/SDD/ロードマップ+調査レポート
 scripts/          決定論ゲート・ブラウザ E2E
 ```
@@ -128,7 +136,7 @@ scripts/          決定論ゲート・ブラウザ E2E
 
 ```bash
 cargo test -p dawcore -p fortelang     # エンジン+言語+Hub+REPL
-scripts/determinism_test.sh            # native/wasm ビット同一ゲート(2 段)
+scripts/determinism_test.sh            # native/wasm ビット同一ゲート(3 本)
 node scripts/web_e2e.mjs               # ブラウザ E2E(要 playwright)
 node scripts/hub_e2e.mjs               # Hub E2E
 ```
@@ -139,3 +147,7 @@ node scripts/hub_e2e.mjs               # Hub E2E
 流用しており、その規律(音声スレッドで割り当てない・ロックしない、UI→audio は
 ロックフリーリング、オフラインとリアルタイムが同一エンジン)が Forte の決定論
 ビルドの土台になっている。
+
+## License
+
+[MIT](LICENSE) © 2026 Shusuke Inoue (fcuro)
