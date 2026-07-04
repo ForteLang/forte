@@ -457,15 +457,19 @@ impl Parser {
         let pos = self.pos();
         self.bump(); // "device"
         let name = self.ident("device の名前")?;
+        let mut dkind = "Instrument".to_string();
         if *self.peek() == Tok::Colon {
             self.bump();
             let kind = self.ident("device の種類")?;
-            if kind != "Instrument" {
-                self.err("E-GRID-005", format!("v0 の device は Instrument のみです(見つかったのは {kind})"));
+            if kind != "Instrument" && kind != "Effect" {
+                self.err("E-GRID-005", format!("device は Instrument か Effect です(見つかったのは {kind})"));
+            } else {
+                dkind = kind;
             }
         }
         self.expect(Tok::LBrace, "`{`");
-        let mut d = DeviceAst { name, pos, params: Vec::new(), nodes: Vec::new(), out: None };
+        let mut d =
+            DeviceAst { name, pos, kind: dkind, params: Vec::new(), nodes: Vec::new(), out: None };
         loop {
             match self.peek().clone() {
                 Tok::RBrace => {
@@ -533,6 +537,14 @@ impl Parser {
             self.bump();
             let port = self.ident("note のポート(freq/gate/vel)")?;
             return Some(NodeExpr::NotePort(port, pos));
+        }
+        if name == "audio" && *self.peek() == Tok::Dot {
+            self.bump();
+            let port = self.ident("audio のポート(in)")?;
+            if port != "in" {
+                self.err("E-GRID-003", format!("audio.{port} はありません(audio.in のみ)"));
+            }
+            return Some(NodeExpr::AudioIn(pos));
         }
         if *self.peek() == Tok::LParen {
             self.bump();

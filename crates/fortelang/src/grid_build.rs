@@ -94,6 +94,8 @@ struct Builder<'a> {
     graph: GridGraph,
     named: HashMap<&'a str, usize>,
     params: HashMap<&'a str, f32>,
+    /// Effect devices: node 0 is AudioIn and note.* is unavailable.
+    effect: bool,
 }
 
 /// Instantiate `dev` with the arguments given at the `instrument` call site.
@@ -134,10 +136,11 @@ pub fn instantiate(dev: &DeviceAst, call: &Call) -> Result<GridGraph, Diag> {
         params.insert(p.name.as_str(), *n as f32);
     }
 
+    let effect = dev.kind == "Effect";
     let mut b = Builder {
         graph: GridGraph {
             modules: vec![GridModule {
-                kind: GridModuleKind::NoteIn,
+                kind: if effect { GridModuleKind::AudioIn } else { GridModuleKind::NoteIn },
                 pos: (20.0, 60.0),
                 params: Vec::new(),
             }],
@@ -145,6 +148,7 @@ pub fn instantiate(dev: &DeviceAst, call: &Call) -> Result<GridGraph, Diag> {
         },
         named: HashMap::new(),
         params,
+        effect,
     };
 
     for (name, expr, pos) in &dev.nodes {
@@ -188,6 +192,13 @@ impl<'a> Builder<'a> {
     fn build_expr(&mut self, expr: &'a NodeExpr, dev: &'a DeviceAst) -> Result<(usize, usize), Diag> {
         match expr {
             NodeExpr::NotePort(port, pos) => {
+                if self.effect {
+                    return Err(Diag::new(
+                        "E-GRID-003",
+                        *pos,
+                        "Effect に note.* はありません(入力は audio.in)",
+                    ));
+                }
                 let Some(&(_, idx)) = NOTE_PORTS.iter().find(|(n, _)| n == port) else {
                     return Err(Diag::new(
                         "E-GRID-003",
@@ -196,6 +207,16 @@ impl<'a> Builder<'a> {
                     ));
                 };
                 Ok((0, idx))
+            }
+            NodeExpr::AudioIn(pos) => {
+                if !self.effect {
+                    return Err(Diag::new(
+                        "E-GRID-003",
+                        *pos,
+                        "Instrument に audio.in はありません(入力は note.*)",
+                    ));
+                }
+                Ok((0, 0))
             }
             NodeExpr::Ref(name, pos) => {
                 if let Some(&idx) = self.named.get(name.as_str()) {
@@ -295,12 +316,21 @@ impl<'a> Builder<'a> {
                 for (port, src) in pending_inputs {
                     self.graph.conns.push(GridConn { from: src, to: (idx, port) });
                 }
-                // unwired inputs with defaults connect to NoteIn
+                // unwired inputs with defaults connect to NoteIn — which an
+                // Effect graph doesn't have
                 for (aname, port, default) in spec.inputs {
                     if seen_inputs.contains(port) {
                         continue;
                     }
                     match default {
+                        Some(_) if self.effect && spec.kind == GridModuleKind::Adsr => {
+                            return Err(Diag::new(
+                                "E-GRID-001",
+                                *pos,
+                                format!("Effect の {name} には gate を明示してください(note.gate はありません)"),
+                            ));
+                        }
+                        Some(_) if self.effect => {} // osc: falls back to 220 Hz
                         Some(note_port) => self
                             .graph
                             .conns
@@ -354,7 +384,10 @@ impl<'a> Builder<'a> {
             )),
             NodeArg::Expr(e) => {
                 let pos = match e {
-                    NodeExpr::Call { pos, .. } | NodeExpr::Ref(_, pos) | NodeExpr::NotePort(_, pos) => *pos,
+                    NodeExpr::Call { pos, .. }
+                    | NodeExpr::Ref(_, pos)
+                    | NodeExpr::NotePort(_, pos)
+                    | NodeExpr::AudioIn(pos) => *pos,
                 };
                 Err(Diag::new(
                     "E-GRID-003",

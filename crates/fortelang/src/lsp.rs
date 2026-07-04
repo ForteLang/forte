@@ -159,7 +159,7 @@ const DOCS: &[(&str, &str, &str)] = &[
     ("track", "トラック: `track 名前 { instrument … play … }`", "keyword"),
     ("return", "リターントラック: `return 名前 { insert reverb(...) }` — `send 名前 0.3` で送る", "keyword"),
     ("section", "名前付き区間: `section verse = bars(1..8)` → `play x at verse`", "keyword"),
-    ("device", "自作音源: `device 名前 : Instrument { param / node / out }`", "keyword"),
+    ("device", "自作音源/エフェクト: `device 名前 : Instrument|Effect { param / node / out }`(Effect の入力は audio.in、insert で使う)", "keyword"),
     ("tempo", "テンポ: `tempo 120bpm`", "keyword"),
     ("meter", "拍子: `meter 4/4`", "keyword"),
     ("key", "キー: `key D minor`", "keyword"),

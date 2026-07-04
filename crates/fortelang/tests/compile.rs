@@ -390,3 +390,74 @@ song "X" { tempo 120bpm track A { instrument K() play beat`x---` at bars(1..1) }
     let p2 = fortelang::compile_str(&flat).unwrap();
     assert_ne!(dropped.f32_digest, fortelang::render_digest(&p2, 2.0).f32_digest);
 }
+
+// ---------------------------------------------------------------------------
+// device … : Effect — user-defined audio effects
+// ---------------------------------------------------------------------------
+
+const FX_SONG: &str = r#"device Fuzz : Effect {
+  param amount = 0.6 in 0.0..1.0
+  node crushed = shaper(in: audio.in, drive: amount, mode: "fold")
+  node dry     = gain(in: audio.in, level: 0.3)
+  out mix(a: crushed, b: dry)
+}
+device Tremolo : Effect {
+  param speed = 0.45
+  node wob = lfo(rate: speed, shape: "sine")
+  out gain(in: audio.in, mod: gain(in: wob, level: 0.5))
+}
+song "FX" {
+  tempo 110bpm
+  track Keys {
+    instrument polymer(wave: "tri")
+    insert Fuzz(amount: 0.7)
+    insert Tremolo(speed: 0.5)
+    play notes`C3:1 E3:1 G3:1 _:1` at bars(1..2)
+  }
+}"#;
+
+#[test]
+fn user_defined_effects_process_audio() {
+    let p = fortelang::compile_str(FX_SONG).expect("effect devices must compile");
+    let devices = &p.tracks[0].devices;
+    assert_eq!(devices.len(), 3); // polymer + Fuzz + Tremolo
+    assert_eq!(devices[1].kind, dawcore::model::DeviceKind::GridFx);
+    assert!(devices[1].grid.is_some());
+
+    let wet = fortelang::render_digest(&p, 2.0);
+    assert!(wet.rms > 0.005, "fx chain must pass signal (rms {})", wet.rms);
+    assert_eq!(wet.f32_digest, fortelang::render_digest(&p, 2.0).f32_digest);
+
+    let dry_src = FX_SONG
+        .replace("insert Fuzz(amount: 0.7)", "")
+        .replace("insert Tremolo(speed: 0.5)", "");
+    let dry = fortelang::render_digest(&fortelang::compile_str(&dry_src).unwrap(), 2.0);
+    assert_ne!(wet.f32_digest, dry.f32_digest, "effects must be audible");
+}
+
+#[test]
+fn effect_device_errors_are_reported() {
+    let codes = |src: &str| -> Vec<&'static str> {
+        match fortelang::compile_str(src) {
+            Ok(_) => Vec::new(),
+            Err(ds) => ds.into_iter().map(|d| d.code).collect(),
+        }
+    };
+    // an Effect cannot be an instrument, an Instrument cannot be an insert
+    let src = FX_SONG.replace("instrument polymer(wave: \"tri\")", "instrument Fuzz()");
+    assert!(codes(&src).contains(&"E-DEV-009"), "{src}");
+    let src = r#"device L : Instrument { node o = osc() out gain(in: o) }
+song "X" { tempo 100bpm track A { instrument polymer() insert L() play beat`x---` at bars(1..1) } }"#;
+    assert!(codes(src).contains(&"E-DEV-009"));
+    // note.* has no meaning inside an Effect; audio.in none inside an Instrument
+    let src = r#"device E : Effect { node g = gain(in: note.freq) out g }
+song "X" { tempo 100bpm track A { instrument polymer() insert E() play beat`x---` at bars(1..1) } }"#;
+    assert!(codes(src).contains(&"E-GRID-003"));
+    let src = r#"device I : Instrument { node g = gain(in: audio.in) out g }
+song "X" { tempo 100bpm track A { instrument I() play beat`x---` at bars(1..1) } }"#;
+    assert!(codes(src).contains(&"E-GRID-003"));
+    // adsr inside an Effect must state its gate explicitly
+    let src = r#"device E : Effect { node env = adsr() out gain(in: audio.in, mod: env) }
+song "X" { tempo 100bpm track A { instrument polymer() insert E() play beat`x---` at bars(1..1) } }"#;
+    assert!(codes(src).contains(&"E-GRID-001"));
+}

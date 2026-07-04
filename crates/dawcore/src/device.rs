@@ -119,6 +119,10 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
             Dsp::Inst(Box::new(GridSynth::compile(&graph, sr)))
         }
         // ---- Audio → Audio ----
+        DeviceKind::GridFx => {
+            let graph = dev.grid.clone().unwrap_or_else(GridGraph::default_patch);
+            Dsp::Audio(Box::new(crate::dsp::grid::GridFx::compile(&graph, sr)))
+        }
         DeviceKind::Filter => Dsp::Audio(Box::new(FilterFx { l: Svf::new(sr), r: Svf::new(sr), mode: FilterMode::Lowpass })),
         DeviceKind::Delay => Dsp::Audio(Box::new(StereoDelay::new(sr))),
         DeviceKind::Reverb => Dsp::Audio(Box::new(FdnReverb::new(sr))),

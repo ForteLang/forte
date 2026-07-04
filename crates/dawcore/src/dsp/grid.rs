@@ -102,23 +102,138 @@ fn fresh_state(kind: GridModuleKind, sr: f32, node_idx: usize) -> NodeState {
     }
 }
 
+/// Compile a graph into node specs + evaluation order (shared by the poly
+/// synth and the audio-effect interpreter).
+fn build_specs(graph: &GridGraph) -> (Vec<NodeSpec>, Vec<usize>, Option<usize>) {
+    let n = graph.modules.len();
+    let mut nodes = Vec::with_capacity(n);
+    for (i, m) in graph.modules.iter().enumerate() {
+        let n_inputs = m.kind.inputs().len();
+        let mut inputs = vec![Vec::new(); n_inputs];
+        for c in &graph.conns {
+            if c.to.0 == i && c.to.1 < n_inputs && c.from.0 < n {
+                inputs[c.to.1].push((c.from.0, c.from.1.min(MAX_OUTPUTS - 1)));
+            }
+        }
+        nodes.push(NodeSpec { kind: m.kind, params: m.params.clone(), inputs });
+    }
+    let order = topo_order(n, &graph.conns);
+    let out_node = graph.modules.iter().position(|m| m.kind == GridModuleKind::Out);
+    (nodes, order, out_node)
+}
+
+/// One node, one sample. `note` feeds NoteIn (zeros in an effect context);
+/// `audio_in` feeds AudioIn (zero in an instrument context).
+#[allow(clippy::too_many_arguments)]
+#[inline]
+fn eval_node(
+    kind: GridModuleKind,
+    params: &[f32],
+    ins: &[f32; 4],
+    connected: &[bool; 4],
+    state: &mut NodeState,
+    out: &mut [f32; MAX_OUTPUTS],
+    sr: f32,
+    note: (f32, f32, f32),
+    audio_in: f32,
+) {
+    match kind {
+        GridModuleKind::NoteIn => {
+            out[0] = note.0;
+            out[1] = note.1;
+            out[2] = note.2;
+        }
+        GridModuleKind::AudioIn => {
+            out[0] = audio_in;
+        }
+        GridModuleKind::Osc => {
+            let base = if connected[0] { ins[0].max(0.1) } else { 220.0 };
+            // pitch mod shifts up to ±4 octaves (mirrors the SVF's
+            // cutoff mod) — envelopes make kick drops, LFOs vibrato
+            let freq = base * crate::dmath::powf(2.0, ins[1] * 4.0);
+            let shape = Waveform::from_index((params[0] * 3.999) as u8);
+            if let NodeState::Osc(osc) = state {
+                out[0] = osc.next(freq, sr, shape);
+            }
+        }
+        GridModuleKind::Noise => {
+            if let NodeState::Noise(s) = state {
+                *s ^= *s << 13;
+                *s ^= *s >> 17;
+                *s ^= *s << 5;
+                out[0] = (*s as f32 / u32::MAX as f32) * 2.0 - 1.0;
+            }
+        }
+        GridModuleKind::Shaper => {
+            let drive = (params[0] + ins[1]).clamp(0.0, 1.0);
+            let x = ins[0] * (1.0 + drive * 15.0);
+            out[0] = match (params[1] * 2.999) as u8 {
+                1 => x.clamp(-1.0, 1.0), // hard clip
+                2 => {
+                    // triangle wavefolder: reflects instead of clipping
+                    let t = (x * 0.25 + 0.25).rem_euclid(1.0);
+                    4.0 * (t - 0.5).abs() - 1.0
+                }
+                _ => crate::dmath::tanh(x),
+            };
+        }
+        GridModuleKind::Lfo => {
+            if let NodeState::Lfo { phase } = state {
+                let hz = 0.05 + params[0] * 12.0;
+                let shape = (params[1] * 3.999) as u8;
+                out[0] = match shape {
+                    1 => 1.0 - 4.0 * (*phase - 0.5).abs(),
+                    2 => *phase * 2.0 - 1.0,
+                    3 => if *phase < 0.5 { 1.0 } else { -1.0 },
+                    _ => crate::dmath::sin(*phase * std::f32::consts::TAU),
+                };
+                *phase = (*phase + hz / sr).fract();
+            }
+        }
+        GridModuleKind::Adsr => {
+            if let NodeState::Adsr { env, prev_gate } = state {
+                let gate = ins[0];
+                if gate > 0.5 && *prev_gate <= 0.5 {
+                    env.set(
+                        0.001 + params[0] * params[0] * 2.0,
+                        0.001 + params[1] * params[1] * 2.0,
+                        params[2],
+                        0.001 + params[3] * params[3] * 2.5,
+                    );
+                    env.trigger();
+                } else if gate <= 0.5 && *prev_gate > 0.5 {
+                    env.release();
+                }
+                *prev_gate = gate;
+                out[0] = env.next();
+            }
+        }
+        GridModuleKind::Filter => {
+            if let NodeState::Filter(svf) = state {
+                let base = 30.0 * crate::dmath::powf(600.0, params[0].clamp(0.0, 1.0));
+                // cutoff mod input shifts up to ±4 octaves
+                let cutoff = base * crate::dmath::powf(2.0, ins[1] * 4.0);
+                svf.set(cutoff, params[1]);
+                out[0] = svf.process(ins[0], FilterMode::Lowpass);
+            }
+        }
+        GridModuleKind::Gain => {
+            let m = if connected[1] { ins[1].clamp(0.0, 2.0) } else { 1.0 };
+            out[0] = ins[0] * params[0] * m;
+        }
+        GridModuleKind::Mix => {
+            out[0] = ins[0] + ins[1];
+        }
+        GridModuleKind::Out => {
+            out[0] = ins[0];
+        }
+    }
+}
+
 impl GridSynth {
     /// Compile a graph. Runs on the UI thread.
     pub fn compile(graph: &GridGraph, sample_rate: f32) -> Self {
-        let n = graph.modules.len();
-        let mut nodes = Vec::with_capacity(n);
-        for (i, m) in graph.modules.iter().enumerate() {
-            let n_inputs = m.kind.inputs().len();
-            let mut inputs = vec![Vec::new(); n_inputs];
-            for c in &graph.conns {
-                if c.to.0 == i && c.to.1 < n_inputs && c.from.0 < n {
-                    inputs[c.to.1].push((c.from.0, c.from.1.min(MAX_OUTPUTS - 1)));
-                }
-            }
-            nodes.push(NodeSpec { kind: m.kind, params: m.params.clone(), inputs });
-        }
-        let order = topo_order(n, &graph.conns);
-        let out_node = graph.modules.iter().position(|m| m.kind == GridModuleKind::Out);
+        let (nodes, order, out_node) = build_specs(graph);
         let has_adsr = graph.modules.iter().any(|m| m.kind == GridModuleKind::Adsr);
 
         let voices = (0..GRID_VOICES)
@@ -136,6 +251,7 @@ impl GridSynth {
             })
             .collect();
 
+        let n = nodes.len();
         GridSynth {
             sample_rate,
             nodes,
@@ -234,96 +350,18 @@ impl GridSynth {
                 }
 
                 let voice = &mut self.voices[vi];
-                let params = &self.nodes[ni].params;
-                let out = &mut self.values[ni];
-                match kind {
-                    GridModuleKind::NoteIn => {
-                        out[0] = midi_to_freq(voice.note);
-                        out[1] = voice.gate;
-                        out[2] = voice.velocity;
-                    }
-                    GridModuleKind::Osc => {
-                        let base = if connected[0] { ins[0].max(0.1) } else { 220.0 };
-                        // pitch mod shifts up to ±4 octaves (mirrors the SVF's
-                        // cutoff mod) — envelopes make kick drops, LFOs vibrato
-                        let freq = base * crate::dmath::powf(2.0, ins[1] * 4.0);
-                        let shape = Waveform::from_index((params[0] * 3.999) as u8);
-                        if let NodeState::Osc(osc) = &mut voice.states[ni] {
-                            out[0] = osc.next(freq, sr, shape);
-                        }
-                    }
-                    GridModuleKind::Noise => {
-                        if let NodeState::Noise(s) = &mut voice.states[ni] {
-                            *s ^= *s << 13;
-                            *s ^= *s >> 17;
-                            *s ^= *s << 5;
-                            out[0] = (*s as f32 / u32::MAX as f32) * 2.0 - 1.0;
-                        }
-                    }
-                    GridModuleKind::Shaper => {
-                        let drive = (params[0] + ins[1]).clamp(0.0, 1.0);
-                        let x = ins[0] * (1.0 + drive * 15.0);
-                        out[0] = match (params[1] * 2.999) as u8 {
-                            1 => x.clamp(-1.0, 1.0), // hard clip
-                            2 => {
-                                // triangle wavefolder: reflects instead of clipping
-                                let t = (x * 0.25 + 0.25).rem_euclid(1.0);
-                                4.0 * (t - 0.5).abs() - 1.0
-                            }
-                            _ => crate::dmath::tanh(x),
-                        };
-                    }
-                    GridModuleKind::Lfo => {
-                        if let NodeState::Lfo { phase } = &mut voice.states[ni] {
-                            let hz = 0.05 + params[0] * 12.0;
-                            let shape = (params[1] * 3.999) as u8;
-                            out[0] = match shape {
-                                1 => 1.0 - 4.0 * (*phase - 0.5).abs(),
-                                2 => *phase * 2.0 - 1.0,
-                                3 => if *phase < 0.5 { 1.0 } else { -1.0 },
-                                _ => crate::dmath::sin(*phase * std::f32::consts::TAU),
-                            };
-                            *phase = (*phase + hz / sr).fract();
-                        }
-                    }
-                    GridModuleKind::Adsr => {
-                        if let NodeState::Adsr { env, prev_gate } = &mut voice.states[ni] {
-                            let gate = ins[0];
-                            if gate > 0.5 && *prev_gate <= 0.5 {
-                                env.set(
-                                    0.001 + params[0] * params[0] * 2.0,
-                                    0.001 + params[1] * params[1] * 2.0,
-                                    params[2],
-                                    0.001 + params[3] * params[3] * 2.5,
-                                );
-                                env.trigger();
-                            } else if gate <= 0.5 && *prev_gate > 0.5 {
-                                env.release();
-                            }
-                            *prev_gate = gate;
-                            out[0] = env.next();
-                        }
-                    }
-                    GridModuleKind::Filter => {
-                        if let NodeState::Filter(svf) = &mut voice.states[ni] {
-                            let base = 30.0 * crate::dmath::powf(600.0, params[0].clamp(0.0, 1.0));
-                            // cutoff mod input shifts up to ±4 octaves
-                            let cutoff = base * crate::dmath::powf(2.0, ins[1] * 4.0);
-                            svf.set(cutoff, params[1]);
-                            out[0] = svf.process(ins[0], FilterMode::Lowpass);
-                        }
-                    }
-                    GridModuleKind::Gain => {
-                        let m = if connected[1] { ins[1].clamp(0.0, 2.0) } else { 1.0 };
-                        out[0] = ins[0] * params[0] * m;
-                    }
-                    GridModuleKind::Mix => {
-                        out[0] = ins[0] + ins[1];
-                    }
-                    GridModuleKind::Out => {
-                        out[0] = ins[0];
-                    }
-                }
+                let note = (midi_to_freq(voice.note), voice.gate, voice.velocity);
+                eval_node(
+                    kind,
+                    &self.nodes[ni].params,
+                    &ins,
+                    &connected,
+                    &mut voice.states[ni],
+                    &mut self.values[ni],
+                    sr,
+                    note,
+                    0.0,
+                );
             }
 
             let s = self.values[out_node][0];
@@ -347,5 +385,81 @@ impl GridSynth {
             }
         }
         sum * 0.25
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GridFx: the same node graph as an audio effect (`device X : Effect`).
+// The signal enters through AudioIn; each stereo channel runs its own copy of
+// the node states so filters/LFO phases stay per-channel.
+// ---------------------------------------------------------------------------
+
+pub struct GridFx {
+    sample_rate: f32,
+    nodes: Vec<NodeSpec>,
+    order: Vec<usize>,
+    out_node: Option<usize>,
+    states: [Vec<NodeState>; 2],
+    values: Vec<[f32; MAX_OUTPUTS]>,
+}
+
+impl GridFx {
+    pub fn compile(graph: &GridGraph, sample_rate: f32) -> Self {
+        let (nodes, order, out_node) = build_specs(graph);
+        let states: Vec<NodeState> = graph
+            .modules
+            .iter()
+            .enumerate()
+            .map(|(i, m)| fresh_state(m.kind, sample_rate, i))
+            .collect();
+        let n = nodes.len();
+        GridFx {
+            sample_rate,
+            nodes,
+            order,
+            out_node,
+            states: [states.clone(), states],
+            values: vec![[0.0; MAX_OUTPUTS]; n],
+        }
+    }
+
+    #[inline]
+    fn chan(&mut self, ch: usize, x: f32) -> f32 {
+        let Some(out_node) = self.out_node else { return x };
+        for oi in 0..self.order.len() {
+            let ni = self.order[oi];
+            let mut ins = [0.0f32; 4];
+            let mut connected = [false; 4];
+            for (port, sources) in self.nodes[ni].inputs.iter().enumerate() {
+                for &(sn, sp) in sources {
+                    ins[port] += self.values[sn][sp];
+                    connected[port] = true;
+                }
+            }
+            let mut out = self.values[ni];
+            eval_node(
+                self.nodes[ni].kind,
+                &self.nodes[ni].params,
+                &ins,
+                &connected,
+                &mut self.states[ch][ni],
+                &mut out,
+                self.sample_rate,
+                (0.0, 0.0, 0.0),
+                x,
+            );
+            self.values[ni] = out;
+        }
+        self.values[out_node][0]
+    }
+}
+
+impl crate::device::AudioFx for GridFx {
+    #[inline]
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        (self.chan(0, l), self.chan(1, r))
+    }
+    fn configure(&mut self, _params: &[f32]) {
+        // params are baked into the graph at compile time (like PolyGrid)
     }
 }

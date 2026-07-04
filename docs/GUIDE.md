@@ -186,6 +186,25 @@ song "..." {
 (Kick = sine+tanh、Snare = noise+SVF+胴鳴り、Hat = noise+clip。
 ビルトインサンプル不使用 — 音色の一字一句がコードです)。
 
+**エフェクトも自作できます**(`: Effect`)。入力信号は `audio.in`:
+
+```forte
+device Fuzz : Effect {
+  param amount = 0.6 in 0.0..1.0
+  node crushed = shaper(in: audio.in, drive: amount, mode: "fold")
+  node dry     = gain(in: audio.in, level: 0.3)
+  out mix(a: crushed, b: dry)          // wet + dry のパラレル
+}
+
+track Keys {
+  instrument polymer(wave: "tri")
+  insert Fuzz(amount: 0.7)             // insert で使う(instrument には書けない)
+}
+```
+
+LFO を `gain` の mod に挿せばトレモロ、`svf` の mod に挿せばオートワウ。
+ステレオは左右チャンネルが独立の状態で同じグラフを通ります。
+
 ## 4. ライブラリに分割して import
 
 音源を別ファイルに切り出すと、複数の曲から使えます(そして将来 Hub で

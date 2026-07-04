@@ -98,11 +98,18 @@ num       = [ "-" ] NUMBER [ UNIT ] ;
 | `bass(p, rate: 0.5)` | rate 省略時 1 コード 1 音 | ルート音 oct2, vel 100 |
 | `arp(p, rate: 0.5, style: "up\|down\|updown")` | rate は 0<r≤1 小節 | 構成音 oct4 を巡回, vel 95 |
 
-### 4.5 デバイス DSL(音源をコードで定義)
+### 4.5 デバイス DSL(音源とエフェクトをコードで定義)
 
-`param` はインスタンス化時に束縛(範囲は `in lo..hi`、既定 0..1)。グラフは
-ボイス毎インタープリタに展開され、ポリフォニー(8 声・最古スチール)・
-エンベロープ解放はエンジンが担う。
+`device 名前 : Instrument`(音源)または `device 名前 : Effect`(エフェクト、
+`insert` で使う)。`param` はインスタンス化時に束縛(範囲は `in lo..hi`、
+既定 0..1)。Instrument のグラフはボイス毎インタープリタに展開され、
+ポリフォニー(8 声・最古スチール)・エンベロープ解放はエンジンが担う。
+Effect のグラフはステレオ各チャンネルが独立の状態で同一グラフを評価する。
+
+- Instrument の信号ソースは `note.freq / note.gate / note.vel`。
+- Effect の信号ソースは **`audio.in`**(入力信号)。note.* は使えず
+  (E-GRID-003)、`adsr` は gate の明示が必要(E-GRID-001)。
+- Effect を instrument に、Instrument を insert に書くと E-DEV-009。
 
 | プリミティブ | 信号入力(既定) | パラメータ(既定) |
 | --- | --- | --- |
@@ -197,7 +204,7 @@ send レベル 0..1。
 | E-TIME-001..004 | 時間(小節範囲、rate、tempo、拍子) |
 | E-SONG-001..004 | 曲構造(tempo 必須、キー、track なし、song なし) |
 | E-MOD-001..007 | 名前解決(パターン/section/return/import/循環) |
-| E-DEV-001..008 | デバイス(未知、パラメータ、ビルトインサンプル、衝突) |
+| E-DEV-001..009 | デバイス(未知、パラメータ、ビルトインサンプル、衝突、Instrument/Effect の取り違え) |
 | E-GRID-001..006 | デバイス DSL(必須入力、前方参照、信号/数値、未知プリミティブ) |
 | E-PAT-001..003 | パターン関数(prog 必須、引数、入れ子) |
 | E-BEAT / E-NOTE / E-PROG | 各リテラルの内容 |
@@ -216,5 +223,5 @@ send レベル 0..1。
 - 未実装(v2 候補): ユーザー定義ジェネリクス、automate の volume 以外の対象
   (pan / デバイスパラメータ)、lfo 以外のモジュレータ(steps / random)、
   3 連符 beat リテラル(DECISION-S2)、セクション反復の一級表現(DECISION-S3)、
-  単位型の完全な検査(Hz/dB/ms)、`route` 明示ルーティング、エフェクトの
-  device DSL(現状 Instrument のみ)、ed25519 署名の実検証。
+  単位型の完全な検査(Hz/dB/ms)、`route` 明示ルーティング、
+  ed25519 署名の実検証。(エフェクトの device DSL は §4.5 で実装済み)

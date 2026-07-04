@@ -125,7 +125,7 @@ pub fn compile(
 
         // insert effects, in order
         for call in &tast.inserts {
-            match build_effect(call) {
+            match build_effect(call, &user_devices) {
                 Ok(dev) => track.devices.push(dev),
                 Err(d) => diags.push(d),
             }
@@ -295,7 +295,7 @@ pub fn compile(
         let color = TRACK_COLORS[(song.tracks.len() + ri) % TRACK_COLORS.len()];
         let mut track = Track::new(id, rast.name.clone(), TrackKind::Effect, color);
         for call in &rast.inserts {
-            match build_effect(call) {
+            match build_effect(call, &user_devices) {
                 Ok(dev) => track.devices.push(dev),
                 Err(d) => diags.push(d),
             }
@@ -505,6 +505,13 @@ fn build_instrument(
     assets: &HashMap<String, crate::AssetInfo>,
 ) -> Result<(Device, u8), Diag> {
     if let Some(dev_ast) = user_devices.get(call.name.as_str()) {
+        if dev_ast.kind == "Effect" {
+            return Err(Diag::new(
+                "E-DEV-009",
+                call.pos,
+                format!("'{}' は Effect です(instrument ではなく insert で使います)", call.name),
+            ));
+        }
         let graph = grid_build::instantiate(dev_ast, call)?;
         let mut dev = Device::new(DeviceKind::PolyGrid);
         dev.grid = Some(graph);
@@ -703,7 +710,20 @@ fn build_lfo(m: &ModulateAst, track: &Track) -> Result<Modulator, Diag> {
     Ok(lfo)
 }
 
-fn build_effect(call: &Call) -> Result<Device, Diag> {
+fn build_effect(call: &Call, user_devices: &HashMap<&str, &DeviceAst>) -> Result<Device, Diag> {
+    if let Some(dev_ast) = user_devices.get(call.name.as_str()) {
+        if dev_ast.kind != "Effect" {
+            return Err(Diag::new(
+                "E-DEV-009",
+                call.pos,
+                format!("'{}' は Instrument です(insert ではなく instrument で使います)", call.name),
+            ));
+        }
+        let graph = grid_build::instantiate(dev_ast, call)?;
+        let mut dev = Device::new(DeviceKind::GridFx);
+        dev.grid = Some(graph);
+        return Ok(dev);
+    }
     let (kind, params, opts): (DeviceKind, &[(&str, usize)], &[(&str, usize, &[&str])]) =
         match call.name.as_str() {
             "filter" => (
@@ -723,7 +743,10 @@ fn build_effect(call: &Call) -> Result<Device, Diag> {
                 return Err(Diag::new(
                     "E-DEV-001",
                     call.pos,
-                    format!("effect '{other}' はありません(使えるもの: {})", EFFECTS.join(", ")),
+                    format!(
+                        "effect '{other}' はありません(使えるもの: {}。または device … : Effect で自作)",
+                        EFFECTS.join(", ")
+                    ),
                 ))
             }
         };

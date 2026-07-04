@@ -29,12 +29,15 @@ pub struct AssetImportAst {
     pub pos: Pos,
 }
 
-/// `device WarmLead : Instrument { param … / node … / out … }` — a synth
-/// defined in the language itself; lowered to a Grid node graph.
+/// `device WarmLead : Instrument { param … / node … / out … }` — a synth (or
+/// with `: Effect`, an audio effect) defined in the language itself; lowered
+/// to a Grid node graph.
 #[derive(Clone, Debug)]
 pub struct DeviceAst {
     pub name: String,
     pub pos: Pos,
+    /// "Instrument" | "Effect"
+    pub kind: String,
     pub params: Vec<DevParam>,
     pub nodes: Vec<(String, NodeExpr, Pos)>,
     pub out: Option<NodeExpr>,
@@ -57,6 +60,8 @@ pub enum NodeExpr {
     Ref(String, Pos),
     /// `note.freq` / `note.gate` / `note.vel`
     NotePort(String, Pos),
+    /// `audio.in` — the incoming signal (Effect devices only)
+    AudioIn(Pos),
 }
 
 #[derive(Clone, Debug)]

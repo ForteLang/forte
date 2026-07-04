@@ -31,6 +31,8 @@ pub enum DeviceKind {
     Reverb,
     Eq,
     Drive,
+    /// A user-defined effect: a Grid graph fed by AudioIn (`device X : Effect`).
+    GridFx,
 }
 
 /// The three signal-transformation stages every device belongs to.
@@ -81,6 +83,7 @@ impl DeviceKind {
             DeviceKind::Reverb => "Reverb",
             DeviceKind::Eq => "EQ-5",
             DeviceKind::Drive => "Distortion",
+            DeviceKind::GridFx => "Grid FX",
         }
     }
 
@@ -117,6 +120,7 @@ impl DeviceKind {
             DeviceKind::Reverb => &["Size", "Decay", "Mix"],
             DeviceKind::Eq => &["Low", "Mid", "High"],
             DeviceKind::Drive => &["Drive"],
+            DeviceKind::GridFx => &[],
         }
     }
 
@@ -137,6 +141,7 @@ impl DeviceKind {
             DeviceKind::Reverb => vec![0.5, 0.5, 0.25],
             DeviceKind::Eq => vec![0.5, 0.5, 0.5],
             DeviceKind::Drive => vec![0.3],
+            DeviceKind::GridFx => Vec::new(),
         }
     }
 
@@ -189,7 +194,8 @@ impl SampleSource {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GridModuleKind {
-    NoteIn, // pitch / gate / velocity source
+    NoteIn,  // pitch / gate / velocity source (instrument graphs)
+    AudioIn, // incoming signal (effect graphs)
     Osc,
     Noise, // deterministic white noise (per-voice xorshift PRNG)
     Lfo,
@@ -209,6 +215,7 @@ impl GridModuleKind {
     pub fn label(self) -> &'static str {
         match self {
             GridModuleKind::NoteIn => "Note In",
+            GridModuleKind::AudioIn => "Audio In",
             GridModuleKind::Osc => "Osc",
             GridModuleKind::Noise => "Noise",
             GridModuleKind::Shaper => "Shaper",
@@ -223,6 +230,7 @@ impl GridModuleKind {
     pub fn inputs(self) -> &'static [&'static str] {
         match self {
             GridModuleKind::NoteIn => &[],
+            GridModuleKind::AudioIn => &[],
             GridModuleKind::Osc => &["Pitch", "Mod"],
             GridModuleKind::Noise => &[],
             GridModuleKind::Lfo => &[],
@@ -237,6 +245,7 @@ impl GridModuleKind {
     pub fn outputs(self) -> &'static [&'static str] {
         match self {
             GridModuleKind::NoteIn => &["Pitch", "Gate", "Vel"],
+            GridModuleKind::AudioIn => &["In"],
             GridModuleKind::Osc => &["Out"],
             GridModuleKind::Noise => &["Out"],
             GridModuleKind::Shaper => &["Out"],
