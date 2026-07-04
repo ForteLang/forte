@@ -10,7 +10,16 @@ fn repo_root() -> std::path::PathBuf {
 
 #[test]
 fn every_std_library_validates() {
-    let expected = [("drums", 10), ("bass", 5), ("keys", 5), ("pads", 4), ("leads", 5)];
+    let expected = [
+        ("drums", 22),
+        ("percussion", 12),
+        ("bass", 13),
+        ("keys", 15),
+        ("pads", 10),
+        ("leads", 13),
+        ("synths", 12),
+        ("fx", 6),
+    ];
     let mut total = 0;
     for (name, count) in expected {
         let path = repo_root().join(format!("lib/std/{name}.forte"));
@@ -27,7 +36,7 @@ fn every_std_library_validates() {
             ),
         }
     }
-    assert_eq!(total, 29, "the standard library ships 29 instruments");
+    assert_eq!(total, 103, "the standard library ships 103 instruments");
 }
 
 #[test]
