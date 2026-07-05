@@ -59,9 +59,15 @@ fn base_dir(entry: &str) -> String {
 /// `../instruments/…`), then rebase everything onto the files' deepest
 /// common ancestor so the snapshot keeps its real directory shape
 /// (`songs/x.forte`, `instruments/y.forte`).
-fn collect_rebased(
-    entry: &str,
-) -> Result<(String, BTreeMap<String, Vec<u8>>, Vec<serde_json::Value>), String> {
+/// The collected build inputs: entry (rebased), sources by rebased path,
+/// and the credits of the packages they came from.
+struct Snapshot {
+    entry: String,
+    files: BTreeMap<String, Vec<u8>>,
+    credits: Vec<serde_json::Value>,
+}
+
+fn collect_rebased(entry: &str) -> Result<Snapshot, String> {
     use std::path::PathBuf;
     fn walk(
         abs: &Path,
@@ -152,7 +158,7 @@ fn collect_rebased(
 
     let files: BTreeMap<String, Vec<u8>> =
         abs_files.into_iter().map(|(p, b)| (rel(&p), b)).collect();
-    Ok((entry_rel, files, credits))
+    Ok(Snapshot { entry: entry_rel, files, credits })
 }
 
 fn compile_snapshot(
@@ -168,7 +174,7 @@ fn compile_snapshot(
 /// `forte build song.forte -o name.fortesong` — snapshot, render for the
 /// proof, and pack. Returns (bytes, human summary).
 pub fn build(entry: &str) -> Result<(Vec<u8>, String), String> {
-    let (entry_name, files, credits) = collect_rebased(entry)?;
+    let Snapshot { entry: entry_name, files, credits } = collect_rebased(entry)?;
     let project = compile_snapshot(&entry_name, &files)?;
     let info = crate::render_digest(&project, 8.0);
     let digest = format!("{:016x}", info.f32_digest);
