@@ -42,9 +42,10 @@ fn pitch_name(p: u8) -> String {
     format!("{}{}", NOTE_NAMES[(p % 12) as usize], p as i32 / 12 - 1)
 }
 
-/// Find `device NAME` in the standard library (or any .forte library file
-/// reachable from the current directory) and return the import path.
-fn find_device(name: &str) -> Option<String> {
+/// Find `device NAME` (case-insensitive) in the standard library reachable
+/// from the current directory. Returns (import path, canonical name) so
+/// `forte instruments subbass` still resolves to SubBass.
+fn find_device(name: &str) -> Option<(String, String)> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
         let std_dir = dir.join("lib/std");
@@ -54,12 +55,10 @@ fn find_device(name: &str) -> Option<String> {
                     entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "forte")).collect();
                 files.sort();
                 for f in files {
-                    if let Ok(src) = std::fs::read_to_string(&f) {
-                        let pat = format!("device {name} ");
-                        let pat2 = format!("device {name}:");
-                        if src.contains(&pat) || src.contains(&pat2) {
-                            return Some(f.to_string_lossy().into_owned());
-                        }
+                    let Ok(src) = std::fs::read_to_string(&f) else { continue };
+                    let Ok(ast) = crate::parser::parse(&src) else { continue };
+                    if let Some(d) = ast.devices.iter().find(|d| d.name.eq_ignore_ascii_case(name)) {
+                        return Some((f.to_string_lossy().into_owned(), d.name.clone()));
                     }
                 }
             }
@@ -69,6 +68,18 @@ fn find_device(name: &str) -> Option<String> {
             return None;
         }
     }
+}
+
+/// `forte instruments <arg>` does what you mean: an exact instrument name
+/// (case-insensitive, optionally with `(args)`) enters play mode; anything
+/// else filters the catalog.
+pub fn play_or_list(arg: &str, from: Option<&str>) -> Result<(), String> {
+    let bare = arg.split('(').next().unwrap_or(arg).trim();
+    let is_builtin = matches!(bare.to_ascii_lowercase().as_str(), "polymer" | "grid" | "sampler");
+    if from.is_some() || is_builtin || find_device(bare).is_some() {
+        return run(arg, from);
+    }
+    list(Some(arg))
 }
 
 /// `forte instruments [QUERY]` — the catalog: every device in lib/std with
@@ -152,9 +163,10 @@ pub fn list(query: Option<&str>) -> Result<(), String> {
 /// editor opens, and the change is committed automatically on exit — every
 /// edit leaves history you can `forte log` / `forte diff` / fork from.
 pub fn edit(name: &str) -> Result<(), String> {
-    let src_path = find_device(name).ok_or_else(|| {
+    let (src_path, name) = find_device(name).ok_or_else(|| {
         format!("instrument '{name}' が見つかりません(一覧: forte instruments)")
     })?;
+    let name = name.as_str();
     std::fs::create_dir_all("instruments").map_err(|e| e.to_string())?;
     let file_name = std::path::Path::new(&src_path)
         .file_name()
@@ -259,20 +271,27 @@ pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
     if !std::io::stdin().is_terminal() {
         return Err("キーボード演奏には端末が必要です(パイプ経由では動きません)".into());
     }
-    let name = call.split('(').next().unwrap_or(call).trim().to_string();
-    // builtins need no import; anything else is looked up in lib/std
-    let import = match from {
-        Some(f) => Some(f.to_string()),
-        None if matches!(name.as_str(), "polymer" | "grid" | "sampler") => None,
-        None => Some(find_device(&name).ok_or_else(|| {
-            format!(
-                "instrument '{name}' が見つかりません(lib/std を探しました)。\n\
+    let typed = call.split('(').next().unwrap_or(call).trim().to_string();
+    let args_part = call.strip_prefix(&typed).unwrap_or("");
+    // builtins need no import; anything else is looked up (case-insensitively)
+    // in lib/std — the canonical spelling wins so `subbass` finds SubBass
+    let lower = typed.to_ascii_lowercase();
+    let (name, import) = match from {
+        Some(f) => (typed.clone(), Some(f.to_string())),
+        None if matches!(lower.as_str(), "polymer" | "grid" | "sampler") => (lower, None),
+        None => {
+            let (path, canonical) = find_device(&typed).ok_or_else(|| {
+                format!(
+                    "instrument '{typed}' が見つかりません(lib/std を探しました)。\n\
                  一覧: forte instruments   絞り込み: forte instruments 808\n\
-                 ファイル指定: forte instrument {name} --from path/to/lib.forte"
-            )
-        })?),
+                 ファイル指定: forte instrument {typed} --from path/to/lib.forte"
+                )
+            })?;
+            (canonical, Some(path))
+        }
     };
-    let src = live_source(call, import.as_deref());
+    let call = format!("{name}{args_part}");
+    let src = live_source(&call, import.as_deref());
     let project = crate::compile_with_loader(&src, &crate::FsLoader, ".").map_err(|ds| {
         ds.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n")
     })?;

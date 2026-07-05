@@ -64,6 +64,7 @@ hardware clones tr808 / tr909 / tb303 / juno60 / sh101 / prophet5 / cr78):
 forte instruments             # all 148 instruments: names, parameters, usage
 forte instruments 808         # filter (by name or by library name)
 forte instruments acid        # brings up the tb303
+forte instruments SubBass     # an exact name (any case) plays it right away
 ```
 
 Every line in the listing can be dropped straight into a song:
