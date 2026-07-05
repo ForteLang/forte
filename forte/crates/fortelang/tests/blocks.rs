@@ -424,3 +424,53 @@ fn block_params_wire_placements_to_instrument_knobs() {
     let dark = digest(&inherited);
     assert_ne!(dark, digest(&base), "the inherited default must change the sound");
 }
+
+const SIXTEENTHS: &str = r#"block Line {
+  key A minor
+  track Lead {
+    instrument prisma(wave: "saw", cutoff: 0.5)
+    play notes`A2:0.25 C3:0.25 E3:0.25 A3:0.25` at bars(1..1)
+  }
+}"#;
+
+#[test]
+fn placement_swing_and_stretch_shape_one_instance() {
+    // swing shifts off-beat 16ths: the same block straight and shuffled
+    // must sound different, and the sibling placement stays straight
+    let swung = format!(
+        "{SIXTEENTHS}\nsong \"S\" {{\n  tempo 120bpm\n  key A minor\n  play Line at bars(1..2)\n  play Line(swing: 0.66) at bars(3..4)\n}}"
+    );
+    let straight = format!(
+        "{SIXTEENTHS}\nsong \"S\" {{\n  tempo 120bpm\n  key A minor\n  play Line at bars(1..2)\n  play Line at bars(3..4)\n}}"
+    );
+    assert_ne!(digest(&swung), digest(&straight), "local swing must reach the notes");
+    // out of range
+    let bad = format!("{RIFF}\nsong \"S\" {{ tempo 120bpm play Riff(swing: 0.9) at bars(1..2) }}");
+    let errs = match fortelang::compile_str(&bad) {
+        Err(e) => e,
+        Ok(_) => panic!("swing 0.9 must be rejected"),
+    };
+    assert!(errs.iter().any(|d| d.code == "E-TYPE-002"), "{errs:?}");
+
+    // stretch: 2 — the one-bar riff fills two bars, notes land twice as late
+    let stretched = format!(
+        "{RIFF}\nsong \"S\" {{\n  tempo 120bpm\n  key A minor\n  play Riff(stretch: 2) at bars(1..2)\n}}"
+    );
+    let p = compile_str(&stretched).unwrap();
+    let lead = p.tracks.iter().find(|t| t.name == "Riff.Lead").unwrap();
+    let clip = &lead.arranger[0];
+    assert!((clip.clip.length - 8.0).abs() < 1e-9, "clip length doubles: {}", clip.clip.length);
+    // A2:1 C3:1 E3:1 A3:1 → the second note starts at beat 2 after stretch
+    assert!(
+        clip.clip.notes.iter().any(|n| (n.start - 2.0).abs() < 1e-9),
+        "note starts double: {:?}",
+        clip.clip.notes.iter().map(|n| n.start).collect::<Vec<_>>()
+    );
+    // stretch out of range
+    let bad = format!("{RIFF}\nsong \"S\" {{ tempo 120bpm play Riff(stretch: 8) at bars(1..2) }}");
+    let errs = match fortelang::compile_str(&bad) {
+        Err(e) => e,
+        Ok(_) => panic!("stretch 8 must be rejected"),
+    };
+    assert!(errs.iter().any(|d| d.code == "E-TYPE-002"), "{errs:?}");
+}

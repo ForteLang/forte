@@ -370,6 +370,8 @@ impl Parser {
                         let mut from = None;
                         let mut to = None;
                         let mut volume = None;
+                        let mut swing = None;
+                        let mut stretch = None;
                         let mut params = Vec::new();
                         if *self.peek() == Tok::LParen {
                             self.bump();
@@ -411,6 +413,14 @@ impl Parser {
                                         let n = self.number("volume(0..1)")?;
                                         volume = Some((n.0, apos));
                                     }
+                                    "swing" => {
+                                        let n = self.number("swing(0.5..0.8)")?;
+                                        swing = Some((n.0, apos));
+                                    }
+                                    "stretch" => {
+                                        let n = self.number("stretch(倍率)")?;
+                                        stretch = Some((n.0, apos));
+                                    }
                                     // anything else is a block param value:
                                     //   play Riff(cutoff: 0.7)
                                     other => {
@@ -438,7 +448,18 @@ impl Parser {
                             let name = self.ident("区間(bars(a..b) かセクション名)")?;
                             AtRef::Section(name, spos)
                         };
-                        song.places.push(PlaceAst { block, key, from, to, volume, params, at, pos });
+                        song.places.push(PlaceAst {
+                            block,
+                            key,
+                            from,
+                            to,
+                            volume,
+                            swing,
+                            stretch,
+                            params,
+                            at,
+                            pos,
+                        });
                     }
                     // body-level automate: fade a placed block instance
                     //   automate Riff.volume from 0 to 1 over intro
