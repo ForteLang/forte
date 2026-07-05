@@ -23,6 +23,10 @@ pub struct FileAst {
 #[derive(Clone, Debug)]
 pub struct BlockAst {
     pub name: String,
+    /// `block Child : Parent { … }` — OOP-style inheritance: the child
+    /// starts from the parent's body and overrides (instrument swaps,
+    /// insert param changes, added effects, replaced patterns).
+    pub parent: Option<(String, Pos)>,
     pub body: SongAst,
     pub pos: Pos,
 }
