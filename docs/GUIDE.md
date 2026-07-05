@@ -182,6 +182,19 @@ play Riff(volume: 0.5) at bars(9..16)          // half volume, this span only
 automate Riff.volume from 0 to 1 over intro    // fade the instance in
 ```
 
+- **Give a block public knobs** — declare `param` (device syntax), use it
+  in the block's instrument args, and set it at the placement:
+
+```forte
+block Riff {
+  param cutoff = 0.5 in 0..1
+  track Acid { instrument Bass303(cutoff: cutoff) … }
+}
+play Riff(cutoff: 0.8) at bars(9..16)   // every placement must agree —
+                                        // for a second sound, inherit:
+block DarkRiff : Riff { param cutoff = 0.15 in 0..1 }
+```
+
 - **Inherit instead of copying** — `block Child : Parent { … }` starts from
   the parent and overrides like a class: swap the instrument, change one
   insert's parameters, add an effect, or replace the pattern:

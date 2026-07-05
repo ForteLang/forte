@@ -176,6 +176,7 @@ impl Parser {
             requires: Vec::new(),
             artist: None,
             place_autos: Vec::new(),
+            params: Vec::new(),
             tempo: None,
             swing: None,
             meter: None,
@@ -255,6 +256,27 @@ impl Parser {
                             song.artist = Some(a);
                         } else {
                             self.err("E-PARSE-023", "artist には文字列が必要です(例: artist \"Forte Essentials\")");
+                        }
+                    }
+                    // the block's public knobs — device syntax:
+                    //   param cutoff = 0.5 in 0..1
+                    "param" => {
+                        self.bump();
+                        let ppos = self.pos();
+                        if let Some(name) = self.ident("param の名前") {
+                            self.expect(Tok::Eq, "`=`");
+                            if let Some((default, _, _)) = self.number("param の既定値") {
+                                let mut range = None;
+                                if self.keyword("in") {
+                                    let a = self.number("範囲の下限");
+                                    self.expect(Tok::DotDot, "`..`");
+                                    let b = self.number("範囲の上限");
+                                    if let (Some(a), Some(b)) = (a, b) {
+                                        range = Some((a.0, b.0));
+                                    }
+                                }
+                                song.params.push(DevParam { name, default, range, pos: ppos });
+                            }
                         }
                     }
                     "tempo" => {
@@ -338,6 +360,7 @@ impl Parser {
                         let mut from = None;
                         let mut to = None;
                         let mut volume = None;
+                        let mut params = Vec::new();
                         if *self.peek() == Tok::LParen {
                             self.bump();
                             loop {
@@ -378,10 +401,12 @@ impl Parser {
                                         let n = self.number("volume(0..1)")?;
                                         volume = Some((n.0, apos));
                                     }
-                                    other => self.err(
-                                        "E-PARSE-022",
-                                        format!("配置引数 '{other}' は不明です(key / from / to / volume)"),
-                                    ),
+                                    // anything else is a block param value:
+                                    //   play Riff(cutoff: 0.7)
+                                    other => {
+                                        let n = self.number(&format!("{other}(param 値)"))?;
+                                        params.push((other.to_string(), n.0, apos));
+                                    }
                                 }
                                 if *self.peek() == Tok::Comma {
                                     self.bump();
@@ -403,7 +428,7 @@ impl Parser {
                             let name = self.ident("区間(bars(a..b) かセクション名)")?;
                             AtRef::Section(name, spos)
                         };
-                        song.places.push(PlaceAst { block, key, from, to, volume, at, pos });
+                        song.places.push(PlaceAst { block, key, from, to, volume, params, at, pos });
                     }
                     // body-level automate: fade a placed block instance
                     //   automate Riff.volume from 0 to 1 over intro

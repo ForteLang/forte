@@ -50,13 +50,15 @@ song      = "song" string body ;                                    (* legacy al
 body      = "{" { bodyItem } "}" ;
 bodyItem  = "desc" string | "tags" string | "license" string
           | "version" string | "requires" string | "artist" string
+          | "param" ident "=" num [ "in" num ".." num ]              (* the block's public knobs *)
           | "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
           | "let" ident "=" musicLit
           | "section" ident "=" "bars" "(" num ".." num ")"
           | track | return | block | place | placeAuto ;
 place     = "play" ident [ "(" placeArg { "," placeArg } ")" ] atRef ;
 placeArg  = "key" ":" string | "from" ":" num | "to" ":" num
-          | "volume" ":" num ;                                       (* scale the instance, this span only *)
+          | "volume" ":" num                                         (* scale the instance, this span only *)
+          | ident ":" num ;                                          (* a declared block param *)
 placeAuto = "automate" ident "." "volume" "from" num "to" num "over" overRef ;
 track     = "track" ident "{" { trackItem } "}" ;
 trackItem = "instrument" call | "insert" call
@@ -296,6 +298,15 @@ it to other blocks. The outermost block you build is "the song".
     from the outside (0 = silent, 1 = the block's own mix). Targets must
     be `<placement>.volume` in v1; unknown placements are E-AUTO-002 with
     the placed names listed.
+  - **Public knobs**: a block declares `param cutoff = 0.5 in 0..1`
+    (device syntax) and references the name in its instrument/insert args
+    (`instrument Bass303(cutoff: cutoff)`). A placement sets it with
+    `play Riff(cutoff: 0.7)` — unknown names are E-BLOCK-005 listing the
+    declared ones, out-of-range values are E-TYPE-002. Because instances
+    of one block share tracks, every placement of a block must agree on
+    its knob values (E-BLOCK-005 otherwise — inherit with
+    `block Dark : Riff { param cutoff = 0.1 in 0..1 }` for a different
+    sound). Inheritance replaces same-name param declarations.
 - **The block above always wins**: the root's `tempo` / `swing` / `meter` /
   `key` govern the entire render. A placed block's own `tempo` is ignored;
   its own `key` is the *reference* its transposition is computed from.

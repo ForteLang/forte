@@ -372,3 +372,55 @@ fn placement_automation_fades_an_instance_in() {
     };
     assert!(errs.iter().any(|d| d.code == "E-AUTO-002" && d.message.contains("volume")), "{errs:?}");
 }
+
+#[test]
+fn block_params_wire_placements_to_instrument_knobs() {
+    const KNOB: &str = r#"block Knob {
+  param cutoff = 0.5 in 0..1
+  track Lead {
+    instrument prisma(wave: "saw", cutoff: cutoff)
+    play notes`A2:1` at bars(1..1)
+  }
+}"#;
+    // default value vs an override must change the sound (different digest)
+    let base = format!("{KNOB}\nsong \"S\" {{ tempo 120bpm play Knob at bars(1..2) }}");
+    let hot = format!("{KNOB}\nsong \"S\" {{ tempo 120bpm play Knob(cutoff: 0.9) at bars(1..2) }}");
+    assert_ne!(digest(&base), digest(&hot), "the param must reach the instrument");
+    // explicit default = the same sound
+    let explicit = format!("{KNOB}\nsong \"S\" {{ tempo 120bpm play Knob(cutoff: 0.5) at bars(1..2) }}");
+    assert_eq!(digest(&base), digest(&explicit));
+
+    // unknown param name → the declared ones are listed
+    let bad = format!("{KNOB}\nsong \"S\" {{ tempo 120bpm play Knob(reso: 0.9) at bars(1..2) }}");
+    let errs = match fortelang::compile_str(&bad) {
+        Err(e) => e,
+        Ok(_) => panic!("unknown param must be rejected"),
+    };
+    assert!(errs.iter().any(|d| d.code == "E-BLOCK-005" && d.message.contains("cutoff")), "{errs:?}");
+
+    // out of the declared range
+    let oob = format!("{KNOB}\nsong \"S\" {{ tempo 120bpm play Knob(cutoff: 1.5) at bars(1..2) }}");
+    let errs = match fortelang::compile_str(&oob) {
+        Err(e) => e,
+        Ok(_) => panic!("out-of-range param must be rejected"),
+    };
+    assert!(errs.iter().any(|d| d.code == "E-TYPE-002"), "{errs:?}");
+
+    // same block, different knob values → tracks are shared, so refuse and
+    // point at inheritance
+    let conflict = format!(
+        "{KNOB}\nsong \"S\" {{ tempo 120bpm play Knob(cutoff: 0.2) at bars(1..2) play Knob(cutoff: 0.9) at bars(3..4) }}"
+    );
+    let errs = match fortelang::compile_str(&conflict) {
+        Err(e) => e,
+        Ok(_) => panic!("conflicting param values must be rejected"),
+    };
+    assert!(errs.iter().any(|d| d.code == "E-BLOCK-005" && d.message.contains("継承")), "{errs:?}");
+
+    // inheritance can override the DEFAULT instead
+    let inherited = format!(
+        "{KNOB}\nblock Dark : Knob {{ param cutoff = 0.1 in 0..1 }}\nsong \"S\" {{ tempo 120bpm play Dark at bars(1..2) }}"
+    );
+    let dark = digest(&inherited);
+    assert_ne!(dark, digest(&base), "the inherited default must change the sound");
+}
