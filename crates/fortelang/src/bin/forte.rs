@@ -793,19 +793,13 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
     use dawcore::command::Command;
     use dawcore::model::Project;
     use dawcore::sync::full_sync;
-    use std::io::Write as _;
+    use std::io::{IsTerminal, Write as _};
     use std::time::{Duration, Instant, SystemTime};
 
-    fn compile_file(path: &str) -> Result<Project, ExitCode> {
-        let src = load(path)?;
-        fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base_dir(path)).map_err(
-            |diags| {
-                for d in &diags {
-                    eprintln!("{path}:{d}");
-                }
-                ExitCode::FAILURE
-            },
-        )
+    fn compile_file(path: &str) -> Result<Project, Vec<String>> {
+        let src = std::fs::read_to_string(path).map_err(|e| vec![format!("{path}: {e}")])?;
+        fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base_dir(path))
+            .map_err(|diags| diags.iter().map(|d| format!("{path}:{d}")).collect())
     }
     fn apply(handle: &mut dawcore::engine::EngineHandle, p: &Project, prev_slots: usize) {
         full_sync(handle, p);
@@ -820,52 +814,83 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
         std::fs::metadata(path).and_then(|m| m.modified()).ok()
     }
 
-    /// The console timeline: one lane per track, bars mapped onto LANE_W
-    /// cells — see at a glance which track enters when and where the song ends.
-    fn print_timeline(p: &Project) {
-        const LANE_W: usize = 40;
+    const LANE_W: usize = 40;
+
+    /// One frame of the in-place UI: header, per-track lanes with the
+    /// playhead running through them (sounding tracks highlighted), status.
+    fn render(p: &Project, pos: f64, loops: i64, peak: f32, message: &str) -> Vec<String> {
         let bpb = p.time_sig.0 as f64 * 4.0 / p.time_sig.1 as f64;
-        let len_beats = dawcore::bounce::arrangement_len(p);
+        let len_beats = dawcore::bounce::arrangement_len(p).max(1.0);
         let bars = (len_beats / bpb).ceil().max(1.0);
-        let secs = len_beats * 60.0 / p.tempo;
-        println!(
-            "♪ {} bpm {}/{} — {} bars({}:{:02.0})  ファイル保存で即反映、Ctrl+C で終了",
+        let total = len_beats * 60.0 / p.tempo;
+        let mut out = Vec::with_capacity(p.tracks.len() + 3);
+        out.push(format!(
+            "♪ {} bpm {}/{} — {} bars({}:{:04.1})  save = hot reload, Ctrl+C = quit",
             p.tempo,
             p.time_sig.0,
             p.time_sig.1,
             bars as i64,
-            (secs / 60.0) as i64,
-            secs % 60.0,
-        );
+            (total / 60.0) as i64,
+            total % 60.0,
+        ));
+        let frac = (pos / len_beats).clamp(0.0, 1.0);
+        let head_col = ((frac * LANE_W as f64) as usize).min(LANE_W - 1);
         let name_w = p.tracks.iter().map(|t| t.name.chars().count()).max().unwrap_or(4).max(4);
         for t in &p.tracks {
             let mut lane = ['·'; LANE_W];
+            let mut active = false;
             for a in &t.arranger {
                 let s = ((a.start / len_beats) * LANE_W as f64).floor() as usize;
                 let e = (((a.start + a.duration) / len_beats) * LANE_W as f64).ceil() as usize;
                 for c in lane.iter_mut().take(e.min(LANE_W)).skip(s.min(LANE_W)) {
                     *c = '█';
                 }
+                if pos >= a.start && pos < a.start + a.duration {
+                    active = true;
+                }
             }
+            // the playhead cuts through every lane
+            lane[head_col] = if lane[head_col] == '█' { '┃' } else { '╎' };
+            let lane_str: String = lane.iter().collect();
             let inst = if t.kind == dawcore::model::TrackKind::Effect {
                 "(return)".to_string()
             } else {
                 t.devices.first().map(|d| d.kind.label().to_string()).unwrap_or_default()
             };
-            println!(
-                "  {:<name_w$} ▕{}▏ {}",
-                t.name,
-                lane.iter().collect::<String>(),
-                inst,
-            );
+            if active {
+                out.push(format!("\x1b[1m▶ {:<name_w$} ▕{lane_str}▏ {inst}\x1b[0m", t.name));
+            } else {
+                out.push(format!("\x1b[2m  {:<name_w$} ▕{lane_str}▏ {inst}\x1b[0m", t.name));
+            }
         }
+        let bar = (pos / bpb).floor() as i64 + 1;
+        let beat = (pos % bpb).floor() as i64 + 1;
+        let secs = pos * 60.0 / p.tempo;
+        out.push(format!(
+            "▶ bar {bar:>3}.{beat}  {}:{:04.1} / {}:{:04.1}{}  peak {peak:>4.2}",
+            (secs / 60.0) as i64,
+            secs % 60.0,
+            (total / 60.0) as i64,
+            total % 60.0,
+            if loops > 0 { format!("  loop {}", loops + 1) } else { String::new() },
+        ));
+        if !message.is_empty() {
+            out.push(message.to_string());
+        }
+        out
     }
 
     let mut project = match compile_file(path) {
         Ok(p) => p,
-        Err(c) => return c,
+        Err(errs) => {
+            for e in errs {
+                eprintln!("{e}");
+            }
+            return ExitCode::FAILURE;
+        }
     };
     let mut audio = fortelang::audio::start();
+    let tty = std::io::stdout().is_terminal();
     if audio.silent {
         eprintln!("audio: 出力デバイスなし — 無音バックエンドで走行します({})", audio.device_name);
     } else {
@@ -874,17 +899,16 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
     apply(&mut audio.handle, &project, 0);
     audio.handle.send(Command::Play);
     println!("playing: \"{path}\"");
-    print_timeline(&project);
 
     let started = Instant::now();
     let mut last_mtime = mtime(path);
     let mut last_status = Instant::now();
-    let mut bpb = project.time_sig.0 as f64 * 4.0 / project.time_sig.1 as f64;
-    let mut len_beats = dawcore::bounce::arrangement_len(&project).max(1.0);
     let mut loops = 0i64;
     let mut last_pos = 0.0f64;
+    let mut drawn = 0usize;
+    let mut message = String::new();
     loop {
-        std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(50));
         audio.handle.collect_garbage();
 
         // hot reload on mtime change
@@ -895,59 +919,53 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
                 Ok(p) => {
                     let prev = project.tracks.len();
                     apply(&mut audio.handle, &p, prev);
-                    bpb = p.time_sig.0 as f64 * 4.0 / p.time_sig.1 as f64;
-                    len_beats = dawcore::bounce::arrangement_len(&p).max(1.0);
-                    println!("\nreloaded:");
-                    print_timeline(&p);
                     project = p;
+                    message = format!("reloaded ✓ ({} tracks)", project.tracks.len());
                 }
-                Err(_) => {
-                    println!("(エラーのため直前の版を再生し続けます)");
+                Err(errs) => {
+                    // keep playing the previous version; show the first error
+                    message = format!(
+                        "✗ {}(直前の版を再生し続けます)",
+                        errs.first().cloned().unwrap_or_default()
+                    );
                 }
             }
         }
 
-        if last_status.elapsed() >= Duration::from_millis(200) {
+        if last_status.elapsed() >= Duration::from_millis(if tty { 100 } else { 2000 }) {
             last_status = Instant::now();
             let pos = audio.handle.shared.position_beats();
             if pos < last_pos - 1.0 {
                 loops += 1; // the loop wrapped
             }
             last_pos = pos;
-            let bar = (pos / bpb).floor() as i64 + 1;
-            let beat = (pos % bpb).floor() as i64 + 1;
-            // progress bar over the arrangement
-            const PROG_W: usize = 24;
-            let frac = (pos / len_beats).clamp(0.0, 1.0);
-            let filled = (frac * PROG_W as f64).round() as usize;
-            let bar_str: String =
-                (0..PROG_W).map(|i| if i < filled { '█' } else { '░' }).collect();
-            // which tracks are sounding right now (clip covers the playhead)
-            let mut active = String::new();
-            for t in &project.tracks {
-                if t.arranger.iter().any(|a| pos >= a.start && pos < a.start + a.duration) {
-                    if !active.is_empty() {
-                        active.push(' ');
-                    }
-                    if active.chars().count() + t.name.chars().count() > 32 {
-                        active.push('…');
-                        break;
-                    }
-                    active.push_str(&t.name);
+            let peak = audio.handle.shared.master_peak();
+            if tty {
+                // in-place redraw: jump to the top of the block, wipe, repaint
+                let frame = render(&project, pos, loops, peak, &message);
+                let mut out = String::new();
+                if drawn > 0 {
+                    out.push_str(&format!("\x1b[{drawn}A"));
                 }
+                out.push_str("\r\x1b[J");
+                for line in &frame {
+                    out.push_str(line);
+                    out.push('\n');
+                }
+                drawn = frame.len();
+                print!("{out}");
+                let _ = std::io::stdout().flush();
+            } else {
+                // piped: one plain line, no ANSI, no accumulation games
+                let bpb = project.time_sig.0 as f64 * 4.0 / project.time_sig.1 as f64;
+                println!(
+                    "bar {:.0}.{:.0} peak {peak:.2}{}",
+                    (pos / bpb).floor() + 1.0,
+                    (pos % bpb).floor() + 1.0,
+                    if message.is_empty() { String::new() } else { format!("  {message}") }
+                );
+                message.clear();
             }
-            let secs = pos * 60.0 / project.tempo;
-            let total = len_beats * 60.0 / project.tempo;
-            print!(
-                "\r▶ bar {bar:>3}.{beat} ▕{bar_str}▏ {}:{:02.0}/{}:{:02.0}{} peak {:>4.2} [{active}]\x1b[K",
-                (secs / 60.0) as i64,
-                secs % 60.0,
-                (total / 60.0) as i64,
-                total % 60.0,
-                if loops > 0 { format!(" loop{}", loops + 1) } else { String::new() },
-                audio.handle.shared.master_peak(),
-            );
-            let _ = std::io::stdout().flush();
         }
 
         if let Some(t) = for_secs {
