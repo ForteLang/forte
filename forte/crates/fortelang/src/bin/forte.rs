@@ -169,7 +169,10 @@ fn main() -> ExitCode {
                     args.get(2).cloned().unwrap_or_default(),
                     |acc, a| format!("{acc} {a}"),
                 )),
-                _ => Err("usage: forte package <add SRC | list | verify | search [QUERY]>".into()),
+                Some("sounddiff") if args.len() >= 4 => {
+                    fortelang::package::sounddiff(&args[2], &args[3])
+                }
+                _ => Err("usage: forte package <add SRC | list | verify | search [QUERY] | sounddiff OLD NEW>".into()),
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
@@ -362,6 +365,7 @@ fn main() -> ExitCode {
             eprintln!("       forte package list          (導入済み package の一覧と説明)");
             eprintln!("       forte package verify        (packages/ が lock どおりかを digest で検証)");
             eprintln!("       forte package search [QUERY] (GitHub の topic:forte-package を検索)");
+            eprintln!("       forte package sounddiff <OLD> <NEW> (どの音が変わったか + version bump 提案)");
             eprintln!("       forte remote add <github:owner/repo | git-URL>  (プロジェクトを GitHub と接続)");
             eprintln!("       forte push [-m \"メッセージ\"]   (プロジェクト全体を origin へ。これが配信)");
             eprintln!("       forte pull                  (origin から取り込み)");

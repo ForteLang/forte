@@ -134,3 +134,38 @@ fn search_rendering_speaks_the_add_command() {
     let none = fortelang::package::render_search(r#"{"total_count":0,"items":[]}"#).unwrap();
     assert!(none.contains("ありません"), "{none}");
 }
+
+#[test]
+fn sounddiff_recommends_the_honest_bump() {
+    let base = std::env::temp_dir().join(format!("forte-sounddiff-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let mk = |ver: &str, blocks: &[(&str, &str)]| {
+        let root = base.join(ver);
+        std::fs::create_dir_all(root.join("blocks")).unwrap();
+        std::fs::write(root.join("package.forte"), "block P { desc \"p\" }\n").unwrap();
+        for (name, body) in blocks {
+            std::fs::write(root.join("blocks").join(format!("{name}.forte")), body).unwrap();
+        }
+        root
+    };
+    const GROOVE: &str = "block Groove {\n  track D { instrument sampler(sample: \"Kick\") play beat`x---` at bars(1..1) }\n}\n";
+
+    // comments only → patch (models identical)
+    let v1 = mk("v1", &[("groove", GROOVE)]);
+    let v2 = mk("v2", &[("groove", &format!("// re-commented, same sound\n{GROOVE}"))]);
+    let (ok, out, err) = forte(&base, &["package", "sounddiff", &v1.to_string_lossy(), &v2.to_string_lossy()]);
+    assert!(ok, "{err}");
+    assert!(out.contains("patch"), "comment-only must be patch: {out}");
+
+    // a new block → minor
+    let v3 = mk("v3", &[("groove", GROOVE), ("extra", &GROOVE.replace("Groove", "Extra"))]);
+    let (_, out, _) = forte(&base, &["package", "sounddiff", &v1.to_string_lossy(), &v3.to_string_lossy()]);
+    assert!(out.contains("minor") && out.contains("added"), "additions are minor: {out}");
+
+    // the pattern changes → major
+    let v4 = mk("v4", &[("groove", &GROOVE.replace("x---", "x-x-"))]);
+    let (_, out, _) = forte(&base, &["package", "sounddiff", &v1.to_string_lossy(), &v4.to_string_lossy()]);
+    assert!(out.contains("major") && out.contains("changed"), "sound changes are major: {out}");
+
+    let _ = std::fs::remove_dir_all(&base);
+}

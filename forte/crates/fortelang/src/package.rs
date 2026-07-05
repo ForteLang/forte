@@ -285,6 +285,122 @@ pub fn verify() -> Result<(), String> {
     }
 }
 
+/// Every sounding root in a package file: the song, or each top-level block
+/// (a block library builds its LAST block, so each block is rotated into
+/// root position and compiled on its own).
+fn file_model_hashes(path: &Path) -> Result<Vec<(String, String)>, String> {
+    let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let base = path.parent().unwrap_or(Path::new("")).to_string_lossy().into_owned();
+    let parsed = crate::parser::parse(&src)
+        .map_err(|ds| format!("{}: {}", path.display(), ds.first().map(|d| d.to_string()).unwrap_or_default()))?;
+    let hash_project = |p: &dawcore::model::Project| -> String {
+        format!("{:016x}", crate::fnv1a64(serde_json::to_string(p).unwrap_or_default().as_bytes()))
+    };
+    let mut out = Vec::new();
+    if parsed.song.is_some() {
+        match crate::compile_with_loader(&src, &crate::FsLoader, &base) {
+            Ok(p) => out.push(("song".into(), hash_project(&p))),
+            Err(_) => out.push(("song".into(), "broken".into())),
+        }
+        return Ok(out);
+    }
+    // rotate each block into root position by appending a one-placement song
+    for b in &parsed.blocks {
+        let probe = format!(
+            "{src}\nsong \"__probe\" {{\n  tempo 120bpm\n  play {} at bars(1..1)\n}}\n",
+            b.name
+        );
+        match crate::compile_with_loader(&probe, &crate::FsLoader, &base) {
+            Ok(p) => out.push((b.name.clone(), hash_project(&p))),
+            Err(_) => out.push((b.name.clone(), "broken".into())),
+        }
+    }
+    Ok(out)
+}
+
+/// `forte package sounddiff <OLD_DIR> <NEW_DIR>` — which sounds changed
+/// between two versions of a package, and the version bump that means.
+/// blocks/ and songs/ are compared by compiled-MODEL digest (comment and
+/// formatting edits stay "unchanged"); instruments/ by source bytes.
+pub fn sounddiff(old: &str, new: &str) -> Result<(), String> {
+    let mut changed = 0usize;
+    let mut added = 0usize;
+    let mut removed = 0usize;
+
+    let list = |root: &Path, sub: &str| -> Vec<String> {
+        let mut v: Vec<String> = std::fs::read_dir(root.join(sub))
+            .map(|rd| {
+                rd.flatten()
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .filter(|n| n.ends_with(".forte"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        v.sort();
+        v
+    };
+
+    for sub in ["blocks", "songs", "instruments"] {
+        let old_root = Path::new(old);
+        let new_root = Path::new(new);
+        let a = list(old_root, sub);
+        let b = list(new_root, sub);
+        for f in &a {
+            if !b.contains(f) {
+                println!("removed  : {sub}/{f}");
+                removed += 1;
+            }
+        }
+        for f in &b {
+            if !a.contains(f) {
+                println!("added    : {sub}/{f}");
+                added += 1;
+                continue;
+            }
+            let (op, np) = (old_root.join(sub).join(f), new_root.join(sub).join(f));
+            if sub == "instruments" {
+                // devices have no single sounding root — compare source bytes
+                let same = std::fs::read(&op).ok() == std::fs::read(&np).ok();
+                if !same {
+                    println!("changed  : {sub}/{f}(ソース)");
+                    changed += 1;
+                }
+                continue;
+            }
+            let (ha, hb) = (file_model_hashes(&op)?, file_model_hashes(&np)?);
+            for (name, h) in &hb {
+                match ha.iter().find(|(n, _)| n == name) {
+                    Some((_, old_h)) if old_h != h => {
+                        println!("changed  : {sub}/{f} — {name}(model {old_h} → {h})");
+                        changed += 1;
+                    }
+                    Some(_) => {}
+                    None => {
+                        println!("added    : {sub}/{f} — {name}");
+                        added += 1;
+                    }
+                }
+            }
+            for (name, _) in &ha {
+                if !hb.iter().any(|(n, _)| n == name) {
+                    println!("removed  : {sub}/{f} — {name}");
+                    removed += 1;
+                }
+            }
+        }
+    }
+
+    let bump = if changed > 0 || removed > 0 {
+        "major(音が変わる/消える変更があります)"
+    } else if added > 0 {
+        "minor(追加のみ。既存の音は不変)"
+    } else {
+        "patch(モデル不変 — コメント・整形のみ)"
+    };
+    println!("→ recommended bump: {bump}");
+    Ok(())
+}
+
 /// Render the GitHub search response for `forte package search`.
 /// Split from the HTTP call so the formatting is testable offline.
 pub fn render_search(json: &str) -> Result<String, String> {

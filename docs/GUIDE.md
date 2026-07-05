@@ -696,6 +696,19 @@ from its own `package.forte` — and every player shows them. Declare
 `sponsor "https://github.com/sponsors/you"` in your meta block and every
 song built from your instruments carries your support link.
 
+**Versioning that speaks sound**: before bumping `version`, ask what
+actually changed:
+
+```bash
+forte package sounddiff ../old-checkout .   # compare two versions
+# changed  : blocks/acid-line.forte — AcidLine(model 3f… → 91…)
+# → recommended bump: major(音が変わる/消える変更があります)
+```
+
+blocks/ and songs/ are compared by **compiled-model digest** — comment
+and formatting edits stay "unchanged" (patch); additions alone are
+minor; a changed or removed sound is major.
+
 **Being found**: give your GitHub repository the topic **`forte-package`**
 and it becomes discoverable:
 
