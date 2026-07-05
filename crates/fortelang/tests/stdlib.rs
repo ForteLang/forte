@@ -25,6 +25,7 @@ fn every_std_library_validates() {
         ("sh101", 3),
         ("prophet5", 3),
         ("cr78", 8),
+        ("tr909", 11),
     ];
     let mut total = 0;
     for (name, count) in expected {
@@ -42,7 +43,7 @@ fn every_std_library_validates() {
             ),
         }
     }
-    assert_eq!(total, 137, "the standard library ships 137 instruments");
+    assert_eq!(total, 148, "the standard library ships 148 instruments");
 }
 
 #[test]
