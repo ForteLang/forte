@@ -301,6 +301,50 @@ try {
     recovered.includes('take-2.frec') && !recovered.includes('.recording.pcm'),
     recovered.join(', ')
   );
+
+  // 11) zero-install player: player.html?src=….fortesong unpacks the
+  //     container, verifies the files digest, compiles and PLAYS — with a
+  //     ../-climbing import (smiley-acid) to prove the module rebase
+  const track = encodeURIComponent(
+    '../../packages/essentials_0.6.0/albums/first-light/04-smiley-acid.fortesong'
+  );
+  await page.goto(`http://127.0.0.1:${PORT}/forte/web/player.html?src=${track}`, {
+    waitUntil: 'load',
+  });
+  await page.waitForFunction(
+    () => document.querySelectorAll('.trk').length === 1,
+    null,
+    { timeout: 15000 }
+  );
+  await page.click('#toggle');
+  await page.waitForFunction(
+    () => /\d+:\d+ \/ \d+:\d+/.test(document.getElementById('time').textContent),
+    null,
+    { timeout: 20000 }
+  );
+  const trackName = await page.textContent('#t-name');
+  check('player loads the .fortesong meta', trackName === 'Smiley Acid', trackName);
+  const p1 = await page.textContent('#time');
+  await page.waitForTimeout(1500);
+  const p2 = await page.textContent('#time');
+  check('player transport advances', p1 !== p2, `${p1} → ${p2}`);
+  const audible = await page.evaluate(async () => {
+    // tap the worklet's pos messages for a real peak reading
+    return await new Promise((res) => {
+      let peak = 0;
+      const t = setTimeout(() => res(peak), 2500);
+      const orig = node.port.onmessage;
+      node.port.onmessage = (e) => {
+        if (e.data.kind === 'pos') peak = Math.max(peak, e.data.peak);
+        orig(e);
+        if (peak > 0.02) {
+          clearTimeout(t);
+          res(peak);
+        }
+      };
+    });
+  });
+  check('player playback is audible', audible > 0.02, `peak ${audible.toFixed(3)}`);
 } finally {
   await browser.close();
   server.kill();

@@ -1,10 +1,11 @@
 // Service worker: precache the whole editor so it works fully offline
 // (SYS-NFR-001 — sharing is packages on GitHub, never a dependency for composing).
-const CACHE = 'forte-v12';
+const CACHE = 'forte-v13';
 const ASSETS = [
   './',
   './index.html',
   './catalog.html',
+  './player.html',
   './main.js',
   './viz.js',
   './storage.js',

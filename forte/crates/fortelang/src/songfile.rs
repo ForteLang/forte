@@ -160,6 +160,8 @@ pub fn build(entry: &str) -> Result<(Vec<u8>, String), String> {
         "render": {
             "sample_rate": 48000,
             "seconds": info.seconds,
+            "tempo": project.tempo,
+            "len_beats": dawcore::bounce::arrangement_len(&project),
             "f32_digest_fnv1a64": digest,
         },
         "files_digest_fnv1a64": files_digest(&files),

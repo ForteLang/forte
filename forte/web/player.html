@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forte Player — .fortesong をブラウザで</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #16181d; color: #d7dae0;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    background: #1e2128; border-bottom: 1px solid #2b2f38; }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: 2px; color: #e8b34c; }
+  header span { font-size: 12px; color: #8a919e; }
+  #logo { width: 26px; height: 26px; margin-right: -6px; }
+  a.back { color: #e8b34c; font-size: 12px; margin-left: auto; text-decoration: none; }
+  main { max-width: 720px; margin: 0 auto; padding: 22px 16px; }
+  #now h2 { margin: 0 0 2px; font-size: 20px; }
+  #now .artist { color: #e8b34c; font-size: 13px; }
+  #now .desc { color: #8a919e; font-size: 13px; margin-top: 6px; }
+  #now .proof { color: #566070; font-size: 11px; font-family: ui-monospace, monospace; margin-top: 6px; }
+  #transport { display: flex; align-items: center; gap: 10px; margin: 18px 0 6px; }
+  button { background: #2b2f38; color: #d7dae0; border: 1px solid #3a3f4b;
+    border-radius: 8px; padding: 8px 18px; font-size: 15px; cursor: pointer; }
+  button.primary { background: #e8b34c; color: #16181d; border-color: #e8b34c; font-weight: 700; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  #bar-wrap { flex: 1; height: 8px; background: #23262e; border-radius: 99px; overflow: hidden; }
+  #bar { height: 100%; width: 0%; background: #e8b34c; }
+  #time { font: 12px/1 ui-monospace, monospace; color: #8a919e; min-width: 86px; text-align: right; }
+  #tracks { margin-top: 18px; }
+  .trk { display: flex; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    font-size: 14px; color: #b6bcc6; align-items: baseline; }
+  .trk:hover { background: #1e2128; }
+  .trk.on { background: #1e2128; color: #fff; font-weight: 600; }
+  .trk .n { color: #566070; font: 12px/1 ui-monospace, monospace; min-width: 18px; }
+  .trk .len { margin-left: auto; font: 12px/1 ui-monospace, monospace; color: #8a919e; }
+  #drop { border: 1px dashed #3a3f4b; border-radius: 10px; padding: 26px; text-align: center;
+    color: #8a919e; font-size: 13px; margin-top: 20px; }
+  #drop.hot { border-color: #e8b34c; color: #e8b34c; }
+  #status { font-size: 12px; color: #8a919e; margin-top: 12px; min-height: 1.2em; }
+  .hint code { color: #b6bcc6; }
+</style>
+</head>
+<body>
+<header>
+  <img id="logo" src="logo.svg" alt=""><h1>FORTE PLAYER</h1>
+  <span>WAV ではなくコード。あなたのブラウザが決定論レンダーで演奏します。</span>
+  <a class="back" href="catalog.html">📦 カタログ</a>
+</header>
+<main>
+  <div id="now" hidden>
+    <h2 id="t-name"></h2>
+    <div class="artist" id="t-artist"></div>
+    <div class="desc" id="t-desc"></div>
+    <div class="proof" id="t-proof"></div>
+  </div>
+  <div id="transport" hidden>
+    <button id="prev" title="前の曲">⏮</button>
+    <button id="toggle" class="primary" title="再生/一時停止">▶</button>
+    <button id="next" title="次の曲">⏭</button>
+    <div id="bar-wrap"><div id="bar"></div></div>
+    <div id="time"></div>
+  </div>
+  <div id="tracks"></div>
+  <div id="drop">.fortesong ファイルをここにドロップ(複数でプレイリスト)<br>
+    <span class="hint">または <code>player.html?src=path/to/song.fortesong</code></span></div>
+  <div id="status"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const status = (m) => { $('status').textContent = m; };
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+// ---- store-only zip reader (the exact format zip.rs writes) -----------------
+function unzip(buf) {
+  const v = new DataView(buf);
+  const bytes = new Uint8Array(buf);
+  const files = new Map();
+  let off = 0;
+  while (off + 4 <= buf.byteLength && v.getUint32(off, true) === 0x04034b50) {
+    const method = v.getUint16(off + 8, true);
+    const csize = v.getUint32(off + 18, true);
+    const nlen = v.getUint16(off + 26, true);
+    const xlen = v.getUint16(off + 28, true);
+    const name = new TextDecoder().decode(bytes.subarray(off + 30, off + 30 + nlen));
+    const start = off + 30 + nlen + xlen;
+    if (method !== 0) throw new Error('store-only zip expected');
+    files.set(name, bytes.slice(start, start + csize));
+    off = start + csize;
+  }
+  if (!files.size) throw new Error('.fortesong を読めません(zip ではない?)');
+  return files;
+}
+
+// ---- FNV-1a 64 over sorted (path, bytes) — the manifest's files digest ------
+function filesDigest(files) {
+  let h = 0xcbf29ce484222325n;
+  const P = 0x100000001b3n, M = 0xffffffffffffffffn;
+  const upd = (bs) => { for (const b of bs) { h ^= BigInt(b); h = (h * P) & M; } };
+  const enc = new TextEncoder();
+  for (const name of [...files.keys()].sort()) {
+    upd(enc.encode(name)); upd([0]); upd(files.get(name)); upd([0]);
+  }
+  return h.toString(16).padStart(16, '0');
+}
+
+// rebase every packed path relative to the entry's directory (imports may
+// climb with ../ — the wasm compiler resolves against base_dir "")
+function relFromEntry(entry, path) {
+  const dir = entry.split('/').slice(0, -1);
+  const parts = path.split('/');
+  let i = 0;
+  while (i < dir.length && i < parts.length - 1 && dir[i] === parts[i]) i++;
+  return '../'.repeat(dir.length - i) + parts.slice(i).join('/');
+}
+
+function toBase64(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) {
+    s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  }
+  return btoa(s);
+}
+
+// ---- load a .fortesong into a playlist track --------------------------------
+function parseSong(buf, label) {
+  const files = unzip(buf);
+  const manifest = JSON.parse(new TextDecoder().decode(files.get('fortesong.manifest.json')));
+  files.delete('fortesong.manifest.json');
+  const expect = manifest.files_digest_fnv1a64 || '';
+  if (expect && filesDigest(files) !== expect) {
+    throw new Error(`${label}: ソースが改竄されています(digest 不一致)`);
+  }
+  const entry = manifest.entry;
+  const modules = {}, assets = {};
+  const dec = new TextDecoder();
+  for (const [name, data] of files) {
+    const rel = relFromEntry(entry, name);
+    if (name.endsWith('.frec')) assets[rel] = toBase64(data);
+    else modules[rel] = dec.decode(data);
+  }
+  return {
+    label,
+    name: manifest.name || label,
+    artist: manifest.artist || '',
+    desc: manifest.desc || '',
+    seconds: manifest.render?.seconds || 0,
+    tempo: manifest.render?.tempo || 120,
+    lenBeats: manifest.render?.len_beats || 0,
+    digest: manifest.render?.f32_digest_fnv1a64 || '',
+    text: modules[entry.split('/').pop()] ?? dec.decode(files.get(entry)),
+    modules, assets,
+  };
+}
+
+// ---- audio: the editor's worklet, unchanged ---------------------------------
+let ac, node, wasmBytes;
+async function ensureAudio() {
+  if (ac) return;
+  wasmBytes = await (await fetch('forte.wasm')).arrayBuffer();
+  ac = new AudioContext({ sampleRate: 48000, latencyHint: 'playback' });
+  const src = await (await fetch('worklet.js')).text();
+  const blobUrl = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  await ac.audioWorklet.addModule(blobUrl);
+  node = new AudioWorkletNode(ac, 'forte', { outputChannelCount: [2] });
+  node.connect(ac.destination);
+  await new Promise((res) => {
+    node.port.onmessage = (e) => e.data.kind === 'ready' && res();
+    node.port.postMessage({ cmd: 'init', wasm: wasmBytes.slice(0) });
+  });
+  node.port.onmessage = onWorklet;
+}
+
+// ---- player state ------------------------------------------------------------
+const playlist = [];
+let cur = -1, playing = false, lastBeats = 0;
+
+function onWorklet(e) {
+  const m = e.data;
+  if (m.kind === 'err') { status(`worklet error: ${m.message}`); return; }
+  if (m.kind === 'compiled') {
+    if (m.diagCount > 0) status(`compile failed: ${m.diagCount} diagnostics`);
+    return;
+  }
+  if (m.kind !== 'pos' || cur < 0 || !playing) return;
+  const t = playlist[cur];
+  // the engine loops the arrangement — a wrap means the track ended
+  if (t.lenBeats > 0 && m.beats < lastBeats - 1) { next(); return; }
+  lastBeats = m.beats;
+  const secs = (m.beats * 60) / t.tempo;
+  const total = t.seconds || 1;
+  $('bar').style.width = `${Math.min(100, (secs / total) * 100)}%`;
+  $('time').textContent = `${mmss(Math.min(secs, total))} / ${mmss(total)}`;
+}
+
+function renderList() {
+  $('tracks').innerHTML = playlist
+    .map(
+      (t, i) => `<div class="trk${i === cur ? ' on' : ''}" data-i="${i}">
+        <span class="n">${String(i + 1).padStart(2, '0')}</span>
+        <span>${t.name}</span>
+        <span class="len">${mmss(t.seconds)}</span></div>`
+    )
+    .join('');
+  document.querySelectorAll('.trk').forEach((el) => {
+    el.onclick = () => play(Number(el.dataset.i));
+  });
+}
+
+async function play(i) {
+  if (!playlist.length) return;
+  cur = ((i % playlist.length) + playlist.length) % playlist.length;
+  const t = playlist[cur];
+  await ensureAudio();
+  await ac.resume();
+  const enc = new TextEncoder();
+  node.port.postMessage({
+    cmd: 'src',
+    text: enc.encode(t.text),
+    modules: enc.encode(JSON.stringify(t.modules)),
+    assets: enc.encode(JSON.stringify(t.assets)),
+  });
+  node.port.postMessage({ cmd: 'play' });
+  playing = true;
+  lastBeats = 0;
+  $('now').hidden = false;
+  $('transport').hidden = false;
+  $('t-name').textContent = t.name;
+  $('t-artist').textContent = t.artist;
+  $('t-desc').textContent = t.desc;
+  $('t-proof').textContent = t.digest ? `build digest ${t.digest} — 同じコードは誰の環境でも同じ音` : '';
+  $('toggle').textContent = '⏸';
+  renderList();
+  status('');
+}
+const next = () => play(cur + 1);
+const prev = () => play(cur - 1);
+
+$('next').onclick = next;
+$('prev').onclick = prev;
+$('toggle').onclick = async () => {
+  if (cur < 0) { play(0); return; }
+  if (playing) { await ac.suspend(); playing = false; $('toggle').textContent = '▶'; }
+  else { await ac.resume(); playing = true; $('toggle').textContent = '⏸'; }
+};
+
+// ---- intake: URL params + drag & drop ----------------------------------------
+async function addFromUrl(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  const label = decodeURIComponent(url.split('/').pop().replace(/\.fortesong$/, ''));
+  playlist.push(parseSong(await res.arrayBuffer(), label));
+}
+
+const drop = $('drop');
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('hot'); };
+drop.ondragleave = () => drop.classList.remove('hot');
+drop.ondrop = async (e) => {
+  e.preventDefault();
+  drop.classList.remove('hot');
+  for (const f of e.dataTransfer.files) {
+    if (!f.name.endsWith('.fortesong')) continue;
+    try {
+      playlist.push(parseSong(await f.arrayBuffer(), f.name.replace(/\.fortesong$/, '')));
+    } catch (err) { status(String(err.message || err)); }
+  }
+  renderList();
+  if (cur < 0 && playlist.length) play(0);
+};
+
+(async () => {
+  const srcs = new URLSearchParams(location.search).getAll('src');
+  for (const s of srcs) {
+    try { await addFromUrl(s); } catch (err) { status(String(err.message || err)); }
+  }
+  if (playlist.length) {
+    renderList();
+    drop.style.display = 'none';
+    status('▶ を押すと再生します(初回はブラウザの自動再生制限のためクリックが必要)');
+  }
+})();
+</script>
+</body>
+</html>

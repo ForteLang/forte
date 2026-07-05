@@ -737,8 +737,18 @@ bundled reference album:
 forte play packages/essentials_0.6.0/albums/first-light
 ```
 
+**No install at all**: `forte browser` also serves `player.html` — a
+zero-install player. It unpacks a `.fortesong` in the browser, verifies
+the source digest, compiles with the same wasm engine, and plays the
+same bit-identical render. Album links in the catalog open it with the
+whole tracklist (`player.html?src=…&src=…`), and dropping `.fortesong`
+files onto the page builds a playlist. Host `web/` anywhere static
+(GitHub Pages) and "click a link → the album plays → the code is right
+there" works with nothing installed.
+
 Developers compose packages; listeners `forte package add` and
-`forte play`. Same GitHub, same content, both directions.
+`forte play` — or just a browser. Same GitHub, same content, both
+directions.
 
 ## 9. Troubleshooting
 

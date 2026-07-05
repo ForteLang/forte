@@ -61,6 +61,10 @@ audio player with `space` pause, `n`/`p` track skip, and auto-advance:
 forte play packages/essentials_0.6.0/albums/first-light
 ```
 
+No install at all? `forte browser` serves a **zero-install player**
+(`player.html`): the album plays in the browser from the same code, same
+digest — and the catalog links every album straight into it.
+
 ## Play instruments
 
 ```bash
