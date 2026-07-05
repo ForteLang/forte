@@ -130,6 +130,9 @@ pub struct SongAst {
     pub requires: Vec<String>,
     /// `artist "…"` — who made this (albums declare it; players display it).
     pub artist: Option<String>,
+    /// `sponsor "https://…"` — where listeners can support the author
+    /// (package lists, the catalog and players surface it).
+    pub sponsor: Option<String>,
     /// Body-level `automate <配置名>.volume from A to B over 区間` — fade a
     /// placed block instance from the outside (target keeps the dot form).
     pub place_autos: Vec<AutomateAst>,

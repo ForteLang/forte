@@ -110,7 +110,8 @@ async function load() {
     return `<div class="pkg">
       <h2>${esc(p.name)}<span class="ver">${esc(p.version)}</span>
         ${p.license ? `<span class="badge">${esc(p.license)}</span>` : ''}</h2>
-      <div class="meta">${esc(p.desc)}</div>
+      <div class="meta">${esc(p.desc)}${p.sponsor
+        ? ` — <a href="${esc(p.sponsor)}" style="color:#e8b34c">♥ support</a>` : ''}</div>
       <div>${tags}</div>
       ${albumList(p.dir, p.albums || [])}
       ${fileList(p.dir, 'instruments', p.instruments)}

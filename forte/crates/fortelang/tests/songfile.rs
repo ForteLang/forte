@@ -6,6 +6,12 @@ use std::path::Path;
 fn setup(base: &Path) -> String {
     std::fs::create_dir_all(base.join("songs")).unwrap();
     std::fs::create_dir_all(base.join("instruments")).unwrap();
+    // the project IS a package — its meta becomes the credits
+    std::fs::write(
+        base.join("package.forte"),
+        "block Mini {\n  desc \"Test package.\"\n  version \"0.3.0\"\n  artist \"Mini Crew\"\n  sponsor \"https://example.com/support\"\n}\n",
+    )
+    .unwrap();
     // an import that climbs with ../ — the layout every package song uses
     std::fs::write(
         base.join("instruments").join("lead.forte"),
@@ -38,6 +44,9 @@ fn fortesong_roundtrip_tamper_and_album() {
     assert_eq!(sf.artist, "Test Artist");
     assert_eq!(sf.entry, "songs/tune.forte");
     assert!(sf.files.contains_key("instruments/lead.forte"), "rebased import");
+
+    // credits: the source package's own meta rides along
+    assert_eq!(sf.credits, vec!["Mini 0.3.0 (Mini Crew)"], "credits: {:?}", sf.credits);
 
     // the packed sources compile and reproduce the packed render digest
     let project = fortelang::songfile::compile(&sf).expect("compile");

@@ -1098,6 +1098,9 @@ fn play_album(path: &str, verify: bool, for_secs: Option<f64>) -> ExitCode {
                 if idx == 0 && !desc.is_empty() {
                     frame.push(format!("\x1b[2m{desc}\x1b[0m"));
                 }
+                if !sf.credits.is_empty() {
+                    frame.push(format!("\x1b[2mcredits: {}\x1b[0m", sf.credits.join(", ")));
+                }
                 for (i, s) in songs.iter().enumerate() {
                     let mark = if i == idx { "▶" } else { " " };
                     let line = format!(

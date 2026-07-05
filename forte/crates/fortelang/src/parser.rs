@@ -175,6 +175,7 @@ impl Parser {
             version: None,
             requires: Vec::new(),
             artist: None,
+            sponsor: None,
             place_autos: Vec::new(),
             params: Vec::new(),
             tempo: None,
@@ -256,6 +257,15 @@ impl Parser {
                             song.artist = Some(a);
                         } else {
                             self.err("E-PARSE-023", "artist には文字列が必要です(例: artist \"Forte Essentials\")");
+                        }
+                    }
+                    "sponsor" => {
+                        self.bump();
+                        if let Tok::Str(u) = self.peek().clone() {
+                            self.bump();
+                            song.sponsor = Some(u);
+                        } else {
+                            self.err("E-PARSE-023", "sponsor には文字列が必要です(例: sponsor \"https://github.com/sponsors/you\")");
                         }
                     }
                     // the block's public knobs — device syntax:
