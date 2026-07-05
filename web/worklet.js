@@ -8,7 +8,10 @@ class ForteProcessor extends AudioWorkletProcessor {
     super();
     this.ready = false;
     this.blocks = 0;
-    this.port.onmessage = (e) => this.onMessage(e.data);
+    this.port.onmessage = (e) =>
+      Promise.resolve(this.onMessage(e.data)).catch((err) =>
+        this.port.postMessage({ kind: 'err', message: String((err && err.stack) || err) })
+      );
   }
 
   async onMessage(msg) {
@@ -22,18 +25,19 @@ class ForteProcessor extends AudioWorkletProcessor {
         break;
       }
       case 'src': {
+        // NOTE: AudioWorkletGlobalScope has no TextEncoder — the main thread
+        // sends pre-encoded Uint8Arrays. (A TextEncoder here once silenced
+        // the whole editor: the throw vanished into the async handler.)
         if (!this.ready) return;
-        const stage = (json, commit) => {
-          const mb = new TextEncoder().encode(json);
-          const mp = this.e.fw_modules_prepare(this.ctx, mb.length);
-          new Uint8Array(this.e.memory.buffer, mp, mb.length).set(mb);
+        const stage = (bytes, commit) => {
+          const mp = this.e.fw_modules_prepare(this.ctx, bytes.length);
+          new Uint8Array(this.e.memory.buffer, mp, bytes.length).set(bytes);
           commit(this.ctx);
         };
         if (msg.modules) stage(msg.modules, this.e.fw_modules_commit);
         if (msg.assets) stage(msg.assets, this.e.fw_assets_commit);
-        const bytes = new TextEncoder().encode(msg.text);
-        const ptr = this.e.fw_src_prepare(this.ctx, bytes.length);
-        new Uint8Array(this.e.memory.buffer, ptr, bytes.length).set(bytes);
+        const ptr = this.e.fw_src_prepare(this.ctx, msg.text.length);
+        new Uint8Array(this.e.memory.buffer, ptr, msg.text.length).set(msg.text);
         const n = this.e.fw_compile(this.ctx);
         this.port.postMessage({ kind: 'compiled', diagCount: n });
         break;

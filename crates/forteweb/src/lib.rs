@@ -275,6 +275,12 @@ pub unsafe extern "C" fn fw_process(ptr: *mut Ctx, frames: usize) {
     c.engine.process(&mut l[..n], &mut r[..n], n);
 }
 
+/// Debug: how many tracks the live engine actually holds (0 = silence).
+#[no_mangle]
+pub unsafe extern "C" fn fw_debug_tracks(ptr: *mut Ctx) -> i32 {
+    ctx(ptr).engine.debug_track_count() as i32
+}
+
 /// Read-only visualization data (shared implementation in fortelang::viz).
 fn viz_json(p: &Project) -> Vec<u8> {
     serde_json::to_vec(&fortelang::viz::viz_json(p)).unwrap_or_else(|_| b"null".to_vec())

@@ -66,6 +66,20 @@ try {
   });
   check('live diagnostics', diagText.includes('E-DEV-002'), diagText.slice(0, 60));
 
+  // undo the typo before playing — otherwise the worklet (rightly) refuses
+  // to load the broken source and the transport runs over silence
+  await page.evaluate(async () => {
+    const ta = document.getElementById('fallback');
+    if (ta) {
+      ta.value = ta.value.replace('cutof:', 'cutoff:');
+      ta.dispatchEvent(new Event('input'));
+    } else {
+      const ed = monaco.editor.getModels()[0];
+      ed.setValue(ed.getValue().replace('cutof:', 'cutoff:'));
+    }
+    await new Promise((r) => setTimeout(r, 600));
+  });
+
   await page.click('#play');
   await page.waitForFunction(
     () => /bar\s+\d+\.\d/.test(document.getElementById('status').textContent),
@@ -76,6 +90,11 @@ try {
   await page.waitForTimeout(1500);
   const s2 = await page.textContent('#status');
   check('worklet playback advances', s1 !== s2, `${s1} → ${s2}`);
+  // …and actually makes sound. The transport once advanced over a silent
+  // engine (TextEncoder missing in the worklet scope) and this suite was
+  // blind to it — peak must be nonzero while the kick plays.
+  const peak = parseFloat((s2.match(/peak\s+([\d.]+)/) || [])[1] ?? '0');
+  check('worklet playback is audible', peak > 0.02, `peak ${peak}`);
 
   const vizTracks = await page.evaluate(() => window.__vizTracks ?? 0);
   check('arrangement view rendered', vizTracks >= 6, `${vizTracks} tracks`);
