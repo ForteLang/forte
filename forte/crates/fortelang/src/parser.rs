@@ -175,6 +175,7 @@ impl Parser {
             version: None,
             requires: Vec::new(),
             artist: None,
+            place_autos: Vec::new(),
             tempo: None,
             swing: None,
             meter: None,
@@ -336,6 +337,7 @@ impl Parser {
                         let mut key = None;
                         let mut from = None;
                         let mut to = None;
+                        let mut volume = None;
                         if *self.peek() == Tok::LParen {
                             self.bump();
                             loop {
@@ -344,7 +346,7 @@ impl Parser {
                                     break;
                                 }
                                 let apos = self.pos();
-                                let arg = self.ident("配置引数(key / from / to)")?;
+                                let arg = self.ident("配置引数(key / from / to / volume)")?;
                                 self.expect(Tok::Colon, "`:`");
                                 match arg.as_str() {
                                     "key" => {
@@ -372,9 +374,13 @@ impl Parser {
                                         let n = self.number("to(小節)")?;
                                         to = Some(n.0 as u32);
                                     }
+                                    "volume" => {
+                                        let n = self.number("volume(0..1)")?;
+                                        volume = Some((n.0, apos));
+                                    }
                                     other => self.err(
                                         "E-PARSE-022",
-                                        format!("配置引数 '{other}' は不明です(key / from / to)"),
+                                        format!("配置引数 '{other}' は不明です(key / from / to / volume)"),
                                     ),
                                 }
                                 if *self.peek() == Tok::Comma {
@@ -397,12 +403,49 @@ impl Parser {
                             let name = self.ident("区間(bars(a..b) かセクション名)")?;
                             AtRef::Section(name, spos)
                         };
-                        song.places.push(PlaceAst { block, key, from, to, at, pos });
+                        song.places.push(PlaceAst { block, key, from, to, volume, at, pos });
+                    }
+                    // body-level automate: fade a placed block instance
+                    //   automate Riff.volume from 0 to 1 over intro
+                    "automate" => {
+                        self.bump();
+                        let apos = self.pos();
+                        let target = self.param_target("automate 対象(<配置名>.volume)")?;
+                        if !self.keyword("from") {
+                            self.err("E-PARSE-020", "automate は `from A to B over 区間` で書きます");
+                        }
+                        let from = self.number("開始値")?;
+                        if !self.keyword("to") {
+                            self.err("E-PARSE-020", "`to` が必要です");
+                        }
+                        let to = self.number("終了値")?;
+                        if !self.keyword("over") {
+                            self.err("E-PARSE-020", "`over bars(a..b)` か `over セクション名` が必要です");
+                        }
+                        let at = if self.keyword("bars") {
+                            self.expect(Tok::LParen, "`(`");
+                            let a = self.number("開始小節")?;
+                            self.expect(Tok::DotDot, "`..`");
+                            let b = self.number("終了小節")?;
+                            self.expect(Tok::RParen, "`)`");
+                            AtRef::Bars(a.0 as u32, b.0 as u32)
+                        } else {
+                            let spos = self.pos();
+                            let name = self.ident("区間(bars(a..b) かセクション名)")?;
+                            AtRef::Section(name, spos)
+                        };
+                        song.place_autos.push(AutomateAst {
+                            target,
+                            from: from.0,
+                            to: to.0,
+                            at,
+                            pos: apos,
+                        });
                     }
                     other => {
                         self.err(
                             "E-PARSE-007",
-                            format!("song/block 内で使えない要素です: {other}(tempo/meter/key/let/section/track/return/block/play)"),
+                            format!("song/block 内で使えない要素です: {other}(tempo/meter/key/let/section/track/return/block/play/automate)"),
                         );
                         self.bump();
                     }

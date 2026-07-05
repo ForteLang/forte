@@ -174,6 +174,14 @@ Rules of thumb:
   is always playable on its own.
 - Reusable blocks live in `packages/<pkg>/blocks/` — fork one, change its pattern, and
   every song placing it follows.
+- **Control an instance from outside** — the placing body can scale or
+  fade a whole placement without touching the block's code:
+
+```forte
+play Riff(volume: 0.5) at bars(9..16)          // half volume, this span only
+automate Riff.volume from 0 to 1 over intro    // fade the instance in
+```
+
 - **Inherit instead of copying** — `block Child : Parent { … }` starts from
   the parent and overrides like a class: swap the instrument, change one
   insert's parameters, add an effect, or replace the pattern:

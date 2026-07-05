@@ -41,6 +41,9 @@ pub struct PlaceAst {
     pub key: Option<((String, String), Pos)>,
     pub from: Option<u32>,
     pub to: Option<u32>,
+    /// `volume: 0.6` — scales the whole instance (every track's fader)
+    /// across this placement's span only.
+    pub volume: Option<(f64, Pos)>,
     pub at: AtRef,
     pub pos: Pos,
 }
@@ -125,6 +128,9 @@ pub struct SongAst {
     pub requires: Vec<String>,
     /// `artist "…"` — who made this (albums declare it; players display it).
     pub artist: Option<String>,
+    /// Body-level `automate <配置名>.volume from A to B over 区間` — fade a
+    /// placed block instance from the outside (target keeps the dot form).
+    pub place_autos: Vec<AutomateAst>,
     pub tempo: Option<(f64, Pos)>,
     pub swing: Option<(f64, Pos)>,
     pub meter: Option<((u32, u32), Pos)>,
