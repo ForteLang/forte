@@ -18,6 +18,7 @@ fn main() -> ExitCode {
                 .and_then(|i| args.get(i + 1))
                 .cloned();
             // the extension picks the format: .fortesong = playable container
+            #[cfg(not(target_family = "wasm"))]
             if let Some(o) = out.as_deref().filter(|o| o.ends_with(".fortesong")) {
                 match fortelang::songfile::build(&args[1]) {
                     Ok((bytes, summary)) => {
