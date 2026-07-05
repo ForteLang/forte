@@ -219,13 +219,21 @@ fn main() -> ExitCode {
                 .position(|a| a == "--for")
                 .and_then(|i| args.get(i + 1))
                 .and_then(|s| s.parse::<f64>().ok());
+            // --from bars(9) / --from 9 — start listening mid-song
+            let from_bar = args
+                .iter()
+                .position(|a| a == "--from")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|s| {
+                    s.trim_start_matches("bars(").trim_end_matches(')').parse::<u32>().ok()
+                });
             // .fortesong file or an album directory → the player
             let target = std::path::Path::new(&args[1]);
             if args[1].ends_with(".fortesong") || (target.is_dir() && target.join("album.forte").is_file())
             {
                 play_album(&args[1], args.iter().any(|a| a == "--verify"), for_secs)
             } else {
-                play(&args[1], for_secs)
+                play(&args[1], for_secs, from_bar)
             }
         }
         #[cfg(not(target_family = "wasm"))]
@@ -307,7 +315,7 @@ fn main() -> ExitCode {
             eprintln!("usage: forte check <song.forte>");
             eprintln!("       forte build <song.forte> [-o out.wav | out.fortesong] [--stems]");
             eprintln!("       forte export <song.forte> [-o out.zip]  (曲+履歴+証明の自己完結 zip)");
-            eprintln!("       forte play  <song.forte> [--for SECS]   (トラックタイムラインを表示しながら再生)");
+            eprintln!("       forte play  <song.forte> [--for SECS] [--from bars(9)]  (トラックタイムライン付き再生)");
             eprintln!("       forte play  <name.fortesong | ALBUM-DIR> [--verify]  (プレイヤー: n/p/space/q)");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
             eprintln!("       forte instruments list [QUERY]  (カタログ。list bass / list 808 で絞り込み)");
@@ -700,7 +708,7 @@ fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
 /// every successful recompile is swapped into the running engine without
 /// stopping the transport — listen, edit, listen (SYS-EDT-002 minimal form).
 #[cfg(not(target_family = "wasm"))]
-fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
+fn play(path: &str, for_secs: Option<f64>, from_bar: Option<u32>) -> ExitCode {
     use dawcore::command::Command;
     use dawcore::model::Project;
     use dawcore::sync::full_sync;
@@ -712,14 +720,28 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
         fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base_dir(path))
             .map_err(|diags| diags.iter().map(|d| format!("{path}:{d}")).collect())
     }
-    fn apply(handle: &mut dawcore::engine::EngineHandle, p: &Project, prev_slots: usize) {
+    fn apply(
+        handle: &mut dawcore::engine::EngineHandle,
+        p: &Project,
+        prev_slots: usize,
+        from_bar: Option<u32>,
+    ) {
         full_sync(handle, p);
         for slot in p.tracks.len()..prev_slots {
             handle.send(Command::RemoveTrack { slot });
         }
         let len = dawcore::bounce::arrangement_len(p);
-        handle.send(Command::SetLoop { enabled: true, start: 0.0, end: len });
+        // --from bars(9): the loop starts (and restarts) at that bar
+        let bpb = p.time_sig.0 as f64 * 4.0 / p.time_sig.1 as f64;
+        let start = from_bar
+            .map(|b| ((b.max(1) - 1) as f64 * bpb).min((len - bpb).max(0.0)))
+            .unwrap_or(0.0);
+        handle.send(Command::SetLoop { enabled: true, start, end: len });
         handle.send(Command::SetLaunchQuant(0.0));
+        if start > 0.0 {
+            // Stop parks the playhead at the loop start
+            handle.send(Command::Stop);
+        }
     }
     fn mtime(path: &str) -> Option<SystemTime> {
         std::fs::metadata(path).and_then(|m| m.modified()).ok()
@@ -811,7 +833,7 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
     } else {
         println!("audio: {}", audio.device_name);
     }
-    apply(&mut audio.handle, &project, 0);
+    apply(&mut audio.handle, &project, 0, from_bar);
     audio.handle.send(Command::Play);
     println!("playing: \"{path}\"");
 
@@ -833,7 +855,7 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
             match compile_file(path) {
                 Ok(p) => {
                     let prev = project.tracks.len();
-                    apply(&mut audio.handle, &p, prev);
+                    apply(&mut audio.handle, &p, prev, from_bar);
                     project = p;
                     message = format!("reloaded ✓ ({} tracks)", project.tracks.len());
                 }

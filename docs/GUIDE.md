@@ -125,6 +125,8 @@ When you quit, your performance is printed as a `notes` literal quantized to
 `forte play my-song.forte` shows a timeline in the console:
 each track's lane (which bar it enters and exits), the moving playhead,
 elapsed/total time, loop count, and which tracks are currently sounding.
+Composing the back half? `forte play my-song.forte --from bars(9)` starts
+(and loops) from bar 9.
 
 ## 0.8 Blocks — music as reusable parts
 
