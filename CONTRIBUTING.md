@@ -18,6 +18,7 @@ sudo apt install libasound2-dev
 rustup target add wasm32-wasip1 wasm32-unknown-unknown
 
 cargo build --release -p fortelang   # the `forte` CLI → target/release/forte
+echo 'source <(forte complete bash)' >> ~/.bashrc   # tab-completion (zsh: forte complete zsh)
 forte web build                      # browser editor (web/forte.wasm)
 
 # for the E2E tests

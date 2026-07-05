@@ -50,10 +50,14 @@ song "Handmade" {
 # Linux needs ALSA headers for audio output: sudo apt install libasound2-dev
 cargo install --path crates/fortelang   # installs the `forte` command
 
+# tab-completion (recommended — instrument names complete dynamically):
+echo 'source <(forte complete bash)' >> ~/.bashrc   # bash
+echo 'source <(forte complete zsh)'  >> ~/.zshrc    # zsh
+
 forte repl                              # type a line, hear it immediately
 forte check songs/first-light.forte     # validate (errors in musical terms + line numbers)
 forte play  songs/first-light.forte     # live playback + console timeline; saves hot-reload
-forte instrument Bass303                # your keyboard becomes a piano (a w s e d ...)
+forte instruments play Bass303          # your keyboard becomes a piano (a w s e d ...)
 forte browser                           # launch the browser editor
 forte build songs/first-light.forte     # WAV + build proof (digest included)
 forte build songs/handmade-kit.forte --stems  # per-track WAVs + per-stem digests
