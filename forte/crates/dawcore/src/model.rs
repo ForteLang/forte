@@ -494,6 +494,20 @@ impl Modulator {
 pub struct ModRoute {
     pub param: usize,
     pub amount: f32, // bipolar -1..1
+    /// Cross-device route (macros reach any device on the track);
+    /// `None` targets the device the modulator lives on.
+    #[serde(default)]
+    pub device: Option<usize>,
+}
+
+/// Automation of a modulator's own field, addressed by the track-flat
+/// modulator index (device order, then declaration order within a device).
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ModAutomation {
+    pub mod_index: usize,
+    /// 0 = depth (scales every route amount), 1 = rate, 2 = value (macro knob)
+    pub field: u8,
+    pub points: Vec<AutomationPoint>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -579,6 +593,9 @@ pub struct Track {
     pub volume_automation: Vec<AutomationPoint>,
     #[serde(default)]
     pub param_automation: Vec<ParamAutomation>,
+    /// Modulator-field automation lanes (depth / rate / macro value).
+    #[serde(default)]
+    pub mod_automation: Vec<ModAutomation>,
     /// Post-fader sends: (destination effect-track id, level 0..1).
     #[serde(default)]
     pub sends: Vec<(usize, f32)>,
@@ -606,6 +623,7 @@ impl Track {
             audio_clips: Vec::new(),
             volume_automation: Vec::new(),
             param_automation: Vec::new(),
+            mod_automation: Vec::new(),
             sends: Vec::new(),
         }
     }
@@ -843,7 +861,7 @@ impl Project {
         {
             let mut lfo = Modulator::new(ModKind::Lfo);
             lfo.rate = 0.22;
-            lfo.routes.push(ModRoute { param: 1, amount: 0.3 });
+            lfo.routes.push(ModRoute { param: 1, amount: 0.3, device: None });
             keys.devices[0].modulators.push(lfo);
         }
         keys.devices.push(Device::new(DeviceKind::Reverb));

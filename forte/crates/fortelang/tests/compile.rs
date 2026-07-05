@@ -317,9 +317,10 @@ fn automate_and_modulate_errors_are_reported() {
     // amount is required
     let src = r#"song "X" { tempo 120bpm track A { instrument prisma() play beat`x---` at bars(1..2) modulate cutoff with lfo(rate: 0.3) } }"#;
     assert!(err_codes(src).contains(&"E-LFO-003"));
-    // modulator kinds are lfo / steps / random — anything else is a parse error
+    // modulator kinds are lfo / steps / random / adsr, or a body-level
+    // `let` shared modulator — anything else lists what exists
     let src = r#"song "X" { tempo 120bpm track A { instrument prisma() play beat`x---` at bars(1..2) modulate cutoff with wobble(amount: 0.4) } }"#;
-    assert!(err_codes(src).contains(&"E-PARSE-021"));
+    assert!(err_codes(src).contains(&"E-LFO-005"));
 }
 
 // ---------------------------------------------------------------------------

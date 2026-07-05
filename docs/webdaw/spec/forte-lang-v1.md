@@ -53,7 +53,7 @@ bodyItem  = "desc" string | "tags" string | "license" string
           | "sponsor" string
           | "param" ident "=" num [ "in" num ".." num ]              (* the block's public knobs *)
           | "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
-          | "let" ident "=" musicLit
+          | "let" ident "=" ( musicLit | call )                     (* call = a shared modulator *)
           | "section" ident "=" "bars" "(" num ".." num ")"
           | track | return | block | place | placeAuto ;
 place     = "play" ident [ "(" placeArg { "," placeArg } ")" ] [ "as" ident ] atRef ;
@@ -68,7 +68,8 @@ trackItem = "instrument" call | "insert" call
           | "audio" ident atRef
           | "send" ident num
           | "automate" ident "from" num "to" num "over" overRef
-          | "modulate" ident "with" call
+          | "modulate" ident "with" call [ "as" ident ]
+          | "macro" ident "{" { "route" ident "amount" ":" num } "}"
           | "volume" num | "pan" num ;
 overRef   = "bars" "(" num ".." num ")" | ident ;                   (* section name *)
 return    = "return" ident "{" { "insert" call | "volume" num | "pan" num } "}" ;
@@ -220,8 +221,9 @@ Unknown names produce E-AUTO-001 / E-LFO-001 with a list of "what is available".
   For parameters with a lane, the base value is replaced by the lane: before the ramp begins
   it holds `from`, and after it ends it holds `to`. Multiple `automate`s are merged, per target,
   into a single lane in beat order.
-- `modulate <param> with <modulator>(…)` — plugs a modulator into a parameter.
-  There are 4 kinds (anything else is E-PARSE-021):
+- `modulate <param> with <modulator>(…) [as <name>]` — plugs a modulator into a
+  parameter. There are 4 kinds — or the name of a body-level shared modulator
+  (below); anything else is E-LFO-005 listing what exists:
   - `lfo(rate: 0.4, amount: 0.5, shape: "tri")` — periodic wave. `rate` 0..1
     (0.05..8.05 Hz, default 0.3), `shape` sine / tri / saw / square
     (default sine).
@@ -241,6 +243,52 @@ Unknown names produce E-AUTO-001 / E-LFO-001 with a list of "what is available".
   saturating to 0..1. `automate` and `modulate` **can be layered** on a single parameter
   (modulation rides on top of the ramp), and multiple `modulate`s can be
   stacked as well.
+
+#### Naming a modulator: `as`, and automating the modulator itself
+
+`modulate cutoff with lfo(rate: 0.3, amount: 0.2) as wobble` names the
+modulator. A named modulator exposes two automation targets:
+
+- `automate wobble.amount from 0 to 0.6 over build` — a **depth** ramp that
+  scales every route of that modulator (the wobble deepens into the drop);
+- `automate wobble.rate from 0.1 to 0.8 over build` — the speed knob.
+
+Both are ordinary lanes (0..1, merged per target, evaluated at block rate
+before the modulators run each block).
+
+#### Macros: one knob, many parameters
+
+```forte
+macro brightness {
+  route cutoff   amount: 0.8
+  route delay.mix amount: 0.3
+}
+automate brightness from 0.1 to 0.9 over drop
+```
+
+A `macro` (track item) declares a knob that fans out to any number of
+`route <param> amount: <-1..1>` targets — instrument params and
+`insert.param` alike, across devices. The knob starts at **0** (a declared
+but untouched macro is a no-op) and is driven by automating the macro's
+bare name. `name.amount` / `name.rate` also work on macros. Unknown route
+targets are E-AUTO-001; a bare name that is neither a param nor a macro is
+E-AUTO-001 with the known modulator names appended.
+
+#### Shared modulators: body-level `let`
+
+```forte
+let groove = lfo(rate: 0.25, amount: 0.3)
+track A { … modulate cutoff  with groove }
+track B { … modulate delay.mix with groove(amount: 0.15) }
+```
+
+`let <name> = lfo|steps|random|adsr(…)` at body level declares a shared
+modulator **definition**. `modulate … with <name>(…)` copies the definition
+into that track (call-site args override the let's args), so every user
+runs with identical parameters and phase — the whole song breathes at one
+rate. Pure sugar: the render is bit-identical to writing the same
+modulator inline on each track. Inheritance overrides `let` definitions by
+name, like music `let`s.
 
 ### 4.9.5 Metadata: desc and tags
 

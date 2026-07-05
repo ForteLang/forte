@@ -9,7 +9,7 @@ use crate::diag::{Diag, Pos};
 use crate::grid_build;
 use crate::music;
 use dawcore::model::{
-    ArrangerClip, AudioClip, AutomationPoint, Clip, Device, DeviceKind, KeySignature, ModKind, ParamAutomation,
+    ArrangerClip, AudioClip, AutomationPoint, Clip, Device, DeviceKind, KeySignature, ModAutomation, ModKind, ParamAutomation,
     ModRoute, Modulator, Note, Project, SampleSource, Scale, Track, TrackKind, TRACK_COLORS,
 };
 
@@ -405,17 +405,145 @@ fn lower_body(
             }
         }
 
-        // automation lanes: volume, an instrument param, or `<insert>.<param>`
+        // modulators plug into instrument or insert params; each lives on the
+        // device it modulates (its routes get that device's index). The kind
+        // may also be a body-level `let name = lfo(...)` shared definition —
+        // its args are the base, the call site's args win. `as name` makes
+        // the modulator itself automatable (name.amount / name.rate).
+        let mut named_mods: Vec<(usize, usize, String)> = Vec::new(); // (device, slot, name)
+        for m in &tast.modulations {
+            let eff: ModulateAst = if matches!(m.kind.as_str(), "lfo" | "steps" | "random" | "adsr")
+            {
+                m.clone()
+            } else if let Some(ml) = body.mod_lets.iter().find(|ml| ml.name == m.kind) {
+                let mut args = ml.args.clone();
+                for (k, v) in &m.args {
+                    match args.iter_mut().find(|(ak, _)| ak == k) {
+                        Some(slot) => slot.1 = v.clone(),
+                        None => args.push((k.clone(), v.clone())),
+                    }
+                }
+                ModulateAst {
+                    param: m.param.clone(),
+                    kind: ml.kind.clone(),
+                    args,
+                    alias: m.alias.clone(),
+                    pos: m.pos,
+                }
+            } else {
+                let names: Vec<&str> = body.mod_lets.iter().map(|ml| ml.name.as_str()).collect();
+                diags.push(Diag::new(
+                    "E-LFO-005",
+                    m.pos,
+                    format!(
+                        "モジュレータ '{}' がありません(lfo / steps / random / adsr、または body の let 定義: {})",
+                        m.kind,
+                        if names.is_empty() { "なし".to_string() } else { names.join(", ") }
+                    ),
+                ));
+                continue;
+            };
+            match build_lfo(&eff, &track, &insert_devs, env.tempo) {
+                Ok((di, lfo)) => {
+                    if let Some(name) = &eff.alias {
+                        named_mods.push((di, track.devices[di].modulators.len(), name.clone()));
+                    }
+                    track.devices[di].modulators.push(lfo);
+                }
+                Err(d) => diags.push(d),
+            }
+        }
+
+        // macros: one knob fanned out to many params, across devices. The
+        // knob lives on device 0 and starts at 0 — silent until automated.
+        for mac in &tast.macros {
+            if track.devices.is_empty() {
+                diags.push(Diag::new("E-LFO-002", mac.pos, "macro には instrument が必要です"));
+                continue;
+            }
+            let mut knob = Modulator::new(ModKind::Macro);
+            knob.value = 0.0;
+            let mut ok = true;
+            for (target, amount, rpos) in &mac.routes {
+                if !(-1.0..=1.0).contains(amount) {
+                    diags.push(Diag::new(
+                        "E-TYPE-003",
+                        *rpos,
+                        format!("route の amount {amount} は -1..1 の範囲外です"),
+                    ));
+                    ok = false;
+                    continue;
+                }
+                match resolve_target(&track, &insert_devs, target) {
+                    Ok((di, pi)) => knob.routes.push(ModRoute {
+                        param: pi,
+                        amount: *amount as f32,
+                        device: Some(di),
+                    }),
+                    Err(msg) => {
+                        diags.push(Diag::new("E-AUTO-001", *rpos, msg));
+                        ok = false;
+                    }
+                }
+            }
+            if !ok {
+                continue;
+            }
+            named_mods.push((0, track.devices[0].modulators.len(), mac.name.clone()));
+            track.devices[0].modulators.push(knob);
+        }
+
+        // (device, slot) → track-flat modulator index, in build_mods order
+        let mod_flat = |di: usize, slot: usize, track: &Track| -> usize {
+            track.devices[..di].iter().map(|d| d.modulators.len()).sum::<usize>() + slot
+        };
+        // macros answer to their bare name; every named modulator exposes
+        // `.amount` (depth over all routes) and `.rate`
+        let resolve_mod = |name: &str, track: &Track| -> Option<(usize, u8)> {
+            if let Some((head, tail)) = name.split_once('.') {
+                let (di, slot, _) = named_mods.iter().find(|(_, _, n)| n == head)?;
+                let field = match tail {
+                    "amount" => 0u8,
+                    "rate" => 1,
+                    _ => return None,
+                };
+                return Some((mod_flat(*di, *slot, track), field));
+            }
+            let (di, slot, _) = named_mods.iter().find(|(di, slot, n)| {
+                n == name && track.devices[*di].modulators[*slot].kind == ModKind::Macro
+            })?;
+            Some((mod_flat(*di, *slot, track), 2))
+        };
+
+        // automation lanes: volume, an instrument param, `<insert>.<param>`,
+        // a macro knob, or a named modulator's field
         for auto in &tast.automations {
-            let param_target = if auto.target == "volume" {
-                None
+            enum AutoTarget {
+                Volume,
+                Param(usize, usize),
+                Modf(usize, u8),
+            }
+            let target = if auto.target == "volume" {
+                AutoTarget::Volume
             } else {
                 match resolve_target(&track, &insert_devs, &auto.target) {
-                    Ok(t) => Some(t),
-                    Err(msg) => {
-                        diags.push(Diag::new("E-AUTO-001", auto.pos, msg));
-                        continue;
-                    }
+                    Ok((di, pi)) => AutoTarget::Param(di, pi),
+                    Err(msg) => match resolve_mod(&auto.target, &track) {
+                        Some((mi, field)) => AutoTarget::Modf(mi, field),
+                        None => {
+                            let mut msg = msg;
+                            if !named_mods.is_empty() {
+                                let names: Vec<&str> =
+                                    named_mods.iter().map(|(_, _, n)| n.as_str()).collect();
+                                msg.push_str(&format!(
+                                    "。名前付きモジュレータ/マクロ: {}(.amount / .rate、マクロは名前そのもの)",
+                                    names.join(", ")
+                                ));
+                            }
+                            diags.push(Diag::new("E-AUTO-001", auto.pos, msg));
+                            continue;
+                        }
+                    },
                 }
             };
             if !(0.0..=1.0).contains(&auto.from) || !(0.0..=1.0).contains(&auto.to) {
@@ -444,12 +572,12 @@ fn lower_body(
                 },
                 AutomationPoint { beat: b as f64 * beats_per_bar, value: auto.to as f32, hold: true },
             ];
-            match param_target {
-                None => track.volume_automation.extend(points),
+            match target {
+                AutoTarget::Volume => track.volume_automation.extend(points),
                 // ramps targeting the same param merge into ONE lane in beat
                 // order — separate lanes would each cover the whole timeline
                 // (eval holds the edge values) and the last one would win
-                Some((di, pi)) => match track
+                AutoTarget::Param(di, pi) => match track
                     .param_automation
                     .iter_mut()
                     .find(|pa| pa.device == di && pa.param == pi)
@@ -462,18 +590,20 @@ fn lower_body(
                         .param_automation
                         .push(ParamAutomation { device: di, param: pi, points }),
                 },
+                AutoTarget::Modf(mi, field) => match track
+                    .mod_automation
+                    .iter_mut()
+                    .find(|ma| ma.mod_index == mi && ma.field == field)
+                {
+                    Some(lane) => {
+                        lane.points.extend(points);
+                        lane.points.sort_by(|x, y| x.beat.total_cmp(&y.beat));
+                    }
+                    None => track.mod_automation.push(ModAutomation { mod_index: mi, field, points }),
+                },
             }
         }
         track.volume_automation.sort_by(|x, y| x.beat.total_cmp(&y.beat));
-
-        // modulators plug into instrument or insert params; each lives on the
-        // device it modulates (its routes get that device's index)
-        for m in &tast.modulations {
-            match build_lfo(m, &track, &insert_devs, env.tempo) {
-                Ok((di, lfo)) => track.devices[di].modulators.push(lfo),
-                Err(d) => diags.push(d),
-            }
-        }
 
         // plays → arranger clips
         for play in &tast.plays {
@@ -1133,6 +1263,12 @@ fn merge_block(parent: &SongAst, child: &SongAst) -> SongAst {
             None => out.lets.push(l.clone()),
         }
     }
+    for ml in &child.mod_lets {
+        match out.mod_lets.iter_mut().find(|x| x.name == ml.name) {
+            Some(slot) => *slot = ml.clone(),
+            None => out.mod_lets.push(ml.clone()),
+        }
+    }
     for sct in &child.sections {
         match out.sections.iter_mut().find(|x| x.name == sct.name) {
             Some(slot) => *slot = sct.clone(),
@@ -1211,6 +1347,12 @@ fn merge_track(base: &mut TrackAst, over: &TrackAst) {
     }
     base.automations.extend(over.automations.iter().cloned());
     base.modulations.extend(over.modulations.iter().cloned());
+    for mac in &over.macros {
+        match base.macros.iter_mut().find(|x| x.name == mac.name) {
+            Some(slot) => *slot = mac.clone(),
+            None => base.macros.push(mac.clone()),
+        }
+    }
 }
 
 fn collect_devices<'a>(
@@ -1797,7 +1939,7 @@ fn build_lfo(
         let hz = (1.0 / cycle_seconds).clamp(0.05, 8.05);
         lfo.rate = (((hz - 0.05) / 8.0) as f32).clamp(0.0, 1.0);
     }
-    lfo.routes.push(ModRoute { param: idx, amount });
+    lfo.routes.push(ModRoute { param: idx, amount, device: None });
     Ok((di, lfo))
 }
 
