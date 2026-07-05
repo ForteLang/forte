@@ -1,0 +1,143 @@
+// Sunrise House — daybreak house, 32 bars, composed from blocks. The pad
+// fades in through the intro, piano and arp stack up in the main, and in
+// the outro the elements go home one by one — the song is just the
+// schedule of their comings and goings.
+import { Kick909, Clap, HatClosed, HatOpen, Crash } from "../instruments/drums.forte"
+import { OctaveBass } from "../instruments/bass.forte"
+import { EPiano } from "../instruments/keys.forte"
+import { WarmPad } from "../instruments/pads.forte"
+import { Pluck } from "../instruments/leads.forte"
+import { Riser } from "../instruments/fx.forte"
+
+// Four on the floor.
+block Floor {
+  track Kick { instrument Kick909(click: 0.5) volume 0.9 play beat`x--- x--- x--- x---` at bars(1..4) }
+}
+
+// Offbeat open hats.
+block OffHat {
+  track Open { instrument HatOpen(decay: 0.25) volume 0.5 pan 0.15 play beat`--x- --x- --x- --x-` at bars(1..4) }
+}
+
+// Main-section tops: clap into the dawn reverb, ticking closed hats.
+block Tops {
+  return Dawn {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.75
+  }
+  track Clap { instrument Clap(tone: 0.6) volume 0.6 send Dawn 0.25 play beat`---- x--- ---- x---` at bars(1..4) }
+  track Tick { instrument HatClosed(bright: 0.9) volume 0.35 pan -0.1 play beat`x-xx x-xx x-xx x-xX` at bars(1..4) }
+}
+
+// A washed crash to open the main section.
+block Splash {
+  track Cym { instrument Crash(decay: 0.8) insert reverb(size: 0.65, decay: 0.5, mix: 0.3) volume 0.4 play beat`x--- ---- ---- ----` at bars(1..1) }
+}
+
+// The octave bass walking the sky changes.
+block Bassline {
+  key F minor
+  let sky = prog`Fm7 | Dbmaj7 | Ab | Eb`
+  track Bass {
+    instrument OctaveBass(blend: 0.55)
+    volume 0.78
+    play bass(sky, rate: 0.5) at bars(1..4)
+  }
+}
+
+// The warm pad bed.
+block PadBed {
+  key F minor
+  let sky = prog`Fm7 | Dbmaj7 | Ab | Eb`
+  return Dawn {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.75
+  }
+  track Pad {
+    instrument WarmPad(cutoff: 0.42)
+    send Dawn 0.4
+    volume 0.5
+    play chords(sky) at bars(1..8)
+  }
+}
+
+// Intro variant: the pad fades in with the first light.
+block PadRise : PadBed {
+  track Pad { automate volume from 0.2 to 0.5 over bars(1..8) }
+}
+
+// Driven e-piano chords for the main section.
+block Piano {
+  key F minor
+  let sky = prog`Fm7 | Dbmaj7 | Ab | Eb`
+  return Dawn {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.75
+  }
+  track Piano {
+    instrument EPiano(tine: 0.45)
+    insert drive(drive: 0.12)
+    send Dawn 0.35
+    volume 0.6
+    play chords(sky) at bars(1..4)
+  }
+}
+
+// The plucked arp, echoing to the right.
+block Arps {
+  key F minor
+  let sky = prog`Fm7 | Dbmaj7 | Ab | Eb`
+  return Dawn {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.75
+  }
+  track Arp {
+    instrument Pluck()
+    insert delay(time: 0.375, fdbk: 0.4, mix: 0.3)
+    send Dawn 0.35
+    volume 0.45
+    pan 0.25
+    play arp(sky, rate: 0.25, style: "updown") at bars(1..4)
+  }
+}
+
+// First entrance of the arp: fading up.
+block ArpRise : Arps {
+  track Arp { automate volume from 0.15 to 0.45 over bars(1..4) }
+}
+
+// A two-bar riser into the main section.
+block Lift {
+  track Rise {
+    instrument Riser(climb: 0.8)
+    insert reverb(size: 0.65, decay: 0.5, mix: 0.25)
+    volume 0.4
+    play notes`C3:8` at bars(1..2)
+  }
+}
+
+song "Sunrise House" {
+  tempo 124bpm
+  meter 4/4
+  key F minor
+
+  section intro = bars(1..8)
+  section main  = bars(9..24)
+  section outro = bars(25..32)
+
+  play Floor at bars(1..30)
+  play OffHat at bars(5..28)
+  play Tops at main
+  play Splash at bars(9..9)
+  play Lift at bars(7..8)
+
+  play Bassline at bars(3..30)
+
+  play PadRise at intro
+  play PadBed at outro
+
+  play Piano at main
+
+  play ArpRise at bars(13..16)
+  play Arps at bars(17..24)
+}

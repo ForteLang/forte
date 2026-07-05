@@ -46,7 +46,7 @@
     },
     "pattern-fns": {
       "name": "support.function.pattern.forte",
-      "match": "\\b(chords|arp|bass|sampler|polymer|grid|filter|eq|drive|delay|reverb)\\b"
+      "match": "\\b(chords|arp|bass|sampler|prisma|mesh|filter|eq|drive|delay|reverb)\\b"
     },
     "numbers": {
       "name": "constant.numeric.forte",

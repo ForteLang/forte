@@ -1,0 +1,85 @@
+// Rooftop Funk — funk on the roof, 28 bars, composed from blocks. The horn
+// section hits land in the chorus; the bridge is a conversation between
+// clav and bass. The song just books the players' entrances.
+import { Kick909, SnareTight, HatClosed, HatOpen } from "../instruments/drums.forte"
+import { PickBass } from "../instruments/bass.forte"
+import { Clav } from "../instruments/keys.forte"
+import { AnalogBrass } from "../instruments/synths.forte"
+
+// The pocket: kick, snare, and busy 16th hats.
+block Funk {
+  track Kick  { instrument Kick909(click: 0.5) volume 0.9 play beat`X--- --x- x--- -x--` at bars(1..4) }
+  track Snare { instrument SnareTight(snap: 0.8) volume 0.7 play beat`---- x--- ---- x--x` at bars(1..4) }
+  track Hat   { instrument HatClosed(bright: 0.9) volume 0.4 pan 0.2 play beat`x-xx -xx- xx-x -xxX` at bars(1..4) }
+}
+
+// Chorus kit: the pocket with an open hat splash.
+block FunkOpen : Funk {
+  track Open { instrument HatOpen(decay: 0.2) volume 0.35 play beat`---- ---- --x- ----` at bars(1..4) }
+}
+
+// The main bass riff — one bar of picked funk.
+block Bassline {
+  key E minor
+  track Bass {
+    instrument PickBass()
+    volume 0.8
+    play notes`E2:0.25 _:0.25 E2:0.25 G2:0.25 A2:0.5 _:0.5 E2:0.25 D2:0.25 E2:0.5 _:0.5 B1:0.25 D2:0.25` at bars(1..4)
+  }
+}
+
+// Bridge variant: the bass steps forward and speaks in full phrases.
+block BassTalk : Bassline {
+  track Bass { play notes`E2:0.5 G2:0.25 A2:0.25 B2:0.5 A2:0.25 G2:0.25 E2:0.5 D2:0.5 E2:1` at bars(1..4) }
+}
+
+// The clav vamp — muted, driven, always chattering.
+block Vamp {
+  key E minor
+  let vamp = prog`Em7 | Em7 | A7 | A7`
+  track Clav {
+    instrument Clav(mute: 0.6)
+    insert drive(drive: 0.25)
+    volume 0.5
+    pan 0.15
+    play arp(vamp, rate: 0.25, style: "updown") at bars(1..4)
+  }
+}
+
+// The horn section hits.
+block Horns {
+  key E minor
+  let kime = prog`G | A | Em7 | Em7`
+  track Horns {
+    instrument AnalogBrass(blow: 0.65)
+    volume 0.5
+    pan -0.1
+    play chords(kime) at bars(1..4)
+  }
+}
+
+song "Rooftop Funk" {
+  tempo 106bpm
+  meter 4/4
+  key E minor
+
+  section groove = bars(1..8)
+  section horns  = bars(9..16)
+  section bridge = bars(17..20)
+  section outset = bars(21..28)
+
+  play Funk at groove
+  play FunkOpen at horns
+  play Funk at bridge
+  play Funk at outset
+
+  play Bassline at bars(1..16)
+  play BassTalk at bridge
+  play Bassline at outset
+
+  play Vamp at bars(1..20)
+  play Vamp at outset
+
+  play Horns at horns
+  play Horns at outset
+}

@@ -16,8 +16,8 @@ trap 'rm -rf "$SCRATCH"' EXIT
 fail=0
 
 echo "== corpus: check every .forte =="
-for f in lib/std/*.forte songs/devices/*.forte songs/*.forte \
-         songs/patterns/*.forte songs/examples/*.forte; do
+for f in packages/*/instruments/*.forte packages/*/songs/devices/*.forte \
+         packages/*/blocks/*.forte packages/*/songs/*.forte packages/*/package.forte; do
   if ! $FORTE check "$f" > /dev/null 2>&1; then
     echo "   FAIL check: $f" >&2
     $FORTE check "$f" >&2 || true
@@ -29,13 +29,13 @@ echo "   OK: all sources compile"
 render_all=1
 if [ -n "${CORPUS_BASE:-}" ]; then
   changed="$(git diff --name-only "$CORPUS_BASE"...HEAD 2>/dev/null || echo ALL)"
-  if [ "$changed" != "ALL" ] && ! grep -qE '^(lib/|crates/|scripts/)' <<< "$changed"; then
+  if [ "$changed" != "ALL" ] && ! grep -qE '^(packages/[^/]+/instruments/|crates/|scripts/)' <<< "$changed"; then
     render_all=0
   fi
 fi
 
 echo "== corpus: build patterns/examples (full=$render_all) =="
-for f in songs/patterns/*.forte songs/examples/*.forte; do
+for f in packages/*/blocks/*.forte packages/*/songs/*.forte; do
   if [ "$render_all" = 0 ] && ! grep -qx "$f" <<< "${changed:-}"; then
     continue
   fi

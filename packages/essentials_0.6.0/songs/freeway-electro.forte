@@ -1,0 +1,99 @@
+// Freeway Electro — 32-bar electro, block-composed. 808 skeleton with
+// SH101 zaps and P5 chord hits; a tom conversation takes over the break
+// and the bare backbone rides out the last four bars.
+import { BD808, SD808, CH808, OH808, CP808, CB808, LT808, MT808, HT808 } from "../instruments/tr808.forte"
+import { SH101Bass, SH101Zap } from "../instruments/sh101.forte"
+import { P5Brass } from "../instruments/prophet5.forte"
+
+// Kick + snare skeleton: 2-bar phrase with the ghosted pickup at the end.
+block Backbone {
+  let kick  = beat`X--- --x- --x- x--- X--- --x- ---- x-.-`
+  let snare = beat`---- X--- ---- X--- ---- X--- ---- X.--`
+  track BD { instrument BD808(tone: 0.45, decay: 0.55) insert comp(thresh: 0.4, ratio: 0.6) volume 0.95 play kick at bars(1..2) }
+  track SD { instrument SD808(snappy: 0.7) volume 0.8 play snare at bars(1..2) }
+}
+
+// Closed-hat top line.
+block TopHats {
+  let chh = beat`x.x. x.x. x.x. x.xX`
+  track CH { instrument CH808() volume 0.45 pan 0.15 play chh at bars(1..1) }
+}
+
+// Second-roll extras: open hats and the cowbell figure.
+block RideBells {
+  let ohh  = beat`--x- ---- --x- ----`
+  let bell = beat`x--- ---- -x-- --x-`
+  track OH { instrument OH808(decay: 0.3) volume 0.35 play ohh at bars(1..1) }
+  track CB { instrument CB808() volume 0.3 pan -0.25 play bell at bars(1..1) }
+}
+
+// Off-beat clap.
+block Claps {
+  let clap = beat`---- x--- ---- ----`
+  track CP { instrument CP808(room: 0.5) volume 0.5 play clap at bars(1..1) }
+}
+
+// The break: low/mid toms trade a 4-bar conversation, high tom stabs.
+block TomTalk {
+  let toms = beat`x-x- ---- ---- x--- ---- x-x- ---- ---- x--- -x-- x-x- ---- --x- ---- x-x- X---`
+  let zap  = beat`---- ---x ---- ----`
+  track LT { instrument LT808() volume 0.7 pan -0.2 play toms at bars(1..4) }
+  track MT { instrument MT808() volume 0.65 play toms at bars(1..4) }
+  track HT { instrument HT808() volume 0.6 pan 0.2 play zap at bars(1..4) }
+}
+
+// One-bar SH101 bass riff with octave slides.
+block ZapBass {
+  key G minor
+  track Bass {
+    instrument SH101Bass(cutoff: 0.38, glide: 0.04)
+    insert drive(drive: 0.15)
+    volume 0.8
+    play notes`G1:0.25 _:0.25 G1:0.25 G2~:0.25 _:0.25 G1:0.25 _:0.25 Bb1:0.25 _:0.25 G1:0.25 F1:0.25 _:0.25 G1:0.25 D2~:0.25 G1:0.25 _:0.25` at bars(1..1)
+  }
+}
+
+// Second-roll topping: delayed zap accents and P5 brass hits.
+block ZapTop {
+  key G minor
+  let zap = beat`---- ---x ---- ----`
+  track Zap {
+    instrument SH101Zap()
+    insert delay(time: 0.25, fdbk: 0.4, mix: 0.35)
+    volume 0.45
+    pan 0.3
+    play zap at bars(1..1)
+  }
+  track Hits {
+    instrument P5Brass(blow: 0.6)
+    insert chorus(rate: 0.3, depth: 0.4, mix: 0.4)
+    volume 0.45
+    pan -0.1
+    play notes`_:3 [G3 Bb3 D4]:0.5 _:0.5 _:3.5 [F3 A3 C4]:0.5` at bars(1..2)
+  }
+}
+
+song "Freeway Electro" {
+  tempo 118bpm
+  swing 0.52
+  meter 4/4
+  key G minor
+
+  section roll  = bars(1..12)
+  section brk   = bars(13..16)
+  section roll2 = bars(17..28)
+  section out   = bars(29..32)
+
+  play Backbone at roll
+  play Backbone at roll2
+  play Backbone at out
+  play TopHats at roll
+  play TopHats at roll2
+  play Claps at bars(5..28)
+  play TomTalk at brk
+  play RideBells at roll2
+
+  play ZapBass at roll
+  play ZapBass at roll2
+  play ZapTop at roll2
+}

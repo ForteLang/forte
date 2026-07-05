@@ -17,8 +17,8 @@ const API_PORT = 9391;
 
 // seed the hub via the CLI
 const run = (...a) => execFileSync(FORTE, a, { env: { ...process.env, FORTE_HUB: HUB } }).toString();
-console.log(run('hub', 'publish', join(ROOT, 'songs/devices/warm.forte')).trim());
-console.log(run('hub', 'publish', join(ROOT, 'songs/handmade.forte')).trim());
+console.log(run('hub', 'publish', join(ROOT, 'packages/essentials_0.6.0/songs/devices/warm.forte')).trim());
+console.log(run('hub', 'publish', join(ROOT, 'packages/essentials_0.6.0/songs/handmade.forte')).trim());
 console.log(run('hub', 'release', 'handmade').trim());
 
 const api = spawn(FORTE, ['hub', 'serve', '--port', String(API_PORT)], {

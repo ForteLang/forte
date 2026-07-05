@@ -110,7 +110,7 @@ async function tryMonaco(initial) {
         root: [
           [/\/\/.*/, 'comment'],
           [/\b(song|track|return|section|let|instrument|insert|play|at|send|volume|pan|tempo|meter|key|bars|automate|modulate|from|to|over|with)\b/, 'keyword'],
-          [/\b(chords|arp|bass|sampler|polymer|grid|filter|eq|drive|delay|reverb|beat|notes|prog)\b/, 'type'],
+          [/\b(chords|arp|bass|sampler|prisma|mesh|filter|eq|drive|delay|reverb|beat|notes|prog)\b/, 'type'],
           [/"[^"]*"/, 'string'],
           [/`[^`]*`/, 'string.backtick'],
           [/-?\d+(\.\d+)?\w*/, 'number'],
@@ -349,7 +349,7 @@ async function loadSong(name) {
   if (locals.includes(name)) {
     text = await store.read(name);
   } else {
-    text = await (await fetch(`../songs/${name}`)).text();
+    text = await (await fetch(`../packages/essentials_0.6.0/songs/${name}`)).text();
   }
   setText(text);
   recompile(0);
@@ -684,7 +684,7 @@ async function boot() {
   }
   for (const lib of MODULE_LIBS) {
     try {
-      bundledModules[lib] = await (await fetch(`../songs/${lib}`)).text();
+      bundledModules[lib] = await (await fetch(`../packages/essentials_0.6.0/songs/${lib}`)).text();
     } catch { /* offline without cache: song imports will diagnose */ }
   }
   await refreshModules();
@@ -695,7 +695,7 @@ async function boot() {
 
   const initialText = locals.includes(currentName)
     ? await store.read(currentName)
-    : await (await fetch(`../songs/${currentName}`)).text();
+    : await (await fetch(`../packages/essentials_0.6.0/songs/${currentName}`)).text();
   setText(initialText);
   await tryMonaco(initialText);
   onChange = () => {

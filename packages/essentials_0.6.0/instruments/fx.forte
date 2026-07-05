@@ -1,0 +1,55 @@
+// std/fx — 6 transition / one-shot effects. Write build-up risers and
+// impacts as instruments and they slot right into your song code.
+// Usage: import { Riser, Impact } from "packages/essentials_0.6.0/instruments/fx.forte"
+
+device Riser : Instrument {
+  param climb = 0.8 in 0.2..1.0   // depth of the sweep upward
+
+  node env = adsr(a: 0.35, d: 0.1, s: 1.0, r: 0.3)
+  node up  = adsr(a: 1.0, d: 0.0, s: 1.0, r: 0.2)         // keeps climbing slowly
+  node nz  = svf(in: noise(), cutoff: 0.3, reso: 0.5, mod: gain(in: up, level: climb))
+  out gain(in: nz, mod: env, level: 0.7)
+}
+
+device Downlifter : Instrument {
+  node env  = adsr(a: 0.005, d: 1.0, s: 0.0, r: 0.5)
+  node fall = adsr(a: 0.001, d: 1.0, s: 0.0, r: 0.5)
+  node nz   = svf(in: noise(), cutoff: 0.15, reso: 0.5, mod: gain(in: fall, level: 0.7))
+  out gain(in: nz, mod: env, level: 0.5)
+}
+
+device Impact : Instrument {
+  node env  = adsr(a: 0.001, d: 0.9, s: 0.0, r: 0.8)
+  node penv = adsr(a: 0.001, d: 0.12, s: 0.0, r: 0.06)
+  node boom = osc(freq: gain(in: note.freq, level: 0.5), shape: "sine",
+                  mod: gain(in: penv, level: 0.4))
+  node air  = gain(in: svf(in: noise(), cutoff: 0.75, reso: 0.2), level: 0.25)
+  node sum  = mix(a: shaper(in: boom, drive: 0.5, mode: "tanh"), b: air)
+  out gain(in: sum, mod: env, level: 0.9)
+}
+
+device Zap : Instrument {
+  node env  = adsr(a: 0.001, d: 0.09, s: 0.0, r: 0.04)
+  node penv = adsr(a: 0.001, d: 0.06, s: 0.0, r: 0.03)
+  node o    = osc(freq: mix(a: note.freq, b: note.freq), shape: "saw",
+                  mod: gain(in: penv, level: 0.9))
+  node f    = svf(in: o, cutoff: 0.7, reso: 0.6)
+  out gain(in: f, mod: env, level: 0.6)
+}
+
+device NoiseCrash : Instrument {
+  node env = adsr(a: 0.001, d: 1.0, s: 0.0, r: 1.0)
+  node nz  = svf(in: noise(), cutoff: 0.85, reso: 0.15)
+  node fz  = shaper(in: nz, drive: 0.4, mode: "clip")
+  out gain(in: fz, mod: env, level: 0.55)
+}
+
+device Stab : Instrument {
+  node env  = adsr(a: 0.001, d: 0.18, s: 0.0, r: 0.1)
+  node o1   = osc(shape: "saw")
+  node o5   = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.5)), shape: "saw")
+  node o8   = osc(freq: mix(a: note.freq, b: note.freq), shape: "square")
+  node sum  = mix(a: o1, b: mix(a: gain(in: o5, level: 0.5), b: gain(in: o8, level: 0.3)))
+  node f    = svf(in: sum, cutoff: 0.55, reso: 0.4)
+  out gain(in: f, mod: env, level: 0.6)
+}

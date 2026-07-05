@@ -7,8 +7,8 @@ use forteweb::*;
 fn peak_after(seconds: f32) -> (f32, f64) {
     let ctx = fw_new(48_000.0);
     unsafe {
-        let src = std::fs::read("../../songs/first-light.forte").unwrap();
-        let warm = std::fs::read_to_string("../../songs/devices/warm.forte").unwrap();
+        let src = std::fs::read("../../packages/essentials_0.6.0/songs/first-light.forte").unwrap();
+        let warm = std::fs::read_to_string("../../packages/essentials_0.6.0/songs/devices/warm.forte").unwrap();
         let modules = serde_json::json!({ "devices/warm.forte": warm }).to_string();
 
         let mp = fw_modules_prepare(ctx, modules.len());

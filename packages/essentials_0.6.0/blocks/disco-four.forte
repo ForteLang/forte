@@ -1,0 +1,63 @@
+// Pattern: Disco (118bpm) — four-on-the-floor + octave bass +
+// string machine. The offbeat open hat makes the hips move.
+import { Kick909, HatOpen, HatClosed, Clap } from "../instruments/drums.forte"
+import { OctaveBass } from "../instruments/bass.forte"
+import { StringMachine } from "../instruments/synths.forte"
+import { Clav } from "../instruments/keys.forte"
+
+block DiscoFourDrums {
+  let four = beat`x--- x--- x--- x---`
+  let off  = beat`--x- --x- --x- --x-`
+  let funk = beat`x-x- -x-- x--x --x-`
+
+  track Kick { instrument Kick909(click: 0.45) volume 0.9 play four at bars(1..8) }
+  track Off  { instrument HatOpen(decay: 0.22) volume 0.5 pan 0.1 play off at bars(1..8) }
+  track Hat  { instrument HatClosed(bright: 0.95) volume 0.35 pan -0.2 play funk at bars(1..8) }
+}
+
+block DiscoFourBass {
+  key D minor
+  let boog = prog`Dm7 | G7 | Bbmaj7 | A7`
+  track Bass {
+    instrument OctaveBass(blend: 0.65)
+    volume 0.8
+    play arp(boog, rate: 0.25, style: "up") at bars(1..8)
+  }
+}
+
+block DiscoFourKeys {
+  key D minor
+  let clap = beat`---- x--- ---- x---`
+  let boog = prog`Dm7 | G7 | Bbmaj7 | A7`
+
+  return Studio {
+    insert reverb(size: 0.55, decay: 0.4, mix: 1.0)
+    volume 0.7
+  }
+
+  track Clap { instrument Clap(tone: 0.55) volume 0.55 send Studio 0.25 play clap at bars(1..8) }
+
+  track Strings {
+    instrument StringMachine()
+    send Studio 0.4
+    volume 0.5
+    play chords(boog) at bars(1..8)
+  }
+
+  track Clav {
+    instrument Clav(mute: 0.65)
+    volume 0.4
+    pan 0.25
+    play arp(boog, rate: 0.25, style: "down") at bars(5..8)
+  }
+}
+
+block DiscoFour {
+  tempo 118bpm
+  meter 4/4
+  key D minor
+
+  play DiscoFourDrums at bars(1..8)
+  play DiscoFourBass at bars(1..8)
+  play DiscoFourKeys at bars(1..8)
+}

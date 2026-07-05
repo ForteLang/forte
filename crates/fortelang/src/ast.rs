@@ -110,6 +110,10 @@ pub enum NodeArg {
 #[derive(Clone, Debug)]
 pub struct SongAst {
     pub name: String,
+    /// `desc "…"` — one-line description shown by forte play / catalogs.
+    pub desc: Option<String>,
+    /// `tags "acid, bass, 303"` — search keywords for packages/browsing.
+    pub tags: Vec<String>,
     pub tempo: Option<(f64, Pos)>,
     pub swing: Option<(f64, Pos)>,
     pub meter: Option<((u32, u32), Pos)>,

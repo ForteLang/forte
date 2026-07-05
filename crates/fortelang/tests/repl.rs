@@ -17,7 +17,7 @@ fn layering_builds_a_multitrack_song() {
     assert!(matches!(eval(&mut s, &mut undo, ":tempo 140"), Action::Play(_)));
     assert!(matches!(eval(&mut s, &mut undo, "beat`x--- x-x-`"), Action::Play(_)));
     assert!(matches!(eval(&mut s, &mut undo, ":track Bass"), Action::Msg(_)));
-    assert!(matches!(eval(&mut s, &mut undo, ":inst polymer(wave: \"saw\", sub: 0.8)"), Action::Play(_)));
+    assert!(matches!(eval(&mut s, &mut undo, ":inst prisma(wave: \"saw\", sub: 0.8)"), Action::Play(_)));
     assert!(matches!(eval(&mut s, &mut undo, "notes`C2:1 G2:1`"), Action::Play(_)));
     assert!(matches!(eval(&mut s, &mut undo, ":vol 0.7"), Action::Play(_)));
 

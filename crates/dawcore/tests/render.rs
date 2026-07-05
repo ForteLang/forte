@@ -14,7 +14,7 @@ fn grid_synth_makes_sound() {
     let (mut engine, mut handle) = Engine::new(sr);
     let project = Project::demo();
     let bass = project.tracks.iter().find(|t| t.name == "Bass").unwrap();
-    assert_eq!(bass.devices[0].kind, dawcore::model::DeviceKind::PolyGrid);
+    assert_eq!(bass.devices[0].kind, dawcore::model::DeviceKind::PolyMesh);
     assert!(bass.devices[0].grid.is_some(), "grid device has no graph");
     let bass_id = bass.id;
 

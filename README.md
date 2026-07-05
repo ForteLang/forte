@@ -55,13 +55,13 @@ echo 'source <(forte complete bash)' >> ~/.bashrc   # bash
 echo 'source <(forte complete zsh)'  >> ~/.zshrc    # zsh
 
 forte repl                              # type a line, hear it immediately
-forte check songs/first-light.forte     # validate (errors in musical terms + line numbers)
-forte play  songs/first-light.forte     # live playback + console timeline; saves hot-reload
+forte check packages/essentials_0.6.0/songs/first-light.forte     # validate (errors in musical terms + line numbers)
+forte play  packages/essentials_0.6.0/songs/first-light.forte     # live playback + console timeline; saves hot-reload
 forte instruments play Bass303          # your keyboard becomes a piano (a w s e d ...)
 forte browser                           # launch the browser editor
-forte build songs/first-light.forte     # WAV + build proof (digest included)
-forte build songs/handmade-kit.forte --stems  # per-track WAVs + per-stem digests
-forte export songs/first-light.forte    # self-contained zip (song + takes + proof + history)
+forte build packages/essentials_0.6.0/songs/first-light.forte     # WAV + build proof (digest included)
+forte build packages/essentials_0.6.0/songs/handmade-kit.forte --stems  # per-track WAVs + per-stem digests
+forte export packages/essentials_0.6.0/songs/first-light.forte    # self-contained zip (song + takes + proof + history)
 forte upgrade                           # update the forte command itself
 ```
 
@@ -73,7 +73,7 @@ forte> beat`x--- x-x-`                     ← loops instantly
 forte> let theme = prog`Am | F | C | G`
 forte> arp(theme, rate: 0.25, style: "updown")
 ♪ playing
-forte> :inst polymer(wave: "saw")          ← swap the instrument while it plays
+forte> :inst prisma(wave: "saw")          ← swap the instrument while it plays
 forte> :fx reverb(mix: 0.3)
 forte> :save jam.forte                     ← the jam becomes a song file
 ```
@@ -84,7 +84,7 @@ forte> :save jam.forte                     ← the jam becomes a song file
 | `:track Bass` / `:tracks` / `:drop Bass` | Layer tracks; subsequent patterns, `:inst`, `:fx` target that track |
 | `:vol 0.7` / `:pan -0.3` / `:undo` | Volume/pan of the current track, undo one step |
 | `let name = …` / `device … { … }` / `import …` | Add to the session (multi-line OK; errors roll back) |
-| `:tempo 140` / `:inst polymer(…)` / `:fx reverb(…)` / `:fx clear` | Change everything without stopping |
+| `:tempo 140` / `:inst prisma(…)` / `:fx reverb(…)` / `:fx clear` | Change everything without stopping |
 | `:show` / `:save jam.forte` / `:stop` / `:quit` / `:help` | Show source / save as a song / stop / quit |
 
 ### Blocks — compose with reusable parts
@@ -95,8 +95,8 @@ multi-track piece of music. Songs are just the outermost block — they decide
 put, content loops to fill the placement, and blocks nest arbitrarily deep:
 
 ```forte
-import { AcidLine } from "../blocks/acid-line.forte"
-import { FourFloor } from "../blocks/four-floor.forte"
+import { AcidLine } from "../packages/essentials_0.6.0/blocks/acid-line.forte"
+import { FourFloor } from "../packages/essentials_0.6.0/blocks/four-floor.forte"
 
 song "Block Party" {
   tempo 126bpm
@@ -109,7 +109,7 @@ song "Block Party" {
 ```
 
 Reusable blocks live in `blocks/`; a block library is directly playable
-(`forte play blocks/acid-line.forte` renders its last block), so parts are
+(`forte play packages/essentials_0.6.0/blocks/acid-line.forte` renders its last block), so parts are
 auditioned exactly like songs.
 
 ### Find, audition, and use instruments
@@ -133,7 +133,7 @@ the performance is source code you can paste straight into a song. Then wire
 it in:
 
 ```forte
-import { BD808, SD808, CH808 } from "lib/std/tr808.forte"
+import { BD808, SD808, CH808 } from "packages/essentials_0.6.0/instruments/tr808.forte"
 track Drums { instrument BD808(decay: 0.7) play beat`x--- x---` at bars(1..8) }
 ```
 
@@ -174,14 +174,14 @@ Edit only an instrument library and every song importing it reports
 
 ### Instruments
 
-The standard library `lib/std/` ships 148 instruments written in the device DSL —
+The standard library `packages/essentials_0.6.0/instruments/` ships 148 instruments written in the device DSL —
 including faithful classic-hardware recreations: the full 808, 909 and CR-78 drum
 machines, the 303 bass (with real accent and slide), Juno-style DCO polys
 (PWM + chorus), Prophet-style two-oscillator polys, and SH-101-style monos
 with glide. They are plain code: fork one and rewrite it character by
-character (demo: `forte play songs/std-tour.forte`). For full arrangements to
-learn from, `songs/patterns/` holds genre grooves (house, DnB, bossa nova,
-afrobeat, trap, …) and `songs/examples/` holds complete songs with sections —
+character (demo: `forte play packages/essentials_0.6.0/songs/std-tour.forte`). For full arrangements to
+learn from, `packages/essentials_0.6.0/blocks/` holds genre grooves (house, DnB, bossa nova,
+afrobeat, trap, …) and `packages/essentials_0.6.0/songs/` holds complete songs with sections —
 every one of them compiles and renders under the merge gate (forte ci).
 
 Recorded takes become instruments too: slice, stretch, and reverse one recording
@@ -198,7 +198,7 @@ recorded structurally.
 
 ```bash
 export FORTE_HUB=~/.forte-hub
-forte hub publish songs/handmade.forte   # snapshots imports too; inside a VCS
+forte hub publish packages/essentials_0.6.0/songs/handmade.forte   # snapshots imports too; inside a VCS
                                          # repository the full history is pushed
 forte hub fork handmade ./my-take        # forking brings the history down, and the
                                          # fork stamp itself becomes a commit in the lineage
@@ -211,7 +211,7 @@ For collaboration, **any git host is a hub** — no server required:
 
 ```bash
 # create an empty repository (e.g. you/forte-hub) on your git host
-forte hub publish songs/handmade.forte --hub github:you/forte-hub   # pushes with history
+forte hub publish packages/essentials_0.6.0/songs/handmade.forte --hub github:you/forte-hub   # pushes with history
 forte hub fork handmade ./my-take --hub github:you/forte-hub        # forks with history
 forte hub list --hub github:you/forte-hub
 forte hub serve --hub github:you/forte-hub   # serves a synced checkout locally,
@@ -247,7 +247,13 @@ crates/fortelang  the language: lexer/parser/checker, compiler, CLI (check/build
 crates/forteweb   C-ABI wasm for the browser (compile, play, build proof)
 web/              browser editor + Hub lineage page (PWA)
 editor/           Forte Studio (VSCode extension)
-lib/std/          standard instrument library (148 instruments incl. classic hardware clones)
+packages/         content packages — the Bitwig-style unit of distribution:
+  essentials_0.6.0/
+    package.forte   package metadata (desc/tags)
+    instruments/    148 instruments (808/909/CR-78/303/Juno/SH-101/Prophet …)
+    blocks/         250+ reusable blocks across 49 genres
+    songs/          28 complete songs (reference songs + examples)
+packages/essentials_0.6.0/instruments/          standard instrument library (148 instruments incl. classic hardware clones)
 songs/            reference songs, genre patterns/, full example songs/
 docs/webdaw/      vision / system & software requirements / architecture / roadmap
 scripts/          determinism gate, browser E2E

@@ -288,7 +288,7 @@ fn diff_track(
 fn param_str(kind: dawcore::model::DeviceKind, idx: usize, v: f32) -> String {
     use dawcore::model::DeviceKind as K;
     let choices: &[&str] = match (kind, idx) {
-        (K::Polymer, 0) => &["sine", "saw", "square", "tri"],
+        (K::Prisma, 0) => &["sine", "saw", "square", "tri"],
         (K::Filter, 0) => &["lp", "hp", "bp", "notch"],
         _ => &[],
     };

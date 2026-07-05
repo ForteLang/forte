@@ -169,6 +169,8 @@ impl Parser {
 
         let mut song = SongAst {
             name,
+            desc: None,
+            tags: Vec::new(),
             tempo: None,
             swing: None,
             meter: None,
@@ -192,6 +194,28 @@ impl Parser {
                     break;
                 }
                 Tok::Ident(kw) => match kw.as_str() {
+                    "desc" => {
+                        self.bump();
+                        if let Tok::Str(d) = self.peek().clone() {
+                            self.bump();
+                            song.desc = Some(d);
+                        } else {
+                            self.err("E-PARSE-023", "desc には文字列が必要です(例: desc \"A 4-bar acid line\")");
+                        }
+                    }
+                    "tags" => {
+                        self.bump();
+                        if let Tok::Str(t) = self.peek().clone() {
+                            self.bump();
+                            song.tags = t
+                                .split(',')
+                                .map(|x| x.trim().to_string())
+                                .filter(|x| !x.is_empty())
+                                .collect();
+                        } else {
+                            self.err("E-PARSE-023", "tags には文字列が必要です(例: tags \"acid, bass, 303\")");
+                        }
+                    }
                     "tempo" => {
                         self.bump();
                         if let Some((n, unit, pos)) = self.number("tempo") {

@@ -13,7 +13,7 @@ fn digest(src: &str) -> String {
 const RIFF: &str = r#"block Riff {
   key A minor
   track Lead {
-    instrument polymer(wave: "saw", cutoff: 0.5)
+    instrument prisma(wave: "saw", cutoff: 0.5)
     play notes`A2:1 C3:1 E3:1 A3:1` at bars(1..1)
   }
   track Drums {
@@ -84,7 +84,7 @@ fn the_upper_blocks_settings_win() {
   tempo 90bpm
   key A minor
   track L {
-    instrument polymer(wave: "tri")
+    instrument prisma(wave: "tri")
     play notes`A2:1 E3:1` at bars(1..1)
   }
 }
@@ -107,7 +107,7 @@ fn windows_select_bars_inside_a_block() {
     let two_bars = r#"block Two {
   key C minor
   track L {
-    instrument polymer(wave: "saw")
+    instrument prisma(wave: "saw")
     play notes`C3:4` at bars(1..1)
     play notes`G3:4` at bars(2..2)
   }
@@ -128,7 +128,7 @@ fn blocks_nest_and_transpose_accumulates_to_the_effective_key() {
     let src = r#"block Cell {
   key A minor
   track L {
-    instrument polymer(wave: "saw")
+    instrument prisma(wave: "saw")
     play notes`A2:1` at bars(1..1)
   }
 }
@@ -159,7 +159,7 @@ song "S" {
 const PARENT: &str = r#"block Line {
   key A minor
   track Lead {
-    instrument polymer(wave: "saw", cutoff: 0.5)
+    instrument prisma(wave: "saw", cutoff: 0.5)
     insert delay(time: 0.3, fdbk: 0.3, mix: 0.2)
     play notes`A2:1 C3:1 E3:1 A3:1` at bars(1..1)
   }
@@ -169,7 +169,7 @@ const PARENT: &str = r#"block Line {
 fn inheritance_overrides_instruments_and_effect_params() {
     // swap the instrument
     let swapped = format!(
-        "{PARENT}\nblock Dark : Line {{ track Lead {{ instrument polymer(wave: \"square\", cutoff: 0.2) }} }}\nsong \"S\" {{ tempo 120bpm key A minor play Dark at bars(1..1) }}"
+        "{PARENT}\nblock Dark : Line {{ track Lead {{ instrument prisma(wave: \"square\", cutoff: 0.2) }} }}\nsong \"S\" {{ tempo 120bpm key A minor play Dark at bars(1..1) }}"
     );
     let base = format!("{PARENT}\nsong \"S\" {{ tempo 120bpm key A minor play Line at bars(1..1) }}");
     assert_ne!(digest(&base), digest(&swapped), "the child's instrument must replace the parent's");
@@ -207,25 +207,25 @@ fn inheritance_replaces_patterns_and_chains() {
 
 #[test]
 fn inheritance_errors_are_reported() {
-    let unknown = r#"block A : Nope { track T { instrument polymer() play beat`x---` at bars(1..1) } }"#;
+    let unknown = r#"block A : Nope { track T { instrument prisma() play beat`x---` at bars(1..1) } }"#;
     let errs = compile_str(unknown).err().expect("unknown parent must fail");
     assert!(errs.iter().any(|d| d.code == "E-BLOCK-005"), "{errs:?}");
 
-    let cycle = r#"block A : B { track T { instrument polymer() play beat`x---` at bars(1..1) } }
-block B : A { track U { instrument polymer() play beat`x---` at bars(1..1) } }"#;
+    let cycle = r#"block A : B { track T { instrument prisma() play beat`x---` at bars(1..1) } }
+block B : A { track U { instrument prisma() play beat`x---` at bars(1..1) } }"#;
     let errs = compile_str(cycle).err().expect("inheritance cycle must fail");
     assert!(errs.iter().any(|d| d.code == "E-BLOCK-006"), "{errs:?}");
 }
 
 #[test]
 fn block_errors_speak_the_language() {
-    let unknown = r#"song "S" { tempo 120bpm track T { instrument polymer() play beat`x---` at bars(1..1) } play Nope at bars(1..1) }"#;
+    let unknown = r#"song "S" { tempo 120bpm track T { instrument prisma() play beat`x---` at bars(1..1) } play Nope at bars(1..1) }"#;
     let errs = compile_str(unknown).err().expect("unknown block must fail");
     assert!(errs.iter().any(|d| d.code == "E-BLOCK-001"), "{errs:?}");
 
     let cycle = r#"block A { play B at bars(1..1) }
 block B { play A at bars(1..1) }
-song "S" { tempo 120bpm track T { instrument polymer() play beat`x---` at bars(1..1) } play A at bars(1..1) }"#;
+song "S" { tempo 120bpm track T { instrument prisma() play beat`x---` at bars(1..1) } play A at bars(1..1) }"#;
     let errs = compile_str(cycle).err().expect("cycles must fail");
     assert!(errs.iter().any(|d| d.code == "E-BLOCK-002"), "{errs:?}");
 }
@@ -260,4 +260,34 @@ song "S" {
     // A minor content placed under a C minor root transposes +3
     assert_eq!(b.arranger[0].clip.notes[0].pitch, 57 + 3);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ---------------------------------------------------------------------------
+// metadata: desc and tags
+// ---------------------------------------------------------------------------
+
+#[test]
+fn desc_and_tags_ride_the_root_block() {
+    let src = r#"block Meta {
+  desc "A tiny demo."
+  tags "demo, test, meta"
+  track T { instrument prisma() play notes`C3:1` at bars(1..1) }
+}"#;
+    let p = compile_str(src).unwrap();
+    assert_eq!(p.name, "Meta");
+    assert_eq!(p.desc, "A tiny demo.");
+    assert_eq!(p.tags, vec!["demo", "test", "meta"]);
+
+    // inheritance: the child's desc wins when present
+    let child = format!(
+        "{src}\nblock Var : Meta {{ desc \"The variant.\" }}\nsong \"S\" {{ tempo 120bpm play Var at bars(1..1) }}"
+    );
+    let p = compile_str(&child).unwrap();
+    assert_eq!(p.desc, "", "the song root has no desc of its own");
+
+    // a described, empty root block is valid package metadata
+    let meta_only = r#"block Pkg { desc "A package." tags "pkg" }"#;
+    compile_str(meta_only).expect("desc-only blocks are valid (package.forte)");
+    // …but an undescribed empty root is still an error
+    assert!(compile_str(r#"block Nope { tempo 120bpm }"#).is_err());
 }

@@ -1,0 +1,50 @@
+// Pattern: Afrobeat (112bpm) — the agogo bell pattern is the clock.
+// A syncopated bass in conversation with 16th-note shakers.
+import { Kick606, SnareTight, Shaker } from "../instruments/drums.forte"
+import { Agogo, Conga } from "../instruments/percussion.forte"
+import { RubberBass } from "../instruments/bass.forte"
+import { Clav } from "../instruments/keys.forte"
+
+block AfrobeatGrooveDrums {
+  let bell  = beat`x--x --x- x-x- --x-`
+  let kick  = beat`x--- ---- x--- -x--`
+  let snare = beat`---- x--- --x- x---`
+  let shk   = beat`xxxX xxxx xxxX xxxx`
+  let conga = beat`--x- x--x --x- x--x`
+
+  track Bell  { instrument Agogo() volume 0.5 pan 0.25 play bell at bars(1..8) }
+  track Kick  { instrument Kick606(decay: 0.28) volume 0.85 play kick at bars(1..8) }
+  track Snare { instrument SnareTight(snap: 0.6) volume 0.5 pan -0.1 play snare at bars(3..8) }
+  track Shk   { instrument Shaker() volume 0.35 pan -0.25 play shk at bars(1..8) }
+  track Conga { instrument Conga(open: 0.45) volume 0.55 pan 0.1 play conga at bars(1..8) }
+}
+
+block AfrobeatGrooveBass {
+  key C minor
+  track Bass {
+    instrument RubberBass()
+    volume 0.8
+    play notes`C2:0.5 _:0.5 Eb2:0.25 C2:0.25 _:0.5 G1:0.5 _:0.5 C2:0.5 Bb1:0.5 C2:0.5` at bars(1..8)
+  }
+}
+
+block AfrobeatGrooveKeys {
+  key C minor
+  let vamp = prog`Cm7 | Cm7 | F7 | Cm7`
+  track Keys {
+    instrument Clav(mute: 0.55)
+    volume 0.4
+    pan 0.15
+    play arp(vamp, rate: 0.25, style: "up") at bars(5..8)
+  }
+}
+
+block AfrobeatGroove {
+  tempo 112bpm
+  meter 4/4
+  key C minor
+
+  play AfrobeatGrooveDrums at bars(1..8)
+  play AfrobeatGrooveBass at bars(1..8)
+  play AfrobeatGrooveKeys at bars(1..8)
+}

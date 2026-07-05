@@ -7,7 +7,7 @@ const SONG_A: &str = r#"song "X" {
   tempo 108bpm
   section main = bars(1..4)
   track Keys {
-    instrument polymer(wave: "square", cutoff: 0.45)
+    instrument prisma(wave: "square", cutoff: 0.45)
     volume 0.5
     play notes`C4:1 E4:1 G4:1 _:1` at main
   }
@@ -19,7 +19,7 @@ const SONG_B: &str = r#"song "X" {
   tempo 116bpm
   section main = bars(1..4)
   track Keys {
-    instrument polymer(wave: "saw", cutoff: 0.45)
+    instrument prisma(wave: "saw", cutoff: 0.45)
     volume 0.5
     play notes`C4:1 E4:1 G4:1 _:1` at main
   }
@@ -273,7 +273,7 @@ fn clean_text_merge_with_broken_music_warns() {
   tempo 100bpm
   section verse = bars(1..4)
   track A {
-    instrument polymer()
+    instrument prisma()
     play beat`x---` at verse
   }
 }
@@ -295,7 +295,7 @@ fn clean_text_merge_with_broken_music_warns() {
         dir.join("song.forte"),
         base.replace(
             "\n}\n",
-            "\n  track B {\n    instrument polymer(wave: \"tri\")\n    play beat`--x-` at verse\n  }\n}\n",
+            "\n  track B {\n    instrument prisma(wave: \"tri\")\n    play beat`--x-` at verse\n  }\n}\n",
         ),
     )
     .unwrap();

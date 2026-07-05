@@ -48,7 +48,8 @@ nodeExpr  = ident "(" [ ident ":" nodeArg { "," ident ":" nodeArg } ] ")"
 nodeArg   = string | num | nodeExpr ;
 song      = "song" string body ;                                    (* legacy alias: a named root block *)
 body      = "{" { bodyItem } "}" ;
-bodyItem  = "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
+bodyItem  = "desc" string | "tags" string
+          | "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
           | "let" ident "=" musicLit
           | "section" ident "=" "bars" "(" num ".." num ")"
           | track | return | block | place ;
@@ -156,10 +157,10 @@ anyone can plug their own recording into a published instrument.
 | `sampler(take: <imported recording>, root: A3)` | Same as above. A recorded take becomes an instrument: `root` is the note name (C2..C6) at which the take was performed; playing that note gives the original sound, others are repitched chromatically |
 | `sampler(…, start: 0.25, end: 0.6, loop: "on", reverse: "on")` | Sound design: `start`/`end` set the playback range (as a 0..1 fraction), `loop: "on"` loops the range while the note is held (short ranges become sustained tones), `reverse: "on"` plays in reverse. All are fixed at note-on time, preserving determinism |
 | `kit(C2: kickTake, D2: snareTake, …)` | gain, attack, decay, sustain, release. Note-name keys assign recorded takes to pads (only an exactly matching pitch sounds; original-speed playback, no repitching). A `beat` literal strikes the lowest-pitched pad |
-| `polymer` | wave(sine/saw/square/tri), cutoff, reso, attack, decay, sustain, release, detune, sub, filtenv |
-| `grid()` | Modular sound source with a default patch |
+| `prisma` | wave(sine/saw/square/tri), cutoff, reso, attack, decay, sustain, release, detune, sub, filtenv |
+| `mesh()` | Modular sound source with a default patch |
 
-Beyond the built-ins, a standard instrument library `lib/std/` (drums / percussion / bass /
+Beyond the built-ins, a standard instrument library `packages/essentials_0.6.0/instruments/` (drums / percussion / bass /
 keys / leads / pads / synths / fx, 103 instruments in total) is bundled. These are not a language feature but
 user-space code written in the device DSL of §4.5, used via ordinary `import`.
 
@@ -199,7 +200,7 @@ send level 0..1.
 Resolution of the target parameter is shared by automate / modulate (case-insensitive):
 
 - `volume` (automate only) / an instrument's parameter name — built-ins
-  (polymer / sampler) use the parameter tables; **for user-defined devices, the declared `param`
+  (prisma / sampler) use the parameter tables; **for user-defined devices, the declared `param`
   is the name as-is**.
 - `<insertName>.<parameter>` — refers to an insert effect by the name it was written with:
   `delay.mix`, `Muffle.cutoff` (a user-defined Effect's `param`s are also exposed).
@@ -233,6 +234,27 @@ Unknown names produce E-AUTO-001 / E-LFO-001 with a list of "what is available".
   saturating to 0..1. `automate` and `modulate` **can be layered** on a single parameter
   (modulation rides on top of the ramp), and multiple `modulate`s can be
   stacked as well.
+
+### 4.9.5 Metadata: desc and tags
+
+Every body (song or block) may carry one-line metadata at the top:
+
+```forte
+block AcidLine {
+  desc "A 4-bar 303 acid line in A minor; the filter opens while it plays."
+  tags "acid, bass, 303, house"
+  …
+}
+```
+
+- `desc` is the piece's own words — `forte play` prints the ROOT block's
+  desc above the timeline; catalogs, packages and the browser use it when
+  browsing and importing.
+- `tags` is a comma-separated keyword list for search.
+- Inheritance: a child's `desc`/`tags` override the parent's when present.
+- A root block with a `desc` and no tracks/placements is a valid,
+  deliberately silent file — the shape of `packages/<pkg>/package.forte`
+  metadata blocks (an EMPTY root without a desc is still E-SONG-003).
 
 ### 4.10 Blocks (the universal composition unit)
 

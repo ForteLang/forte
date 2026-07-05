@@ -22,7 +22,7 @@ impl TrackState {
     fn new(name: &str) -> Self {
         TrackState {
             name: name.into(),
-            instrument: "polymer()".into(),
+            instrument: "prisma()".into(),
             inserts: Vec::new(),
             pattern: None,
             volume: None,
@@ -103,7 +103,7 @@ impl Session {
         }
         if !any {
             // a song needs at least one track; silence until a pattern arrives
-            s.push_str("\n  track Main {\n    instrument polymer()\n    play beat`----` at bars(1..8)\n  }\n");
+            s.push_str("\n  track Main {\n    instrument prisma()\n    play beat`----` at bars(1..8)\n  }\n");
         }
         s.push('}');
         s.push('\n');
@@ -263,7 +263,7 @@ const HELP: &str = "\
   :track Bass        トラックを作成/切替(以後のパターン・:inst はそのトラックへ)
   :tracks            一覧(▶ が現在)   :drop Bass  削除
 宣言(セッションに積む): let 名前 = … / device … { … } / import …
-調整: :tempo 140  :inst polymer(wave: \"saw\")  :fx reverb(mix: 0.3)  :fx clear
+調整: :tempo 140  :inst prisma(wave: \"saw\")  :fx reverb(mix: 0.3)  :fx clear
       :vol 0.7  :pan -0.3
 その他: :undo(一手戻る) :show :save jam.forte :stop :quit";
 

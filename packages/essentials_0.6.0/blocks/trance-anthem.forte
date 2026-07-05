@@ -1,0 +1,57 @@
+// Pattern: Trance (138bpm) — supersaw 16th arps over four-on-the-floor.
+// The gated roll creates the floating feel.
+import { Kick909, HatOpen, Clap } from "../instruments/drums.forte"
+import { TranceSaw } from "../instruments/synths.forte"
+import { SubBass } from "../instruments/bass.forte"
+
+block TranceAnthemDrums {
+  let four = beat`x--- x--- x--- x---`
+  let off  = beat`--x- --x- --x- --x-`
+
+  track Kick { instrument Kick909(click: 0.55) volume 0.95 play four at bars(1..8) }
+  track Off  { instrument HatOpen(decay: 0.2) volume 0.45 play off at bars(1..8) }
+}
+
+block TranceAnthemBass {
+  key F minor
+  let lift = prog`Fm | Db | Ab | Eb`
+
+  track Bass {
+    instrument SubBass()
+    volume 0.8
+    play bass(lift, rate: 0.25) at bars(1..8)
+  }
+}
+
+// Clap and supersaw both wash into the Hall reverb — they stay with the return.
+block TranceAnthemHall {
+  key F minor
+  let clap = beat`---- x--- ---- x---`
+  let lift = prog`Fm | Db | Ab | Eb`
+
+  return Hall {
+    insert reverb(size: 0.8, decay: 0.6, mix: 1.0)
+    volume 0.8
+  }
+
+  track Clap { instrument Clap(tone: 0.65) volume 0.5 send Hall 0.3 play clap at bars(5..8) }
+
+  track Anthem {
+    instrument TranceSaw(wide: 0.7)
+    insert delay(time: 0.25, fdbk: 0.35, mix: 0.3)
+    send Hall 0.35
+    volume 0.55
+    play arp(lift, rate: 0.25, style: "updown") at bars(1..8)
+    automate volume from 0.3 to 0.55 over bars(1..4)
+  }
+}
+
+block TranceAnthem {
+  tempo 138bpm
+  meter 4/4
+  key F minor
+
+  play TranceAnthemDrums at bars(1..8)
+  play TranceAnthemBass at bars(1..8)
+  play TranceAnthemHall at bars(1..8)
+}

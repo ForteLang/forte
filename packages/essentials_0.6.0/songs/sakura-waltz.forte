@@ -1,0 +1,85 @@
+// Sakura Waltz — a 3/4 waltz, 24 bars, composed from blocks. The celesta
+// theme is one block, the middle section darkens into minor as its own
+// block, and the theme returns with a variant ending. Meter lives on the
+// song — the root always wins.
+import { StringPad } from "../instruments/pads.forte"
+import { Celesta, Vibraphone } from "../instruments/keys.forte"
+import { UprightBass } from "../instruments/bass.forte"
+import { HatClosed } from "../instruments/drums.forte"
+
+// A whispering waltz pulse on the closed hat.
+block Whisper {
+  track Chat { instrument HatClosed(bright: 0.7) volume 0.25 pan 0.2 play beat`---- x--- x---` at bars(1..1) }
+}
+
+// The theme: celesta melody over strings and a walking waltz bass,
+// all washed in the same hall.
+block Theme {
+  key F minor
+  let bloom = prog`F | Dm7 | Gm7 | C7`
+  return Hall {
+    insert reverb(size: 0.7, decay: 0.55, mix: 1.0)
+    volume 0.7
+  }
+  track Bass { instrument UprightBass() volume 0.7 play bass(bloom, rate: 3) at bars(1..4) }
+  track Strings {
+    instrument StringPad(bright: 0.5)
+    send Hall 0.45
+    volume 0.45
+    play chords(bloom) at bars(1..4)
+  }
+  track Celesta {
+    instrument Celesta()
+    send Hall 0.4
+    volume 0.55
+    pan 0.15
+    play notes`A4:1 C5:1 F5:1 E5:1.5 C5:0.5 A4:1 G4:1 Bb4:1 D5:1 C5:2 A4:1` at bars(1..4)
+  }
+}
+
+// The returning theme: the same phrase, but it rises to stay.
+block ThemeEnd : Theme {
+  track Celesta {
+    play notes`A4:1 C5:1 F5:1 E5:1.5 C5:0.5 A4:1 G4:1 Bb4:1 D5:1 F5:2 F5:1` at bars(1..4)
+  }
+}
+
+// The middle: the harmony clouds over and the vibraphone takes the tune.
+block Shade {
+  key F minor
+  let shade = prog`Dm | Bbmaj7 | Gm7 | A7`
+  return Hall {
+    insert reverb(size: 0.7, decay: 0.55, mix: 1.0)
+    volume 0.7
+  }
+  track Bass { instrument UprightBass() volume 0.7 play bass(shade, rate: 3) at bars(1..4) }
+  track Strings {
+    instrument StringPad(bright: 0.5)
+    send Hall 0.45
+    volume 0.45
+    play chords(shade) at bars(1..4)
+  }
+  track Vibes {
+    instrument Vibraphone(motor: 0.4)
+    send Hall 0.45
+    volume 0.45
+    pan -0.2
+    play notes`D5:1.5 E5:0.5 F5:1 A4:1.5 Bb4:0.5 D5:1 G4:1 Bb4:1 D5:1 C#5:2 A4:1` at bars(1..4)
+  }
+}
+
+song "Sakura Waltz" {
+  tempo 88bpm
+  meter 3/4
+  key F minor
+
+  section themea = bars(1..8)
+  section middle = bars(9..16)
+  section themeb = bars(17..24)
+
+  play Whisper at bars(3..22)
+
+  play Theme at themea
+  play Shade at middle
+  play ThemeEnd at themeb
+}

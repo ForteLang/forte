@@ -144,7 +144,7 @@ fn delay_song(body: &str) -> String {
   tempo 120bpm
   key C minor
   track A {{
-    instrument polymer(wave: "saw", cutoff: 0.5)
+    instrument prisma(wave: "saw", cutoff: 0.5)
     insert delay(time: 0.3, fdbk: 0.45, mix: 0.0)
     play notes`C3:0.5 G3:0.5 C4:0.5 _:2.5` at bars(1..4)
     {body}
@@ -183,7 +183,7 @@ song "E" {{
   tempo 120bpm
   key C minor
   track A {{
-    instrument polymer(wave: "saw", cutoff: 0.8)
+    instrument prisma(wave: "saw", cutoff: 0.8)
     insert Muffle()
     play notes`C3:1 G3:1 C3:1 G3:1` at bars(1..4)
     {body}
@@ -235,7 +235,7 @@ fn builtin_instruments_keep_working() {
   tempo 120bpm
   key C minor
   track A {
-    instrument polymer(wave: "saw", cutoff: 0.4)
+    instrument prisma(wave: "saw", cutoff: 0.4)
     play notes`C3:1 G3:1 C3:1 G3:1` at bars(1..2)
     automate cutoff from 0.2 to 0.9 over bars(1..2)
     modulate cutoff with steps(seq: "0.2 0.8", every: "1/8", amount: 0.3)
