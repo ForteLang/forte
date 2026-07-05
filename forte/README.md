@@ -36,13 +36,9 @@ song "Handmade" {
 }
 ```
 
-| Browser editor (musical-vocabulary diff in the History panel) | Hub lineage page |
-| --- | --- |
-| ![editor](../docs/images/ui-editor.png) | ![hub](../docs/images/ui-hub.png) |
-
-**The fork family tree** — see at a glance whose remix grew out of whose song:
-
-![lineage tree](../docs/images/ui-tree.png)
+| Browser editor (musical-vocabulary diff in the History panel) |
+| --- |
+| ![editor](../docs/images/ui-editor.png) |
 
 ## Getting started
 
@@ -191,61 +187,44 @@ loop: "on", reverse: "on")`, turn beatboxing into a drum kit with
 material via the `take` slot + `sample()` node. Devices don't own takes, so an
 instrument can be published and anyone can plug their own recording into it.
 
-### The Hub
+### Packages — distribution is GitHub
 
-A fork-lineage registry: the only way to take is to fork, so provenance is
-recorded structurally.
-
-```bash
-export FORTE_HUB=~/.forte-hub
-forte hub publish ../packages/essentials_0.6.0/songs/handmade.forte   # snapshots imports too; inside a VCS
-                                         # repository the full history is pushed
-forte hub fork handmade ./my-take        # forking brings the history down, and the
-                                         # fork stamp itself becomes a commit in the lineage
-forte hub release handmade               # deterministic build → digest into the ledger
-forte hub verify handmade                # anyone can re-verify the release
-forte hub serve                          # → http://localhost:8000/web/hub.html to dig the lineage
-```
-
-For collaboration, **any git host is a hub** — no server required:
+Everything is a package: a `forte init` project pushed to GitHub. The CLI
+covers both directions —
 
 ```bash
-# create an empty repository (e.g. you/forte-hub) on your git host
-forte hub publish ../packages/essentials_0.6.0/songs/handmade.forte --hub github:you/forte-hub   # pushes with history
-forte hub fork handmade ./my-take --hub github:you/forte-hub        # forks with history
-forte hub list --hub github:you/forte-hub
-forte hub serve --hub github:you/forte-hub   # serves a synced checkout locally,
-                                             # so the browser lineage page just works
+forte init my-album && cd my-album
+forte package add github:owner/pkg     # vendor flat into packages/<name>_<version>/
+forte package list                     # what you have (desc/tags/license/version)
+forte remote add github:you/my-album   # connect the folder to GitHub
+forte push                             # publish: source, assets, .forte/ history
+forte pull                             # integrate upstream
 ```
 
-A hub is just a git repository (`registry.json` + `store/`): authentication is
-your usual git credentials (SSH keys / `gh auth`), the author is
-`git config user.name`, and the ledger's change history lives in git. GitLab or
-a bare repo on a NAS work the same way. Concurrent publishes resolve via push
-compare-and-swap (lose the race → sync and replay automatically).
+A vendored package never nests: its own `packages/`, `.forte/` and `.git/`
+are excluded on copy, its `requires` are hoisted into the consumer's one
+flat `packages/`, and `package.lock` pins each source + commit. The
+browser's `catalog.html` (served by `forte browser`, backed by
+`/api/packages`) lists every vendored package with browsable sources.
 
-Prefer your own server? An authenticated HTTP server is built in
-(`forte hub serve` + `forte hub signup` — token-based, the author is derived
-from the token).
-
-Inside a forked folder, `forte log` shows **your commits stacked on top of the
-original author's**, and `forte diff <their-commit> HEAD` answers "what did I
-change from the original?" in musical terms.
+Inside a vendored or cloned project, `forte log` shows **your commits
+stacked on top of the original author's**, and
+`forte diff <their-commit> HEAD` answers "what did I change from the
+original?" in musical terms.
 
 ### Forte Studio (VSCode)
 
 `editor/vscode-forte/` — diagnostics, Play/Build, REPL (Shift+Enter), plus a
-sidebar with **History** (commits / musical diff / checkout) and **Hub**
-(browse → ▶ listen / fork / publish / verify / lineage). The UI is a thin
-wrapper around the `forte` CLI.
+sidebar with **History** (commits / musical diff / checkout). The UI is a
+thin wrapper around the `forte` CLI.
 
 ## Repository layout
 
 ```
 crates/dawcore    real-time engine + DSP (lock-free, deterministic, no GUI)
-crates/fortelang  the language: lexer/parser/checker, compiler, CLI (check/build/play/lsp/hub)
+crates/fortelang  the language: lexer/parser/checker, compiler, CLI (check/build/play/lsp/package)
 crates/forteweb   C-ABI wasm for the browser (compile, play, build proof)
-web/              browser editor + Hub lineage page (PWA)
+web/              browser editor + package catalog (PWA)
 editor/           Forte Studio (VSCode extension)
 packages/         content packages — the Bitwig-style unit of distribution:
   essentials_0.6.0/
@@ -270,10 +249,9 @@ scripts/          determinism gate, browser E2E
 ```bash
 forte ci                               # the full merge gate (all of the below)
 forte ci quick                         # tests + clippy + determinism only
-cargo test -p dawcore -p fortelang     # engine + language + hub + REPL
+cargo test -p dawcore -p fortelang     # engine + language + packages + REPL
 scripts/determinism_test.sh            # native/wasm bit-identity gate
 node scripts/web_e2e.mjs               # browser E2E (needs playwright)
-node scripts/hub_e2e.mjs               # hub E2E
 scripts/check_corpus.sh                # every instrument & song compiles + renders
 ```
 

@@ -1,5 +1,5 @@
 // Forte Studio: LSP diagnostics, play/build, REPL, the read-only arrangement
-// view, song history (VCS) and the fork-only Hub. The compiler and the CLI
+// view and song history (VCS). The compiler and the CLI
 // are the single source of truth — this is a thin shell around `forte`.
 
 import { execFile } from 'child_process';
@@ -28,11 +28,6 @@ function forte(args: string[], cwd?: string): Promise<string> {
       else resolve(stdout.trim());
     });
   });
-}
-
-function hubFlags(): string[] {
-  const dir = vscode.workspace.getConfiguration('forte').get<string>('hub');
-  return dir ? ['--hub', dir] : [];
 }
 
 /** Directory whose enclosing .forte repo VCS commands act on. */
@@ -84,62 +79,7 @@ class HistoryProvider implements vscode.TreeDataProvider<CommitItem> {
   }
 }
 
-// ---- Hub view: listen, fork, publish — the fork-only ecosystem -------------
 
-class HubItem extends vscode.TreeItem {
-  constructor(
-    public readonly repo: string,
-    v: number,
-    kind: string,
-    author: string,
-    forkedFrom: string | undefined,
-    releases: number
-  ) {
-    super(`${repo} v${v}`, vscode.TreeItemCollapsibleState.None);
-    this.description = `${kind} · ${author}${forkedFrom ? ` · ⑂ ${forkedFrom}` : ''}`;
-    this.tooltip = releases ? `releases: ${releases}` : undefined;
-    this.contextValue = 'hubRepo';
-    this.iconPath = new vscode.ThemeIcon(kind === 'library' ? 'library' : 'music');
-  }
-}
-
-class HubProvider implements vscode.TreeDataProvider<HubItem> {
-  private ev = new vscode.EventEmitter<void>();
-  readonly onDidChangeTreeData = this.ev.event;
-  refresh() {
-    this.ev.fire();
-  }
-  getTreeItem(e: HubItem) {
-    return e;
-  }
-  async getChildren(): Promise<HubItem[]> {
-    try {
-      const data: {
-        repos: {
-          name: string;
-          v: number;
-          kind: string;
-          author: string;
-          forked_from: { repo: string; v: number } | null;
-          releases: number;
-        }[];
-      } = JSON.parse(await forte(['hub', 'list', '--json', ...hubFlags()], repoCwd()));
-      return data.repos.map(
-        (r) =>
-          new HubItem(
-            r.name,
-            r.v,
-            r.kind,
-            r.author,
-            r.forked_from ? `${r.forked_from.repo} v${r.forked_from.v}` : undefined,
-            r.releases
-          )
-      );
-    } catch {
-      return [];
-    }
-  }
-}
 
 export async function activate(context: vscode.ExtensionContext) {
   // --- language server ------------------------------------------------------
@@ -217,14 +157,12 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // --- Forte Studio: History (VCS) + Hub sidebars ---------------------------
+  // --- Forte Studio: History (VCS) sidebar ----------------------------------
   const history = new HistoryProvider();
-  const hub = new HubProvider();
   const err = (e: unknown) => vscode.window.showErrorMessage(`Forte: ${(e as Error).message}`);
 
   context.subscriptions.push(
     vscode.window.createTreeView('forteHistory', { treeDataProvider: history }),
-    vscode.window.createTreeView('forteHub', { treeDataProvider: hub }),
     vscode.window.onDidChangeActiveTextEditor(() => history.refresh()),
 
     vscode.commands.registerCommand('forte.refreshHistory', () => history.refresh()),
@@ -277,78 +215,6 @@ export async function activate(context: vscode.ExtensionContext) {
         const out = await forte(['merge', branch], repoCwd());
         await showReport(`forte merge ${branch}`, out);
         history.refresh();
-      } catch (e) {
-        err(e);
-      }
-    }),
-
-    vscode.commands.registerCommand('forte.refreshHub', () => hub.refresh()),
-    vscode.commands.registerCommand('forte.hubListen', async (item: HubItem) => {
-      try {
-        const entry = await forte(['hub', 'entry', item.repo, ...hubFlags()], repoCwd());
-        playTerminal?.dispose();
-        playTerminal = vscode.window.createTerminal(`Forte: ${item.repo}`);
-        playTerminal.show(true);
-        playTerminal.sendText(`${fortePath()} play "${entry}"`);
-      } catch (e) {
-        err(e);
-      }
-    }),
-    vscode.commands.registerCommand('forte.hubFork', async (item: HubItem) => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      const dest = await vscode.window.showInputBox({
-        prompt: 'fork 先フォルダ',
-        value: root ? path.join(root, 'forks', item.repo) : item.repo,
-      });
-      if (!dest) return;
-      try {
-        const out = await forte(['hub', 'fork', item.repo, dest, ...hubFlags()], repoCwd());
-        const open = await vscode.window.showInformationMessage(out, 'フォルダを開く');
-        if (open) {
-          await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(dest), {
-            forceNewWindow: true,
-          });
-        }
-      } catch (e) {
-        err(e);
-      }
-    }),
-    vscode.commands.registerCommand('forte.hubLineage', async (item: HubItem) => {
-      try {
-        await showReport(
-          `forte hub lineage ${item.repo}`,
-          await forte(['hub', 'lineage', item.repo, ...hubFlags()], repoCwd())
-        );
-      } catch (e) {
-        err(e);
-      }
-    }),
-    vscode.commands.registerCommand('forte.hubVerify', (item: HubItem) =>
-      vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: `${item.repo} を検証中…` },
-        async () => {
-          try {
-            vscode.window.showInformationMessage(
-              await forte(['hub', 'verify', item.repo, ...hubFlags()], repoCwd())
-            );
-          } catch (e) {
-            err(e);
-          }
-        }
-      )
-    ),
-    vscode.commands.registerCommand('forte.hubPublish', async () => {
-      const file = activeForteFile();
-      if (!file) return;
-      const name = await vscode.window.showInputBox({
-        prompt: 'hub 上の名前(空なら ファイル名)',
-        value: path.basename(file, '.forte'),
-      });
-      if (name === undefined) return;
-      try {
-        const args = ['hub', 'publish', file, ...(name ? ['--as', name] : []), ...hubFlags()];
-        vscode.window.showInformationMessage(await forte(args, repoCwd()));
-        hub.refresh();
       } catch (e) {
         err(e);
       }

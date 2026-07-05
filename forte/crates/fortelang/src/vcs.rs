@@ -6,7 +6,7 @@
 //! 設計メモ:
 //! - 追跡対象は音楽のソースのみ: `*.forte` と `*.frec`。ビルド成果物
 //!   (wav / manifest)は音のソースから再現できるので追跡しない。
-//! - commit に壁時計は入れない(hub と同じ思想)。順序は親チェーンが持つ。
+//! - commit に壁時計は入れない(決定論と同じ思想)。順序は親チェーンが持つ。
 //! - checkout は作業ツリーがクリーンなときだけ(v1)。
 
 use std::collections::BTreeMap;
@@ -406,7 +406,7 @@ impl Repo {
         self.read_tree(&self.commit_obj(&hash)?.tree)
     }
 
-    // ---- history transport (hub push / fork) ---------------------------------
+    // ---- history transport (project push / fork) ------------------------------
 
     /// Every object hash reachable from a commit: the commit chain plus all
     /// trees and blobs. This is what "publishing the history" means.

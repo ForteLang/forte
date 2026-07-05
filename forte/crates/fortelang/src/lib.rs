@@ -15,14 +15,6 @@ pub mod export;
 pub mod fmt;
 pub mod frec;
 pub mod grid_build;
-#[cfg(not(target_family = "wasm"))]
-pub mod hub;
-#[cfg(not(target_family = "wasm"))]
-pub mod hub_git;
-#[cfg(not(target_family = "wasm"))]
-pub mod hub_remote;
-#[cfg(not(target_family = "wasm"))]
-pub mod hub_server;
 pub mod lexer;
 #[cfg(not(target_family = "wasm"))]
 pub mod live;

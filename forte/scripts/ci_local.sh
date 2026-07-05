@@ -22,10 +22,9 @@ fi
 echo "== 3/4 corpus =="
 scripts/check_corpus.sh
 
-echo "== 4/4 web + hub E2E =="
+echo "== 4/4 web E2E =="
 if command -v node >/dev/null 2>&1 && [ -d node_modules/playwright ]; then
   node scripts/web_e2e.mjs
-  node scripts/hub_e2e.mjs
 else
   echo "skip: playwright なし(node scripts/web_e2e.mjs を手動で)"
 fi
