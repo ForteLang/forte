@@ -27,13 +27,20 @@ npx playwright install chromium
 
 ## Testing
 
-Before opening a PR, run at least the following (CI runs the same):
+Before opening a PR, run the merge gate locally (GitHub Actions is
+intentionally off — the gate runs on the maintainer's machine before every
+merge):
 
 ```bash
+scripts/ci_local.sh          # the full gate
+scripts/ci_local.sh quick    # tests + clippy + determinism only
+
+# or piece by piece:
 cargo test -p dawcore -p fortelang     # engine + language + hub + REPL
 scripts/determinism_test.sh            # native/wasm bit-identity gate
 node scripts/web_e2e.mjs               # browser E2E (playwright + chromium)
 node scripts/hub_e2e.mjs               # hub E2E
+scripts/check_corpus.sh                # every instrument & song renders
 ```
 
 ## The determinism gate — the most important rule here
@@ -60,7 +67,7 @@ native, wasm, and in the browser. To keep that promise:
 - One PR = one topic, kept small. Discuss large design changes in an issue
   first.
 - Behavior changes come with tests (Rust unit tests or E2E).
-- CI (GitHub Actions) must be fully green.
+- `scripts/ci_local.sh` must pass (run locally; GitHub Actions is off).
 - Changes to the language also update the relevant part of
   `docs/webdaw/spec/`. The spec and docs are part of the product.
 - Commit messages: first line says what and why. Japanese or English both

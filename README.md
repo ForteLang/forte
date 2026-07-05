@@ -9,7 +9,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ForteLang/forte/actions/workflows/ci.yml"><img src="https://github.com/ForteLang/forte/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
 </p>
 
@@ -139,7 +138,7 @@ with glide. They are plain code: fork one and rewrite it character by
 character (demo: `forte play songs/std-tour.forte`). For full arrangements to
 learn from, `songs/patterns/` holds genre grooves (house, DnB, bossa nova,
 afrobeat, trap, …) and `songs/examples/` holds complete songs with sections —
-every one of them compiles and renders under CI.
+every one of them compiles and renders under the merge gate (scripts/ci_local.sh).
 
 Recorded takes become instruments too: slice, stretch, and reverse one recording
 into many instruments with `sampler(take: voice, start: 0.25, end: 0.6,
@@ -219,6 +218,7 @@ scripts/          determinism gate, browser E2E
 ## Testing
 
 ```bash
+scripts/ci_local.sh                    # the full merge gate (all of the below)
 cargo test -p dawcore -p fortelang     # engine + language + hub + REPL
 scripts/determinism_test.sh            # native/wasm bit-identity gate
 node scripts/web_e2e.mjs               # browser E2E (needs playwright)
