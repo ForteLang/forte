@@ -188,6 +188,27 @@ block DarkAcid : AcidLine {
 }
 ```
 
+### Projects are packages
+
+Work inside a project scaffolded by `forte init <name>` — the folder is
+also the unit of distribution:
+
+```sh
+forte init my-album && cd my-album
+forte package add github:owner/their-package   # vendor into packages/
+forte package list                             # name, version, license, desc
+```
+
+- `package.forte` holds your project's meta block (`desc` / `tags` /
+  `license` / `version` / `requires`).
+- Everything you add lands **flat** in `packages/<name>_<version>/`; a
+  package's own `requires` are fetched and hoisted next to it, so
+  `packages/` never nests. `package.lock` pins what was fetched (source +
+  commit) for reproducibility.
+- Distribution is just GitHub: push the project and others
+  `forte package add github:you/my-album`. Their copy excludes your
+  `packages/` and `.forte/` — dependencies re-resolve from your `requires`.
+
 ## 1. Your first song (5 minutes)
 
 Create `my-song.forte`:

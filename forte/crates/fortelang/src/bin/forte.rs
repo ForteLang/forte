@@ -108,7 +108,37 @@ fn main() -> ExitCode {
         Some("repl") => ExitCode::from(fortelang::repl::run() as u8),
         #[cfg(not(target_family = "wasm"))]
         Some("hub") if args.len() >= 2 => hub_cmd(&args[1..]),
+        // bare `forte init` keeps the classic behaviour (repo in cwd);
+        // `forte init NAME` scaffolds a distributable package project (#57)
+        #[cfg(not(target_family = "wasm"))]
+        Some("init") if args.len() >= 2 => {
+            match fortelang::package::init_project(&args[1]) {
+                Ok(msg) => {
+                    println!("{msg}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("init: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("init") => vcs_print(fortelang::vcs::Repo::init(".")),
+        #[cfg(not(target_family = "wasm"))]
+        Some("package") => {
+            let result = match args.get(1).map(String::as_str) {
+                Some("add") if args.len() >= 3 => fortelang::package::add(&args[2]),
+                Some("list") | None => fortelang::package::list(),
+                _ => Err("usage: forte package add <github:owner/repo[@ref] | URL | PATH> / forte package list".into()),
+            };
+            match result {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("package: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("status") => vcs_status(),
         Some("commit") => {
             let msg = args
@@ -262,7 +292,9 @@ fn main() -> ExitCode {
             eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
             eprintln!("       forte lsp");
-            eprintln!("       forte init                  (このディレクトリをリポジトリに)");
+            eprintln!("       forte init [NAME]           (NAME 付きで package プロジェクトを作成 / なしで cwd をリポジトリに)");
+            eprintln!("       forte package add <github:owner/repo[@ref] | URL | PATH>  (packages/ にフラット導入)");
+            eprintln!("       forte package list          (導入済み package の一覧と説明)");
             eprintln!("       forte status");
             eprintln!("       forte commit -m \"メッセージ\"");
             eprintln!("       forte log");

@@ -1,0 +1,233 @@
+//! `forte package` — the acquisition side of the ecosystem (issue #52/#57).
+//!
+//! A project made by `forte init` IS a distributable package; consumers pull
+//! it with `forte package add <src>` and it lands in the project's flat
+//! `packages/` directory. Dependencies declared with `requires "…"` are
+//! resolved recursively into the SAME flat directory (npm-style hoisting), so
+//! nested `packages/` never exist: a distributed package's own `packages/`
+//! and `.forte/` are excluded when it is copied.
+
+use std::path::{Path, PathBuf};
+
+/// `github:owner/repo[@ref]` → (clone URL, optional ref). Anything else is a
+/// git URL or a local path, passed through.
+fn resolve_src(src: &str) -> (String, Option<String>) {
+    let (base, git_ref) = match src.rsplit_once('@') {
+        // don't split scp-style URLs (git@github.com:…) on their first '@'
+        Some((b, r)) if !b.is_empty() && !r.contains('/') && !r.contains(':') => {
+            (b.to_string(), Some(r.to_string()))
+        }
+        _ => (src.to_string(), None),
+    };
+    if let Some(rest) = base.strip_prefix("github:") {
+        (format!("https://github.com/{rest}.git"), git_ref)
+    } else {
+        (base, git_ref)
+    }
+}
+
+/// Copy a package tree, excluding what must never nest: the package's own
+/// vendored dependencies, VCS state, and git internals.
+fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(from).map_err(|e| e.to_string())?.flatten() {
+        let name = entry.file_name();
+        let name_s = name.to_string_lossy();
+        if name_s == "packages" || name_s == ".forte" || name_s == ".git" || name_s == "target" {
+            continue;
+        }
+        let src = entry.path();
+        let dst = to.join(&name);
+        if src.is_dir() {
+            copy_tree(&src, &dst)?;
+        } else {
+            std::fs::copy(&src, &dst).map_err(|e| format!("{}: {e}", src.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Read a package's identity from its root package.forte (or any single
+/// top-level meta block): (name, version, requires).
+fn read_meta(dir: &Path) -> Result<(String, String, Vec<String>), String> {
+    let meta_path = dir.join("package.forte");
+    let src = std::fs::read_to_string(&meta_path)
+        .map_err(|_| format!("{} に package.forte がありません(package の必須メタ)", dir.display()))?;
+    let ast = crate::parser::parse(&src)
+        .map_err(|ds| ds.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n"))?;
+    let root = ast
+        .blocks
+        .last()
+        .ok_or("package.forte に meta block がありません(block Name { desc … version … })")?;
+    let name = root.name.to_ascii_lowercase();
+    let version = root.body.version.clone().unwrap_or_else(|| "0.0.0".into());
+    Ok((name, version, root.body.requires.clone()))
+}
+
+/// One resolved dependency, recorded in package.lock for reproducibility.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct LockEntry {
+    name: String,
+    version: String,
+    source: String,
+    commit: String,
+}
+
+fn git_head(dir: &Path) -> String {
+    std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(dir)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default()
+}
+
+/// Fetch + place one package (and, recursively, its requires) into the flat
+/// `packages/` of the current project.
+pub fn add(src: &str) -> Result<(), String> {
+    let mut lock: Vec<LockEntry> = std::fs::read_to_string("package.lock")
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    let mut queue = vec![src.to_string()];
+    while let Some(item) = queue.pop() {
+        let (url, git_ref) = resolve_src(&item);
+        let local = Path::new(&url);
+        // local paths install directly; anything else is cloned shallow
+        let (checkout, source_label): (PathBuf, String) = if local.exists() {
+            (local.to_path_buf(), url.clone())
+        } else {
+            let tmp = std::env::temp_dir().join(format!("forte-pkg-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&tmp);
+            let mut cmd = std::process::Command::new("git");
+            cmd.args(["clone", "--depth", "1"]);
+            if let Some(r) = &git_ref {
+                cmd.args(["--branch", r]);
+            }
+            cmd.arg(&url).arg(&tmp);
+            let out = cmd.output().map_err(|e| format!("git が実行できません: {e}"))?;
+            if !out.status.success() {
+                return Err(format!(
+                    "{item} を取得できません:\n{}",
+                    String::from_utf8_lossy(&out.stderr).trim()
+                ));
+            }
+            (tmp, url.clone())
+        };
+
+        let (name, version, requires) = read_meta(&checkout)?;
+        let dirname = format!("{name}_{version}");
+        let dest = Path::new("packages").join(&dirname);
+        if dest.exists() {
+            println!("skip   : {dirname}(導入済み)");
+        } else {
+            copy_tree(&checkout, &dest)?;
+            let commit = git_head(&checkout);
+            println!("added  : packages/{dirname}  ← {item}");
+            lock.retain(|e| !(e.name == name && e.version == version));
+            lock.push(LockEntry { name, version, source: source_label, commit });
+        }
+        // hoist dependencies into the SAME flat packages/ (no nesting, ever)
+        for r in requires {
+            queue.push(r);
+        }
+    }
+    lock.sort_by(|a, b| a.name.cmp(&b.name));
+    std::fs::write("package.lock", serde_json::to_string_pretty(&lock).unwrap())
+        .map_err(|e| e.to_string())?;
+    println!("lock   : package.lock を更新しました");
+    Ok(())
+}
+
+/// `forte package list` — what this project has, with each package's own words.
+pub fn list() -> Result<(), String> {
+    let dir = Path::new("packages");
+    if !dir.is_dir() {
+        println!("packages/ がありません(forte package add で取り込みます)");
+        return Ok(());
+    }
+    let mut entries: Vec<_> = std::fs::read_dir(dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    entries.sort();
+    for p in entries {
+        match read_meta(&p) {
+            Ok((name, version, _)) => {
+                // pull desc/license straight from the meta block
+                let src = std::fs::read_to_string(p.join("package.forte")).unwrap_or_default();
+                let ast = crate::parser::parse(&src).ok();
+                let (desc, license) = ast
+                    .as_ref()
+                    .and_then(|a| a.blocks.last())
+                    .map(|b| {
+                        (
+                            b.body.desc.clone().unwrap_or_default(),
+                            b.body.license.clone().unwrap_or_default(),
+                        )
+                    })
+                    .unwrap_or_default();
+                println!(
+                    "{name} {version}{}",
+                    if license.is_empty() { String::new() } else { format!("  [{license}]") }
+                );
+                if !desc.is_empty() {
+                    println!("  {desc}");
+                }
+            }
+            Err(_) => println!("{}(package.forte なし)", p.display()),
+        }
+    }
+    Ok(())
+}
+
+/// `forte init <name>` — scaffold a project that is ALSO a distributable
+/// package: meta, role directories, flat packages/, and a forte VCS repo.
+pub fn init_project(name: &str) -> Result<String, String> {
+    let dir = Path::new(name);
+    if dir.exists() {
+        return Err(format!("{name} は既に存在します"));
+    }
+    std::fs::create_dir_all(dir.join("blocks")).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(dir.join("songs")).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(dir.join("packages")).map_err(|e| e.to_string())?;
+    // "my-album" → "MyAlbum": each non-alphanumeric boundary starts a word
+    let block_name: String = {
+        let mut out = String::new();
+        let mut upper = true;
+        for ch in name.chars() {
+            if ch.is_alphanumeric() {
+                out.push(if upper { ch.to_ascii_uppercase() } else { ch });
+                upper = false;
+            } else {
+                upper = true;
+            }
+        }
+        if out.is_empty() { "Package".into() } else { out }
+    };
+    std::fs::write(
+        dir.join("package.forte"),
+        format!(
+            "// {name} — a Forte package. This folder is both your project and\n\
+             // the unit of distribution: push it to GitHub and others can\n\
+             // `forte package add github:you/{name}`.\n\
+             block {block_name} {{\n  desc \"Describe this package in one line.\"\n  tags \"\"\n  license \"CC-BY-NC-SA-4.0\"\n  version \"0.1.0\"\n  // requires \"github:fortelang/forte@main\"\n}}\n"
+        ),
+    )
+    .map_err(|e| e.to_string())?;
+    let repo_msg = {
+        let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+        std::env::set_current_dir(dir).map_err(|e| e.to_string())?;
+        let r = crate::vcs::Repo::init(".");
+        std::env::set_current_dir(cwd).map_err(|e| e.to_string())?;
+        r?
+    };
+    Ok(format!(
+        "created: {name}/(package.forte + blocks/ songs/ packages/)\n{repo_msg}\n\
+         次: cd {name} && forte package add github:… で素材を取り込み、blocks/ に block を書く"
+    ))
+}

@@ -49,6 +49,7 @@ nodeArg   = string | num | nodeExpr ;
 song      = "song" string body ;                                    (* legacy alias: a named root block *)
 body      = "{" { bodyItem } "}" ;
 bodyItem  = "desc" string | "tags" string | "license" string
+          | "version" string | "requires" string
           | "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
           | "let" ident "=" musicLit
           | "section" ident "=" "bars" "(" num ".." num ")"
@@ -257,7 +258,15 @@ block AcidLine {
   `packages/LICENSE`: forking and remixing the source is free and
   non-commercial; commercially exploiting rendered audio requires the
   rights holder's permission.
-- Inheritance: a child's `desc`/`tags` override the parent's when present.
+- `version "0.6.0"` names the package/block version. `forte package add`
+  vendors a package into `packages/<name>_<version>/`, so the version is
+  part of the on-disk identity and two versions can coexist.
+- `requires "github:owner/repo[@ref]"` (repeatable) declares a package
+  dependency. `forte package add` resolves requires recursively and hoists
+  every dependency into the consumer's ONE flat `packages/` directory —
+  vendored packages never contain a nested `packages/` of their own.
+- Inheritance: a child's `desc`/`tags`/`license`/`version`/`requires`
+  override the parent's when present.
 - A root block with a `desc` and no tracks/placements is a valid,
   deliberately silent file — the shape of `packages/<pkg>/package.forte`
   metadata blocks (an EMPTY root without a desc is still E-SONG-003).

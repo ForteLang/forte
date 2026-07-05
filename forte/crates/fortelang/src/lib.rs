@@ -28,6 +28,8 @@ pub mod lexer;
 pub mod live;
 pub mod lsp;
 pub mod music;
+#[cfg(not(target_family = "wasm"))]
+pub mod package;
 pub mod parser;
 pub mod perform;
 #[cfg(not(target_family = "wasm"))]

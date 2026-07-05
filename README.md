@@ -89,8 +89,20 @@ fully offline).
 
 All content lives in **packages** — themed, versioned collections
 (`packages/essentials_0.6.0/` ships 150 instruments, 320+ blocks and 28
-songs). Your own project is a package too: compose in it, push it to
-GitHub, and others take it whole and import just the blocks they want.
+songs). Your own project is a package too:
+
+```sh
+forte init my-album          # scaffold: package.forte + blocks/ songs/ packages/
+cd my-album
+forte package add github:fortelang/forte   # vendor a package into packages/
+forte package list           # what you have, in each package's own words
+```
+
+Every dependency lands flat in `packages/<name>_<version>/` (a package's
+`requires` are hoisted next to it — never nested), and `package.lock`
+records exactly what was fetched. Push your project to GitHub and it IS a
+package: others run `forte package add github:you/my-album` and import
+just the blocks they want.
 Package content is licensed [CC BY-NC-SA 4.0](packages/LICENSE): fork and
 remix freely; commercializing rendered audio needs the author's permission.
 

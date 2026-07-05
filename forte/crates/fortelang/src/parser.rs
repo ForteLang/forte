@@ -172,6 +172,8 @@ impl Parser {
             desc: None,
             tags: Vec::new(),
             license: None,
+            version: None,
+            requires: Vec::new(),
             tempo: None,
             swing: None,
             meter: None,
@@ -224,6 +226,24 @@ impl Parser {
                             song.license = Some(l);
                         } else {
                             self.err("E-PARSE-023", "license には文字列が必要です(例: license \"CC-BY-NC-SA-4.0\")");
+                        }
+                    }
+                    "version" => {
+                        self.bump();
+                        if let Tok::Str(v) = self.peek().clone() {
+                            self.bump();
+                            song.version = Some(v);
+                        } else {
+                            self.err("E-PARSE-023", "version には文字列が必要です(例: version \"0.6.0\")");
+                        }
+                    }
+                    "requires" => {
+                        self.bump();
+                        if let Tok::Str(r) = self.peek().clone() {
+                            self.bump();
+                            song.requires.push(r);
+                        } else {
+                            self.err("E-PARSE-023", "requires には文字列が必要です(例: requires \"github:owner/repo@0.6.0\")");
                         }
                     }
                     "tempo" => {
