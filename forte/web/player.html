@@ -46,6 +46,27 @@
     color: #8a919e; font-size: 13px; margin-top: 20px; }
   #drop.hot { border-color: #e8b34c; color: #e8b34c; }
   #status { font-size: 12px; color: #8a919e; margin-top: 12px; min-height: 1.2em; }
+  #arr-wrap { margin-top: 18px; display: none; }
+  #arr { width: 100%; height: 260px; background: #14161b; border: 1px solid #2b2f38;
+    border-radius: 10px; }
+  #blocks { margin-top: 14px; display: none; }
+  #blocks h3 { font-size: 11px; letter-spacing: 1px; color: #8a919e;
+    text-transform: uppercase; margin: 0 0 8px; }
+  .blk { border: 1px solid #2b2f38; border-radius: 10px; background: #1a1d23;
+    padding: 10px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color .15s; }
+  .blk:hover { border-color: #3a3f4b; }
+  .blk.live { border-color: #e8b34c; background: #201d15; }
+  .blk .bname { font-size: 14px; font-weight: 600; }
+  .blk.live .bname::before { content: '▶ '; color: #e8b34c; }
+  .blk .btracks { font: 11px/1.7 ui-monospace, monospace; color: #8a919e; margin-top: 2px; }
+  .blk .btracks b { color: #b6bcc6; font-weight: 500; }
+  #blk-src-wrap { display: none; margin-top: 12px; }
+  #blk-import { font: 12px/1.6 ui-monospace, monospace; color: #e8b34c;
+    background: #14161b; border: 1px solid #2b2f38; border-radius: 8px;
+    padding: 8px 12px; margin-bottom: 8px; user-select: all; }
+  #blk-src { background: #14161b; border: 1px solid #2b2f38; border-radius: 8px;
+    padding: 12px; font: 12px/1.6 ui-monospace, monospace; overflow-x: auto;
+    white-space: pre; max-height: 340px; overflow-y: auto; color: #b6bcc6; }
   .hint code { color: #b6bcc6; }
 </style>
 </head>
@@ -74,6 +95,15 @@
     <div id="time"></div>
   </div>
   <div id="tracks"></div>
+  <div id="arr-wrap"><canvas id="arr"></canvas></div>
+  <div id="blocks">
+    <h3>Blocks — 聴きながら、どれを再利用するか選ぶ</h3>
+    <div id="blk-list"></div>
+    <div id="blk-src-wrap">
+      <div id="blk-import"></div>
+      <pre id="blk-src"></pre>
+    </div>
+  </div>
   <div id="drop">.fortesong ファイルをここにドロップ(複数でプレイリスト)<br>
     <span class="hint">または <code>player.html?src=path/to/song.fortesong</code></span></div>
   <div id="status"></div>
@@ -156,6 +186,7 @@ function parseSong(buf, label) {
     name: manifest.name || label,
     artist: manifest.artist || '',
     desc: manifest.desc || '',
+    creditsRaw: manifest.credits || [],
     credits: (manifest.credits || [])
       .map((c) => `${c.package} ${c.version}${c.artist ? ` (${c.artist})` : ''}${
         c.sponsor ? ` — support: ${c.sponsor}` : ''}`),
@@ -164,8 +195,114 @@ function parseSong(buf, label) {
     lenBeats: manifest.render?.len_beats || 0,
     digest: manifest.render?.f32_digest_fnv1a64 || '',
     text: modules[entry.split('/').pop()] ?? dec.decode(files.get(entry)),
+    entry,
     modules, assets,
   };
+}
+
+// ---- composer view: compile in a main-thread wasm for the arrangement ------
+import('./viz.js').then((m) => { VizClass = m.Viz; });
+let VizClass = null, viz = null, main = null, vizData = null, blockEls = [];
+
+async function ensureMainWasm() {
+  if (main) return;
+  if (!wasmBytes) wasmBytes = await (await fetch('forte.wasm')).arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(wasmBytes.slice(0), {});
+  main = { e: instance.exports, ctx: instance.exports.fw_new(48000) };
+}
+function stage(json, commit) {
+  const bytes = new TextEncoder().encode(json);
+  const ptr = main.e.fw_modules_prepare(main.ctx, bytes.length);
+  new Uint8Array(main.e.memory.buffer, ptr, bytes.length).set(bytes);
+  commit(main.ctx);
+}
+async function composerView(t) {
+  try {
+    await ensureMainWasm();
+    stage(JSON.stringify(t.modules), main.e.fw_modules_commit);
+    stage(JSON.stringify(t.assets), main.e.fw_assets_commit);
+    const src = new TextEncoder().encode(t.text);
+    const sp = main.e.fw_src_prepare(main.ctx, src.length);
+    new Uint8Array(main.e.memory.buffer, sp, src.length).set(src);
+    if (main.e.fw_compile(main.ctx) !== 0) return;
+    const vp = main.e.fw_viz_ptr(main.ctx), vl = main.e.fw_viz_len(main.ctx);
+    vizData = JSON.parse(new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, vp, vl)));
+    if (!viz && VizClass) viz = new VizClass($('arr'));
+    if (viz) { $('arr-wrap').style.display = 'block'; viz.setData(vizData); }
+    renderBlocks(t);
+  } catch (e) { /* the view is optional; playback must never depend on it */ }
+}
+
+// group tracks by their block prefix ("Riff.Acid" → block Riff)
+function blockGroups() {
+  const groups = new Map();
+  for (const t of vizData?.tracks ?? []) {
+    const dot = t.name.indexOf('.');
+    const key = dot > 0 ? t.name.slice(0, dot) : '(root)';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(t);
+  }
+  return groups;
+}
+
+function renderBlocks(t) {
+  const list = $('blk-list');
+  list.innerHTML = '';
+  blockEls = [];
+  for (const [name, tracks] of blockGroups()) {
+    const el = document.createElement('div');
+    el.className = 'blk';
+    const lines = tracks.map((tr) => {
+      const short = tr.name.slice(name === '(root)' ? 0 : name.length + 1);
+      const fx = tr.inserts?.length ? ` + ${tr.inserts.join(' + ')}` : '';
+      return `<b>${short}</b> — ${tr.instrument || '(return)'}${fx}`;
+    }).join('<br>');
+    el.innerHTML = `<div class="bname">${name}</div><div class="btracks">${lines}</div>`;
+    el.onclick = () => showBlockSource(t, name);
+    list.appendChild(el);
+    blockEls.push({ name, el, tracks });
+  }
+  $('blocks').style.display = 'block';
+}
+
+// which blocks are sounding right now — poll the clip spans at the playhead
+function updateLiveBlocks(beats) {
+  for (const { el, tracks } of blockEls) {
+    const live = tracks.some((tr) =>
+      tr.clips.some((c) => beats >= c.start && beats < c.start + c.duration));
+    el.classList.toggle('live', live);
+  }
+}
+
+// click a block: its source from the container + the import line to reuse it
+function showBlockSource(t, name) {
+  if (name === '(root)') return;
+  const re = new RegExp(`^block\\s+${name}[\\s:{]`, 'm');
+  for (const [path, src] of Object.entries(t.modules)) {
+    if (!re.test(src)) continue;
+    // pull the block's own definition (brace matching from its header)
+    const at = src.search(re);
+    let depth = 0, end = at;
+    for (let i = src.indexOf('{', at); i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) { end = i + 1; break; }
+    }
+    const pkg = (t.creditsRaw ?? [])[0];
+    const base = pkg ? `packages/${pkg.package.toLowerCase()}_${pkg.version}/` : '';
+    // module keys are entry-relative; resolve back to the package root
+    const dir = t.entry.split('/').slice(0, -1);
+    const parts = path.split('/');
+    while (parts[0] === '..') { parts.shift(); dir.pop(); }
+    const real = [...dir, ...parts].join('/');
+    $('blk-import').textContent = `import { ${name} } from "${base}${real}"`;
+    $('blk-src').textContent = src.slice(at, end);
+    $('blk-src-wrap').style.display = 'block';
+    $('blk-src-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+  $('blk-import').textContent = `block ${name} — このコンテナ内で定義(entry 直下)`;
+  $('blk-src').textContent = '';
+  $('blk-src-wrap').style.display = 'block';
 }
 
 // ---- audio: the editor's worklet, unchanged ---------------------------------
@@ -203,6 +340,8 @@ function onWorklet(e) {
   if (t.lenBeats > 0 && m.beats < lastBeats - 1) { next(); return; }
   lastBeats = m.beats;
   const secs = (m.beats * 60) / t.tempo;
+  if (viz) viz.setPlayhead(m.beats);
+  updateLiveBlocks(m.beats);
   const total = t.seconds || 1;
   $('bar').style.width = `${Math.min(100, (secs / total) * 100)}%`;
   $('time').textContent = `${mmss(Math.min(secs, total))} / ${mmss(total)}`;
@@ -248,6 +387,7 @@ async function play(i) {
   $('toggle').textContent = '⏸';
   renderList();
   status('');
+  composerView(t);
 }
 const next = () => play(cur + 1);
 const prev = () => play(cur - 1);

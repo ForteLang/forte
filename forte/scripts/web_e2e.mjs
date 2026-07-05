@@ -306,7 +306,7 @@ try {
   //     container, verifies the files digest, compiles and PLAYS — with a
   //     ../-climbing import (smiley-acid) to prove the module rebase
   const track = encodeURIComponent(
-    '../../packages/essentials_0.6.0/albums/first-light/04-smiley-acid.fortesong'
+    '../../packages/essentials_0.6.0/albums/first-light/02-hello-world.fortesong'
   );
   await page.goto(`http://127.0.0.1:${PORT}/forte/web/player.html?src=${track}`, {
     waitUntil: 'load',
@@ -323,7 +323,7 @@ try {
     { timeout: 20000 }
   );
   const trackName = await page.textContent('#t-name');
-  check('player loads the .fortesong meta', trackName === 'Smiley Acid', trackName);
+  check('player loads the .fortesong meta', trackName === 'Hello World', trackName);
   const p1 = await page.textContent('#time');
   await page.waitForTimeout(1500);
   const p2 = await page.textContent('#time');
@@ -345,6 +345,36 @@ try {
     });
   });
   check('player playback is audible', audible > 0.02, `peak ${audible.toFixed(3)}`);
+
+  // 12) the composer view: while a track plays, the player shows its
+  //     arrangement, its blocks with instruments, live highlighting, and
+  //     each block's source + import line one click away
+  await page.waitForSelector('.blk', { timeout: 20000 });
+  const blkInfo = await page.evaluate(() => {
+    const blocks = [...document.querySelectorAll('.blk')];
+    return {
+      count: blocks.length,
+      live: blocks.filter((b) => b.classList.contains('live')).length,
+      hasInstrument: /—\s+\S/.test(blocks[0]?.textContent ?? ''),
+      arrShown: getComputedStyle(document.getElementById('arr-wrap')).display !== 'none',
+    };
+  });
+  check('composer view lists the blocks', blkInfo.count >= 3, `${blkInfo.count} blocks`);
+  check('instruments shown per track', blkInfo.hasInstrument);
+  check('live blocks highlighted while playing', blkInfo.live >= 1, `${blkInfo.live} live`);
+  check('arrangement canvas rendered', blkInfo.arrShown);
+  await page.click('.blk:nth-child(2)');
+  await page.waitForFunction(
+    () => document.getElementById('blk-src-wrap').style.display === 'block',
+    null,
+    { timeout: 10000 }
+  );
+  const importLine = await page.textContent('#blk-import');
+  check(
+    'block source + import line one click away',
+    importLine.startsWith('import {') || importLine.startsWith('block'),
+    importLine.slice(0, 60)
+  );
 } finally {
   await browser.close();
   server.kill();
