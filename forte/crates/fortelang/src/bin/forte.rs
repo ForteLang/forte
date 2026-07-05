@@ -234,13 +234,19 @@ fn main() -> ExitCode {
                 .and_then(|s| {
                     s.trim_start_matches("bars(").trim_end_matches(')').parse::<u32>().ok()
                 });
+            // --block Name: audition ONE block of a library as the root
+            let block = args
+                .iter()
+                .position(|a| a == "--block")
+                .and_then(|i| args.get(i + 1))
+                .cloned();
             // .fortesong file or an album directory → the player
             let target = std::path::Path::new(&args[1]);
             if args[1].ends_with(".fortesong") || (target.is_dir() && target.join("album.forte").is_file())
             {
                 play_album(&args[1], args.iter().any(|a| a == "--verify"), for_secs)
             } else {
-                play(&args[1], for_secs, from_bar)
+                play(&args[1], for_secs, from_bar, block.as_deref())
             }
         }
         #[cfg(not(target_family = "wasm"))]
@@ -356,7 +362,7 @@ fn main() -> ExitCode {
             eprintln!("usage: forte check <song.forte>");
             eprintln!("       forte build <song.forte> [-o out.wav | out.fortesong] [--stems]");
             eprintln!("       forte export <song.forte> [-o out.zip]  (曲+履歴+証明の自己完結 zip)");
-            eprintln!("       forte play  <song.forte> [--for SECS] [--from bars(9)]  (トラックタイムライン付き再生)");
+            eprintln!("       forte play  <song.forte> [--for SECS] [--from bars(9)] [--block Name]  (タイムライン付き再生)");
             eprintln!("       forte play  <name.fortesong | ALBUM-DIR> [--verify]  (プレイヤー: n/p/space/q)");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
             eprintln!("       forte instruments list [QUERY]  (カタログ。list bass / list 808 で絞り込み)");
@@ -754,15 +760,22 @@ fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
 /// every successful recompile is swapped into the running engine without
 /// stopping the transport — listen, edit, listen (SYS-EDT-002 minimal form).
 #[cfg(not(target_family = "wasm"))]
-fn play(path: &str, for_secs: Option<f64>, from_bar: Option<u32>) -> ExitCode {
+fn play(path: &str, for_secs: Option<f64>, from_bar: Option<u32>, block: Option<&str>) -> ExitCode {
     use dawcore::command::Command;
     use dawcore::model::Project;
     use dawcore::sync::full_sync;
     use std::io::{IsTerminal, Write as _};
     use std::time::{Duration, Instant, SystemTime};
 
-    fn compile_file(path: &str) -> Result<Project, Vec<String>> {
-        let src = std::fs::read_to_string(path).map_err(|e| vec![format!("{path}: {e}")])?;
+    fn compile_file(path: &str, block: Option<&str>) -> Result<Project, Vec<String>> {
+        let mut src = std::fs::read_to_string(path).map_err(|e| vec![format!("{path}: {e}")])?;
+        if let Some(b) = block {
+            // an empty heir of the block becomes the LAST definition, so the
+            // chosen block roots the build with its own tempo/key intact
+            src.push_str(&format!("
+block __Probe : {b} {{}}
+"));
+        }
         fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base_dir(path))
             .map_err(|diags| diags.iter().map(|d| format!("{path}:{d}")).collect())
     }
@@ -863,7 +876,7 @@ fn play(path: &str, for_secs: Option<f64>, from_bar: Option<u32>) -> ExitCode {
         out
     }
 
-    let mut project = match compile_file(path) {
+    let mut project = match compile_file(path, block) {
         Ok(p) => p,
         Err(errs) => {
             for e in errs {
@@ -898,7 +911,7 @@ fn play(path: &str, for_secs: Option<f64>, from_bar: Option<u32>) -> ExitCode {
         let m = mtime(path);
         if m != last_mtime {
             last_mtime = m;
-            match compile_file(path) {
+            match compile_file(path, block) {
                 Ok(p) => {
                     let prev = project.tracks.len();
                     apply(&mut audio.handle, &p, prev, from_bar);

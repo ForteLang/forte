@@ -50,6 +50,10 @@
         {
           "id": "forteHistory",
           "name": "History"
+        },
+        {
+          "id": "forteBlocks",
+          "name": "Blocks"
         }
       ]
     },
@@ -101,6 +105,20 @@
       {
         "command": "forte.merge",
         "title": "Forte: Merge Branch…"
+      },
+      {
+        "command": "forte.refreshBlocks",
+        "title": "Blocks を更新",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "forte.blockListen",
+        "title": "▶ 試聴",
+        "icon": "$(play)"
+      },
+      {
+        "command": "forte.blockRefs",
+        "title": "どこから使われている?"
       }
     ],
     "menus": {
@@ -114,6 +132,11 @@
           "command": "forte.refreshHistory",
           "when": "view == forteHistory",
           "group": "navigation@2"
+        },
+        {
+          "command": "forte.refreshBlocks",
+          "when": "view == forteBlocks",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -126,6 +149,16 @@
           "command": "forte.checkoutCommit",
           "when": "view == forteHistory && viewItem == commit",
           "group": "inline@2"
+        },
+        {
+          "command": "forte.blockListen",
+          "when": "view == forteBlocks && viewItem == forteBlock",
+          "group": "inline@1"
+        },
+        {
+          "command": "forte.blockRefs",
+          "when": "view == forteBlocks && viewItem == forteBlock",
+          "group": "context@1"
         }
       ]
     },

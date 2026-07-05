@@ -615,6 +615,11 @@ The ♪ icon in the activity bar is the **Forte Studio** sidebar:
   difference against the working tree opens alongside, in musical terms) and
   **Restore** (checkout). Merging is in the command palette:
   **Forte: Merge Branch…**
+- **Blocks** — every `block` across the workspace, grouped by file. Inline
+  **▶ 試聴** plays just that block as the build root
+  (`forte play <file> --block <Name>`), and right-click →
+  **どこから使われている?** lists every song/block that places or imports
+  it (the reverse reference).
 
 ## 7.5 Version control — give your song a history
 
