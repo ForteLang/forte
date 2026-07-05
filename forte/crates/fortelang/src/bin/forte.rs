@@ -17,6 +17,24 @@ fn main() -> ExitCode {
                 .position(|a| a == "-o")
                 .and_then(|i| args.get(i + 1))
                 .cloned();
+            // the extension picks the format: .fortesong = playable container
+            #[cfg(not(target_family = "wasm"))]
+            if let Some(o) = out.as_deref().filter(|o| o.ends_with(".fortesong")) {
+                match fortelang::songfile::build(&args[1]) {
+                    Ok((bytes, summary)) => {
+                        if let Err(e) = std::fs::write(o, &bytes) {
+                            eprintln!("{o}: 書き込めません: {e}");
+                            return ExitCode::FAILURE;
+                        }
+                        println!("built  : {o} ({summary})");
+                        return ExitCode::SUCCESS;
+                    }
+                    Err(e) => {
+                        eprintln!("build: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
             build(&args[1], out, args.iter().any(|a| a == "--stems"))
         }
         #[cfg(not(target_family = "wasm"))]
@@ -201,7 +219,14 @@ fn main() -> ExitCode {
                 .position(|a| a == "--for")
                 .and_then(|i| args.get(i + 1))
                 .and_then(|s| s.parse::<f64>().ok());
-            play(&args[1], for_secs)
+            // .fortesong file or an album directory → the player
+            let target = std::path::Path::new(&args[1]);
+            if args[1].ends_with(".fortesong") || (target.is_dir() && target.join("album.forte").is_file())
+            {
+                play_album(&args[1], args.iter().any(|a| a == "--verify"), for_secs)
+            } else {
+                play(&args[1], for_secs)
+            }
         }
         #[cfg(not(target_family = "wasm"))]
         Some("browser") => {
@@ -280,9 +305,10 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!("usage: forte check <song.forte>");
-            eprintln!("       forte build <song.forte> [-o out.wav] [--stems]");
+            eprintln!("       forte build <song.forte> [-o out.wav | out.fortesong] [--stems]");
             eprintln!("       forte export <song.forte> [-o out.zip]  (曲+履歴+証明の自己完結 zip)");
             eprintln!("       forte play  <song.forte> [--for SECS]   (トラックタイムラインを表示しながら再生)");
+            eprintln!("       forte play  <name.fortesong | ALBUM-DIR> [--verify]  (プレイヤー: n/p/space/q)");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
             eprintln!("       forte instruments list [QUERY]  (カタログ。list bass / list 808 で絞り込み)");
             eprintln!("       forte instruments play <Name[(args)]>  (キーボードが鍵盤に。1..9/-/= でノブ)");
@@ -861,6 +887,205 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
             if started.elapsed().as_secs_f64() >= t {
                 println!();
                 break;
+            }
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+/// The album player (issue #53): `.fortesong` tracks with next/prev/pause.
+/// A single .fortesong plays as a one-track album.
+#[cfg(not(target_family = "wasm"))]
+fn play_album(path: &str, verify: bool, for_secs: Option<f64>) -> ExitCode {
+    use dawcore::command::Command;
+    use std::io::{IsTerminal, Read as _, Write as _};
+    use std::time::{Duration, Instant};
+
+    let p = std::path::Path::new(path);
+    let (title, artist, desc, track_paths) = if p.is_dir() {
+        match fortelang::songfile::load_album(p) {
+            Ok(Some(a)) => (a.title, a.artist, a.desc, a.tracks),
+            Ok(None) => {
+                eprintln!("play: {} に album.forte がありません", p.display());
+                return ExitCode::FAILURE;
+            }
+            Err(e) => {
+                eprintln!("play: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        (String::new(), String::new(), String::new(), vec![p.to_path_buf()])
+    };
+
+    // load every track up front: files digest is checked here, so a
+    // tampered album refuses to play before the first note
+    let mut songs = Vec::new();
+    for t in &track_paths {
+        match fortelang::songfile::load(&t.to_string_lossy()) {
+            Ok(sf) => songs.push(sf),
+            Err(e) => {
+                eprintln!("play: {}: {e}", t.display());
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    if verify {
+        for sf in &songs {
+            print!("verify {} … ", sf.name);
+            let _ = std::io::stdout().flush();
+            match fortelang::songfile::verify(sf) {
+                Ok(msg) => println!("{msg}"),
+                Err(e) => {
+                    println!("{e}");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+    }
+
+    let mut audio = fortelang::audio::start();
+    if audio.silent {
+        eprintln!("audio: 出力デバイスなし — 無音バックエンドで走行します({})", audio.device_name);
+    }
+    let tty = std::io::stdout().is_terminal();
+    let _raw = if tty { Some(fortelang::live::RawTerm::enter()) } else { None };
+
+    let mm_ss = |s: f64| format!("{}:{:04.1}", (s / 60.0) as i64, s % 60.0);
+    let started = Instant::now();
+    let mut idx = 0usize;
+    let mut drawn = 0usize;
+    'album: while idx < songs.len() {
+        let sf = &songs[idx];
+        let project = match fortelang::songfile::compile(sf) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("play: {}: {e}", sf.name);
+                return ExitCode::FAILURE;
+            }
+        };
+        let len_beats = dawcore::bounce::arrangement_len(&project).max(1.0);
+        let total_secs = len_beats * 60.0 / project.tempo;
+
+        audio.handle.send(Command::Stop);
+        dawcore::sync::full_sync(&mut audio.handle, &project);
+        for slot in project.tracks.len()..dawcore::model::MAX_TRACKS {
+            audio.handle.send(Command::RemoveTrack { slot });
+        }
+        audio.handle.send(Command::SetLoop { enabled: false, start: 0.0, end: f64::MAX / 4.0 });
+        audio.handle.send(Command::SetLaunchQuant(0.0));
+        audio.handle.send(Command::Play);
+        let mut paused = false;
+        if !tty {
+            println!("track {}/{}: {}{}", idx + 1, songs.len(), sf.name, if sf.artist.is_empty() { String::new() } else { format!(" — {}", sf.artist) });
+        }
+
+        loop {
+            std::thread::sleep(Duration::from_millis(50));
+            audio.handle.collect_garbage();
+
+            // keys: n next / p prev / space pause / q quit
+            if tty {
+                let mut buf = [0u8; 8];
+                let n = std::io::stdin().read(&mut buf).unwrap_or(0);
+                for &b in &buf[..n] {
+                    match b {
+                        b'q' | 3 => {
+                            println!();
+                            break 'album;
+                        }
+                        b'n' => {
+                            idx += 1;
+                            if idx >= songs.len() {
+                                println!();
+                                break 'album;
+                            }
+                            continue 'album;
+                        }
+                        b'p' => {
+                            idx = idx.saturating_sub(1);
+                            continue 'album;
+                        }
+                        b' ' => {
+                            paused = !paused;
+                            audio.handle.send(if paused { Command::Pause } else { Command::Play });
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            let pos = audio.handle.shared.position_beats();
+            let secs = pos * 60.0 / project.tempo;
+
+            // end of track (+2s tail for reverbs) → auto-advance
+            if !paused && secs >= total_secs + 2.0 {
+                idx += 1;
+                if idx >= songs.len() {
+                    println!();
+                    break 'album;
+                }
+                continue 'album;
+            }
+            if let Some(t) = for_secs {
+                if started.elapsed().as_secs_f64() >= t {
+                    println!();
+                    break 'album;
+                }
+            }
+
+            if tty {
+                let mut frame = Vec::with_capacity(songs.len() + 4);
+                let head = if title.is_empty() {
+                    format!("\x1b[1m♪ {}\x1b[0m{}", sf.name, if sf.artist.is_empty() { String::new() } else { format!(" — {}", sf.artist) })
+                } else {
+                    format!(
+                        "\x1b[1m♪ {title}\x1b[0m{}  ({} tracks)",
+                        if artist.is_empty() { String::new() } else { format!(" — {artist}") },
+                        songs.len()
+                    )
+                };
+                frame.push(head);
+                if idx == 0 && !desc.is_empty() {
+                    frame.push(format!("\x1b[2m{desc}\x1b[0m"));
+                }
+                for (i, s) in songs.iter().enumerate() {
+                    let mark = if i == idx { "▶" } else { " " };
+                    let line = format!(
+                        "{mark} {:>2}  {:<28} {}",
+                        i + 1,
+                        s.name,
+                        mm_ss(s.seconds.max(0.0))
+                    );
+                    if i == idx {
+                        frame.push(format!("\x1b[1m{line}\x1b[0m"));
+                    } else {
+                        frame.push(format!("\x1b[2m{line}\x1b[0m"));
+                    }
+                }
+                const BAR_W: usize = 36;
+                let frac = (secs / total_secs).clamp(0.0, 1.0);
+                let fill = (frac * BAR_W as f64) as usize;
+                let bar: String =
+                    (0..BAR_W).map(|i| if i < fill { '█' } else { '·' }).collect();
+                frame.push(format!(
+                    "{} {} / {} ▕{bar}▏ space=pause n=next p=prev q=quit",
+                    if paused { "⏸" } else { "▶" },
+                    mm_ss(secs.min(total_secs)),
+                    mm_ss(total_secs),
+                ));
+                let mut out = String::new();
+                if drawn > 0 {
+                    out.push_str(&format!("\x1b[{drawn}A"));
+                }
+                out.push_str("\r\x1b[J");
+                for line in &frame {
+                    out.push_str(line);
+                    out.push('\n');
+                }
+                drawn = frame.len();
+                print!("{out}");
+                let _ = std::io::stdout().flush();
             }
         }
     }

@@ -828,6 +828,9 @@ fn merge_block(parent: &SongAst, child: &SongAst) -> SongAst {
     if !child.requires.is_empty() {
         out.requires = child.requires.clone();
     }
+    if child.artist.is_some() {
+        out.artist = child.artist.clone();
+    }
     if child.tempo.is_some() {
         out.tempo = child.tempo;
     }

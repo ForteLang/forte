@@ -30,6 +30,8 @@ pub mod remote;
 pub mod repl;
 pub mod semdiff;
 pub mod sha;
+#[cfg(not(target_family = "wasm"))]
+pub mod songfile;
 pub mod vcs;
 pub mod viz;
 pub mod zip;

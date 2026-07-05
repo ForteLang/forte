@@ -475,6 +475,14 @@ impl Engine {
             Command::Play => {
                 self.playing = true;
             }
+            Command::Pause => {
+                self.playing = false;
+                // silence held notes but do NOT move the playhead
+                for t in self.tracks.iter_mut().flatten() {
+                    t.pending_offs.clear();
+                    t.all_instruments_off();
+                }
+            }
             Command::Stop => {
                 self.playing = false;
                 self.last_click_beat = -1;

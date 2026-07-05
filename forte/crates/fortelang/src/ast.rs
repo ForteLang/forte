@@ -123,6 +123,8 @@ pub struct SongAst {
     /// `requires "github:owner/repo@ref"` — package dependencies, resolved
     /// FLAT into the consumer's packages/ by `forte package add`.
     pub requires: Vec<String>,
+    /// `artist "…"` — who made this (albums declare it; players display it).
+    pub artist: Option<String>,
     pub tempo: Option<(f64, Pos)>,
     pub swing: Option<(f64, Pos)>,
     pub meter: Option<((u32, u32), Pos)>,

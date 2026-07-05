@@ -174,6 +174,7 @@ impl Parser {
             license: None,
             version: None,
             requires: Vec::new(),
+            artist: None,
             tempo: None,
             swing: None,
             meter: None,
@@ -244,6 +245,15 @@ impl Parser {
                             song.requires.push(r);
                         } else {
                             self.err("E-PARSE-023", "requires には文字列が必要です(例: requires \"github:owner/repo@0.6.0\")");
+                        }
+                    }
+                    "artist" => {
+                        self.bump();
+                        if let Tok::Str(a) = self.peek().clone() {
+                            self.bump();
+                            song.artist = Some(a);
+                        } else {
+                            self.err("E-PARSE-023", "artist には文字列が必要です(例: artist \"Forte Essentials\")");
                         }
                     }
                     "tempo" => {

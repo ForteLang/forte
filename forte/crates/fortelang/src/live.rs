@@ -275,10 +275,13 @@ pub fn live_source(call: &str, import: Option<&str>) -> String {
     )
 }
 
-struct RawTerm;
+/// Raw-mode terminal guard (min 0 time 0 → non-blocking key reads);
+/// restores canonical mode on drop. Shared by the instrument keyboard and
+/// the album player.
+pub struct RawTerm;
 
 impl RawTerm {
-    fn enter() -> Self {
+    pub fn enter() -> Self {
         // min 0 time 0 → read() returns immediately when no key is waiting
         let _ = std::process::Command::new("stty")
             .args(["-icanon", "-echo", "min", "0", "time", "0"])
