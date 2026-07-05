@@ -113,3 +113,24 @@ fn init_and_flat_package_add() {
 
     let _ = std::fs::remove_dir_all(&base);
 }
+
+#[test]
+fn search_rendering_speaks_the_add_command() {
+    // a captured GitHub search response shape
+    let json = r#"{"total_count":2,"items":[
+      {"full_name":"someone/tb303-mods","description":"303 variants","stargazers_count":42},
+      {"full_name":"other/ambient-kit","description":null,"stargazers_count":0}
+    ]}"#;
+    let out = fortelang::package::render_search(json).unwrap();
+    assert!(out.contains("someone/tb303-mods  ★42"), "{out}");
+    assert!(out.contains("forte package add github:someone/tb303-mods"), "{out}");
+    assert!(out.contains("other/ambient-kit  ★0"), "{out}");
+
+    // rate-limit / error responses surface GitHub's own words
+    let err = fortelang::package::render_search(r#"{"message":"API rate limit exceeded"}"#);
+    assert!(err.is_err() && err.unwrap_err().contains("rate limit"));
+
+    // empty result set is a sentence, not silence
+    let none = fortelang::package::render_search(r#"{"total_count":0,"items":[]}"#).unwrap();
+    assert!(none.contains("ありません"), "{none}");
+}

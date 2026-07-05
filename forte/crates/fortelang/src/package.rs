@@ -281,6 +281,59 @@ pub fn verify() -> Result<(), String> {
     }
 }
 
+/// Render the GitHub search response for `forte package search`.
+/// Split from the HTTP call so the formatting is testable offline.
+pub fn render_search(json: &str) -> Result<String, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| format!("応答を読めません: {e}"))?;
+    if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
+        return Err(format!("GitHub API: {msg}"));
+    }
+    let items = v["items"].as_array().cloned().unwrap_or_default();
+    if items.is_empty() {
+        return Ok("該当する package はありません(topic:forte-package で検索しています)".into());
+    }
+    let mut out = String::new();
+    for it in &items {
+        let full = it["full_name"].as_str().unwrap_or("?");
+        let desc = it["description"].as_str().unwrap_or("");
+        let stars = it["stargazers_count"].as_u64().unwrap_or(0);
+        out.push_str(&format!("{full}  ★{stars}\n"));
+        if !desc.is_empty() {
+            out.push_str(&format!("  {desc}\n"));
+        }
+        out.push_str(&format!("  取り込み: forte package add github:{full}\n"));
+    }
+    Ok(out.trim_end().to_string())
+}
+
+/// `forte package search <query>` — discover packages on GitHub. The
+/// convention: a Forte package repository carries the topic
+/// `forte-package`; search matches name/description within that topic.
+pub fn search(query: &str) -> Result<(), String> {
+    let q = format!(
+        "topic:forte-package{}{}",
+        if query.is_empty() { "" } else { " " },
+        query
+    );
+    let url = format!(
+        "https://api.github.com/search/repositories?q={}&sort=stars&order=desc&per_page=20",
+        q.replace(' ', "+")
+    );
+    let out = std::process::Command::new("curl")
+        .args(["-s", "-H", "Accept: application/vnd.github+json", "-H", "User-Agent: forte-cli", &url])
+        .output()
+        .map_err(|e| format!("curl が実行できません: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "検索できません(ネットワーク?): {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    println!("{}", render_search(&String::from_utf8_lossy(&out.stdout))?);
+    Ok(())
+}
+
 /// `forte init <name>` — scaffold a project that is ALSO a distributable
 /// package: meta, role directories, flat packages/, and a forte VCS repo.
 pub fn init_project(name: &str) -> Result<String, String> {

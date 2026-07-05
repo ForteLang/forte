@@ -688,7 +688,14 @@ forte pull                             # bring upstream changes back
 ```
 
 Consumers then run `forte package add github:you/my-album` and import just
-the blocks they want. Their copy excludes your `packages/` and `.forte/`;
+the blocks they want.
+
+**Being found**: give your GitHub repository the topic **`forte-package`**
+and it becomes discoverable:
+
+```bash
+forte package search acid      # searches topic:forte-package on GitHub
+``` Their copy excludes your `packages/` and `.forte/`;
 dependencies re-resolve from your `requires`, so nesting never happens.
 
 In the browser, `forte browser` serves the **package catalog** at
