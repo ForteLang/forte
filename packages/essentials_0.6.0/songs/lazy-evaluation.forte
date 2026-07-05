@@ -1,0 +1,255 @@
+// Lazy Evaluation — downtempo for deferred work. A trio that only plays
+// what is strictly needed: brushed drums a hair behind the beat, an
+// upright bass that resolves late, wurli chords that wait to be forced.
+// The whistle states the thunk; the band evaluates it four bars later. 96bpm.
+//
+// STRUCTURE: the trio is a nested block — `Trio` contains `Kit`, `Upright`
+// and `Comping` placed on its own timeline, and the variants
+// (TrioSketch/TrioSwing) replace inner members while `as Trio` keeps
+// everything on one set of lanes.
+import { Kick808, SnareBrush, HatPedal, Ride, Shaker } from "../instruments/drums.forte"
+import { UprightBass } from "../instruments/bass.forte"
+import { Wurli, Vibraphone } from "../instruments/keys.forte"
+import { WarmPad } from "../instruments/pads.forte"
+import { Whistle, SoftLead } from "../instruments/leads.forte"
+import { Cabasa, Conga } from "../instruments/percussion.forte"
+import { Downlifter } from "../instruments/fx.forte"
+
+// ---- the trio: three musicians in one nested block -------------------------------
+block Trio {
+  // the kit: kick barely there, brushes drawing circles, pedal hat timekeeping
+  block Kit {
+    track Kick {
+      instrument Kick808(punch: 0.4, decay: 0.42)
+      insert eq(low: 0.58, mid: 0.45, high: 0.45)
+      insert comp(thresh: 0.45, ratio: 0.55, attack: 0.025, release: 0.18, makeup: 0.15)
+      volume 0.78
+      play beat`X--- ---- --x- ---- X--- ---- --x- -.--` at bars(1..2)
+    }
+    track Brush {
+      instrument SnareBrush()
+      insert eq(low: 0.2, mid: 0.55, high: 0.58)
+      insert comp(thresh: 0.48, ratio: 0.45, attack: 0.008, release: 0.12, makeup: 0.12)
+      insert reverb(size: 0.5, decay: 0.4, mix: 0.16)
+      volume 0.44
+      pan 0.08
+      play beat`---- x--. ---- x--- ---- x--. --.- x-.-` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.18
+      pan -0.15
+      play beat`--x- --x- --x- --x-` at bars(1..4)
+    }
+  }
+  // the upright: roots on time, resolutions deliberately late
+  block Upright {
+    track Bass {
+      instrument UprightBass()
+      insert eq(low: 0.56, mid: 0.5, high: 0.45)
+      insert comp(thresh: 0.42, ratio: 0.55, attack: 0.015, release: 0.16, makeup: 0.2)
+      volume 0.74
+      play notes`A1:1.5 _:0.5 E2:1 _:0.5 C#2:0.5 D2:1.5 _:0.5 A1:1 F#1:0.5 G#1:0.5 A1:1.5 _:0.5 E2:1 _:0.5 E2:0.5 F#2:1.5 _:0.5 D2:0.75 C#2:0.75 B1:0.5` at bars(1..4)
+    }
+  }
+  // the comping: wurli chords that arrive only when the phrase forces them
+  block Comping {
+    track Keys {
+      instrument Wurli(bark: 0.35)
+      insert eq(low: 0.28, mid: 0.52, high: 0.55)
+      insert chorus(rate: 0.2, depth: 0.5, mix: 0.45)
+      insert width(amount: 0.6)
+      volume 0.5
+      pan -0.1
+      play notes`_:1.5 [A2 E3 G#3 C#4]:1.5 _:1 _:1.5 [D3 F#3 A3 C#4]:1.5 _:1 _:1.5 [A2 E3 G#3 C#4]:1 _:0.5 [B2 F#3 A3 D#4]:1 _:1.5 [E3 G#3 B3 D4]:2.5` at bars(1..4)
+    }
+  }
+  play Kit at bars(1..4)
+  play Upright at bars(1..4)
+  play Comping at bars(1..4)
+}
+// the sketch: the trio marking the chart, not committing yet
+block TrioSketch : Trio {
+  block Kit {
+    track Kick {
+      instrument Kick808(punch: 0.35, decay: 0.4)
+      insert eq(low: 0.58, mid: 0.45, high: 0.45)
+      insert comp(thresh: 0.46, ratio: 0.5, attack: 0.025, release: 0.18, makeup: 0.12)
+      volume 0.7
+      play beat`X--- ---- ---- ----` at bars(1..2)
+    }
+    track Brush {
+      instrument SnareBrush()
+      insert eq(low: 0.2, mid: 0.55, high: 0.58)
+      insert comp(thresh: 0.48, ratio: 0.45, attack: 0.008, release: 0.12, makeup: 0.12)
+      insert reverb(size: 0.5, decay: 0.4, mix: 0.2)
+      volume 0.36
+      pan 0.08
+      play beat`---- ---- ---- x---` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.12
+      pan -0.15
+      play beat`---- --x- ---- --x-` at bars(1..4)
+    }
+  }
+}
+// the swing: everyone finally commits — ghosts, drops, answered chords
+block TrioSwing : Trio {
+  block Kit {
+    track Kick {
+      instrument Kick808(punch: 0.45, decay: 0.42)
+      insert eq(low: 0.58, mid: 0.45, high: 0.45)
+      insert comp(thresh: 0.42, ratio: 0.58, attack: 0.02, release: 0.16, makeup: 0.18)
+      volume 0.8
+      play beat`X--- --.- --x- ---- X--- ---- --x- x-.-` at bars(1..2)
+    }
+    track Brush {
+      instrument SnareBrush()
+      insert eq(low: 0.2, mid: 0.55, high: 0.58)
+      insert comp(thresh: 0.46, ratio: 0.48, attack: 0.008, release: 0.12, makeup: 0.14)
+      insert reverb(size: 0.5, decay: 0.4, mix: 0.16)
+      volume 0.48
+      pan 0.08
+      play beat`--.- x--. -.-- x--- ---. x-.- --.- x.x.` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.22
+      pan -0.15
+      play beat`--x- --x- --x- --xx` at bars(1..4)
+    }
+  }
+  block Comping {
+    track Keys {
+      instrument Wurli(bark: 0.45)
+      insert eq(low: 0.28, mid: 0.52, high: 0.58)
+      insert chorus(rate: 0.2, depth: 0.55, mix: 0.5)
+      insert width(amount: 0.65)
+      volume 0.52
+      pan -0.1
+      play notes`_:0.5 [A2 E3 G#3 C#4]:1 _:1 [A2 E3 G#3 C#4]:0.5 _:1 _:1.5 [D3 F#3 A3 C#4]:1 _:0.5 [D3 F#3 A3 C#4]:0.5 _:0.5 _:0.5 [A2 E3 G#3 C#4]:1 _:0.5 [B2 F#3 A3 D#4]:1.5 _:0.5 _:1 [E3 G#3 B3 D4]:1.5 [D3 F#3 A3 C#4]:1.5` at bars(1..4)
+      automate chorus.mix from 0.45 to 0.58 over bars(1..16)
+    }
+  }
+}
+
+// Hands: cabasa and a far conga — the percussion section that shows up late.
+block Hands {
+  track Cab {
+    instrument Cabasa()
+    insert eq(low: 0.1, mid: 0.5, high: 0.6)
+    volume 0.2
+    pan 0.3
+    play beat`.x.x .x.x .x.x .xxx` at bars(1..2)
+  }
+  track Conga {
+    instrument Conga(open: 0.5)
+    insert eq(low: 0.35, mid: 0.55, high: 0.5)
+    insert delay(time: 0.312, fdbk: 0.3, mix: 0.22)
+    volume 0.3
+    pan -0.3
+    play beat`---- --x- ---- x--- ---- --x- -x-- ----` at bars(1..2)
+  }
+}
+
+// The thunk: a whistled promise of a melody, unevaluated.
+block Thunk {
+  key A major
+  track Whistle {
+    instrument Whistle()
+    insert eq(low: 0.15, mid: 0.5, high: 0.58)
+    insert delay(time: 0.469, fdbk: 0.4, mix: 0.32)
+    insert reverb(size: 0.7, decay: 0.55, mix: 0.25)
+    volume 0.44
+    pan 0.12
+    play notes`_:1 C#5~:1.5 E5~:1 C#5~:1.5 B4~:2 _:2 A4~:1 B4~:1.5 C#5~:1.5 B4~:1.5 A4~:1.5 _:1 F#4~:1 A4~:2 B4~:1 A4~:3 _:2.5` at bars(1..6)
+  }
+}
+// the evaluation: the vibraphone finally computes the phrase, resolved
+block Force : Thunk {
+  track Whistle {
+    volume 0.4
+    automate delay.mix from 0.32 to 0.45 over bars(1..8)
+  }
+  track Vibe {
+    instrument Vibraphone(motor: 0.45)
+    insert eq(low: 0.2, mid: 0.52, high: 0.56)
+    insert chorus(rate: 0.2, depth: 0.4, mix: 0.35)
+    insert delay(time: 0.625, fdbk: 0.4, mix: 0.32)
+    volume 0.4
+    pan -0.28
+    play notes`_:3 C#4:0.5 E4:0.75 F#4:0.75 E4:1 _:1.5 B3:0.5 C#4:0.75 E4:0.75 C#4:1 A3:1.5 _:2 E4:0.5 F#4:1 A4:1.5 G#4:1 E4:2 _:3` at bars(1..6)
+  }
+}
+
+// The pad: warm air conditioning for the whole room.
+block Air {
+  key A major
+  track Pad {
+    instrument WarmPad(cutoff: 0.38)
+    insert eq(low: 0.3, mid: 0.5, high: 0.52)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.85, decay: 0.72, mix: 0.35)
+    volume 0.38
+    pan 0.05
+    play notes`[A2 E3 C#4 G#4]:8 [D3 A3 F#4 C#5]:8` at bars(1..4)
+    automate cutoff from 0.3 to 0.46 over bars(1..16)
+  }
+}
+
+block Sigh { track D { instrument Downlifter() volume 0.35 pan -0.1 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+song "Lazy Evaluation" {
+  desc "Downtempo for deferred work: a brushed trio in one nested block that only plays what is strictly needed, an upright bass resolving late, and a whistled thunk the vibraphone evaluates four bars later. 96bpm."
+  artist "Forte Essentials"
+  tempo 96bpm
+  swing 0.6
+  meter 4/4
+  key A major
+
+  section chart  = bars(1..8)
+  section head   = bars(9..24)
+  section solo   = bars(25..40)
+  section pause  = bars(41..46)
+  section commit = bars(47..62)
+  section coda   = bars(63..72)
+
+  // chart: the trio sketches while the pad warms the room
+  play TrioSketch as Trio at chart
+  play Air at chart
+
+  // head: the trio plays for real, the thunk gets whistled
+  play Trio at head
+  play Air(volume: 0.8) at head
+  play Thunk at bars(11..24)
+  play Hands at bars(17..24)
+
+  // solo: evaluation begins — vibes answer the whistle
+  play Trio at solo
+  play Air(volume: 0.7) at solo
+  play Hands at solo
+  play Force as Thunk at solo
+
+  // pause: garbage collection — everyone breathes
+  play Sigh at bars(41..41)
+  play TrioSketch as Trio at pause
+  play Air at pause
+
+  // commit: the swing lands, evaluation completes
+  play TrioSwing as Trio at commit
+  play Air(volume: 0.7) at commit
+  play Hands at commit
+  play Force as Thunk at commit
+
+  // coda: the trio marks the chart once more and leaves it unresolved
+  play TrioSketch as Trio at coda
+  play Air at coda
+  play Thunk(volume: 0.7) at bars(63..68)
+  automate Air.volume from 1 to 0 over bars(69..72)
+  automate Trio.volume from 1 to 0.3 over bars(69..72)
+}

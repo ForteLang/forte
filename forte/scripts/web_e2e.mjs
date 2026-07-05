@@ -378,6 +378,14 @@ try {
   );
   const blkTitle = await page.textContent('#blk-title');
   check('lane click shows track + instrument + inserts', /—\s+\S/.test(blkTitle), blkTitle.slice(0, 80));
+  await page.click('#full-src-btn');
+  await page.waitForFunction(
+    () => document.getElementById('blk-src').textContent.includes('song "'),
+    null,
+    { timeout: 5000 }
+  );
+  const fullSrc = await page.textContent('#blk-src');
+  check('whole-piece source one click away', fullSrc.includes('import {'), `${fullSrc.length} chars`);
 
   // 13) transport: the progress bar seeks, and a (re)started track ALWAYS
   //     begins at 0:00 — no position bleed between songs

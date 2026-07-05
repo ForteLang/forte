@@ -92,7 +92,8 @@
   <div id="tracks"></div>
   <div id="arr-wrap">
     <canvas id="arr"></canvas>
-    <div id="arr-hint">トラックをクリックすると、その block のコードと import 行が下に出ます — 聴きながら盗む</div>
+    <div id="arr-hint">トラックをクリックすると、その block のコードと import 行が下に出ます — 聴きながら盗む
+      <button id="full-src-btn" style="margin-left:10px; padding: 3px 10px; font-size: 11px;">📄 曲全体の .forte を見る</button></div>
     <div id="blk-src-wrap">
       <div id="blk-title"></div>
       <div id="blk-import"></div>
@@ -281,6 +282,21 @@ function showTrackSource(t, tr) {
   $('blk-src').textContent = '';
   $('blk-src-wrap').style.display = 'block';
 }
+
+// the whole piece: the entry .forte exactly as packed in the container
+$('full-src-btn').onclick = () => {
+  const t = currentTrackFile;
+  if (!t) return;
+  const entryBase = t.entry.split('/').pop();
+  const pkg = (t.creditsRaw ?? [])[0];
+  const base = pkg ? `packages/${pkg.package.toLowerCase()}_${pkg.version}/` : '';
+  $('blk-title').innerHTML = `${t.name}<span>${entryBase} — 曲全体(${
+    Object.keys(t.modules).length} ファイルのソース閉包)</span>`;
+  $('blk-import').textContent = `${base}${t.entry} — この曲のすべての音はこのコードから決定論レンダーされます`;
+  $('blk-src').textContent = t.text;
+  $('blk-src-wrap').style.display = 'block';
+  $('blk-src-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
 
 // ---- audio: the editor's worklet, unchanged ---------------------------------
 let ac, node, wasmBytes;

@@ -1,0 +1,13 @@
+// Hot Reload — the Essentials second album. Warm electronica in daylight:
+// detuned electric pianos, brushed and micro-programmed rhythm machines,
+// melodies computed once and returned from memory. Where First Light was
+// the night drive, this is the afternoon build — nested blocks all the
+// way down, every lane a family of variants.
+// Listen: forte play packages/essentials_0.6.0/albums/hot-reload
+block HotReload {
+  desc "Warm daylight electronica: detuned keys, brushed micro-grooves and melodies served from memory — nested blocks all the way down. The afternoon build to First Light's night drive."
+  tags "album, electronica, downtempo, warm, ambient, idm"
+  artist "Forte Essentials"
+  license "CC-BY-NC-SA-4.0"
+  version "0.6.0"
+}

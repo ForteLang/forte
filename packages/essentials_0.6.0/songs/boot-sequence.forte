@@ -291,17 +291,20 @@ song "Boot Sequence" {
   section finale  = bars(65..80)
   section off     = bars(81..88)
 
-  // boot: blips in the dark, the arp fades in from silence
-  play Blips at boot
-  play ArpFifths(cutoff: 0.3) at bars(1..88)
-  automate ArpFifths.volume from 0 to 1 over bars(1..8)
+  // boot: POWER ON — an impact, a full tom cascade, the kick and the arp
+  // already open on beat one. The machine doesn't fade in, it boots.
+  play Hit at bars(1..1)
+  play TomFillBig as TomFill at bars(1..1)
+  play Pulse at bars(1..8)
+  play Blips at bars(3..8)
+  play ArpFifths(cutoff: 0.55) at bars(1..88)
 
-  // groove: the pulse lands with an impact — ONE pulse lane from here on
+  // groove: a second impact, tops and the engine bass pile on
   play Hit at bars(9..9)
-  play PulseIn as Pulse at groove
-  play TopsIn as Tops at bars(13..16)
+  play Pulse at groove
+  play TopsIn as Tops at bars(9..16)
   play Tops at bars(17..24)
-  play Engine at bars(17..24)
+  play Engine at bars(13..24)
   play TomFill at bars(16..16)
   play TomFill at bars(24..24)
 
