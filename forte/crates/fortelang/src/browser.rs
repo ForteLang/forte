@@ -134,6 +134,7 @@ fn packages_json(root: &Path) -> String {
             "desc": meta.body.desc.clone().unwrap_or_default(),
             "tags": meta.body.tags,
             "license": meta.body.license.clone().unwrap_or_default(),
+            "sponsor": meta.body.sponsor.clone().unwrap_or_default(),
             "version": meta.body.version.clone().unwrap_or_default(),
             "instruments": list("instruments"),
             "blocks": list("blocks"),

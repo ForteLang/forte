@@ -24,6 +24,8 @@ pub struct SongFile {
     pub name: String,
     pub desc: String,
     pub artist: String,
+    /// One line per source package: "name version (artist)".
+    pub credits: Vec<String>,
     pub seconds: f64,
     pub render_digest: String,
     pub files: BTreeMap<String, Vec<u8>>,
@@ -57,7 +59,9 @@ fn base_dir(entry: &str) -> String {
 /// `../instruments/…`), then rebase everything onto the files' deepest
 /// common ancestor so the snapshot keeps its real directory shape
 /// (`songs/x.forte`, `instruments/y.forte`).
-fn collect_rebased(entry: &str) -> Result<(String, BTreeMap<String, Vec<u8>>), String> {
+fn collect_rebased(
+    entry: &str,
+) -> Result<(String, BTreeMap<String, Vec<u8>>, Vec<serde_json::Value>), String> {
     use std::path::PathBuf;
     fn walk(
         abs: &Path,
@@ -115,9 +119,40 @@ fn collect_rebased(entry: &str) -> Result<(String, BTreeMap<String, Vec<u8>>), S
             .replace('\\', "/")
     };
     let entry_rel = rel(&entry_abs);
+
+    // credits: the packages these sources came from (nearest package.forte
+    // above each file), each speaking its own meta
+    let mut pkg_roots: Vec<PathBuf> = Vec::new();
+    for p in abs_files.keys() {
+        let mut d = p.parent();
+        while let Some(dir) = d {
+            if dir.join("package.forte").is_file() {
+                if !pkg_roots.contains(&dir.to_path_buf()) {
+                    pkg_roots.push(dir.to_path_buf());
+                }
+                break;
+            }
+            d = dir.parent();
+        }
+    }
+    pkg_roots.sort();
+    let mut credits = Vec::new();
+    for root in pkg_roots {
+        let Ok(src) = std::fs::read_to_string(root.join("package.forte")) else { continue };
+        let Ok(ast) = crate::parser::parse(&src) else { continue };
+        let Some(m) = ast.blocks.last().map(|b| &b.body) else { continue };
+        credits.push(serde_json::json!({
+            "package": m.name,
+            "version": m.version.clone().unwrap_or_default(),
+            "artist": m.artist.clone().unwrap_or_default(),
+            "license": m.license.clone().unwrap_or_default(),
+            "sponsor": m.sponsor.clone().unwrap_or_default(),
+        }));
+    }
+
     let files: BTreeMap<String, Vec<u8>> =
         abs_files.into_iter().map(|(p, b)| (rel(&p), b)).collect();
-    Ok((entry_rel, files))
+    Ok((entry_rel, files, credits))
 }
 
 fn compile_snapshot(
@@ -133,7 +168,7 @@ fn compile_snapshot(
 /// `forte build song.forte -o name.fortesong` — snapshot, render for the
 /// proof, and pack. Returns (bytes, human summary).
 pub fn build(entry: &str) -> Result<(Vec<u8>, String), String> {
-    let (entry_name, files) = collect_rebased(entry)?;
+    let (entry_name, files, credits) = collect_rebased(entry)?;
     let project = compile_snapshot(&entry_name, &files)?;
     let info = crate::render_digest(&project, 8.0);
     let digest = format!("{:016x}", info.f32_digest);
@@ -164,6 +199,7 @@ pub fn build(entry: &str) -> Result<(Vec<u8>, String), String> {
             "len_beats": dawcore::bounce::arrangement_len(&project),
             "f32_digest_fnv1a64": digest,
         },
+        "credits": credits,
         "files_digest_fnv1a64": files_digest(&files),
     });
 
@@ -202,11 +238,28 @@ pub fn load(path: &str) -> Result<SongFile, String> {
             "ソースが改竄されています: manifest {expect} ≠ 実体 {actual}"
         ));
     }
+    let credits = m["credits"]
+        .as_array()
+        .map(|cs| {
+            cs.iter()
+                .map(|c| {
+                    let artist = c["artist"].as_str().unwrap_or_default();
+                    format!(
+                        "{} {}{}",
+                        c["package"].as_str().unwrap_or_default(),
+                        c["version"].as_str().unwrap_or_default(),
+                        if artist.is_empty() { String::new() } else { format!(" ({artist})") }
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     Ok(SongFile {
         entry: m["entry"].as_str().unwrap_or_default().to_string(),
         name: m["name"].as_str().unwrap_or_default().to_string(),
         desc: m["desc"].as_str().unwrap_or_default().to_string(),
         artist: m["artist"].as_str().unwrap_or_default().to_string(),
+        credits,
         seconds: m["render"]["seconds"].as_f64().unwrap_or(0.0),
         render_digest: m["render"]["f32_digest_fnv1a64"].as_str().unwrap_or_default().to_string(),
         files,

@@ -690,6 +690,12 @@ forte pull                             # bring upstream changes back
 Consumers then run `forte package add github:you/my-album` and import just
 the blocks they want.
 
+**Credits are automatic**: a `.fortesong` records which packages its
+sources came from — each package's name, version, `artist` and `sponsor`
+from its own `package.forte` — and every player shows them. Declare
+`sponsor "https://github.com/sponsors/you"` in your meta block and every
+song built from your instruments carries your support link.
+
 **Being found**: give your GitHub repository the topic **`forte-package`**
 and it becomes discoverable:
 

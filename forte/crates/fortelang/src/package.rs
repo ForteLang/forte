@@ -202,13 +202,14 @@ pub fn list() -> Result<(), String> {
                 // pull desc/license straight from the meta block
                 let src = std::fs::read_to_string(p.join("package.forte")).unwrap_or_default();
                 let ast = crate::parser::parse(&src).ok();
-                let (desc, license) = ast
+                let (desc, license, sponsor) = ast
                     .as_ref()
                     .and_then(|a| a.blocks.last())
                     .map(|b| {
                         (
                             b.body.desc.clone().unwrap_or_default(),
                             b.body.license.clone().unwrap_or_default(),
+                            b.body.sponsor.clone().unwrap_or_default(),
                         )
                     })
                     .unwrap_or_default();
@@ -218,6 +219,9 @@ pub fn list() -> Result<(), String> {
                 );
                 if !desc.is_empty() {
                     println!("  {desc}");
+                }
+                if !sponsor.is_empty() {
+                    println!("  support: {sponsor}");
                 }
             }
             Err(_) => println!("{}(package.forte なし)", p.display()),

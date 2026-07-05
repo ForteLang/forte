@@ -57,6 +57,7 @@
     <div class="artist" id="t-artist"></div>
     <div class="desc" id="t-desc"></div>
     <div class="proof" id="t-proof"></div>
+    <div class="proof" id="t-credits"></div>
   </div>
   <div id="transport" hidden>
     <button id="prev" title="前の曲">⏮</button>
@@ -148,6 +149,9 @@ function parseSong(buf, label) {
     name: manifest.name || label,
     artist: manifest.artist || '',
     desc: manifest.desc || '',
+    credits: (manifest.credits || [])
+      .map((c) => `${c.package} ${c.version}${c.artist ? ` (${c.artist})` : ''}${
+        c.sponsor ? ` — support: ${c.sponsor}` : ''}`),
     seconds: manifest.render?.seconds || 0,
     tempo: manifest.render?.tempo || 120,
     lenBeats: manifest.render?.len_beats || 0,
@@ -233,6 +237,7 @@ async function play(i) {
   $('t-artist').textContent = t.artist;
   $('t-desc').textContent = t.desc;
   $('t-proof').textContent = t.digest ? `build digest ${t.digest} — 同じコードは誰の環境でも同じ音` : '';
+  $('t-credits').textContent = t.credits.length ? `credits: ${t.credits.join(', ')}` : '';
   $('toggle').textContent = '⏸';
   renderList();
   status('');

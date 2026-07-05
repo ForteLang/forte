@@ -1027,6 +1027,9 @@ fn merge_block(parent: &SongAst, child: &SongAst) -> SongAst {
     if child.artist.is_some() {
         out.artist = child.artist.clone();
     }
+    if child.sponsor.is_some() {
+        out.sponsor = child.sponsor.clone();
+    }
     if child.tempo.is_some() {
         out.tempo = child.tempo;
     }

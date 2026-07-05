@@ -50,6 +50,7 @@ song      = "song" string body ;                                    (* legacy al
 body      = "{" { bodyItem } "}" ;
 bodyItem  = "desc" string | "tags" string | "license" string
           | "version" string | "requires" string | "artist" string
+          | "sponsor" string
           | "param" ident "=" num [ "in" num ".." num ]              (* the block's public knobs *)
           | "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
           | "let" ident "=" musicLit
@@ -271,8 +272,11 @@ block AcidLine {
   vendored packages never contain a nested `packages/` of their own.
 - `artist "…"` names who made the piece. Albums declare it in their
   `album.forte` meta block; songs may carry their own; players display it.
+- `sponsor "https://…"` is where listeners can support the author.
+  `forte package list`, the web catalog and the players surface it, and
+  it rides into every .fortesong's credits built from the package.
 - Inheritance: a child's `desc`/`tags`/`license`/`version`/`requires`/
-  `artist` override the parent's when present.
+  `artist`/`sponsor` override the parent's when present.
 - A root block with a `desc` and no tracks/placements is a valid,
   deliberately silent file — the shape of `packages/<pkg>/package.forte`
   metadata blocks (an EMPTY root without a desc is still E-SONG-003).
