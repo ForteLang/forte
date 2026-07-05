@@ -49,6 +49,9 @@ song "Smiley Acid" {
     automate cutoff from 0.5 to 0.95 over peak
     // ランプの上に遅い揺れが乗る(automate と modulate はスタックできる)
     modulate cutoff with lfo(rate: 0.18, amount: 0.08, shape: "sine")
+    // peak ではディレイも湧き上がる(insert のパラメータは 名前.param で差せる)
+    automate delay.mix from 0.12 to 0.12 over deep
+    automate delay.mix from 0.12 to 0.32 over peak
   }
 
   track Pad {

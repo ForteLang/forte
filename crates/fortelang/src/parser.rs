@@ -332,7 +332,7 @@ impl Parser {
                     "automate" => {
                         self.bump();
                         let apos = self.pos();
-                        let target = self.ident("automate 対象(volume)")?;
+                        let target = self.param_target("automate 対象(volume / パラメータ / insert名.パラメータ)")?;
                         if !self.keyword("from") {
                             self.err("E-PARSE-020", "automate は `from A to B over 区間` で書きます");
                         }
@@ -361,16 +361,16 @@ impl Parser {
                     "modulate" => {
                         self.bump();
                         let mpos = self.pos();
-                        let param = self.ident("modulate 対象のパラメータ名")?;
+                        let param = self.param_target("modulate 対象のパラメータ名(または insert名.パラメータ)")?;
                         if !self.keyword("with") {
                             self.err("E-PARSE-021", "modulate は `with lfo(rate: …, amount: …)` で書きます");
                         }
                         let call = self.call()?;
-                        if !matches!(call.name.as_str(), "lfo" | "steps" | "random") {
+                        if !matches!(call.name.as_str(), "lfo" | "steps" | "random" | "adsr") {
                             self.err(
                                 "E-PARSE-021",
                                 format!(
-                                    "modulate に使えるのは lfo / steps / random です(見つかったのは {})",
+                                    "modulate に使えるのは lfo / steps / random / adsr です(見つかったのは {})",
                                     call.name
                                 ),
                             );
@@ -558,6 +558,18 @@ impl Parser {
             }
         }
         Some(d)
+    }
+
+    /// An automate/modulate target: `cutoff` or `delay.mix` (insert.param),
+    /// returned as one dotted string for the compiler to resolve.
+    fn param_target(&mut self, what: &str) -> Option<String> {
+        let head = self.ident(what)?;
+        if *self.peek() == Tok::Dot {
+            self.bump();
+            let tail = self.ident("パラメータ名(insert名. の後)")?;
+            return Some(format!("{head}.{tail}"));
+        }
+        Some(head)
     }
 
     /// DSP expression: `osc(shape: "saw")` / `note.freq` / a node or param name.

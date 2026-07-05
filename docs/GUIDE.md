@@ -154,6 +154,8 @@ song "名前" {
     modulate cutoff with lfo(rate: 0.4, amount: 0.5, shape: "tri")  // ワブル
     modulate cutoff with steps(seq: "0.2 0.7 0.4 0.9", every: "1/16", amount: 0.5) // 16分のステップシーケンス
     modulate reso   with random(rate: 0.3, amount: 0.2, smooth: 0.6) // S&H 乱数(決定論)
+    modulate cutoff with adsr(a: 0.02, d: 0.4, s: 0.3, amount: 0.5)  // 音が鳴ると開く外付けエンベロープ
+    automate delay.mix from 0.0 to 0.5 over hook   // insert のパラメータも `名前.param` で差せる
   }
 }
 ```
@@ -164,8 +166,12 @@ song "名前" {
   そのまま名前になります(303 のカットオフスイープはこれ)。
 - `modulate` はパラメータにモジュレータを差し込みます: `lfo`(周期波)、
   `steps`(`every: "1/16"` でテンポ同期のステップシーケンス)、`random`
-  (サンプル&ホールド。決定論)。amount は -1..1 で、`automate` の
-  ランプの上に重ねられます。複数スタックも可。
+  (サンプル&ホールド。決定論)、`adsr`(ノートゲート駆動の外付け
+  エンベロープ)。amount は -1..1 で、`automate` のランプの上に
+  重ねられます。複数スタックも可。
+- 差し先は instrument のパラメータのほか、`delay.mix` のように
+  **insert エフェクトのパラメータ**も `insert名.パラメータ` で指せます
+  (自作 Effect の `param` も同様)。
 - ノブ系の数値はぜんぶ **0..1 に正規化**(volume も cutoff も)。pan だけ -1..1。
 - ビルトイン音源: `sampler(sample: "Kick"/"Snare"/"Hat")`, `polymer(…)`, `grid()`。
   エフェクト: `filter, eq, drive, delay, reverb`。パラメータ名を間違えると

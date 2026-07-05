@@ -130,6 +130,11 @@ pub struct EngineMod {
     // runtime state
     rand_cur: f32,
     rand_target: f32,
+    /// ADSR: note gate fed from the track each block, envelope level, stage
+    /// (0 idle/release, 1 attack, 2 decay/sustain).
+    gate: bool,
+    env: f32,
+    stage: u8,
     routes: Vec<(usize, usize, f32)>, // (device idx, param idx, amount)
 }
 
@@ -171,6 +176,9 @@ pub struct EngineTrack {
     arranger: Vec<EngineArrClip>,
     audio_clips: Vec<EngineAudioClip>,
     pending_offs: Vec<(u8, f64)>,
+    /// Sounding-note count, kept in step with the events dispatched to the
+    /// instrument — the gate source for ADSR modulators.
+    note_gate: u32,
     events: Vec<NoteEvent>,
     /// Reused buffer for the Note-FX chain (ping-pong with `events`).
     scratch_events: Vec<NoteEvent>,
@@ -255,6 +263,9 @@ pub fn build_mods(track: &Track) -> Box<EngineMods> {
                 value: m.value,
                 rand_cur: 0.0,
                 rand_target: 0.0,
+                gate: false,
+                env: 0.0,
+                stage: 0,
                 routes: m.routes.iter().map(|r| (di, r.param, r.amount)).collect(),
             });
         }
@@ -309,6 +320,7 @@ pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
         arranger: build_arranger(track),
         audio_clips: build_audio_clips(track),
         pending_offs: Vec::with_capacity(64),
+        note_gate: 0,
         events: Vec::with_capacity(1024),
         scratch_events: Vec::with_capacity(1024),
         live_events: Vec::with_capacity(128),
@@ -896,6 +908,7 @@ impl EngineTrack {
     }
 
     fn all_instruments_off(&mut self) {
+        self.note_gate = 0;
         for d in &mut self.devices {
             match &mut d.dsp {
                 Dsp::Inst(i) => i.reset(),
@@ -942,7 +955,9 @@ impl EngineTrack {
             }
         }
         // evaluate each modulator and apply to its routes, then advance state
+        let gate = self.note_gate > 0;
         for m in &mut self.mods {
+            m.gate = gate;
             let value = m.evaluate();
             for &(di, pi, amount) in &m.routes {
                 if let Some(d) = self.devices.get_mut(di) {
@@ -1058,6 +1073,11 @@ impl EngineTrack {
             // fire any (note-FX-processed) events scheduled at this sample
             while ev_idx < self.events.len() && self.events[ev_idx].sample as usize == i {
                 let e = self.events[ev_idx];
+                if e.on {
+                    self.note_gate += 1;
+                } else {
+                    self.note_gate = self.note_gate.saturating_sub(1);
+                }
                 for d in &mut self.devices {
                     if let Dsp::Inst(inst) = &mut d.dsp {
                         inst.handle(e.on, e.pitch, e.velocity);
@@ -1196,6 +1216,7 @@ impl EngineMod {
             }
             ModKind::Random => self.rand_cur,
             ModKind::Macro => self.value, // unipolar control value
+            ModKind::Adsr => self.env,    // unipolar envelope level
         }
     }
 
@@ -1220,6 +1241,31 @@ impl EngineMod {
                 self.rand_cur += (self.rand_target - self.rand_cur) * smooth.min(1.0);
             }
             ModKind::Macro => {}
+            ModKind::Adsr => {
+                // block-rate envelope; stage times in steps = [a, d, s, r],
+                // squared so the fast end of the knob has fine resolution
+                let a = self.steps.first().copied().unwrap_or(0.01);
+                let d = self.steps.get(1).copied().unwrap_or(0.3);
+                let s = self.steps.get(2).copied().unwrap_or(0.6).clamp(0.0, 1.0);
+                let r = self.steps.get(3).copied().unwrap_or(0.25);
+                if self.gate {
+                    if self.stage == 0 {
+                        self.stage = 1;
+                    }
+                    if self.stage == 1 {
+                        self.env += dt / (0.001 + a * a * 3.0);
+                        if self.env >= 1.0 {
+                            self.env = 1.0;
+                            self.stage = 2;
+                        }
+                    } else {
+                        self.env = (self.env - dt / (0.001 + d * d * 3.0)).max(s);
+                    }
+                } else {
+                    self.stage = 0;
+                    self.env = (self.env - dt / (0.001 + r * r * 3.0)).max(0.0);
+                }
+            }
         }
     }
 }

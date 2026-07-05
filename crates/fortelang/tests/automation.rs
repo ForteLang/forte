@@ -132,6 +132,102 @@ fn modulators_stack_on_automation() {
     assert_eq!(d, digest(&combined), "stacked modulation must be deterministic");
 }
 
+// ---------------------------------------------------------------------------
+// phase 2: insert effect params + the external ADSR modulator
+// ---------------------------------------------------------------------------
+
+/// A track with a delay insert so `<insert>.<param>` targets have something
+/// to grab. The dry line stops early so delay-mix moves are clearly audible.
+fn delay_song(body: &str) -> String {
+    format!(
+        r#"song "D" {{
+  tempo 120bpm
+  key C minor
+  track A {{
+    instrument polymer(wave: "saw", cutoff: 0.5)
+    insert delay(time: 0.3, fdbk: 0.45, mix: 0.0)
+    play notes`C3:0.5 G3:0.5 C4:0.5 _:2.5` at bars(1..4)
+    {body}
+  }}
+}}"#
+    )
+}
+
+#[test]
+fn inserts_take_automation_by_name() {
+    let plain = digest(&delay_song(""));
+    let swell = delay_song("automate delay.mix from 0.0 to 0.6 over bars(1..4)");
+    let d1 = digest(&swell);
+    assert_ne!(plain, d1, "the delay-mix swell must be audible");
+    assert_eq!(d1, digest(&swell), "insert automation must be deterministic");
+}
+
+#[test]
+fn inserts_take_modulators_by_name() {
+    let plain = digest(&delay_song(""));
+    let wob = delay_song("modulate delay.mix with lfo(rate: 0.5, amount: 0.5, shape: \"tri\")");
+    let d1 = digest(&wob);
+    assert_ne!(plain, d1, "modulating an insert param must be audible");
+    assert_eq!(d1, digest(&wob), "insert modulation must be deterministic");
+}
+
+#[test]
+fn user_effect_params_are_exposed() {
+    let song = |body: &str| {
+        format!(
+            r#"device Muffle : Effect {{
+  param cutoff = 0.25 in 0.0..1.0
+  out svf(in: audio.in, cutoff: cutoff, reso: 0.3)
+}}
+song "E" {{
+  tempo 120bpm
+  key C minor
+  track A {{
+    instrument polymer(wave: "saw", cutoff: 0.8)
+    insert Muffle()
+    play notes`C3:1 G3:1 C3:1 G3:1` at bars(1..4)
+    {body}
+  }}
+}}"#
+        )
+    };
+    let closed = digest(&song(""));
+    let opening = song("automate Muffle.cutoff from 0.1 to 0.9 over bars(1..4)");
+    let d1 = digest(&opening);
+    assert_ne!(closed, d1, "a user Effect's declared param must be automatable");
+    assert_eq!(d1, digest(&opening), "user-effect automation must be deterministic");
+}
+
+#[test]
+fn adsr_modulator_follows_the_note_gate() {
+    let plain = digest(&acid_song(""));
+    let env = acid_song("modulate cutoff with adsr(a: 0.02, d: 0.4, s: 0.3, r: 0.1, amount: 0.5)");
+    let d1 = digest(&env);
+    assert_ne!(plain, d1, "the external ADSR must be audible");
+    assert_eq!(d1, digest(&env), "the ADSR must render deterministically");
+    // it is gate-driven, so it differs from a free-running LFO of any shape
+    let lfo = acid_song(r#"modulate cutoff with lfo(rate: 0.5, amount: 0.5, shape: "saw")"#);
+    assert_ne!(d1, digest(&lfo));
+}
+
+#[test]
+fn insert_target_errors_list_what_exists() {
+    let err = |src: &str| {
+        fortelang::compile_str(src)
+            .err()
+            .expect("must fail")
+            .iter()
+            .map(|d| d.code.to_string())
+            .collect::<Vec<_>>()
+    };
+    // unknown insert name
+    let src = delay_song("automate reverb.mix from 0.0 to 0.5 over bars(1..2)");
+    assert!(err(&src).iter().any(|c| c == "E-AUTO-001"));
+    // known insert, unknown param
+    let src = delay_song("modulate delay.wet with lfo(rate: 0.3, amount: 0.4)");
+    assert!(err(&src).iter().any(|c| c == "E-LFO-001"));
+}
+
 #[test]
 fn builtin_instruments_keep_working() {
     // the generalized path must still serve polymer's parameter table

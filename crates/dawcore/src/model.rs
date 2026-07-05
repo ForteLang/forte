@@ -437,6 +437,10 @@ pub enum ModKind {
     Steps,
     Random,
     Macro,
+    /// A note-gate-driven envelope: rises on the track's first sounding note,
+    /// releases when the track falls silent. Stage times live in `steps`
+    /// as `[a, d, s, r]` (normalized 0..1).
+    Adsr,
 }
 
 impl ModKind {
@@ -446,9 +450,11 @@ impl ModKind {
             ModKind::Steps => "Steps",
             ModKind::Random => "Random",
             ModKind::Macro => "Macro",
+            ModKind::Adsr => "ADSR",
         }
     }
-    pub const ALL: [ModKind; 4] = [ModKind::Lfo, ModKind::Steps, ModKind::Random, ModKind::Macro];
+    pub const ALL: [ModKind; 5] =
+        [ModKind::Lfo, ModKind::Steps, ModKind::Random, ModKind::Macro, ModKind::Adsr];
     /// Distinct colour per modulator (Bitwig assigns each modulator a colour).
     pub fn color(self) -> [u8; 3] {
         match self {
@@ -456,6 +462,7 @@ impl ModKind {
             ModKind::Steps => [0x4f, 0xb6, 0xc8],
             ModKind::Random => [0xd0, 0x66, 0xa8],
             ModKind::Macro => [0xe0, 0xc6, 0x4f],
+            ModKind::Adsr => [0xe8, 0x8a, 0x4c],
         }
     }
 }
