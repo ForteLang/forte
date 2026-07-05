@@ -76,7 +76,9 @@ fn handle(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
 
 /// Scan `<root>/packages/*/` into the catalog JSON: each package's meta
 /// (from its package.forte) and its instruments/blocks/songs file lists.
-fn packages_json(root: &Path) -> String {
+/// Also served as a static `packages.json` on hosts without the API
+/// (GitHub Pages) — see `forte web index` and scripts/publish_web.sh.
+pub fn packages_json(root: &Path) -> String {
     let mut pkgs = Vec::new();
     let dir = root.join("packages");
     let mut entries: Vec<PathBuf> = std::fs::read_dir(&dir)

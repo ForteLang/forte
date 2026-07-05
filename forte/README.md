@@ -187,6 +187,15 @@ loop: "on", reverse: "on")`, turn beatboxing into a drum kit with
 material via the `take` slot + `sample()` node. Devices don't own takes, so an
 instrument can be published and anyone can plug their own recording into it.
 
+### The listening site (GitHub Pages)
+
+`scripts/publish_web.sh` assembles the whole listening experience —
+editor, zero-install player, package catalog (static `packages.json`),
+and the essentials package with its albums — and pushes it to the
+`gh-pages` branch. Enable it once under Settings → Pages (deploy from
+branch `gh-pages`) and "click a link → the album plays" is live.
+`DRY_RUN=1` builds the site without pushing.
+
 ### Packages — distribution is GitHub
 
 Everything is a package: a `forte init` project pushed to GitHub. The CLI

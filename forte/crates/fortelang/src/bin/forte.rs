@@ -334,6 +334,20 @@ fn main() -> ExitCode {
         Some("ci") => ci(args.get(1).map(String::as_str) == Some("quick")),
         #[cfg(not(target_family = "wasm"))]
         Some("web") if args.get(1).map(String::as_str) == Some("build") => web_build(),
+        // the catalog's data as static JSON (GitHub Pages has no /api)
+        #[cfg(not(target_family = "wasm"))]
+        Some("web") if args.get(1).map(String::as_str) == Some("index") => {
+            match repo_root() {
+                Some(root) => {
+                    println!("{}", fortelang::browser::packages_json(&root));
+                    ExitCode::SUCCESS
+                }
+                None => {
+                    eprintln!("web index: Forte リポジトリの中で実行してください");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("version") | Some("--version") | Some("-V") => {
             println!("forte {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
@@ -354,6 +368,7 @@ fn main() -> ExitCode {
             eprintln!("       forte instrument <Name[(args)]> [--from lib.forte]  (= instruments play)");
             eprintln!("       forte browser [--port 8000] [--no-open]  (ブラウザエディタを起動)");
             eprintln!("       forte web build             (ブラウザエディタの wasm を再ビルド)");
+            eprintln!("       forte web index             (カタログ JSON を出力 — 静的ホスティング用)");
             eprintln!("       forte ci [quick]            (マージゲート: test+clippy/決定論/corpus/E2E)");
             eprintln!("       forte upgrade               (forte コマンド自体を更新)");
             eprintln!("       forte complete bash|zsh     (Tab 補完: source <(forte complete bash))");
