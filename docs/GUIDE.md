@@ -632,7 +632,10 @@ forte package list                   # what you have, in each package's own word
 
 - Everything lands **flat** in `packages/<name>_<version>/`. A vendored
   package never contains its own `packages/` — its `requires` are fetched
-  and hoisted next to it. `package.lock` pins source + commit.
+  and hoisted next to it. `package.lock` pins each source + commit + a
+  content digest, and `forte package verify` proves every vendored tree
+  is still byte-identical to what was fetched (tampering shows as
+  MISMATCH).
 - Metadata lives in the language: the `package.forte` root block carries
   `desc` / `tags` / `license` / `version` / `requires`, and `forte play`
   prints the root `desc` while the catalog and browser display the rest.

@@ -71,6 +71,46 @@ struct LockEntry {
     version: String,
     source: String,
     commit: String,
+    /// FNV-1a 64 over the vendored tree (sorted rel-path + bytes), the same
+    /// hash family as the build digest. Lets `forte package verify` prove a
+    /// vendored package is exactly what was fetched.
+    #[serde(default)]
+    digest: String,
+}
+
+/// Content digest of a vendored package directory: every file's relative
+/// path and bytes, in sorted order, through FNV-1a 64.
+fn tree_digest(dir: &Path) -> Result<String, String> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+        let mut entries: Vec<_> =
+            std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten().map(|e| e.path()).collect();
+        entries.sort();
+        for p in entries {
+            if p.is_dir() {
+                walk(&p, out)?;
+            } else {
+                out.push(p);
+            }
+        }
+        Ok(())
+    }
+    let mut files = Vec::new();
+    walk(dir, &mut files)?;
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    let mut update = |bytes: &[u8]| {
+        for &b in bytes {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    };
+    for f in files {
+        let rel = f.strip_prefix(dir).unwrap_or(&f).to_string_lossy().replace('\\', "/");
+        update(rel.as_bytes());
+        update(&[0]);
+        update(&std::fs::read(&f).map_err(|e| format!("{}: {e}", f.display()))?);
+        update(&[0]);
+    }
+    Ok(format!("{h:016x}"))
 }
 
 fn git_head(dir: &Path) -> String {
@@ -125,9 +165,10 @@ pub fn add(src: &str) -> Result<(), String> {
         } else {
             copy_tree(&checkout, &dest)?;
             let commit = git_head(&checkout);
+            let digest = tree_digest(&dest)?;
             println!("added  : packages/{dirname}  ← {item}");
             lock.retain(|e| !(e.name == name && e.version == version));
-            lock.push(LockEntry { name, version, source: source_label, commit });
+            lock.push(LockEntry { name, version, source: source_label, commit, digest });
         }
         // hoist dependencies into the SAME flat packages/ (no nesting, ever)
         for r in requires {
@@ -183,6 +224,61 @@ pub fn list() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// `forte package verify` — prove every vendored package is exactly what
+/// package.lock recorded: present, and byte-identical (tree digest).
+pub fn verify() -> Result<(), String> {
+    let lock: Vec<LockEntry> = serde_json::from_str(
+        &std::fs::read_to_string("package.lock")
+            .map_err(|_| "package.lock がありません(forte package add が作ります)".to_string())?,
+    )
+    .map_err(|e| format!("package.lock を読めません: {e}"))?;
+    let mut bad = 0;
+    for e in &lock {
+        let dirname = format!("{}_{}", e.name, e.version);
+        let dest = Path::new("packages").join(&dirname);
+        if !dest.is_dir() {
+            println!("MISSING : packages/{dirname}(forte package add {} で再取得)", e.source);
+            bad += 1;
+            continue;
+        }
+        if e.digest.is_empty() {
+            println!("no-digest: packages/{dirname}(古い lock。add し直すと記録されます)");
+            continue;
+        }
+        let actual = tree_digest(&dest)?;
+        if actual == e.digest {
+            println!("OK      : packages/{dirname}  {actual}");
+        } else {
+            println!("MISMATCH: packages/{dirname}  lock {} ≠ 実体 {actual}", e.digest);
+            bad += 1;
+        }
+    }
+    // vendored directories the lock doesn't know about
+    if let Ok(rd) = std::fs::read_dir("packages") {
+        let mut extras: Vec<_> = rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.is_dir()
+                    && !lock.iter().any(|e| {
+                        p.file_name().map(|n| n.to_string_lossy() == format!("{}_{}", e.name, e.version))
+                            == Some(true)
+                    })
+            })
+            .collect();
+        extras.sort();
+        for p in extras {
+            println!("unlocked: {}(lock に記録がありません)", p.display());
+        }
+    }
+    if bad > 0 {
+        Err(format!("{bad} 件の package が lock と一致しません"))
+    } else {
+        println!("verify  : すべて lock どおりです");
+        Ok(())
+    }
 }
 
 /// `forte init <name>` — scaffold a project that is ALSO a distributable
