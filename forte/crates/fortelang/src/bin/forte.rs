@@ -11,6 +11,12 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("check") if args.len() >= 2 => check(&args[1]),
+        Some("test") => {
+            let update = args.iter().any(|a| a == "--update");
+            let paths: Vec<String> =
+                args[1..].iter().filter(|a| !a.starts_with("--")).cloned().collect();
+            ExitCode::from(fortelang::testing::run(&paths, update) as u8)
+        }
         Some("build") if args.len() >= 2 => {
             let out = args
                 .iter()
@@ -379,6 +385,7 @@ fn main() -> ExitCode {
             eprintln!("       forte upgrade               (forte コマンド自体を更新)");
             eprintln!("       forte complete bash|zsh     (Tab 補完: source <(forte complete bash))");
             eprintln!("       forte fmt   <song.forte> [--check]");
+            eprintln!("       forte test  [PATH…] [--update]  (digest 固定の回帰テスト: forte-test.lock と照合)");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
             eprintln!("       forte lsp");
             eprintln!("       forte init [NAME]           (NAME 付きで package プロジェクトを作成 / なしで cwd をリポジトリに)");
