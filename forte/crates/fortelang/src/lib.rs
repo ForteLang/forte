@@ -29,6 +29,7 @@ pub mod remote;
 #[cfg(not(target_family = "wasm"))]
 pub mod repl;
 pub mod semdiff;
+pub mod testing;
 #[cfg(not(target_family = "wasm"))]
 pub mod selfupdate;
 pub mod sha;

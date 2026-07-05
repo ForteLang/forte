@@ -452,6 +452,25 @@ track Pad  { … modulate delay.mix with groove(amount: 0.15) }
 
 Formatting: `forte fmt my-song.forte` (guaranteed to never change meaning).
 
+### Test your music like code (`forte test`)
+
+Deterministic builds make "the music didn't change" a testable fact. Lock
+the sound of every song and library in a directory, then let regressions
+fail loudly:
+
+```bash
+forte test songs/ --update    # record current build digests → songs/forte-test.lock
+forte test songs/             # ok while the sound is bit-identical; FAIL if it moved
+```
+
+- Renderable files (songs, block libraries) are compared by build digest;
+  device libraries are compile-checked.
+- Error paths stay tested too: a file whose header says
+  `// expect-error: E-DEV-002` MUST fail to compile with that code.
+- Commit `forte-test.lock` next to your sources — reviewers see exactly
+  which songs a change re-voiced, and `--update` is the explicit "yes, the
+  new sound is intended" gesture.
+
 ## 3. Building your own instruments (device)
 
 Synths are code too. Write them at the top of the file (before the song):
