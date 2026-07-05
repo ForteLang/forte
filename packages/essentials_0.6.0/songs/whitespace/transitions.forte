@@ -1,0 +1,4 @@
+// Whitespace — transitions parts.
+import { Downlifter } from "../../instruments/fx.forte"
+
+block Hush { track D { instrument Downlifter() volume 0.3 pan 0.1 play beat`x--- ---- ---- ----` at bars(1..1) } }

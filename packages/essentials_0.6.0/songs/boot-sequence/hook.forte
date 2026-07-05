@@ -1,0 +1,44 @@
+// Boot Sequence — hook parts.
+import { Bell } from "../../instruments/keys.forte"
+import { BitLead } from "../../instruments/leads.forte"
+
+// ---- the melody: ONE bell lane, theme → finale ---------------------------------
+// A pentatonic hook, phrased call-and-answer, thrown into a dotted delay.
+// This is the part you whistle later.
+block Hook {
+  key A minor
+  track Bell {
+    instrument Bell(decay: 0.6)
+    insert eq(low: 0.15, mid: 0.5, high: 0.6)
+    insert delay(time: 0.381, fdbk: 0.45, mix: 0.35)
+    insert reverb(size: 0.6, decay: 0.5, mix: 0.18)
+    volume 0.6
+    pan 0.1
+    play notes`A4:0.5 C5:0.5 D5:0.5 E5:1 _:0.5 G5:0.5 E5:0.5 D5~:0.5 C5:1 _:0.5 A4:0.5 C5:0.5 D5:0.75 C5:0.25 A4:1.5 _:0.5 G4:0.5 A4:2 _:1` at bars(1..4)
+  }
+}
+
+// finale: the delay throws longer and the room grows around the bell
+block HookWide : Hook {
+  track Bell {
+    insert delay(time: 0.381, fdbk: 0.55, mix: 0.42)
+    insert reverb(size: 0.75, decay: 0.6, mix: 0.26)
+    volume 0.62
+    automate delay.mix from 0.35 to 0.5 over bars(9..16)
+  }
+}
+
+// Counter-melody for the last act: a bit-crushed lead answering the bell.
+block Counter {
+  key A minor
+  track Blip {
+    instrument BitLead()
+    insert filter(type: "lp", cutoff: 0.6, reso: 0.3)
+    insert eq(low: 0.15, mid: 0.5, high: 0.62)
+    insert delay(time: 0.238, fdbk: 0.5, mix: 0.3)
+    volume 0.4
+    pan -0.35
+    play notes`_:1 E5:0.25 D5:0.25 C5:0.25 D5:0.25 _:0.5 A4:0.25 C5:0.25 _:1.5 E5:0.25 G5:0.25 E5:0.25 D5:0.25 _:0.5 C5:0.5 D5:1` at bars(1..2)
+    automate filter.cutoff from 0.45 to 0.75 over bars(1..16)
+  }
+}

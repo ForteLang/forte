@@ -1,0 +1,32 @@
+// Hello World — the floor: ONE kick lane, three moods. Place the family
+// under a single alias (`as Floor`) and the lane evolves through the song.
+import { Kick909 } from "../../instruments/drums.forte"
+
+block Floor {
+  track Kick {
+    instrument Kick909(click: 0.62)
+    insert eq(low: 0.62, mid: 0.45, high: 0.5)
+    insert comp(thresh: 0.38, ratio: 0.65, attack: 0.02, release: 0.18, makeup: 0.25)
+    insert drive(drive: 0.15)
+    volume 0.95
+    play beat`X--- x--- x--- x--x` at bars(1..4)
+  }
+}
+// warmup: softer click, no ghost — the room is still filling
+block FloorIn : Floor {
+  track Kick {
+    instrument Kick909(click: 0.45)
+    insert drive(drive: 0.06)
+    volume 0.88
+    play beat`X--- x--- x--- x---` at bars(1..4)
+    automate volume from 0.72 to 0.88 over bars(1..8)
+  }
+}
+// peak: tighter comp, harder drive, ghost 16ths and a ratchet fill in bar 4
+block FloorPeak : Floor {
+  track Kick {
+    insert comp(thresh: 0.32, ratio: 0.7, attack: 0.015, release: 0.15, makeup: 0.3)
+    insert drive(drive: 0.28)
+    play beat`X--- x--- x--- x--x X--- x--- x--. x--x X--- x--- x--- x--x X--- x--x x.xx x-xX` at bars(1..4)
+  }
+}

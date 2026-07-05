@@ -1,0 +1,16 @@
+// Boot Sequence — stabs parts.
+import { EPiano } from "../../instruments/keys.forte"
+
+// YMO block chords: EPiano stabs on the offbeat, wide and chorused.
+block Stabs {
+  key A minor
+  track EP {
+    instrument EPiano(tine: 0.4)
+    insert eq(low: 0.25, mid: 0.55, high: 0.58)
+    insert chorus(rate: 0.3, depth: 0.5, mix: 0.45)
+    insert width(amount: 0.7)
+    volume 0.55
+    pan 0.08
+    play notes`_:0.5 [A3 C4 E4]:0.5 _:0.5 [A3 C4 E4]:0.5 _:0.5 [F3 A3 C4]:0.5 _:0.5 [F3 A3 C4]:0.5 _:0.5 [C4 E4 G4]:0.5 _:0.5 [C4 E4 G4]:0.5 _:0.5 [G3 B3 D4]:0.5 _:0.5 [G3 B3 D4]:0.5` at bars(1..4)
+  }
+}

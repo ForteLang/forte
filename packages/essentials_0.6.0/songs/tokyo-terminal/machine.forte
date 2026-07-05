@@ -1,0 +1,59 @@
+// Tokyo Terminal — machine parts.
+import { Kick909, HatClosed, HatOpen, Clap } from "../../instruments/drums.forte"
+
+// ---- disco machine: ONE lane — platform, express, anthem -----------------------
+block Machine {
+  track Kick {
+    instrument Kick909(click: 0.5)
+    insert eq(low: 0.6, mid: 0.45, high: 0.5)
+    insert comp(thresh: 0.4, ratio: 0.6, attack: 0.02, release: 0.16, makeup: 0.2)
+    volume 0.9
+    play beat`X--- x--- x--- x---` at bars(1..4)
+  }
+  track Open {
+    instrument HatOpen(decay: 0.3)
+    insert eq(low: 0.1, mid: 0.5, high: 0.62)
+    insert pump(amount: 0.35, beats: 1)
+    volume 0.4
+    pan -0.08
+    play beat`--x- --x- --x- --x-` at bars(1..4)
+  }
+  track Hats {
+    instrument HatClosed(bright: 0.9)
+    insert eq(low: 0.15, mid: 0.45, high: 0.7)
+    insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+    volume 0.28
+    pan 0.2
+    play beat`x.x. x.x. x.x. x.x.` at bars(1..4)
+  }
+  track Clap {
+    instrument Clap(tone: 0.55)
+    insert eq(low: 0.2, mid: 0.6, high: 0.55)
+    insert comp(thresh: 0.45, ratio: 0.5, attack: 0.004, release: 0.12, makeup: 0.15)
+    insert reverb(size: 0.5, decay: 0.4, mix: 0.15)
+    volume 0.5
+    pan -0.05
+    play beat`---- x--- ---- x---` at bars(1..4)
+  }
+}
+
+// platform: the machine idles — no clap yet, hats only breathing
+block MachineIn : Machine {
+  track Hats { volume 0.22 play beat`..x. ..x. ..x. ..x.` at bars(1..4) }
+  track Clap { volume 0.42 play beat`---- ---- ---- x---` at bars(1..4) }
+  track Open { volume 0.34 }
+}
+
+// anthem: ghost hats crowd the grid, the clap answers itself into the room
+block MachineFull : Machine {
+  track Hats {
+    volume 0.32
+    play beat`x.xX x.x. xxx. x.xX x.x. x.xX x.xx xxxX` at bars(1..2)
+  }
+  track Open { insert pump(amount: 0.45, beats: 1) volume 0.46 }
+  track Clap {
+    insert reverb(size: 0.55, decay: 0.45, mix: 0.22)
+    volume 0.55
+    play beat`---- x--- ---- x--. ---- x--- .--- x-.x` at bars(1..2)
+  }
+}

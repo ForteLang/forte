@@ -1,0 +1,20 @@
+// Night Compiler — loop parts.
+import { PolySaw } from "../../instruments/synths.forte"
+
+// The compile loop: a 16th arp that opens over 32 bars — progress bars
+// have never sounded this patient.
+block Loop {
+  key F minor
+  let walk = prog`Fm | Fm | G#maj7 | C#maj7`
+  track Arp {
+    instrument PolySaw(cutoff: 0.35)
+    insert eq(low: 0.25, mid: 0.5, high: 0.58)
+    insert drive(drive: 0.15)
+    insert delay(time: 0.234, fdbk: 0.4, mix: 0.25)
+    insert pump(amount: 0.45, beats: 1)
+    volume 0.44
+    pan -0.25
+    play arp(walk, rate: 0.25, style: "up") at bars(1..8)
+    automate cutoff from 0.3 to 0.62 over bars(1..32)
+  }
+}

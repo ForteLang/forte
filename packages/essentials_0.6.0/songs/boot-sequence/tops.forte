@@ -1,0 +1,50 @@
+// Boot Sequence — tops parts.
+import { HatClosed, HatOpen, Rim } from "../../instruments/drums.forte"
+
+// ---- machine tops: ONE lane, boot → groove → finale ----------------------------
+block Tops {
+  track Hats {
+    instrument HatClosed(bright: 0.9)
+    insert eq(low: 0.2, mid: 0.45, high: 0.7)
+    insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+    volume 0.34
+    pan 0.18
+    play beat`x.x. X.x. x.xX x.x.` at bars(1..4)
+  }
+  track Open {
+    instrument HatOpen(decay: 0.24)
+    insert eq(low: 0.1, mid: 0.5, high: 0.62)
+    volume 0.3
+    pan -0.12
+    play beat`--x- --x- --x- --x-` at bars(1..4)
+  }
+  track Rim {
+    instrument Rim()
+    insert eq(low: 0.2, mid: 0.6, high: 0.55)
+    insert delay(time: 0.24, fdbk: 0.35, mix: 0.3)
+    volume 0.3
+    pan 0.35
+    play beat`---- --x- ---- ---x` at bars(1..4)
+  }
+}
+
+// entrance: only ghosts and the offbeat open
+block TopsIn : Tops {
+  track Hats { volume 0.26 play beat`..x. ..x. ..x. ..X.` at bars(1..4) }
+  track Open { volume 0.24 play beat`---- --x- ---- --x-` at bars(1..4) }
+  track Rim  { volume 0.2 play beat`---- ---- ---- ---x` at bars(1..4) }
+}
+
+// finale: 16th ghosts crowd in, the rim chatters across the delay
+block TopsWide : Tops {
+  track Hats {
+    volume 0.38
+    play beat`x.x. XxX. x.xX xxx. x.x. X.x. xxxX x.xx` at bars(1..2)
+  }
+  track Open { volume 0.34 play beat`--x- --x- --x- --xx` at bars(1..4) }
+  track Rim {
+    insert delay(time: 0.24, fdbk: 0.45, mix: 0.4)
+    volume 0.34
+    play beat`---- --x- -x-- ---x ---- x-x- ---- ---x` at bars(1..2)
+  }
+}

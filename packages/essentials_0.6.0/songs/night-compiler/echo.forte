@@ -1,0 +1,38 @@
+// Night Compiler — echo parts.
+import { VintagePoly } from "../../instruments/synths.forte"
+
+// ---- THE chord: ONE lane that gets wetter all night -----------------------------
+// One minor 9 stab thrown into a feedback delay that answers across the
+// bar. This is the dub in dub techno.
+block Echo {
+  key F minor
+  track Stab {
+    instrument VintagePoly(age: 0.6)
+    insert filter(type: "bp", cutoff: 0.45, reso: 0.4)
+    insert eq(low: 0.3, mid: 0.52, high: 0.56)
+    insert delay(time: 0.703, fdbk: 0.62, mix: 0.45)
+    insert width(amount: 0.75)
+    insert pump(amount: 0.35, beats: 1)
+    volume 0.5
+    play notes`_:0.5 [F3 G#3 C4 D#4 G4]:0.5 _:7 _:0.5 [F3 G#3 C4 D#4 G4]:0.25 _:0.25 [F3 G#3 C4 D#4 G4]:0.5 _:6.5` at bars(1..4)
+    modulate filter.cutoff with lfo(rate: 0.08, amount: 0.2, shape: "sine")
+  }
+}
+
+// deeper: feedback up, the answers start answering each other
+block EchoDub : Echo {
+  track Stab {
+    insert delay(time: 0.703, fdbk: 0.7, mix: 0.52)
+    automate delay.mix from 0.45 to 0.58 over bars(1..24)
+  }
+}
+
+// pause: the stab almost disappears into its own tail
+block EchoTail : Echo {
+  track Stab {
+    insert delay(time: 0.703, fdbk: 0.74, mix: 0.6)
+    insert width(amount: 0.9)
+    volume 0.46
+    automate filter.cutoff from 0.45 to 0.3 over bars(1..8)
+  }
+}

@@ -1,0 +1,45 @@
+// Hello World — the two 303s. `Ask` is the question (saw, driven), `Answer`
+// the reply (square, brighter, panned away). The filter journey is a family
+// of inherited variants: place them under one alias each and the whole
+// conversation happens on two lanes.
+import { Bass303, Square303 } from "../../instruments/tb303.forte"
+
+// ---- 303 #1 — the question --------------------------------------------------
+block Ask {
+  key A minor
+  track Acid {
+    instrument Bass303(cutoff: 0.3, reso: 0.85, envmod: 0.55, decay: 0.22, glide: 0.07)
+    insert eq(low: 0.55, mid: 0.5, high: 0.56)
+    insert comp(thresh: 0.42, ratio: 0.55, attack: 0.01, release: 0.14, makeup: 0.18)
+    insert drive(drive: 0.35)
+    insert delay(time: 0.234, fdbk: 0.35, mix: 0.16)
+    volume 0.74
+    play notes`A1!:0.25 A1:0.25 A2:0.25 A1:0.25 C2~:0.25 C2:0.25 A1:0.25 G2!~:0.25 A2:0.25 E2:0.25 A1:0.25 A2:0.25 D2~:0.25 C2:0.25 A1!:0.25 G1~:0.25` at bars(1..2)
+    modulate cutoff with lfo(rate: 0.16, amount: 0.09, shape: "sine")
+  }
+}
+// the filter journey, as inheritance: each act opens the 303 further
+block AskWarm : Ask   { track Acid { automate cutoff from 0.10 to 0.30 over bars(1..16) automate volume from 0.5 to 0.75 over bars(1..8) } }
+block AskTalk : Ask   { track Acid { automate cutoff from 0.30 to 0.45 over bars(1..16) automate delay.mix from 0.16 to 0.24 over bars(9..16) } }
+block AskOpen : Ask   { track Acid { automate cutoff from 0.45 to 0.60 over bars(1..16) automate drive.drive from 0.35 to 0.45 over bars(1..16) } }
+block AskPeak : Ask   { track Acid { instrument Bass303(cutoff: 0.6, reso: 0.9, envmod: 0.6, decay: 0.24, glide: 0.07) automate cutoff from 0.60 to 0.85 over bars(1..24) modulate cutoff with lfo(rate: 0.3, amount: 0.12, shape: "sine") } }
+block AskFade : Ask   { track Acid { automate cutoff from 0.45 to 0.15 over bars(1..16) automate delay.mix from 0.24 to 0.5 over bars(1..12) automate volume from 0.75 to 0 over bars(9..16) } }
+
+// ---- 303 #2 — the answer ----------------------------------------------------
+block Answer {
+  key A minor
+  track Sq {
+    instrument Square303(cutoff: 0.4, reso: 0.8, envmod: 0.5, decay: 0.2, glide: 0.05)
+    insert eq(low: 0.45, mid: 0.5, high: 0.6)
+    insert comp(thresh: 0.45, ratio: 0.5, attack: 0.01, release: 0.14, makeup: 0.15)
+    insert drive(drive: 0.25)
+    insert delay(time: 0.351, fdbk: 0.45, mix: 0.22)
+    volume 0.6
+    pan 0.3
+    play notes`_:4 A2:0.25 A2:0.25 C3~:0.25 C3:0.25 _:0.5 E3:0.25 D3~:0.25 C3:0.25 A2:0.25 _:0.5 G2!:0.25 A2~:0.75` at bars(1..2)
+    modulate cutoff with lfo(rate: 0.22, amount: 0.07, shape: "tri")
+  }
+}
+block AnswerTalk : Answer { track Sq { automate cutoff from 0.35 to 0.50 over bars(1..16) } }
+block AnswerOpen : Answer { track Sq { automate cutoff from 0.50 to 0.62 over bars(1..16) automate delay.mix from 0.22 to 0.3 over bars(9..16) } }
+block AnswerPeak : Answer { track Sq { automate cutoff from 0.62 to 0.80 over bars(1..24) modulate cutoff with lfo(rate: 0.26, amount: 0.1, shape: "tri") } }

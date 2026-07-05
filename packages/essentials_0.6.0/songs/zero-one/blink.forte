@@ -1,0 +1,28 @@
+// Zero One — blink parts.
+import { Glass } from "../../instruments/keys.forte"
+
+// ---- cursor blinks: ONE lane, blinking → dissolving ----------------------------
+// Glass notes falling on a grid that isn't quite the drum grid —
+// 3-against-4, delayed into shimmer.
+block Blink {
+  key C minor
+  track Glass {
+    instrument Glass(shimmer: 0.5)
+    insert eq(low: 0.15, mid: 0.5, high: 0.6)
+    insert delay(time: 0.402, fdbk: 0.5, mix: 0.4)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.25)
+    volume 0.5
+    pan -0.1
+    play notes`C5:0.75 D#5:0.75 G5:0.75 D#5:0.75 G4:0.5 C5:0.75 D#5:0.75 G5:0.75 A#4:0.75 D#5:0.5` at bars(1..2)
+  }
+}
+
+// dissolving: the delay eats the notes — the screen is going dark
+block BlinkEcho : Blink {
+  track Glass {
+    insert delay(time: 0.402, fdbk: 0.6, mix: 0.52)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.32)
+    volume 0.46
+    automate delay.mix from 0.4 to 0.58 over bars(1..8)
+  }
+}

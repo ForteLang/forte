@@ -249,6 +249,23 @@ play AcidPeak as Acid at drop      // same lane, hotter delay
   may differ — adding or removing devices may not: E-BLOCK-007). Both the
   public-knob agreement and `automate <name>.volume` target the alias.
 
+- **Keep the song file thin** — a song should read like an arrangement,
+  not a warehouse. Put each part (a block family: base + its variants) in
+  its own file under `songs/<song>/`, and let the song be imports plus
+  placements. The reference albums are written this way:
+
+```
+songs/hello-world.forte        # ~80 lines: imports + sections + play/automate
+songs/hello-world/floor.forte  # Floor, FloorIn, FloorPeak
+songs/hello-world/acid.forte   # Ask + 5 variants, Answer + 3 variants
+songs/hello-world/tops.forte   # Tops family + Rides
+```
+
+  Because imports resolve before compilation, splitting a song into part
+  files never changes the rendered audio — the build digest stays
+  bit-identical. And every part file is one `import` line away from being
+  reused in your own song.
+
 ### Projects are packages
 
 Work inside a project scaffolded by `forte init <name>` — the folder is

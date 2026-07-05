@@ -1,0 +1,97 @@
+// Sleep Sort — sort parts.
+import { MusicBox, Kalimba, Glass } from "../../instruments/keys.forte"
+
+// ---- the sort: three registers arriving in pitch order ---------------------------
+block Sort {
+  key E major
+  // the low values: awake first
+  block LowWord {
+    track Kalimba {
+      instrument Kalimba()
+      insert eq(low: 0.25, mid: 0.55, high: 0.54)
+      insert delay(time: 0.357, fdbk: 0.38, mix: 0.3)
+      volume 0.4
+      pan -0.18
+      play notes`E3:0.5 _:1.5 G#3:0.5 _:1.5 B3:0.5 _:1.5 A3:0.5 _:1.5 E3:0.5 _:1.5 F#3:0.5 _:1.5 G#3:0.5 _:1.5 E3:0.5 _:1.5` at bars(1..4)
+    }
+  }
+  // the middle values: a music box, one sleep later
+  block MidWord {
+    track Box {
+      instrument MusicBox()
+      insert eq(low: 0.15, mid: 0.5, high: 0.58)
+      insert delay(time: 0.536, fdbk: 0.42, mix: 0.34)
+      insert reverb(size: 0.7, decay: 0.6, mix: 0.26)
+      volume 0.38
+      pan 0.12
+      play notes`_:1 B4:0.5 _:1.5 G#4:0.5 _:1.5 E4:0.5 _:1.5 F#4:0.5 _:2 A4:0.5 _:1.5 G#4:0.5 _:1.5 B4:0.5 _:1.5 E4:0.5 _:0.5` at bars(1..4)
+    }
+  }
+  // the high values: glass, last out of bed
+  block HighWord {
+    track Glass {
+      instrument Glass(shimmer: 0.5)
+      insert eq(low: 0.12, mid: 0.5, high: 0.58)
+      insert delay(time: 0.714, fdbk: 0.46, mix: 0.38)
+      insert reverb(size: 0.8, decay: 0.7, mix: 0.3)
+      volume 0.3
+      pan 0.3
+      play notes`_:2.5 E5:0.5 _:3.5 G#5:0.5 _:3.5 B5:0.5 _:3 F#5:0.5 _:1.5` at bars(1..4)
+    }
+  }
+  play LowWord at bars(1..4)
+  play MidWord at bars(1..4)
+  play HighWord at bars(2..4)
+}
+
+// the first run: only the low register is awake
+block SortFirst : Sort {
+  block MidWord {
+    track Box {
+      instrument MusicBox()
+      insert eq(low: 0.15, mid: 0.5, high: 0.58)
+      insert delay(time: 0.536, fdbk: 0.42, mix: 0.36)
+      insert reverb(size: 0.7, decay: 0.6, mix: 0.3)
+      volume 0.28
+      pan 0.12
+      play notes`_:3 B4:0.5 _:4.5 E4:0.5 _:4 G#4:0.5 _:3` at bars(1..4)
+    }
+  }
+  block HighWord {
+    track Glass {
+      instrument Glass(shimmer: 0.45)
+      insert eq(low: 0.12, mid: 0.5, high: 0.58)
+      insert delay(time: 0.714, fdbk: 0.46, mix: 0.38)
+      insert reverb(size: 0.8, decay: 0.7, mix: 0.32)
+      volume 0.2
+      pan 0.3
+      play notes`_:7 E5:0.5 _:8.5` at bars(1..4)
+    }
+  }
+}
+
+// the full array: every register answering, values interleaved
+block SortAll : Sort {
+  block LowWord {
+    track Kalimba {
+      instrument Kalimba()
+      insert eq(low: 0.25, mid: 0.55, high: 0.54)
+      insert delay(time: 0.357, fdbk: 0.42, mix: 0.34)
+      volume 0.42
+      pan -0.18
+      play notes`E3:0.5 _:0.5 G#3:0.5 _:0.5 B3:0.5 _:0.5 A3:0.5 _:0.5 E3:0.5 _:0.5 F#3:0.5 _:0.5 G#3:0.5 _:0.5 B3:0.5 _:0.5 A3:0.5 _:0.5 G#3:0.5 _:0.5 F#3:0.5 _:0.5 E3:0.5 _:0.5 D#3:0.5 _:0.5 E3:0.5 _:1.5` at bars(1..4)
+      automate delay.mix from 0.3 to 0.42 over bars(1..8)
+    }
+  }
+  block MidWord {
+    track Box {
+      instrument MusicBox()
+      insert eq(low: 0.15, mid: 0.5, high: 0.58)
+      insert delay(time: 0.536, fdbk: 0.45, mix: 0.36)
+      insert reverb(size: 0.7, decay: 0.6, mix: 0.26)
+      volume 0.4
+      pan 0.12
+      play notes`_:0.5 B4:0.5 _:1 G#4:0.5 _:1 E4:0.5 _:1 F#4:0.5 _:1 A4:0.5 _:1.5 G#4:0.5 _:1 B4:0.5 _:1 C#5:0.5 _:1 B4:0.5 _:1 G#4:0.5 _:0.5` at bars(1..4)
+    }
+  }
+}

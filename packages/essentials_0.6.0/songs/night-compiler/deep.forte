@@ -1,0 +1,24 @@
+// Night Compiler — deep parts.
+import { DubBass } from "../../instruments/bass.forte"
+
+// The sub bassline: three notes an hour. Dub weight, no hurry.
+block Deep {
+  key F minor
+  track Bass {
+    instrument DubBass(depth: 0.85)
+    insert filter(type: "lp", cutoff: 0.3)
+    insert eq(low: 0.6, mid: 0.45, high: 0.42)
+    insert comp(thresh: 0.4, ratio: 0.6, attack: 0.03, release: 0.22, makeup: 0.2)
+    insert pump(amount: 0.4, beats: 1)
+    volume 0.78
+    play notes`F1:3 _:1 F1:2 G#1~:2 F1:3 _:1 C1:2 C#1~:2` at bars(1..4)
+  }
+}
+
+// flow: the filter finally lets the harmonics through
+block DeepOpen : Deep {
+  track Bass {
+    insert filter(type: "lp", cutoff: 0.38)
+    automate filter.cutoff from 0.3 to 0.45 over bars(1..24)
+  }
+}

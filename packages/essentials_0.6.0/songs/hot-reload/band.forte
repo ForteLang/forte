@@ -1,0 +1,49 @@
+// Hot Reload — band parts.
+import { RubberBass } from "../../instruments/bass.forte"
+import { EPiano } from "../../instruments/keys.forte"
+
+// ---- the band: keys and bass as one nested ensemble ------------------------------
+block Band {
+  key F major
+  // the chords: Fmaj7 → Am7 → Dm7 → Bbmaj7, comped just behind the beat
+  block Keys {
+    track EP {
+      instrument EPiano(tine: 0.45)
+      insert eq(low: 0.3, mid: 0.52, high: 0.56)
+      insert chorus(rate: 0.22, depth: 0.55, mix: 0.5)
+      insert width(amount: 0.6)
+      volume 0.56
+      pan -0.08
+      play notes`_:0.5 [F2 C3 E3 A3]:1.25 _:0.75 [F2 C3 E3 A3]:0.5 _:1 _:0.5 [A2 E3 G3 C4]:1.25 _:2.25 _:0.5 [D2 A2 C3 F3]:1.25 _:0.75 [D2 A2 C3 F3]:0.5 _:1 _:0.5 [A#1 F2 A2 D3]:1.5 _:2` at bars(1..4)
+    }
+  }
+  // the ground: a rubber bass that walks the changes with 16th pickups
+  block LowEnd {
+    track Bass {
+      instrument RubberBass()
+      insert eq(low: 0.58, mid: 0.5, high: 0.48)
+      insert comp(thresh: 0.42, ratio: 0.55, attack: 0.012, release: 0.14, makeup: 0.2)
+      insert pump(amount: 0.25, beats: 1)
+      volume 0.72
+      play notes`F1:0.75 _:0.25 F1:0.5 C2:0.5 F1:0.5 _:0.25 E2:0.25 F2:0.5 D2:0.5 A1:0.75 _:0.25 A1:0.5 E2:0.5 A1:0.75 G1:0.25 A1:0.5 C2:0.5 D2:0.75 _:0.25 D2:0.5 A1:0.5 D2:0.5 _:0.25 C2:0.25 D2:0.5 F2:0.5 A#1:0.75 _:0.25 A#1:0.5 F1:0.5 A#1:0.5 _:0.25 A1:0.25 A#1:0.5 C2:0.5` at bars(1..4)
+    }
+  }
+  play Keys at bars(1..4)
+  play LowEnd at bars(1..4)
+}
+
+// the reload: same band, keys voiced an octave up and let ring
+block BandOpen : Band {
+  block Keys {
+    track EP {
+      instrument EPiano(tine: 0.55)
+      insert eq(low: 0.28, mid: 0.52, high: 0.6)
+      insert chorus(rate: 0.22, depth: 0.6, mix: 0.55)
+      insert width(amount: 0.7)
+      volume 0.58
+      pan -0.08
+      play notes`[F3 A3 C4 E4]:3.5 _:0.5 [A3 C4 E4 G4]:3.5 _:0.5 [D3 F3 A3 C4]:3.5 _:0.5 [A#2 D3 F3 A3]:2 [C3 E3 G3 A#3]:2` at bars(1..4)
+      automate chorus.mix from 0.5 to 0.62 over bars(1..16)
+    }
+  }
+}

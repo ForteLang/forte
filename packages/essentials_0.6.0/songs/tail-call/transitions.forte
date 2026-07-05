@@ -1,0 +1,6 @@
+// Tail Call — transitions parts.
+import { Riser, Impact } from "../../instruments/fx.forte"
+
+block Up   { track R { instrument Riser(climb: 0.9) volume 0.55 pan 0.1 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+block Land { track I { instrument Impact() insert reverb(size: 0.82, decay: 0.62, mix: 0.32) volume 0.62 play beat`x--- ---- ---- ----` at bars(1..1) } }

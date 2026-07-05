@@ -1,0 +1,36 @@
+// Segfault Boogie — itch parts.
+import { Clav } from "../../instruments/keys.forte"
+
+// ---- the clav — the itch of the whole track. ONE lane, three tempers -----------
+// 16th funk chops through a touch-wah (LFO on a bandpass), doubled by chorus.
+block Itch {
+  key E minor
+  track Clav {
+    instrument Clav(mute: 0.55)
+    insert filter(type: "bp", cutoff: 0.5, reso: 0.55)
+    insert eq(low: 0.25, mid: 0.55, high: 0.6)
+    insert chorus(rate: 0.35, depth: 0.4, mix: 0.3)
+    volume 0.55
+    pan -0.2
+    play notes`E3:0.25 _:0.25 E3:0.25 G3:0.25 _:0.25 E3:0.25 _:0.25 B3:0.25 _:0.25 A3:0.25 G3:0.25 _:0.25 E3:0.25 _:0.25 D3:0.25 E3:0.25` at bars(1..2)
+    modulate filter.cutoff with lfo(rate: 0.32, amount: 0.25, shape: "sine")
+  }
+}
+
+// reboot: the wah opens over sixteen bars — scratching the itch
+block ItchOpen : Itch {
+  track Clav {
+    automate filter.cutoff from 0.4 to 0.62 over bars(1..16)
+    automate chorus.mix from 0.3 to 0.42 over bars(9..16)
+  }
+}
+
+// jam: double chops crowding the offbeats
+block ItchJam : Itch {
+  track Clav {
+    insert filter(type: "bp", cutoff: 0.58, reso: 0.6)
+    volume 0.58
+    play notes`E3:0.25 E3:0.25 _:0.25 G3:0.25 E3:0.25 _:0.25 B3:0.25 B3:0.25 _:0.25 A3:0.25 G3:0.25 A3:0.25 E3:0.25 D3:0.25 _:0.25 E3:0.25` at bars(1..2)
+    modulate filter.cutoff with lfo(rate: 0.4, amount: 0.28, shape: "sine")
+  }
+}

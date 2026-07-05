@@ -1,0 +1,45 @@
+// Memoize — band parts.
+import { PickBass } from "../../instruments/bass.forte"
+import { JunoKeys } from "../../instruments/juno60.forte"
+import { StringPad } from "../../instruments/pads.forte"
+
+// The bass: a pick bass that walks the lookup table.
+block Lookup {
+  key G major
+  track Bass {
+    instrument PickBass()
+    insert eq(low: 0.56, mid: 0.5, high: 0.46)
+    insert comp(thresh: 0.42, ratio: 0.55, attack: 0.012, release: 0.14, makeup: 0.2)
+    insert pump(amount: 0.22, beats: 1)
+    volume 0.7
+    play notes`G1:0.75 _:0.25 G1:0.5 D2:0.5 G1:0.5 _:0.5 B1:0.5 D2:0.5 E2:0.75 _:0.25 E2:0.5 B1:0.5 E2:0.5 _:0.5 D2:0.5 B1:0.5 C2:0.75 _:0.25 C2:0.5 G1:0.5 C2:0.5 _:0.5 E2:0.5 G2:0.5 D2:0.75 _:0.25 D2:0.5 A1:0.5 D2:0.5 C2:0.5 B1:0.5 A1:0.5` at bars(1..4)
+  }
+}
+
+// The chords: juno keys answering the cache on the offbeats.
+block Chords {
+  key G major
+  track Keys {
+    instrument JunoKeys()
+    insert eq(low: 0.28, mid: 0.52, high: 0.55)
+    insert chorus(rate: 0.22, depth: 0.55, mix: 0.5)
+    insert width(amount: 0.65)
+    volume 0.48
+    pan -0.08
+    play notes`_:0.5 [G2 D3 F#3 B3]:1 _:1.5 [G2 D3 F#3 B3]:0.5 _:0.5 _:0.5 [E2 B2 D3 G3]:1 _:2.5 _:0.5 [C3 G3 B3 E4]:1 _:1.5 [C3 G3 B3 E4]:0.5 _:0.5 _:0.5 [D3 A3 C4 F#4]:1.5 _:2` at bars(1..4)
+  }
+}
+
+// The strings: the memory itself, swelling when the cache warms.
+block Memory {
+  key G major
+  track Str {
+    instrument StringPad()
+    insert eq(low: 0.3, mid: 0.5, high: 0.53)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.85, decay: 0.72, mix: 0.35)
+    volume 0.4
+    pan 0.05
+    play notes`[G3 B3 D4 F#4]:8 [E3 G3 B3 D4]:8 [C3 E3 G3 B3]:8 [D3 F#3 A3 C4]:8` at bars(1..8)
+  }
+}

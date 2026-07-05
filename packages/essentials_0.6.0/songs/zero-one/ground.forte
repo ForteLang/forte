@@ -1,0 +1,24 @@
+// Zero One — ground parts.
+import { SubBass } from "../../instruments/bass.forte"
+
+// The ground: a sub bass drawing slow arcs under everything.
+block Ground {
+  key C minor
+  track Bass {
+    instrument SubBass(drive: 0.2)
+    insert filter(type: "lp", cutoff: 0.25)
+    insert eq(low: 0.58, mid: 0.45, high: 0.4)
+    insert comp(thresh: 0.42, ratio: 0.55, attack: 0.03, release: 0.22, makeup: 0.16)
+    insert pump(amount: 0.3, beats: 1)
+    volume 0.7
+    play notes`C1:4 G#0~:4 D#1:4 A#0~:3 G0:1` at bars(1..4)
+  }
+}
+
+// late: the arcs open a little — the last stretch home
+block GroundOpen : Ground {
+  track Bass {
+    insert filter(type: "lp", cutoff: 0.3)
+    automate filter.cutoff from 0.25 to 0.36 over bars(1..16)
+  }
+}

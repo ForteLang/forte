@@ -1,0 +1,47 @@
+// Tail Call — band parts.
+import { GlideLead } from "../../instruments/leads.forte"
+import { DreamSynth } from "../../instruments/synths.forte"
+import { StringPad } from "../../instruments/pads.forte"
+
+// The accumulator: dream-synth chords gathering what each call returns.
+block Accum {
+  key B minor
+  track Dream {
+    instrument DreamSynth()
+    insert eq(low: 0.28, mid: 0.5, high: 0.55)
+    insert chorus(rate: 0.24, depth: 0.55, mix: 0.5)
+    insert width(amount: 0.7)
+    insert pump(amount: 0.25, beats: 1)
+    volume 0.46
+    pan 0.08
+    play notes`_:0.5 [B2 F#3 A3 D4]:1 _:2.5 _:0.5 [E3 B3 D4 G4]:1 _:2.5 _:0.5 [B2 F#3 A3 D4]:1 _:1.5 [A2 E3 G3 C#4]:1 _:0.5 [G2 D3 F#3 B3]:1.5 [F#2 C#3 E3 A#3]:1.5 _:1` at bars(1..4)
+  }
+}
+
+// The observer: a glide lead narrating the recursion from above.
+block Trace {
+  key B minor
+  track Lead {
+    instrument GlideLead()
+    insert eq(low: 0.22, mid: 0.52, high: 0.58)
+    insert delay(time: 0.369, fdbk: 0.45, mix: 0.32)
+    insert reverb(size: 0.68, decay: 0.58, mix: 0.24)
+    volume 0.5
+    pan -0.06
+    play notes`_:1 F#4~:1.5 A4~:1 B4~:1.5 A4~:1 F#4~:2 _:1.5 D4~:1 E4~:1.5 F#4~:1.5 E4~:1.5 D4~:1 B3~:2.5 _:1 B4~:1 C#5~:1.5 D5~:1.5 C#5~:1 B4~:1.5 A4~:1 F#4~:3 _:2.5` at bars(1..8)
+  }
+}
+
+// The stack: strings rising a layer per section.
+block Stack {
+  key B minor
+  track Str {
+    instrument StringPad()
+    insert eq(low: 0.3, mid: 0.5, high: 0.53)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.85, decay: 0.7, mix: 0.34)
+    volume 0.38
+    pan -0.05
+    play notes`[B2 F#3 D4]:8 [G2 D3 B3]:8 [E3 B3 G4]:8 [F#3 C#4 A#4]:8` at bars(1..8)
+  }
+}

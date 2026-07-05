@@ -1,0 +1,29 @@
+// Whitespace — indent parts.
+import { FluteLead } from "../../instruments/leads.forte"
+import { Triangle } from "../../instruments/percussion.forte"
+
+// The flute: phrases indented one level deeper each time.
+block Indent {
+  key C major
+  track Flute {
+    instrument FluteLead()
+    insert eq(low: 0.2, mid: 0.52, high: 0.56)
+    insert delay(time: 0.417, fdbk: 0.4, mix: 0.3)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.26)
+    volume 0.46
+    pan 0.05
+    play notes`_:2 E4~:1.5 G4~:1 A4~:1.5 G4~:1.5 E4~:1.5 _:1.5 D4~:1 E4~:2 G4~:1.5 E4~:1.5 D4~:1 C4~:2.5 _:2 G4~:1 A4~:1.5 C5~:2 B4~:1.5 A4~:1 G4~:2 _:2.5` at bars(1..8)
+  }
+}
+
+// One triangle, once per eight bars. The cursor blink of the whole piece.
+block Blink {
+  track Tri {
+    instrument Triangle()
+    insert eq(low: 0.1, mid: 0.45, high: 0.6)
+    insert reverb(size: 0.85, decay: 0.75, mix: 0.4)
+    volume 0.22
+    pan -0.3
+    play beat`x--- ---- ---- ----` at bars(1..8)
+  }
+}

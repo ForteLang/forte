@@ -1,0 +1,191 @@
+// Tail Call — engine parts.
+import { Kick909, Snare908, HatClosed, HatPedal } from "../../instruments/drums.forte"
+import { Conga, Timbale, Cabasa } from "../../instruments/percussion.forte"
+
+// ---- the engine: nested kit + latin hands, one aliased lane ----------------------
+block Engine {
+  block Kit {
+    track Kick {
+      instrument Kick909(click: 0.58)
+      insert eq(low: 0.6, mid: 0.45, high: 0.5)
+      insert comp(thresh: 0.38, ratio: 0.64, attack: 0.018, release: 0.15, makeup: 0.24)
+      volume 0.92
+      play beat`X--- x--- x--- x---` at bars(1..4)
+    }
+    track Snare {
+      instrument Snare908(tone: 0.62, snap: 0.6)
+      insert eq(low: 0.28, mid: 0.55, high: 0.58)
+      insert comp(thresh: 0.42, ratio: 0.55, attack: 0.006, release: 0.1, makeup: 0.18)
+      insert reverb(size: 0.45, decay: 0.35, mix: 0.13)
+      volume 0.56
+      pan 0.04
+      play beat`---- x--- ---- x---` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.2
+      pan -0.12
+      play beat`--x- --x- --x- --x-` at bars(1..4)
+    }
+    track Hat {
+      instrument HatClosed(bright: 0.85)
+      insert eq(low: 0.12, mid: 0.45, high: 0.68)
+      insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+      volume 0.28
+      pan 0.18
+      play beat`x.x. x.xX x.x. x.x.` at bars(1..2)
+    }
+  }
+  block Latin {
+    track Conga {
+      instrument Conga(open: 0.55)
+      insert eq(low: 0.32, mid: 0.55, high: 0.52)
+      insert comp(thresh: 0.46, ratio: 0.5, attack: 0.008, release: 0.12, makeup: 0.14)
+      volume 0.32
+      pan -0.28
+      play beat`--x- ---x --x- x--- --x- ---x -x-- --x-` at bars(1..2)
+    }
+    track Timb {
+      instrument Timbale()
+      insert eq(low: 0.25, mid: 0.55, high: 0.55)
+      insert delay(time: 0.246, fdbk: 0.3, mix: 0.22)
+      volume 0.24
+      pan 0.32
+      play beat`---- ---- --x- ---- ---- -x-- ---- ---x` at bars(1..2)
+    }
+    track Cab {
+      instrument Cabasa()
+      insert eq(low: 0.1, mid: 0.5, high: 0.6)
+      volume 0.2
+      pan 0.22
+      play beat`.x.x .x.x .x.x .x.x` at bars(1..2)
+    }
+  }
+  play Kit at bars(1..4)
+  play Latin at bars(1..4)
+}
+
+// first frame: kick and pedal only — the stack is still shallow
+block EngineIn : Engine {
+  block Kit {
+    track Kick {
+      instrument Kick909(click: 0.5)
+      insert eq(low: 0.6, mid: 0.45, high: 0.5)
+      insert comp(thresh: 0.4, ratio: 0.6, attack: 0.02, release: 0.16, makeup: 0.2)
+      volume 0.86
+      play beat`X--- x--- x--- x---` at bars(1..4)
+    }
+    track Snare {
+      instrument Snare908(tone: 0.6, snap: 0.55)
+      insert eq(low: 0.28, mid: 0.55, high: 0.56)
+      insert comp(thresh: 0.44, ratio: 0.52, attack: 0.006, release: 0.1, makeup: 0.16)
+      insert reverb(size: 0.45, decay: 0.35, mix: 0.15)
+      volume 0.4
+      pan 0.04
+      play beat`---- ---- ---- x---` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.16
+      pan -0.12
+      play beat`--x- --x- --x- --x-` at bars(1..4)
+    }
+    track Hat {
+      instrument HatClosed(bright: 0.75)
+      insert eq(low: 0.12, mid: 0.45, high: 0.62)
+      insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+      volume 0.18
+      pan 0.18
+      play beat`..x. ..x. ..x. ..x.` at bars(1..2)
+    }
+  }
+  block Latin {
+    track Conga {
+      instrument Conga(open: 0.5)
+      insert eq(low: 0.32, mid: 0.55, high: 0.52)
+      insert comp(thresh: 0.46, ratio: 0.5, attack: 0.008, release: 0.12, makeup: 0.14)
+      volume 0.2
+      pan -0.28
+      play beat`---- ---x ---- x---` at bars(1..2)
+    }
+    track Timb {
+      instrument Timbale()
+      insert eq(low: 0.25, mid: 0.55, high: 0.55)
+      insert delay(time: 0.246, fdbk: 0.3, mix: 0.22)
+      volume 0.12
+      pan 0.32
+      play beat`---- ---- ---- ---x` at bars(1..4)
+    }
+    track Cab {
+      instrument Cabasa()
+      insert eq(low: 0.1, mid: 0.5, high: 0.6)
+      volume 0.12
+      pan 0.22
+      play beat`.x.. .x.. .x.. .x..` at bars(1..2)
+    }
+  }
+}
+
+// deep frames: ghosts, drags, timbale answering across the field
+block EngineDeep : Engine {
+  block Kit {
+    track Kick {
+      instrument Kick909(click: 0.62)
+      insert eq(low: 0.6, mid: 0.45, high: 0.5)
+      insert comp(thresh: 0.36, ratio: 0.66, attack: 0.016, release: 0.14, makeup: 0.26)
+      volume 0.94
+      play beat`X--- x--- x--. x--- X--- x--- x--- x-.x` at bars(1..2)
+    }
+    track Snare {
+      instrument Snare908(tone: 0.65, snap: 0.65)
+      insert eq(low: 0.28, mid: 0.55, high: 0.58)
+      insert comp(thresh: 0.4, ratio: 0.58, attack: 0.006, release: 0.1, makeup: 0.2)
+      insert reverb(size: 0.45, decay: 0.35, mix: 0.13)
+      volume 0.58
+      pan 0.04
+      play beat`---- x--- --.- x--. ---- x--- .--- x-x.` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.22
+      pan -0.12
+      play beat`--x- --x- --x- --xx` at bars(1..4)
+    }
+    track Hat {
+      instrument HatClosed(bright: 0.9)
+      insert eq(low: 0.12, mid: 0.45, high: 0.7)
+      insert comp(thresh: 0.48, ratio: 0.46, attack: 0.005, release: 0.08, makeup: 0.12)
+      volume 0.32
+      pan 0.18
+      play beat`x.xX x.x. xxx. x.xX x.x. x.xx x.xX xxxX` at bars(1..2)
+    }
+  }
+  block Latin {
+    track Conga {
+      instrument Conga(open: 0.6)
+      insert eq(low: 0.32, mid: 0.55, high: 0.52)
+      insert comp(thresh: 0.44, ratio: 0.52, attack: 0.008, release: 0.12, makeup: 0.16)
+      volume 0.36
+      pan -0.28
+      play beat`--x- x--x --x- x-x- --x- ---x -xx- --x-` at bars(1..2)
+    }
+    track Timb {
+      instrument Timbale()
+      insert eq(low: 0.25, mid: 0.55, high: 0.55)
+      insert delay(time: 0.246, fdbk: 0.38, mix: 0.3)
+      volume 0.28
+      pan 0.32
+      play beat`---- --x- --x- -x-- x--- -x-- ---- x--x` at bars(1..2)
+    }
+    track Cab {
+      instrument Cabasa()
+      insert eq(low: 0.1, mid: 0.5, high: 0.6)
+      volume 0.24
+      pan 0.22
+      play beat`.x.x .xxx .x.x .xx.` at bars(1..2)
+    }
+  }
+}

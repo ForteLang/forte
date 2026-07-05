@@ -1,0 +1,65 @@
+// Race Condition — sprint parts.
+import { Kick909, HatClosed, HatOpen, Clap } from "../../instruments/drums.forte"
+
+// ---- the sprint: ONE drum lane — grid, race, drop -------------------------------
+block Sprint {
+  track Kick {
+    instrument Kick909(click: 0.68)
+    insert eq(low: 0.62, mid: 0.45, high: 0.5)
+    insert comp(thresh: 0.36, ratio: 0.7, attack: 0.018, release: 0.15, makeup: 0.3)
+    insert drive(drive: 0.2)
+    volume 0.95
+    play beat`X--- x--- x--- x---` at bars(1..4)
+  }
+  track Clap {
+    instrument Clap(tone: 0.65)
+    insert eq(low: 0.2, mid: 0.6, high: 0.58)
+    insert comp(thresh: 0.42, ratio: 0.55, attack: 0.004, release: 0.1, makeup: 0.2)
+    insert reverb(size: 0.55, decay: 0.4, mix: 0.15)
+    volume 0.6
+    pan -0.05
+    play beat`---- x--- ---- x--- ---- x--- ---- x-xx` at bars(1..2)
+  }
+  track Hats {
+    instrument HatClosed(bright: 1.0)
+    insert eq(low: 0.12, mid: 0.45, high: 0.8)
+    insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+    volume 0.32
+    pan 0.12
+    play beat`x.xX x.x. x.xX x.x.` at bars(1..4)
+  }
+  track Open {
+    instrument HatOpen(decay: 0.2)
+    insert eq(low: 0.1, mid: 0.5, high: 0.64)
+    insert pump(amount: 0.3, beats: 1)
+    volume 0.4
+    pan -0.12
+    play beat`--x- --x- --x- --x-` at bars(1..4)
+  }
+}
+
+// grid: the warm-up lap — no clap yet, hats counting straight eighths
+block SprintIn : Sprint {
+  track Kick { insert drive(drive: 0.1) volume 0.9 }
+  track Clap { volume 0.45 play beat`---- ---- ---- x---` at bars(1..2) }
+  track Hats { volume 0.26 play beat`x.x. x.x. x.x. x.x.` at bars(1..4) }
+  track Open { volume 0.32 }
+}
+
+// drop: ghost kicks, ratchet claps, hats spilling over the bar line
+block SprintDrop : Sprint {
+  track Kick {
+    insert comp(thresh: 0.32, ratio: 0.72, attack: 0.015, release: 0.13, makeup: 0.34)
+    insert drive(drive: 0.3)
+    play beat`X--- x--- x--. x--- X--- x--- x--- x-.x` at bars(1..2)
+  }
+  track Clap {
+    volume 0.64
+    play beat`---- x--- ---- x--. ---- x--- .-xx x-xX` at bars(1..2)
+  }
+  track Hats {
+    volume 0.36
+    play beat`x.xX xxx. x.xX x.xx x.xX x.x. xxxX xxxx` at bars(1..2)
+  }
+  track Open { insert pump(amount: 0.42, beats: 1) volume 0.46 }
+}

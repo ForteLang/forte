@@ -1,0 +1,53 @@
+// Zero One — home parts.
+import { Bell, Vibraphone } from "../../instruments/keys.forte"
+import { GlideLead } from "../../instruments/leads.forte"
+
+// The hum: a glide lead singing the way home. Two phrases, then silence.
+block Home {
+  key C minor
+  track Lead {
+    instrument GlideLead()
+    insert eq(low: 0.25, mid: 0.52, high: 0.58)
+    insert delay(time: 0.536, fdbk: 0.45, mix: 0.35)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.3)
+    volume 0.5
+    pan 0.05
+    play notes`_:1 G4~:1.5 A#4~:1 G4~:1.5 D#4~:2 F4~:1 D#4~:2 C4:4 _:2 G4~:1 A#4~:1 C5~:2 A#4~:1.5 G4~:1.5 D#4~:1 F4~:2 D#4:5 _:4` at bars(1..8)
+  }
+}
+
+// the second telling: quieter, the delay finishing the phrases
+block HomeSoft : Home {
+  track Lead {
+    insert delay(time: 0.536, fdbk: 0.55, mix: 0.45)
+    volume 0.44
+    automate delay.mix from 0.35 to 0.5 over bars(1..8)
+  }
+}
+
+// The answer: a vibraphone repeating the last three notes, softer.
+block Answer {
+  key C minor
+  track Vibe {
+    instrument Vibraphone(motor: 0.4)
+    insert eq(low: 0.2, mid: 0.52, high: 0.56)
+    insert chorus(rate: 0.2, depth: 0.4, mix: 0.35)
+    insert delay(time: 0.804, fdbk: 0.4, mix: 0.35)
+    volume 0.4
+    pan 0.3
+    play notes`_:8 F4:1 D#4:1 C4:2 _:4` at bars(1..4)
+  }
+}
+
+// A bell counting down to zero, one strike per two bars.
+block Count {
+  key C minor
+  track Bell {
+    instrument Bell(decay: 0.75)
+    insert eq(low: 0.15, mid: 0.5, high: 0.58)
+    insert reverb(size: 0.9, decay: 0.8, mix: 0.35)
+    volume 0.4
+    pan -0.25
+    play notes`C6:8` at bars(1..2)
+  }
+}
