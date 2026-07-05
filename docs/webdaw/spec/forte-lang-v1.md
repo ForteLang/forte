@@ -186,9 +186,15 @@ send レベル 0..1。
 
 ### 4.9 オートメーションとモジュレーション
 
-対象パラメータの解決は automate / modulate で共通: `volume`(automate のみ)、
-ビルトイン instrument(polymer / sampler)のパラメータ表、**自作 device は
-宣言した `param` がそのまま名前になる**(大文字小文字は区別しない)。
+対象パラメータの解決は automate / modulate で共通(大文字小文字は区別しない):
+
+- `volume`(automate のみ)/ instrument のパラメータ名 — ビルトイン
+  (polymer / sampler)はパラメータ表、**自作 device は宣言した `param` が
+  そのまま名前になる**。
+- `<insert名>.<パラメータ>` — insert エフェクトを書いた名前で指す:
+  `delay.mix`、`Muffle.cutoff`(自作 Effect の `param` も公開される)。
+  同名 insert が複数あるときは最初のものに差さる。
+
 未知の名前は「使えるもの」を列挙して E-AUTO-001 / E-LFO-001。
 
 - `automate <param> from 0.2 to 0.8 over bars(1..8)` — 区間の頭から末尾へ
@@ -197,7 +203,7 @@ send レベル 0..1。
   `from`、終了後は `to` を保持する。複数の `automate` は対象ごとに
   ひとつのレーンへ拍順でマージされる。
 - `modulate <param> with <modulator>(…)` — パラメータにモジュレータを
-  差し込む。種類は 3 つ(それ以外は E-PARSE-021):
+  差し込む。種類は 4 つ(それ以外は E-PARSE-021):
   - `lfo(rate: 0.4, amount: 0.5, shape: "tri")` — 周期波。`rate` 0..1
     (0.05..8.05 Hz、省略時 0.3)、`shape` sine / tri / saw / square
     (省略時 sine)。
@@ -208,6 +214,10 @@ send レベル 0..1。
   - `random(rate: 0.4, amount: 0.4, smooth: 0.5)` — サンプル&ホールド
     乱数(決定論: 同一ソースなら同一乱数列)。`smooth` 0..1 でステップ間を
     滑らかに補間。`every` でテンポ同期も可。
+  - `adsr(a: 0.02, d: 0.4, s: 0.3, r: 0.1)` — **ノートゲート駆動**の外付け
+    エンベロープ: トラックの音が鳴り始めると立ち上がり、無音になると
+    リリースする(フィルターエンベロープの後付け)。各値 0..1
+    (時間は 2 乗カーブで最大 3 秒)。ブロックレート評価。
   共通: `amount` -1..1 は**必須**(E-LFO-003)。揺れは基準値
   (automate レーンがあればその時点のレーン値)に amount 幅で乗り、
   0..1 に飽和する。ひとつのパラメータに `automate` と `modulate` を
@@ -256,11 +266,12 @@ send レベル 0..1。
 
 - 実装済みで v0 から確定: send/return 構文(DECISION-S1)、prog クオリティ集合、
   デバイス DSL はノードグラフ形式(任意式 `process` は将来)。
-- 実装済み(v1.1): `automate`(volume + 全 instrument パラメータ、§4.9)、
-  `modulate … with lfo / steps / random`(自作 device の `param` 含む、§4.9)。
-- 未実装(v2 候補): ユーザー定義ジェネリクス、automate pan、
-  insert エフェクトのパラメータへの automate / modulate、外付け ADSR
-  モジュレータ(ノートゲート駆動)、3 連符 beat リテラル(DECISION-S2)、
-  セクション反復の一級表現(DECISION-S3)、単位型の完全な検査(Hz/dB/ms)、
-  `route` 明示ルーティング、ed25519 署名の実検証。
-  (エフェクトの device DSL は §4.5 で実装済み)
+- 実装済み(v1.1): `automate`(volume + instrument / insert の全パラメータ、
+  §4.9)、`modulate … with lfo / steps / random / adsr`(自作 device・
+  自作 Effect の `param`、`<insert>.<param>` 含む、§4.9)。
+- 未実装(v2 候補): ユーザー定義ジェネリクス、automate pan、マクロ
+  (1 ノブ → 多パラメータ)、モジュレータ自体のオートメーション
+  (`wobble.amount`)、song レベル共有モジュレータ、3 連符 beat リテラル
+  (DECISION-S2)、セクション反復の一級表現(DECISION-S3)、
+  単位型の完全な検査(Hz/dB/ms)、`route` 明示ルーティング、
+  ed25519 署名の実検証。(エフェクトの device DSL は §4.5 で実装済み)

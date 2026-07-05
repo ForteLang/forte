@@ -141,10 +141,15 @@ pub fn compile(
             )),
         }
 
-        // insert effects, in order
+        // insert effects, in order; remember their names so automate/modulate
+        // can target `<insert>.<param>` (first match wins on duplicates)
+        let mut insert_devs: Vec<(String, usize)> = Vec::new();
         for call in &tast.inserts {
             match build_effect(call, &user_devices, p.tempo) {
-                Ok(dev) => track.devices.push(dev),
+                Ok(dev) => {
+                    insert_devs.push((call.name.clone(), track.devices.len()));
+                    track.devices.push(dev);
+                }
                 Err(d) => diags.push(d),
             }
         }
@@ -165,13 +170,13 @@ pub fn compile(
             }
         }
 
-        // automation lanes: volume, or any runtime param of the instrument
+        // automation lanes: volume, an instrument param, or `<insert>.<param>`
         for auto in &tast.automations {
             let param_target = if auto.target == "volume" {
                 None
             } else {
-                match resolve_param(&track, &auto.target) {
-                    Ok(idx) => Some(idx),
+                match resolve_target(&track, &insert_devs, &auto.target) {
+                    Ok(t) => Some(t),
                     Err(msg) => {
                         diags.push(Diag::new("E-AUTO-001", auto.pos, msg));
                         continue;
@@ -218,10 +223,10 @@ pub fn compile(
                 // ramps targeting the same param merge into ONE lane in beat
                 // order — separate lanes would each cover the whole timeline
                 // (eval holds the edge values) and the last one would win
-                Some(idx) => match track
+                Some((di, pi)) => match track
                     .param_automation
                     .iter_mut()
-                    .find(|pa| pa.device == 0 && pa.param == idx)
+                    .find(|pa| pa.device == di && pa.param == pi)
                 {
                     Some(lane) => {
                         lane.points.extend(points);
@@ -229,16 +234,17 @@ pub fn compile(
                     }
                     None => track
                         .param_automation
-                        .push(ParamAutomation { device: 0, param: idx, points }),
+                        .push(ParamAutomation { device: di, param: pi, points }),
                 },
             }
         }
         track.volume_automation.sort_by(|x, y| x.beat.total_cmp(&y.beat));
 
-        // LFO modulation of instrument parameters
+        // modulators plug into instrument or insert params; each lives on the
+        // device it modulates (its routes get that device's index)
         for m in &tast.modulations {
-            match build_lfo(m, &track, p.tempo) {
-                Ok(lfo) => track.devices[0].modulators.push(lfo),
+            match build_lfo(m, &track, &insert_devs, p.tempo) {
+                Ok((di, lfo)) => track.devices[di].modulators.push(lfo),
                 Err(d) => diags.push(d),
             }
         }
@@ -789,11 +795,35 @@ fn build_instrument(
 /// Resolve a runtime-controllable param name on the track's instrument
 /// (device 0): builtin kinds use their fixed param table, grid instruments
 /// use the device-declared params exposed via `param_binds`.
-fn resolve_param(track: &Track, name: &str) -> Result<usize, String> {
+/// Resolve an automate/modulate target to (device index, param index).
+/// Undotted names address the instrument (device 0); `<insert>.<param>`
+/// addresses an insert effect by the name it was written with.
+fn resolve_target(
+    track: &Track,
+    inserts: &[(String, usize)],
+    name: &str,
+) -> Result<(usize, usize), String> {
+    if let Some((head, tail)) = name.split_once('.') {
+        let Some(&(_, di)) = inserts.iter().find(|(n, _)| n.eq_ignore_ascii_case(head)) else {
+            return Err(format!(
+                "insert '{head}' はありません(このトラックの insert: {})",
+                if inserts.is_empty() {
+                    "なし".to_string()
+                } else {
+                    inserts.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(", ")
+                }
+            ));
+        };
+        return resolve_device_param(&track.devices[di], tail).map(|pi| (di, pi));
+    }
     let Some(dev) = track.devices.first() else {
         return Err("instrument がありません".into());
     };
-    if dev.kind == DeviceKind::PolyGrid {
+    resolve_device_param(dev, name).map(|pi| (0, pi))
+}
+
+fn resolve_device_param(dev: &Device, name: &str) -> Result<usize, String> {
+    if matches!(dev.kind, DeviceKind::PolyGrid | DeviceKind::GridFx) {
         let names: Vec<&str> = dev
             .grid
             .as_ref()
@@ -809,7 +839,7 @@ fn resolve_param(track: &Track, name: &str) -> Result<usize, String> {
     let params = dev.kind.params();
     if params.is_empty() {
         return Err(
-            "この instrument は実行時パラメータを持ちません(automate volume は使えます)".into()
+            "このデバイスは実行時パラメータを持ちません(automate volume は使えます)".into()
         );
     }
     params.iter().position(|p| p.eq_ignore_ascii_case(name)).ok_or_else(|| {
@@ -823,19 +853,28 @@ fn resolve_param(track: &Track, name: &str) -> Result<usize, String> {
 /// Lower `modulate cutoff with lfo(...) / steps(...) / random(...)` to an
 /// engine [`Modulator`] routed at the track's instrument (device 0). Grid
 /// instruments expose their declared `param`s; builtins use their tables.
-fn build_lfo(m: &ModulateAst, track: &Track, bpm: f64) -> Result<Modulator, Diag> {
+/// Returns the device index the modulator lives on plus the modulator itself.
+fn build_lfo(
+    m: &ModulateAst,
+    track: &Track,
+    inserts: &[(String, usize)],
+    bpm: f64,
+) -> Result<(usize, Modulator), Diag> {
     if track.devices.is_empty() {
         return Err(Diag::new("E-LFO-002", m.pos, "modulate には instrument が必要です"));
     }
-    let idx = resolve_param(track, &m.param).map_err(|msg| Diag::new("E-LFO-001", m.pos, msg))?;
+    let (di, idx) = resolve_target(track, inserts, &m.param)
+        .map_err(|msg| Diag::new("E-LFO-001", m.pos, msg))?;
     let kind = match m.kind.as_str() {
         "steps" => ModKind::Steps,
         "random" => ModKind::Random,
+        "adsr" => ModKind::Adsr,
         _ => ModKind::Lfo,
     };
     let mut lfo = Modulator::new(kind);
     let mut amount: Option<f32> = None;
     let mut every_beats: Option<f64> = None;
+    let mut adsr = [0.01f32, 0.3, 0.6, 0.25]; // a, d, s, r defaults
     for (key, arg) in &m.args {
         match (key.as_str(), arg) {
             ("rate", Arg::Num(n, pos)) => {
@@ -908,12 +947,24 @@ fn build_lfo(m: &ModulateAst, track: &Track, bpm: f64) -> Result<Modulator, Diag
                     }
                 };
             }
+            (k @ ("a" | "d" | "s" | "r"), Arg::Num(n, pos)) if kind == ModKind::Adsr => {
+                if !(0.0..=1.0).contains(n) {
+                    return Err(Diag::new("E-TYPE-002", *pos, format!("adsr.{k} = {n} は 0..1 の範囲外です")));
+                }
+                let slot = match k {
+                    "a" => 0,
+                    "d" => 1,
+                    "s" => 2,
+                    _ => 3,
+                };
+                adsr[slot] = *n as f32;
+            }
             (other, arg) => {
                 let pos = arg.pos();
                 return Err(Diag::new(
                     "E-LFO-003",
                     pos,
-                    format!("modulate の引数 '{other}' は不明です(rate, amount, shape, seq, every, smooth)"),
+                    format!("modulate の引数 '{other}' は不明です(rate, amount, shape, seq, every, smooth, adsr の a/d/s/r)"),
                 ));
             }
         }
@@ -921,6 +972,10 @@ fn build_lfo(m: &ModulateAst, track: &Track, bpm: f64) -> Result<Modulator, Diag
     let Some(amount) = amount else {
         return Err(Diag::new("E-LFO-003", m.pos, "modulate には amount(-1..1)が必要です"));
     };
+    if kind == ModKind::Adsr {
+        // the engine reads the envelope stages from steps = [a, d, s, r]
+        lfo.steps = adsr.to_vec();
+    }
     if let Some(step_beats) = every_beats {
         // tempo-sync: the sequence (or one random cycle) advances one step per
         // `every`; the engine knob maps rate → 0.05..8.05 Hz over a full cycle
@@ -930,7 +985,7 @@ fn build_lfo(m: &ModulateAst, track: &Track, bpm: f64) -> Result<Modulator, Diag
         lfo.rate = (((hz - 0.05) / 8.0) as f32).clamp(0.0, 1.0);
     }
     lfo.routes.push(ModRoute { param: idx, amount });
-    Ok(lfo)
+    Ok((di, lfo))
 }
 
 fn build_effect(
@@ -951,6 +1006,9 @@ fn build_effect(
             dev_ast.takes.iter().map(|(n, _)| (n.clone(), None)).collect();
         let graph = grid_build::instantiate(dev_ast, call, &takes)?;
         let mut dev = Device::new(DeviceKind::GridFx);
+        // expose declared params (same as PolyGrid): configure() re-writes
+        // these baked values, so a static render stays bit-identical
+        dev.params = graph.param_binds.iter().map(|(_, v, _)| *v).collect();
         dev.grid = Some(graph);
         return Ok(dev);
     }

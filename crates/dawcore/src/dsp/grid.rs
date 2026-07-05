@@ -541,6 +541,8 @@ pub struct GridFx {
     out_node: Option<usize>,
     states: [Vec<NodeState>; 2],
     values: Vec<[f32; MAX_OUTPUTS]>,
+    /// Exposed device params → node param slots (same layout as GridSynth).
+    param_binds: Vec<Vec<(usize, usize)>>,
 }
 
 impl GridFx {
@@ -560,6 +562,13 @@ impl GridFx {
             out_node,
             states: [states.clone(), states],
             values: vec![[0.0; MAX_OUTPUTS]; n],
+            param_binds: graph
+                .param_binds
+                .iter()
+                .map(|(_, _, slots)| {
+                    slots.iter().map(|&(n, s)| (n as usize, s as usize)).collect()
+                })
+                .collect(),
         }
     }
 
@@ -600,7 +609,18 @@ impl crate::device::AudioFx for GridFx {
     fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
         (self.chan(0, l), self.chan(1, r))
     }
-    fn configure(&mut self, _params: &[f32]) {
-        // params are baked into the graph at compile time (like PolyGrid)
+    fn configure(&mut self, params: &[f32]) {
+        // write exposed device params into their bound node slots so
+        // automation/modulation can move an Effect's declared `param`s
+        for (i, slots) in self.param_binds.iter().enumerate() {
+            let Some(&v) = params.get(i) else { break };
+            for &(n, s) in slots {
+                if let Some(node) = self.nodes.get_mut(n) {
+                    if let Some(slot) = node.params.get_mut(s) {
+                        *slot = v;
+                    }
+                }
+            }
+        }
     }
 }
