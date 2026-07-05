@@ -562,6 +562,16 @@ complete -F _forte forte
 /// sources win; anywhere else cargo pulls the repository.
 fn upgrade() -> ExitCode {
     println!("forte {} — 更新を確認します…", env!("CARGO_PKG_VERSION"));
+    // a prebuilt release binary beats compiling — try that path first
+    #[cfg(not(target_family = "wasm"))]
+    match fortelang::selfupdate::try_release_upgrade() {
+        Ok(Some(msg)) => {
+            println!("{msg}");
+            return ExitCode::SUCCESS;
+        }
+        Ok(None) => {} // no release/asset for this platform → build from source
+        Err(e) => println!("release バイナリを使えません({e})— ソースからビルドします"),
+    }
     // find a checkout (crates/fortelang next to us or above the cwd)
     let mut checkout = None;
     if let Ok(mut dir) = std::env::current_dir() {

@@ -29,6 +29,8 @@ pub mod remote;
 #[cfg(not(target_family = "wasm"))]
 pub mod repl;
 pub mod semdiff;
+#[cfg(not(target_family = "wasm"))]
+pub mod selfupdate;
 pub mod sha;
 #[cfg(not(target_family = "wasm"))]
 pub mod songfile;
