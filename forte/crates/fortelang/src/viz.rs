@@ -31,6 +31,9 @@ pub fn viz_json(p: &Project) -> serde_json::Value {
                 "name": t.name,
                 "color": t.color,
                 "fx": t.kind == dawcore::model::TrackKind::Effect,
+                // what plays and what shapes it — the composer view reads these
+                "instrument": t.devices.first().map(|d| d.kind.label()).unwrap_or(""),
+                "inserts": t.devices.iter().skip(1).map(|d| d.kind.label()).collect::<Vec<_>>(),
                 "clips": clips,
             })
         })

@@ -1,0 +1,188 @@
+// Zero One — the closer. Ambient techno: a heartbeat sub, glass keys
+// falling like cursor blinks, a shimmer pad that never resolves, and one
+// last melody hummed on the way out of the building. 112bpm.
+import { KickSub, HatClosed, Rim, Shaker } from "../instruments/drums.forte"
+import { SubBass } from "../instruments/bass.forte"
+import { Glass, Bell, Vibraphone } from "../instruments/keys.forte"
+import { ShimmerPad, GlassPad } from "../instruments/pads.forte"
+import { GlideLead, SoftLead } from "../instruments/leads.forte"
+import { Downlifter } from "../instruments/fx.forte"
+
+// The heartbeat: a sub kick alone, softened, with air around it.
+block Heart {
+  track Kick {
+    instrument KickSub(weight: 0.8)
+    insert comp(thresh: 0.45, ratio: 0.5, makeup: 0.15)
+    volume 0.85
+    play beat`X--- x--- x--- x---` at bars(1..4)
+  }
+}
+
+// Small hours percussion: brushes of shaker, a rim echoing far away.
+block Small {
+  track Shk {
+    instrument Shaker(soft: 0.5)
+    volume 0.24
+    pan -0.2
+    play beat`x.x. x.x. x.x. x.x.` at bars(1..4)
+  }
+  track Hat {
+    instrument HatClosed(bright: 0.7)
+    volume 0.2
+    pan 0.2
+    play beat`--x- --x- --x- --x-` at bars(1..4)
+  }
+  track Rim {
+    instrument Rim()
+    insert delay(time: 0.536, fdbk: 0.55, mix: 0.5)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.3)
+    volume 0.28
+    pan 0.4
+    play beat`---- ---- x--- ---- ---- ---- ---- -x--` at bars(1..2)
+  }
+}
+
+// The ground: a sub bass drawing slow arcs under everything.
+block Ground {
+  key C minor
+  track Bass {
+    instrument SubBass(drive: 0.2)
+    insert filter(type: "lp", cutoff: 0.25)
+    insert pump(amount: 0.3, beats: 1)
+    volume 0.7
+    play notes`C1:4 G#0~:4 D#1:4 A#0~:3 G0:1` at bars(1..4)
+  }
+}
+
+// Cursor blinks: glass notes falling on a grid that isn't quite the
+// drum grid — 3-against-4, delayed into shimmer.
+block Blink {
+  key C minor
+  track Glass {
+    instrument Glass(shimmer: 0.5)
+    insert delay(time: 0.402, fdbk: 0.5, mix: 0.4)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.25)
+    volume 0.5
+    pan -0.1
+    play notes`C5:0.75 D#5:0.75 G5:0.75 D#5:0.75 G4:0.5 C5:0.75 D#5:0.75 G5:0.75 A#4:0.75 D#5:0.5` at bars(1..2)
+  }
+}
+
+// The pad: shimmer over glass, wide as the empty office.
+block Air {
+  key C minor
+  track Shimmer {
+    instrument ShimmerPad()
+    insert width(amount: 0.9)
+    insert reverb(size: 0.95, decay: 0.85, mix: 0.45)
+    volume 0.5
+    play notes`[C3 G3 D#4 A#4]:16 [G#2 D#3 C4 G4]:16` at bars(1..8)
+  }
+  track Under {
+    instrument GlassPad()
+    insert pump(amount: 0.25, beats: 1)
+    insert width(amount: 0.7)
+    volume 0.35
+    pan 0.15
+    play notes`[D#3 A#3 F4]:16 [C3 G3 D#4]:16` at bars(1..8)
+  }
+}
+
+// The hum: a glide lead singing the way home. Two phrases, then silence.
+block Home {
+  key C minor
+  track Lead {
+    instrument GlideLead()
+    insert delay(time: 0.536, fdbk: 0.45, mix: 0.35)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.3)
+    volume 0.5
+    play notes`_:1 G4~:1.5 A#4~:1 G4~:1.5 D#4~:2 F4~:1 D#4~:2 C4:4 _:2 G4~:1 A#4~:1 C5~:2 A#4~:1.5 G4~:1.5 D#4~:1 F4~:2 D#4:5 _:4` at bars(1..8)
+  }
+}
+
+// The answer: a vibraphone repeating the last three notes, softer.
+block Answer {
+  key C minor
+  track Vibe {
+    instrument Vibraphone(motor: 0.4)
+    insert chorus(rate: 0.2, depth: 0.4, mix: 0.35)
+    insert delay(time: 0.804, fdbk: 0.4, mix: 0.35)
+    volume 0.4
+    pan 0.3
+    play notes`_:8 F4:1 D#4:1 C4:2 _:4` at bars(1..4)
+  }
+}
+
+// A bell counting down to zero, one strike per two bars.
+block Count {
+  key C minor
+  track Bell {
+    instrument Bell(decay: 0.75)
+    insert reverb(size: 0.9, decay: 0.8, mix: 0.35)
+    volume 0.4
+    pan -0.25
+    play notes`C6:8` at bars(1..2)
+  }
+}
+
+block Exhale { track D { instrument Downlifter() volume 0.4 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+song "Zero One" {
+  desc "The closer: a heartbeat sub, glass keys falling like cursor blinks, a shimmer pad that never resolves, one last melody on the way out. 112bpm ambient techno."
+  artist "Forte Essentials"
+  tempo 112bpm
+  meter 4/4
+  key C minor
+
+  section zero   = bars(1..8)
+  section pulse  = bars(9..24)
+  section hum    = bars(25..40)
+  section still  = bars(41..48)
+  section one    = bars(49..72)
+  section sleep  = bars(73..84)
+
+  // zero: the pad and the blinks, no time yet
+  play Air at zero
+  play Blink at bars(5..8)
+  automate Air.volume from 0 to 1 over bars(1..6)
+
+  // pulse: the heartbeat starts, ground arcs underneath
+  play Heart at pulse
+  play Ground at pulse
+  play Blink at pulse
+  play Air(volume: 0.8) at pulse
+  play Small at bars(17..24)
+  play Count at bars(9..16)
+
+  // hum: the melody arrives over everything
+  play Heart at hum
+  play Ground at hum
+  play Blink at hum
+  play Air(volume: 0.7) at hum
+  play Small at hum
+  play Home at hum
+  play Answer at bars(33..40)
+
+  // still: heartbeat rests — pad, blinks and the bell hold the room
+  play Exhale at bars(41..41)
+  play Air at still
+  play Blink(volume: 0.7) at still
+  play Count at still
+
+  // one: everything breathes together, melody twice, answer following
+  play Heart at one
+  play Ground at one
+  play Blink at one
+  play Air(volume: 0.75) at one
+  play Small at one
+  play Home at bars(49..64)
+  play Answer at bars(57..64)
+  play Home(volume: 0.7) at bars(65..72)
+
+  // sleep: the pad dims, the last blinks, the bell lets go
+  play Air at sleep
+  play Blink(volume: 0.6) at sleep
+  play Count at bars(73..80)
+  automate Air.volume from 1 to 0 over bars(77..84)
+  automate Blink.volume from 0.8 to 0 over bars(79..84)
+}

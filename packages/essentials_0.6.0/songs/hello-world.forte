@@ -1,0 +1,204 @@
+// Hello World — the first program, as acid techno. Two 303s in
+// call-and-response (one saw, one square), a 909 that never blinks, and
+// one long filter conversation from closed to screaming. 128bpm.
+import { Bass303, Square303 } from "../instruments/tb303.forte"
+import { Kick909, HatClosed, HatOpen, Clap, Ride, Crash } from "../instruments/drums.forte"
+import { Stab, Riser, Impact, Downlifter } from "../instruments/fx.forte"
+import { DarkPad } from "../instruments/pads.forte"
+import { Hoover } from "../instruments/synths.forte"
+
+// The floor: 909 kick compressed hard, ghost 16th before the 4.
+block Floor {
+  track Kick {
+    instrument Kick909(click: 0.62)
+    insert comp(thresh: 0.38, ratio: 0.65, makeup: 0.25)
+    insert drive(drive: 0.15)
+    volume 0.95
+    play beat`X--- x--- x--- x--x` at bars(1..4)
+  }
+}
+
+// Tops: swung hats, offbeat opens, a clap thrown into a warehouse.
+block Tops {
+  return Warehouse {
+    insert reverb(size: 0.75, decay: 0.55, mix: 1.0)
+    volume 0.65
+  }
+  track Hats {
+    instrument HatClosed(bright: 0.95)
+    insert eq(high: 0.75, low: 0.1)
+    volume 0.32
+    pan 0.15
+    play beat`x.xX x.x. x.xX x.x.` at bars(1..4)
+  }
+  track Open {
+    instrument HatOpen(decay: 0.22)
+    insert pump(amount: 0.3, beats: 1)
+    volume 0.42
+    pan -0.1
+    play beat`--x- --x- --x- --x-` at bars(1..4)
+  }
+  track Clap {
+    instrument Clap(tone: 0.62)
+    send Warehouse 0.3
+    volume 0.55
+    play beat`---- x--- ---- x---` at bars(1..4)
+  }
+}
+
+// Ride cymbal for the peak sections — the "we are now flying" signal.
+block Rides {
+  track Ride {
+    instrument Ride(wash: 0.45)
+    insert pump(amount: 0.25, beats: 1)
+    volume 0.3
+    pan 0.3
+    play beat`x-x- x-x- x-x- x-x-` at bars(1..4)
+  }
+}
+
+// 303 #1 — the question. Saw, driven, dotted delay. The cutoff journey
+// is automated from OUTSIDE by each section placement (block param).
+block Ask {
+  key A minor
+  track Acid {
+    instrument Bass303(cutoff: 0.3, reso: 0.85, envmod: 0.55, decay: 0.22, glide: 0.07)
+    insert drive(drive: 0.35)
+    insert delay(time: 0.234, fdbk: 0.35, mix: 0.16)
+    volume 0.74
+    play notes`A1!:0.25 A1:0.25 A2:0.25 A1:0.25 C2~:0.25 C2:0.25 A1:0.25 G2!~:0.25 A2:0.25 E2:0.25 A1:0.25 A2:0.25 D2~:0.25 C2:0.25 A1!:0.25 G1~:0.25` at bars(1..2)
+    modulate cutoff with lfo(rate: 0.16, amount: 0.09, shape: "sine")
+  }
+}
+
+// 303 #2 — the answer. Square, brighter, panned the other way, one octave
+// up, answering on the second bar.
+block Answer {
+  key A minor
+  track Sq {
+    instrument Square303(cutoff: 0.4, reso: 0.8, envmod: 0.5, decay: 0.2, glide: 0.05)
+    insert drive(drive: 0.25)
+    insert delay(time: 0.351, fdbk: 0.45, mix: 0.22)
+    volume 0.6
+    pan 0.3
+    play notes`_:4 A2:0.25 A2:0.25 C3~:0.25 C3:0.25 _:0.5 E3:0.25 D3~:0.25 C3:0.25 A2:0.25 _:0.5 G2!:0.25 A2~:0.75` at bars(1..2)
+    modulate cutoff with lfo(rate: 0.22, amount: 0.07, shape: "tri")
+  }
+}
+
+// The filter journey, as inheritance: each act opens the 303s further.
+block AskWarm : Ask   { track Acid { automate cutoff from 0.10 to 0.30 over bars(1..16) automate volume from 0.5 to 0.75 over bars(1..8) } }
+block AskTalk : Ask   { track Acid { automate cutoff from 0.30 to 0.45 over bars(1..16) } }
+block AskOpen : Ask   { track Acid { automate cutoff from 0.45 to 0.60 over bars(1..16) } }
+block AskPeak : Ask   { track Acid { instrument Bass303(cutoff: 0.6, reso: 0.9, envmod: 0.6, decay: 0.24, glide: 0.07) automate cutoff from 0.60 to 0.85 over bars(1..24) modulate cutoff with lfo(rate: 0.3, amount: 0.12, shape: "sine") } }
+block AskFade : Ask   { track Acid { automate cutoff from 0.45 to 0.15 over bars(1..16) automate volume from 0.75 to 0 over bars(9..16) } }
+block AnswerTalk : Answer { track Sq { automate cutoff from 0.35 to 0.50 over bars(1..16) } }
+block AnswerOpen : Answer { track Sq { automate cutoff from 0.50 to 0.62 over bars(1..16) } }
+block AnswerPeak : Answer { track Sq { automate cutoff from 0.62 to 0.80 over bars(1..24) modulate cutoff with lfo(rate: 0.26, amount: 0.1, shape: "tri") } }
+
+// Rave stabs answering the 303s on the offbeat.
+block Stabs {
+  key A minor
+  track Stab {
+    instrument Stab()
+    insert filter(type: "hp", cutoff: 0.25)
+    insert delay(time: 0.234, fdbk: 0.4, mix: 0.3)
+    insert width(amount: 0.6)
+    volume 0.5
+    pan -0.25
+    play beat`---- --x- ---- ---x ---- --x- ---- ----` at bars(1..2)
+  }
+}
+
+// The pad under the breakdown — dark, pumped, wide.
+block Deep {
+  key A minor
+  track Pad {
+    instrument DarkPad(depth: 0.45)
+    insert pump(amount: 0.5, beats: 1)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.85, decay: 0.7, mix: 0.35)
+    volume 0.55
+    play notes`[A2 E3 A3 C4]:8 [F2 C3 F3 A3]:8` at bars(1..4)
+  }
+}
+
+// The hoover — four notes that mean "the drop is coming".
+block Siren {
+  key A minor
+  track Hoover {
+    instrument Hoover()
+    insert filter(type: "lp", cutoff: 0.5, reso: 0.4)
+    insert delay(time: 0.468, fdbk: 0.4, mix: 0.3)
+    insert width(amount: 0.7)
+    volume 0.5
+    play notes`A2:1.5 G2:0.5 A2:1 C3~:1 A2:3.5 _:0.5` at bars(1..2)
+    automate filter.cutoff from 0.2 to 0.8 over bars(1..8)
+  }
+}
+
+// Transition hardware.
+block Lift { track R { instrument Riser(climb: 0.9) volume 0.55 play beat`x--- ---- ---- ----` at bars(1..1) } }
+block Boom { track I { instrument Impact() insert reverb(size: 0.85, decay: 0.65, mix: 0.35) volume 0.65 play beat`x--- ---- ---- ----` at bars(1..1) } }
+block Fall { track D { instrument Downlifter() volume 0.5 play beat`x--- ---- ---- ----` at bars(1..1) } }
+block Wash { track C { instrument Crash(decay: 0.9) insert reverb(size: 0.8, decay: 0.6, mix: 0.3) volume 0.45 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+song "Hello World" {
+  desc "Two 303s in call-and-response, a 909 that never blinks, one long filter conversation from closed to screaming. 128bpm acid."
+  artist "Forte Essentials"
+  tempo 128bpm
+  meter 4/4
+  key A minor
+
+  section warmup = bars(1..16)
+  section talk   = bars(17..32)
+  section open   = bars(33..48)
+  section breakdown = bars(49..56)
+  section peak   = bars(57..80)
+  section fade   = bars(81..96)
+
+  // warmup: kick + closed filter question, tops sneak in halfway
+  play Floor at warmup
+  play AskWarm at warmup
+  play Tops at bars(9..16)
+
+  // talk: the answer arrives, stabs start poking
+  play Floor at talk
+  play Tops at talk
+  play AskTalk at talk
+  play AnswerTalk at talk
+  play Stabs at bars(25..32)
+
+  // open: both filters half-open, rides lift the ceiling
+  play Wash at bars(33..33)
+  play Floor at open
+  play Tops at open
+  play Rides at open
+  play AskOpen at open
+  play AnswerOpen at open
+  play Stabs at open
+
+  // breakdown: drums fall away, the hoover speaks over the dark pad
+  play Fall at bars(49..49)
+  play Deep at breakdown
+  play Siren at breakdown
+  play Lift at bars(55..56)
+  automate Deep.volume from 0 to 1 over bars(49..52)
+
+  // peak: everything, filters wide open, stabs doubled
+  play Boom at bars(57..57)
+  play Wash at bars(57..57)
+  play Floor at peak
+  play Tops at peak
+  play Rides at peak
+  play AskPeak at peak
+  play AnswerPeak at peak
+  play Stabs at peak
+  play Deep(volume: 0.5) at peak
+
+  // fade: the question keeps asking as the room empties
+  play Floor at bars(81..88)
+  play Tops at bars(81..88)
+  play AskFade at fade
+  play Deep(volume: 0.6) at bars(89..96)
+}

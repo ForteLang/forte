@@ -1,0 +1,217 @@
+// Segfault Boogie — the crash you can dance to. Denki-school electro
+// funk: a clav that won't sit still, a talking wobble lead, cowbells from
+// a cheap rhythm box, and one glorious wrong chord where the pointer
+// dereferences. 120bpm.
+import { Kick808, Snare908, HatClosed, HatOpen, Clap, Snap } from "../instruments/drums.forte"
+import { BD78, Cowbell78, Claves78, Tamb78 } from "../instruments/cr78.forte"
+import { FMBass, RubberBass } from "../instruments/bass.forte"
+import { Clav, Wurli } from "../instruments/keys.forte"
+import { Wobble, SquareLead } from "../instruments/leads.forte"
+import { ChorusPulse } from "../instruments/synths.forte"
+import { Zap, Impact, Riser } from "../instruments/fx.forte"
+
+// The beat: 808 kick syncopated against a 908 snare, snaps on the
+// backbeat ghosts. This is a FUNK pattern, not a techno one.
+block Beat {
+  track Kick {
+    instrument Kick808(punch: 0.65, decay: 0.42)
+    insert comp(thresh: 0.4, ratio: 0.6, makeup: 0.2)
+    volume 0.92
+    play beat`X--- --x- ---- x-x- X--- --x- ---x ----` at bars(1..2)
+  }
+  track Snare {
+    instrument Snare908(tone: 0.7, snap: 0.65)
+    insert reverb(size: 0.4, decay: 0.3, mix: 0.12)
+    volume 0.7
+    play beat`---- X--- ---- X--.` at bars(1..1)
+  }
+  track Snap {
+    instrument Snap()
+    volume 0.4
+    pan 0.25
+    play beat`---- ---- --x- ----` at bars(1..1)
+  }
+}
+
+// Cheap-rhythm-box percussion on top — the CR-78 doing its best.
+block Box {
+  track Hat {
+    instrument HatClosed(bright: 0.85)
+    volume 0.3
+    pan -0.15
+    play beat`x.x. x.xX x.x. Xxx.` at bars(1..2)
+  }
+  track Bell {
+    instrument Cowbell78()
+    insert delay(time: 0.25, fdbk: 0.3, mix: 0.25)
+    volume 0.35
+    pan 0.3
+    play beat`---- --x- ---- ---- ---- --x- -x-- ----` at bars(1..2)
+  }
+  track Claves {
+    instrument Claves78()
+    volume 0.3
+    pan -0.35
+    play beat`---x ---- --x- ---- ---x ---- ---- x---` at bars(1..2)
+  }
+  track Tamb {
+    instrument Tamb78()
+    volume 0.25
+    pan 0.1
+    play beat`--x- --x- --x- --x-` at bars(1..1)
+  }
+}
+
+// The bassline: rubber FM funk with octave pops and a chromatic walk-up.
+block Rubber {
+  key E minor
+  track Bass {
+    instrument FMBass(bite: 0.5)
+    insert drive(drive: 0.3)
+    insert comp(thresh: 0.45, ratio: 0.5)
+    insert pump(amount: 0.3, beats: 1)
+    volume 0.75
+    play notes`E1:0.25 _:0.25 E2:0.25 E1:0.25 _:0.25 G1:0.25 E1:0.25 _:0.25 B1:0.25 _:0.25 E1:0.25 D2~:0.25 D2:0.25 C2:0.25 B1:0.25 A1!:0.25` at bars(1..2)
+    modulate bite with lfo(rate: 0.2, amount: 0.18, shape: "tri")
+  }
+}
+
+// The clav — the itch of the whole track. 16th funk chops through a
+// touch-wah (LFO on a bandpass), doubled by a chorus.
+block Itch {
+  key E minor
+  track Clav {
+    instrument Clav(mute: 0.55)
+    insert filter(type: "bp", cutoff: 0.5, reso: 0.55)
+    insert chorus(rate: 0.35, depth: 0.4, mix: 0.3)
+    volume 0.55
+    pan -0.2
+    play notes`E3:0.25 _:0.25 E3:0.25 G3:0.25 _:0.25 E3:0.25 _:0.25 B3:0.25 _:0.25 A3:0.25 G3:0.25 _:0.25 E3:0.25 _:0.25 D3:0.25 E3:0.25` at bars(1..2)
+    modulate filter.cutoff with lfo(rate: 0.32, amount: 0.25, shape: "sine")
+  }
+}
+
+// The talking lead: a wobble that mumbles the hook, then screams it.
+block Mumble {
+  key E minor
+  track Talk {
+    instrument Wobble(rate: 0.3)
+    insert drive(drive: 0.2)
+    insert delay(time: 0.375, fdbk: 0.4, mix: 0.28)
+    insert width(amount: 0.5)
+    volume 0.55
+    pan 0.15
+    play notes`_:2 E4:0.5 G4:0.5 A4~:0.5 A4:0.5 G4:0.5 E4~:1.5 _:1.5 B4:0.25 A4:0.25 G4:0.5 E4:0.5 D4~:1 E4:2.5 _:1` at bars(1..4)
+  }
+}
+
+// Wurli comping — lazy offbeat chords that keep the funk polite.
+block Comp {
+  key E minor
+  track Keys {
+    instrument Wurli(bark: 0.45)
+    insert chorus(rate: 0.3, depth: 0.5, mix: 0.4)
+    insert width(amount: 0.6)
+    volume 0.45
+    play notes`_:0.5 [E3 G3 B3]:0.75 _:0.75 [E3 G3 B3]:0.5 _:1.5 _:0.5 [D3 G3 B3]:0.75 _:0.75 [C3 E3 G3]:0.5 _:1.5` at bars(1..2)
+  }
+}
+
+// THE SEGFAULT: everything halts on a wrong chord, a zap panic-scatters,
+// then the beat reboots. Comedy in four bars.
+block Crash {
+  key E minor
+  track Wrong {
+    instrument ChorusPulse()
+    insert filter(type: "lp", cutoff: 0.7, reso: 0.5)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.4)
+    volume 0.6
+    play notes`[E3 F3 A#3 B3]:3 _:1` at bars(1..1)
+  }
+  track Panic {
+    instrument Zap()
+    insert delay(time: 0.19, fdbk: 0.65, mix: 0.5)
+    volume 0.5
+    play beat`x-x- xx-- x--- ----` at bars(2..2)
+  }
+}
+
+// The reboot lead for the last act — square, proud, slightly too loud.
+block Reboot {
+  key E minor
+  track Lead {
+    instrument SquareLead(drive: 0.45)
+    insert delay(time: 0.25, fdbk: 0.35, mix: 0.25)
+    volume 0.5
+    pan -0.1
+    play notes`E4:0.5 E4:0.25 G4:0.25 A4:0.5 B4~:1 B4:0.5 A4:0.5 G4:0.5 A4~:0.5 G4:0.5 E4:1.5 _:2` at bars(1..2)
+  }
+}
+
+block Boom { track I { instrument Impact() insert reverb(size: 0.8, decay: 0.6, mix: 0.3) volume 0.6 play beat`x--- ---- ---- ----` at bars(1..1) } }
+block Lift { track R { instrument Riser(climb: 0.8) volume 0.5 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+song "Segfault Boogie" {
+  desc "The crash you can dance to: restless clav funk, a talking wobble lead, CR-78 cowbells — and one glorious wrong chord where the pointer dereferences. 120bpm electro funk."
+  artist "Forte Essentials"
+  tempo 120bpm
+  swing 0.56
+  meter 4/4
+  key E minor
+
+  section walk   = bars(1..8)
+  section funk   = bars(9..24)
+  section talkA  = bars(25..40)
+  section fault  = bars(41..44)
+  section reboot = bars(45..60)
+  section jam    = bars(61..80)
+  section out    = bars(81..88)
+
+  // walk in: bass and box percussion first — the funk before the funk
+  play Rubber at walk
+  play Box at bars(5..8)
+
+  // funk: the beat drops, clav starts itching
+  play Boom at bars(9..9)
+  play Beat at funk
+  play Box at funk
+  play Rubber at funk
+  play Itch at bars(13..24)
+
+  // talk: the wobble mumbles the hook over wurli comping
+  play Beat at talkA
+  play Box at talkA
+  play Rubber at talkA
+  play Itch at talkA
+  play Comp at talkA
+  play Mumble at bars(29..40)
+
+  // SEGFAULT (the beat stops mid-sentence)
+  play Crash at fault
+  play Lift at bars(43..44)
+
+  // reboot: everything returns harder, lead on top
+  play Boom at bars(45..45)
+  play Beat at reboot
+  play Box at reboot
+  play Rubber at reboot
+  play Itch at reboot
+  play Reboot at bars(49..60)
+
+  // jam: full band, both leads trading, a second segfault as a joke
+  play Beat at jam
+  play Box at jam
+  play Rubber at jam
+  play Itch at jam
+  play Comp at jam
+  play Mumble at bars(61..72)
+  play Reboot at bars(73..80)
+
+  // out: the machine gives up politely
+  play Rubber at out
+  play Box at out
+  play Comp at out
+  automate Rubber.volume from 1 to 0 over bars(85..88)
+  automate Box.volume from 1 to 0 over bars(85..88)
+  automate Comp.volume from 1 to 0 over bars(85..88)
+}

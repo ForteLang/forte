@@ -1,9 +1,12 @@
-// First Light — the Essentials reference album. Seven songs, dawn to
-// night, every sound reproducible from the code packed inside each track.
+// First Light — the Essentials reference album, remade. Seven techno
+// tracks from boot to shutdown: YMO-school electro, dual-303 acid, an
+// electro-funk segfault, technopolis synthpop, dub techno for the long
+// build, a rave race condition, and an ambient goodbye. Every sound is
+// source code; open any block in the player and take it home.
 // Listen: forte play packages/essentials_0.6.0/albums/first-light
 block FirstLight {
-  desc "Seven songs from dawn to night — the Essentials reference album, every sound rebuilt from code on your machine."
-  tags "album, showcase, essentials, reference"
+  desc "Seven techno tracks from boot to shutdown — YMO-school electro, dual-303 acid, dub techno and one glorious segfault. Music for writing code, made of code."
+  tags "album, techno, electro, acid, ymo, coding"
   artist "Forte Essentials"
   license "CC-BY-NC-SA-4.0"
   version "0.6.0"

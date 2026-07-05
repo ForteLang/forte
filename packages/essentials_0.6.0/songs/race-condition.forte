@@ -1,0 +1,174 @@
+// Race Condition — two threads fight for the same lock at 134bpm. A
+// hoover riff and a scream lead race each other, the drums deadlock into
+// half-time (the same block, stretched), and the winner takes the outro.
+import { Kick909, Snare908, HatClosed, HatOpen, Clap, Crash, Ride } from "../instruments/drums.forte"
+import { LadderBass } from "../instruments/bass.forte"
+import { Hoover, FifthStack } from "../instruments/synths.forte"
+import { ScreamLead, SawLead } from "../instruments/leads.forte"
+import { SweepPad } from "../instruments/pads.forte"
+import { Riser, Impact, NoiseCrash, Zap } from "../instruments/fx.forte"
+
+// The sprint: 909 four-floor with a clap that doubles at phrase ends.
+block Sprint {
+  track Kick {
+    instrument Kick909(click: 0.68)
+    insert comp(thresh: 0.36, ratio: 0.7, makeup: 0.3)
+    insert drive(drive: 0.2)
+    volume 0.95
+    play beat`X--- x--- x--- x---` at bars(1..4)
+  }
+  track Clap {
+    instrument Clap(tone: 0.65)
+    insert reverb(size: 0.55, decay: 0.4, mix: 0.15)
+    volume 0.6
+    play beat`---- x--- ---- x--- ---- x--- ---- x-xx` at bars(1..2)
+  }
+  track Hats {
+    instrument HatClosed(bright: 1.0)
+    insert eq(high: 0.8)
+    volume 0.32
+    pan 0.12
+    play beat`x.xX x.x. x.xX x.x.` at bars(1..4)
+  }
+  track Open {
+    instrument HatOpen(decay: 0.2)
+    insert pump(amount: 0.3, beats: 1)
+    volume 0.4
+    pan -0.12
+    play beat`--x- --x- --x- --x-` at bars(1..4)
+  }
+}
+
+// Thread A: the hoover riff — the mutex everyone wants.
+block ThreadA {
+  key G minor
+  track Hoover {
+    instrument Hoover()
+    insert drive(drive: 0.25)
+    insert filter(type: "lp", cutoff: 0.55, reso: 0.35)
+    insert delay(time: 0.224, fdbk: 0.35, mix: 0.2)
+    insert width(amount: 0.6)
+    volume 0.6
+    play notes`G2:0.5 G2:0.25 G2:0.25 A#2:0.5 G2:0.5 F2:0.5 G2~:1.5 _:0.25 D3:0.25 C3:0.5 A#2:0.5 G2:0.5 F2:0.5 G2~:1 _:0.5` at bars(1..2)
+    modulate filter.cutoff with lfo(rate: 0.24, amount: 0.15, shape: "saw")
+  }
+}
+
+// Thread B: the scream lead — same lock, higher priority, worse manners.
+block ThreadB {
+  key G minor
+  track Scream {
+    instrument ScreamLead(edge: 0.75)
+    insert filter(type: "bp", cutoff: 0.6, reso: 0.45)
+    insert delay(time: 0.336, fdbk: 0.45, mix: 0.3)
+    volume 0.45
+    pan 0.25
+    play notes`_:4 G4:0.25 G4:0.25 A#4:0.25 C5:0.25 D5~:1 D5:0.5 C5:0.5 A#4:0.5 G4~:0.75 _:0.25` at bars(1..2)
+  }
+}
+
+// The bass under the fight: a ladder growl locked to the kick.
+block Lock {
+  key G minor
+  track Bass {
+    instrument LadderBass(cutoff: 0.4, drive: 0.5)
+    insert pump(amount: 0.5, beats: 1)
+    volume 0.72
+    play notes`G1:0.25 G1:0.25 _:0.25 G1:0.25 _:0.25 G1:0.25 G1:0.25 _:0.25 A#1:0.25 _:0.25 G1:0.25 G1:0.25 _:0.25 F1:0.25 G1:0.25 _:0.25` at bars(1..1)
+    modulate cutoff with adsr(a: 0.01, d: 0.12, s: 0.2, r: 0.1, amount: 0.3)
+  }
+}
+
+// Fifth stack chords for the drop — rave gloves on.
+block Rave {
+  key G minor
+  track Stack {
+    instrument FifthStack()
+    insert drive(drive: 0.2)
+    insert width(amount: 0.7)
+    insert delay(time: 0.224, fdbk: 0.3, mix: 0.2)
+    volume 0.5
+    pan -0.2
+    play beat`x--- --x- ---- x--- ---- --x- x--- ----` at bars(1..2)
+  }
+}
+
+// The deadlock: sweep pad + zap panic while both threads wait.
+block Deadlock {
+  key G minor
+  track Sweep {
+    instrument SweepPad(rate: 0.12)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.9, decay: 0.75, mix: 0.4)
+    volume 0.55
+    play notes`[G2 D3 A#3 F4]:16` at bars(1..4)
+  }
+  track Panic {
+    instrument Zap()
+    insert delay(time: 0.28, fdbk: 0.6, mix: 0.5)
+    volume 0.4
+    pan -0.3
+    play beat`x--- ---- --x- ---- -x-- ---- ---x ----` at bars(1..2)
+  }
+}
+
+block Boom  { track I { instrument Impact() insert reverb(size: 0.85, decay: 0.65, mix: 0.35) volume 0.65 play beat`x--- ---- ---- ----` at bars(1..1) } }
+block Up    { track R { instrument Riser(climb: 0.95) volume 0.6 play beat`x--- ---- ---- ----` at bars(1..1) } }
+block Smash { track N { instrument NoiseCrash() volume 0.5 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+song "Race Condition" {
+  desc "Two threads fight for the same lock: a hoover riff races a scream lead, the drums deadlock into half-time, and the winner takes the outro. 134bpm rave."
+  artist "Forte Essentials"
+  tempo 134bpm
+  meter 4/4
+  key G minor
+
+  section grid    = bars(1..16)
+  section raceA   = bars(17..32)
+  section raceB   = bars(33..48)
+  section deadlock = bars(49..56)
+  section drop    = bars(57..80)
+  section winner  = bars(81..96)
+
+  // grid: drums and bass establish the track everyone will fight on
+  play Sprint at grid
+  play Lock at bars(5..16)
+  play Rave at bars(13..16)
+
+  // race, leg one: thread A takes the lock
+  play Boom at bars(17..17)
+  play Sprint at raceA
+  play Lock at raceA
+  play ThreadA at raceA
+  play Rave at bars(25..32)
+
+  // leg two: thread B preempts — A keeps running underneath, swung
+  play Smash at bars(33..33)
+  play Sprint at raceB
+  play Lock at raceB
+  play ThreadA(swing: 0.6, volume: 0.7) at raceB
+  play ThreadB at raceB
+
+  // DEADLOCK: the same drums, stretched to half-time — time dilates
+  play Up at bars(55..56)
+  play Sprint(stretch: 2, volume: 0.7) at deadlock
+  play Deadlock at deadlock
+  play ThreadA(stretch: 2, volume: 0.5) at deadlock
+
+  // the scheduler decides: full-speed drop, both threads, rave chords
+  play Boom at bars(57..57)
+  play Smash at bars(57..57)
+  play Sprint at drop
+  play Lock at drop
+  play ThreadA at drop
+  play ThreadB at drop
+  play Rave at drop
+  play Deadlock(volume: 0.4) at bars(73..80)
+
+  // winner: thread A alone with the crowd, then the lights
+  play Sprint at bars(81..88)
+  play Lock at bars(81..88)
+  play ThreadA at winner
+  play Rave at bars(81..88)
+  automate ThreadA.volume from 1 to 0 over bars(91..96)
+}
