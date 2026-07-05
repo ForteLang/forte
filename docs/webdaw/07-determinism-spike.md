@@ -1,55 +1,59 @@
-# 決定論スパイク結果 (Phase 0.4)
+# Determinism Spike Results (Phase 0.4)
 
-実施日: 2026-07-02 / 結果: **成功 — native と wasm32 でビット同一のレンダリングを達成**
-対応要求: SYS-ENG-001, SRS-CORE-003 (D-11)
+Date: 2026-07-02 / Result: **Success — bit-identical rendering achieved on native and wasm32**
+Requirements addressed: SYS-ENG-001, SRS-CORE-003 (D-11)
 
-## 方法
+## Method
 
-既存 dawcore のデモプロジェクト(シンセ+サンプラー+エフェクト+モジュレータ+
-メトロノイズなしの 20 秒アレンジ)を、同一エンジン(`bounce` と同じ経路)で
-オフラインレンダリングし、全サンプルの f32 ビットパターンのダイジェスト
-(FNV-1a 64)を比較した。
+The existing dawcore demo project (synth + sampler + effects + modulators +
+a 20-second arrangement without metro noise) was rendered offline with the same
+engine (the same path as `bounce`), and digests of the f32 bit patterns of all
+samples (FNV-1a 64) were compared.
 
-- native: x86_64-unknown-linux-gnu(rustc 1.94.1, release)
-- wasm: wasm32-wasip1(同 rustc)、Node 22 の WASI で実行
-- 再現: `scripts/determinism_test.sh`(検証コード: `crates/dawcore/examples/determinism.rs`)
+- native: x86_64-unknown-linux-gnu (rustc 1.94.1, release)
+- wasm: wasm32-wasip1 (same rustc), executed in Node 22's WASI
+- Reproduction: `scripts/determinism_test.sh` (verification code: `crates/dawcore/examples/determinism.rs`)
 
-## 結果
+## Results
 
-| 段階 | f32 digest (native / wasm) | 一致 |
+| Stage | f32 digest (native / wasm) | Match |
 | --- | --- | --- |
-| 修正前(std の float メソッド) | `a287cd7994449b0a` / `52b1fa18e9084db2` | ✗ |
-| 修正後(libm 統一) | `aa68277c9dbb8161` / `aa68277c9dbb8161` | **✓ ビット同一** |
+| Before fix (std float methods) | `a287cd7994449b0a` / `52b1fa18e9084db2` | ✗ |
+| After fix (unified libm) | `aa68277c9dbb8161` / `aa68277c9dbb8161` | **✓ bit-identical** |
 
-修正前の不一致の実態(1,920,000 サンプル中):
-- ビット不一致 63.9%、ただし**最大絶対差 1.49e-7(≈ -136 dBFS、不可聴)**
-- 16bit 量子化後は 0.018% が 1 LSB 差のみ
-- 原因: `f32::sin/cos/tan/exp/tanh/powf` が native では glibc、wasm では
-  compiler-builtins に解決され、実装が異なるため(最初の差はサンプル 6 で発生)
+The reality of the pre-fix mismatch (out of 1,920,000 samples):
+- 63.9% bit mismatch, but **maximum absolute difference 1.49e-7 (≈ -136 dBFS, inaudible)**
+- After 16-bit quantization, only 0.018% differ by 1 LSB
+- Cause: `f32::sin/cos/tan/exp/tanh/powf` resolve to glibc on native and to
+  compiler-builtins on wasm, and the implementations differ (the first divergence
+  occurred at sample 6)
 
-## 修正内容
+## Fix
 
-`crates/dawcore/src/dmath.rs` を新設し、超越関数 6 種を純 Rust の `libm`
-クレートに固定。DSP 内の呼び出し 18 箇所を `crate::dmath::*` に置換。
-`sqrt/abs/floor/round/fract/min/max` は IEEE 正確(全ターゲット同一)のため変更不要。
-既存テスト 13 件はすべて合格。
+Created `crates/dawcore/src/dmath.rs`, pinning the 6 transcendental functions to the
+pure-Rust `libm` crate. Replaced the 18 call sites in the DSP with `crate::dmath::*`.
+`sqrt/abs/floor/round/fract/min/max` are IEEE-exact (identical on all targets) and
+needed no change. All 13 existing tests pass.
 
-## 結論と含意
+## Conclusions and Implications
 
-1. **SYS-ENG-001(クロスターゲット決定論)は達成可能**。ロードマップの
-   後退プラン(wasm 統一への縮退)は不要。
-2. D-11 の規約のうち「超越関数の単一実装」が唯一の実際の障害だった。
-   FMA 縮約・denormal は今回のコード経路では問題にならなかった
-   (Rust は既定で縮約せず、wasm は subnormal を完全サポート)。
-3. 決定論 CI ゲートの原型が `scripts/determinism_test.sh` として動作している。
-   forte-core 開発ではこれを PR ゲート化する(リファレンスコーパスに拡張)。
+1. **SYS-ENG-001 (cross-target determinism) is achievable**. The roadmap's fallback
+   plan (degrading to wasm-unified) is unnecessary.
+2. Of the D-11 conventions, "a single implementation of transcendental functions" was
+   the only actual obstacle. FMA contraction and denormals were not an issue on the
+   code paths exercised this time
+   (Rust does not contract by default, and wasm fully supports subnormals).
+3. A prototype of the determinism CI gate is working as `scripts/determinism_test.sh`.
+   In forte-core development, this will become a PR gate (extended to the reference corpus).
 
-## 残リスク(継続監視)
+## Remaining Risks (Ongoing Monitoring)
 
-- aarch64(Apple Silicon)native は未検証 — Rust の f32 演算は IEEE 準拠のため
-  一致する見込みだが、CI マトリクスに追加して確認する。
-- 将来のマルチスレッドレンダリングでは加算順序の固定(D-11 §5)が必要になる。
-- wasm の NaN ビットパターンは非正規(nondeterministic canonicalization)—
-  音声経路に NaN を流さない規約(SDD §7 の NaN ガード)で回避する。
-- `libm` クレートのバージョン更新で数値が変わりうる → forte.lock 相当で
-  エンジンバージョンに数値実装のバージョンを含める(SRS-BLD-002 に反映済み)。
+- aarch64 (Apple Silicon) native is unverified — Rust's f32 arithmetic is IEEE-compliant
+  so a match is expected, but add it to the CI matrix to confirm.
+- Future multithreaded rendering will require pinning the addition order (D-11 §5).
+- wasm NaN bit patterns are non-canonical (nondeterministic canonicalization) —
+  avoided by the convention of never letting NaN flow through the audio path
+  (the NaN guards of SDD §7).
+- Version updates of the `libm` crate could change the numerics → include the numeric
+  implementation's version in the engine version, forte.lock-style (already reflected
+  in SRS-BLD-002).

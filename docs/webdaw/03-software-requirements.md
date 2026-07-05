@@ -1,170 +1,180 @@
-# ソフトウェア要求仕様 (SRS) — Forte
+# Software Requirements Specification (SRS) — Forte
 
 Status: Draft v0.1 / 2026-07-02
-上位文書: 02-system-requirements.md (SYS)
-下位文書: 04-software-architecture.md (SAD), 05-detailed-design.md (SDD)
+Upstream document: 02-system-requirements.md (SYS)
+Downstream documents: 04-software-architecture.md (SAD), 05-detailed-design.md (SDD)
 
-> **実装状態(2026-07 時点)**: 本書の要求のうち v0 実装が存在するもの —
-> LANG(001-008 の主要部+fmt+import)、PKG(ローカル import と Hub fork。semver は未)、
-> CORE(dawcore 直結。専用レンダーグラフ IR は未)、BLD(build+manifest+digest)、
-> LSP(診断・補完・ホバー・整形)、VIS(アレンジ概観+プレイヘッド。ピアノロールは未)、
-> WEB(001-005: エディタ・AudioWorklet・OPFS・PWA・縮退は Chromium 検証のみ)、
-> REC(001-005: .frec 来歴・PCM 直取り・較正。クラッシュ回復・演奏 fork GUI は未)、
-> HUB(ローカル Hub+HTTP: fork-only・release/verify・類似検索・再生台帳。git 互換・
-> 指紋照合は未)、PLY(プレイヤー・系譜ページ・進行類似 v1)、SEC(来歴の構造検証のみ。
-> 暗号署名・保存時暗号化は未)。詳細は 06-roadmap.md の各項ステータス。
+> **Implementation status (as of 2026-07)**: Requirements in this document with an existing v0 implementation —
+> LANG (the main parts of 001-008 + fmt + import), PKG (local import and Hub fork; semver not yet),
+> CORE (directly coupled to dawcore; dedicated render-graph IR not yet), BLD (build + manifest + digest),
+> LSP (diagnostics, completion, hover, formatting), VIS (arrangement overview + playhead; piano roll not yet),
+> WEB (001-005: editor, AudioWorklet, OPFS, PWA; degradation verified on Chromium only),
+> REC (001-005: .frec provenance, direct PCM capture, calibration; crash recovery and performance-fork GUI not yet),
+> HUB (local Hub + HTTP: fork-only, release/verify, similarity search, playback ledger; git compatibility
+> and fingerprint matching not yet), PLY (player, lineage page, progression similarity v1), SEC (structural
+> validation of provenance only; cryptographic signatures and encryption at rest not yet).
+> See the per-item statuses in 06-roadmap.md for details.
 
-表記: SRS-<コンポーネント>-<番号> [→ トレース先 SYS]。
-コンポーネント: LANG(言語処理系), PKG(パッケージ管理), CORE(オーディオエンジン),
-BLD(ビルド), LSP(エディタ支援), VIS(可視化), WEB(Webエディタ/実行環境),
-REC(録音), HUB(ハブ), PLY(プレイヤー), SEC(セキュリティ)。
+Notation: SRS-<component>-<number> [→ traced SYS].
+Components: LANG (language processor), PKG (package management), CORE (audio engine),
+BLD (build), LSP (editor assistance), VIS (visualization), WEB (web editor/runtime),
+REC (recording), HUB (hub), PLY (player), SEC (security).
 
 ---
 
-## 1. 言語処理系 (LANG)
+## 1. Language Processor (LANG)
 
-- **SRS-LANG-001** [→SYS-LNG-001] Forte lang は以下の一級概念を持つ:
-  `song`(曲), `track`, `pattern`(ノート列), `instrument`, `effect`, `bus`,
-  `automation`, `asset`(録音参照), `module`(再利用単位)。
-- **SRS-LANG-002** [→SYS-LNG-003] ソースは UTF-8 テキスト(拡張子 `.forte`)。
-  1 ファイル 1 モジュール。フォーマッタ(`forte fmt`)を標準提供し、正規形を一意にする
-  (diff/マージの安定化)。
-- **SRS-LANG-003** [→SYS-ENG-001] 言語は**決定論的**である: 実行時乱数・時刻・外部 I/O を
-  持たない。乱数は明示シード必須(`random(seed: …)`)。
-- **SRS-LANG-004** [→SYS-LNG-001] 静的型付け。主要型: `Note`, `Pattern`, `Audio`(信号),
-  `Control`(制御信号), `Time`(拍/秒の単位付き), `Pitch`, `Db`, `Params`。
-  単位の混同(拍と秒、dB と線形)を型エラーとして検出する。
-- **SRS-LANG-005** [→SYS-LNG-002] `import` は `@scope/name@semver` 形式の外部依存と
-  相対パスのローカル依存をサポートする。
-- **SRS-LANG-006** [→SYS-LNG-004] DSP を言語内で記述するための低レベル層
-  (サンプル単位処理、状態変数、フィルタプリミティブ)を持ち、コンパイラが
-  ネイティブ/WASM 双方に落とす。高レベル層(曲・アレンジ)は宣言的に記述する。
-- **SRS-LANG-007** [→SYS-EDT-002] インクリメンタルコンパイル: モジュール単位のキャッシュを持ち、
-  1 モジュール変更の再コンパイル+音反映が 1 秒以内。
-- **SRS-LANG-008** エラーメッセージは音楽家向けの語彙で出す
-  (例: 「Track 'Vocal' の 3 小節目: Pattern の長さが拍子 4/4 と一致しません」)。
+- **SRS-LANG-001** [→SYS-LNG-001] Forte lang has the following first-class concepts:
+  `song`, `track`, `pattern` (note sequence), `instrument`, `effect`, `bus`,
+  `automation`, `asset` (recording reference), `module` (unit of reuse).
+- **SRS-LANG-002** [→SYS-LNG-003] Source is UTF-8 text (extension `.forte`).
+  One module per file. A formatter (`forte fmt`) is provided as standard and makes the canonical
+  form unique (stabilizing diff/merge).
+- **SRS-LANG-003** [→SYS-ENG-001] The language is **deterministic**: it has no runtime randomness,
+  clock, or external I/O. Randomness requires an explicit seed (`random(seed: …)`).
+- **SRS-LANG-004** [→SYS-LNG-001] Statically typed. Principal types: `Note`, `Pattern`, `Audio`
+  (signal), `Control` (control signal), `Time` (unit-carrying beats/seconds), `Pitch`, `Db`,
+  `Params`. Confusing units (beats vs. seconds, dB vs. linear) is detected as a type error.
+- **SRS-LANG-005** [→SYS-LNG-002] `import` supports external dependencies in the
+  `@scope/name@semver` form and local dependencies by relative path.
+- **SRS-LANG-006** [→SYS-LNG-004] There is a low-level layer for writing DSP within the language
+  (per-sample processing, state variables, filter primitives), which the compiler lowers to both
+  native and WASM. The high-level layer (songs, arrangements) is written declaratively.
+- **SRS-LANG-007** [→SYS-EDT-002] Incremental compilation: per-module caching, with recompilation
+  of one changed module plus reflection into sound within 1 second.
+- **SRS-LANG-008** Error messages use vocabulary aimed at musicians
+  (e.g., "Track 'Vocal', bar 3: the Pattern length does not match the 4/4 time signature").
 
-## 2. パッケージ管理 (PKG)
+## 2. Package Management (PKG)
 
-- **SRS-PKG-001** [→SYS-LNG-002] マニフェスト `forte.toml`(名前、バージョン、依存、
-  ライセンス、公開範囲)とロックファイル `forte.lock`(全依存の解決済みコミットハッシュ)。
-- **SRS-PKG-002** [→SYS-HUB-002,003] public 依存の取得は Hub の fork API を経由し、
-  取得の事実が系譜に記録される。レジストリからの匿名ダウンロードは存在しない。
-- **SRS-PKG-003** [→SYS-LNG-004] public 公開時にソース必須。WASM のみのモジュールは
-  private でのみ利用可。
-- **SRS-PKG-004** [→SYS-ENG-004] ロックファイルには依存の**コンテンツハッシュ**を含め、
-  改竄・すり替えを検出する。
+- **SRS-PKG-001** [→SYS-LNG-002] Manifest `forte.toml` (name, version, dependencies, license,
+  visibility) and lock file `forte.lock` (resolved commit hashes of all dependencies).
+- **SRS-PKG-002** [→SYS-HUB-002,003] Retrieval of public dependencies goes through the Hub's fork
+  API, and the fact of retrieval is recorded in the lineage. Anonymous downloads from the registry
+  do not exist.
+- **SRS-PKG-003** [→SYS-LNG-004] Source is mandatory for public publication. WASM-only modules
+  are usable only in private.
+- **SRS-PKG-004** [→SYS-ENG-004] The lock file includes the **content hashes** of dependencies to
+  detect tampering and substitution.
 
-## 3. オーディオエンジン (CORE)
+## 3. Audio Engine (CORE)
 
-- **SRS-CORE-001** [→SYS-ENG-002] エンジンはコンパイル済みプロジェクトから
-  **レンダーグラフ**(ノード=instrument/effect/bus、エッジ=audio/control)を構築し、
-  リアルタイム・オフライン共通のコードパスで処理する。
-- **SRS-CORE-002** [→SYS-ENG-003] リアルタイム経路は割り当て・ロック・システムコールなし
-  (既存 dawcore の規律を踏襲)。UI/制御からの変更はロックフリー SPSC リング経由、
-  置換された構造はガベージチャネルで非 RT スレッドに返却して解放する。
-- **SRS-CORE-003** [→SYS-ENG-001] 浮動小数点決定論規約: f32 固定、FMA 無効化または
-  明示的 fma のみ、超越関数は自前実装(libm 固定)、denormal は明示 flush、
-  並列化は結合順序を固定した決定論的リダクションのみ。
-- **SRS-CORE-004** [→SYS-NFR-005] ターゲット: native(cdylib + C ABI)と wasm32
-  (AudioWorklet 内動作)。単一 Rust ソース。※実装言語は SAD の決定 D-01 参照。
-- **SRS-CORE-005** [→SYS-ENG-002] サンプル精度のスケジューラ、テンポ/拍子マップ、
-  ループ、オートメーション(ブロックレート+サンプル精度イベント)をサポート。
-- **SRS-CORE-006** [→SYS-EDT-002] ホットリロード: 新レンダーグラフへの差し替えは
-  再生位置・稼働ボイスを可能な範囲で維持し、クリックノイズなしで行う
-  (クロスフェード 10ms 以内)。
-- **SRS-CORE-007** [→SYS-NFR-003] パフォーマンス計測(コールバック使用率、
-  アンダーランカウンタ)を常時公開する。
+- **SRS-CORE-001** [→SYS-ENG-002] The engine builds a **render graph** from the compiled project
+  (nodes = instrument/effect/bus, edges = audio/control) and processes it through a code path
+  shared by real-time and offline.
+- **SRS-CORE-002** [→SYS-ENG-003] The real-time path performs no allocation, locking, or system
+  calls (following the discipline of the existing dawcore). Changes from UI/control arrive via a
+  lock-free SPSC ring, and replaced structures are returned to non-RT threads through a garbage
+  channel for deallocation.
+- **SRS-CORE-003** [→SYS-ENG-001] Floating-point determinism conventions: f32 only, FMA disabled
+  or explicit fma only, transcendental functions implemented in-house (pinned libm), denormals
+  explicitly flushed, and parallelization limited to deterministic reductions with fixed
+  association order.
+- **SRS-CORE-004** [→SYS-NFR-005] Targets: native (cdylib + C ABI) and wasm32 (running inside an
+  AudioWorklet). Single Rust source. * For implementation language, see SAD decision D-01.
+- **SRS-CORE-005** [→SYS-ENG-002] Supports a sample-accurate scheduler, tempo/time-signature maps,
+  looping, and automation (block rate + sample-accurate events).
+- **SRS-CORE-006** [→SYS-EDT-002] Hot reload: swapping in a new render graph preserves the
+  playback position and active voices to the extent possible, and occurs without click noise
+  (crossfade within 10ms).
+- **SRS-CORE-007** [→SYS-NFR-003] Performance metrics (callback utilization, underrun counter)
+  are exposed at all times.
 
-## 4. ビルド (BLD)
+## 4. Build (BLD)
 
-- **SRS-BLD-001** [→SYS-ENG-001] `forte build` は WAV(および Opus)を出力し、
-  出力の SHA-256 を**ビルド証明**として `build.manifest.json` に記録する。
-- **SRS-BLD-002** [→SYS-ENG-004] `build.manifest.json` は全依存(コミット+fork系譜 ID)、
-  全アセット(ハッシュ+収録来歴)、エンジンバージョン、ビルド設定を含む。
-- **SRS-BLD-003** [→SYS-HUB-004] open-stems ビルド: バス/トラック単位のステム群+
-  ミックス定義を成果物とするビルドプロファイル。
-- **SRS-BLD-004** [→SYS-NFR-004] フルビルド 5 倍速以上(実時間比)、差分ビルド 1 秒以内。
+- **SRS-BLD-001** [→SYS-ENG-001] `forte build` outputs WAV (and Opus) and records the output's
+  SHA-256 in `build.manifest.json` as the **build proof**.
+- **SRS-BLD-002** [→SYS-ENG-004] `build.manifest.json` includes all dependencies (commit + fork
+  lineage ID), all assets (hash + recording provenance), engine version, and build configuration.
+- **SRS-BLD-003** [→SYS-HUB-004] Open-stems build: a build profile whose artifacts are per-bus/track
+  stems plus the mix definition.
+- **SRS-BLD-004** [→SYS-NFR-004] Full build at 5x real time or faster; incremental build within 1 second.
 
-## 5. エディタ支援 (LSP) / 可視化 (VIS)
+## 5. Editor Assistance (LSP) / Visualization (VIS)
 
-- **SRS-LSP-001** [→SYS-EDT-001] LSP サーバー: 補完(モジュール・パラメータ・音名)、
-  型診断、定義ジャンプ、リネーム、ホバー(パラメータの単位・範囲)。
-- **SRS-LSP-002** [→SYS-EDT-001] VSCode 拡張: シンタックスハイライト、LSP 接続、
-  再生コントロール(再生/停止/ループ範囲)、ビルドタスク。
-- **SRS-VIS-001** [→SYS-EDT-003] 可視化ビュー(読み取り専用): ピアノロール、
-  アレンジ概観、波形/スペクトラム、ミキサー(レベルメーター)、レンダーグラフ、系譜。
-  各ビューはソース位置と双方向リンク(ノートをクリック→該当コード行へ)。
-- **SRS-VIS-002** [→SYS-EDT-002] 可視化は再生と同期し 60fps を目標とする(描画は
-  オーディオに影響しないこと)。
+- **SRS-LSP-001** [→SYS-EDT-001] LSP server: completion (modules, parameters, note names),
+  type diagnostics, go-to-definition, rename, hover (parameter units and ranges).
+- **SRS-LSP-002** [→SYS-EDT-001] VSCode extension: syntax highlighting, LSP connection,
+  playback controls (play/stop/loop range), build tasks.
+- **SRS-VIS-001** [→SYS-EDT-003] Visualization views (read-only): piano roll, arrangement
+  overview, waveform/spectrum, mixer (level meters), render graph, lineage.
+  Each view is bidirectionally linked to source locations (click a note → jump to the code line).
+- **SRS-VIS-002** [→SYS-EDT-002] Visualization stays in sync with playback and targets 60fps
+  (rendering must not affect audio).
 
-## 6. Web エディタ / ブラウザ実行 (WEB)
+## 6. Web Editor / Browser Execution (WEB)
 
-- **SRS-WEB-001** [→SYS-EDT-004] Monaco ベースの Web エディタ+同一 LSP(WASM 動作)。
-- **SRS-WEB-002** [→SYS-ENG-003] ブラウザ再生: AudioWorklet(シンク)+ WASM エンジン+
-  SharedArrayBuffer リング(ringbuf.js 型)。COOP/COEP 配備。
-- **SRS-WEB-003** [→SYS-NFR-001] プロジェクトとアセットは OPFS に保存(Worker +
-  SyncAccessHandle)。オフラインで編集・ビルド・再生が完結する PWA。
-- **SRS-WEB-004** [→SYS-NFR-002] 縮退マトリクス: Safari は Web MIDI 不可・
-  ストレージ 7 日消去のため「クラウド同期必須+MIDI 入力なし」の縮退モードを明示する。
-- **SRS-WEB-005** [→SYS-GOV-003] ローカルプロジェクトの zip エクスポート/インポート
-  (git bundle 互換)を提供する。
+- **SRS-WEB-001** [→SYS-EDT-004] Monaco-based web editor + the same LSP (running as WASM).
+- **SRS-WEB-002** [→SYS-ENG-003] Browser playback: AudioWorklet (sink) + WASM engine +
+  SharedArrayBuffer ring (ringbuf.js style). COOP/COEP deployment.
+- **SRS-WEB-003** [→SYS-NFR-001] Projects and assets are stored in OPFS (Worker +
+  SyncAccessHandle). A PWA in which editing, building, and playback are complete offline.
+- **SRS-WEB-004** [→SYS-NFR-002] Degradation matrix: because Safari lacks Web MIDI and deletes
+  storage after 7 days, an explicit degraded mode of "cloud sync mandatory + no MIDI input"
+  is defined.
+- **SRS-WEB-005** [→SYS-GOV-003] Provide zip export/import of local projects
+  (git bundle compatible).
 
-## 7. 録音 (REC)
+## 7. Recording (REC)
 
-- **SRS-REC-001** [→SYS-REC-001] 入力デバイスは MIDI(Web MIDI / CoreMIDI 等)と
-  マイク/ライン(getUserMedia / native)のみ列挙する。ファイルドロップ・
-  オーディオ import の UI/API を実装しない。
-- **SRS-REC-002** [→SYS-REC-002] 録音は AudioWorklet で PCM 直取りし
-  (MediaRecorder 不使用)、SAB リング→ Worker → OPFS/ディスクへ逐次書き込み。
-  タブ/プロセスクラッシュ後も直前までのテイクが回復できる。
-- **SRS-REC-003** [→SYS-REC-002] 録音アセット形式 `.frec`: PCM+来歴ブロック
-  (セッション ID、入力デバイス種別、収録時刻、収録者 ID、クライアント署名)。
-  来歴ブロックのないオーディオ参照はコンパイルエラー。
-- **SRS-REC-004** [→SYS-REC-003] ループバック較正ウィザード(出力→入力の往復遅延を
-  実測し ±1ms 精度で補正値を保存)。録音は補正値でタイムライン配置される。
-- **SRS-REC-005** [→SYS-REC-001] getUserMedia は
-  echoCancellation/noiseSuppression/autoGainControl をすべて false で開く。
-  効かないブラウザ(既知バグ)では警告を表示する。
-- **SRS-REC-006** [→SYS-REC-004] 演奏 fork モード: open-stems リリースを fork し、
-  録音トラックの追加のみを行う最小 GUI(再生+録音+テイク選択+パンチイン)。
+- **SRS-REC-001** [→SYS-REC-001] Only MIDI (Web MIDI / CoreMIDI, etc.) and microphone/line
+  (getUserMedia / native) input devices are enumerated. No UI/API for file drop or audio import
+  is implemented.
+- **SRS-REC-002** [→SYS-REC-002] Recording captures PCM directly in an AudioWorklet
+  (no MediaRecorder), sequentially writing SAB ring → Worker → OPFS/disk.
+  Takes up to the moment of a tab/process crash can be recovered.
+- **SRS-REC-003** [→SYS-REC-002] Recorded asset format `.frec`: PCM + provenance block
+  (session ID, input device type, recording time, recordist ID, client signature).
+  An audio reference without a provenance block is a compile error.
+- **SRS-REC-004** [→SYS-REC-003] Loopback calibration wizard (measures output → input round-trip
+  delay and stores a correction value with ±1ms accuracy). Recordings are placed on the timeline
+  using the correction value.
+- **SRS-REC-005** [→SYS-REC-001] getUserMedia is opened with echoCancellation/noiseSuppression/
+  autoGainControl all false. In browsers where this does not take effect (known bugs), a warning
+  is displayed.
+- **SRS-REC-006** [→SYS-REC-004] Performance-fork mode: a minimal GUI that forks an open-stems
+  release and only adds recorded tracks (playback + record + take selection + punch-in).
 
 ## 8. Hub (HUB)
 
-- **SRS-HUB-001** [→SYS-HUB-001] git 互換ホスティング(smart HTTP)。private は
-  通常の git 運用可。
-- **SRS-HUB-002** [→SYS-HUB-002] public リポジトリ: git clone/fetch を認可層で拒否し、
-  fork API(系譜記録+所有権付与)経由でのみ複製を提供する。
-- **SRS-HUB-003** [→SYS-HUB-002,003] 系譜グラフ DB: ノード=リポジトリ/リリース/アセット/
-  ユーザー、エッジ=fork/depends/performed/released。公開 API で照会可能。
-- **SRS-HUB-004** [→SYS-HUB-004] リリースパイプライン: タグ push → ビルドファームで
-  クリーンルーム決定論ビルド → 提出されたビルド証明とハッシュ照合 → 一致で公開。
-  不一致は公開拒否(再現性の強制)。
-- **SRS-HUB-005** [→SYS-HUB-005] 配信はストリーミングのみ(セグメント化+署名 URL)。
-  ダウンロード API を持たない(完全な複製防止は不可能である前提で、規約+検出で補完)。
-- **SRS-HUB-006** [→SYS-REC-005] 音響指紋(リリース音源全件)を保持し、新規アセット/
-  リリースとの照合ジョブ+通報フローを持つ。
-- **SRS-HUB-007** [→SYS-HUB-006] ポイント台帳の**データ基盤のみ**先行実装:
-  再生イベント→系譜への貢献集計(バッチ)。換金・消費機能は実装しない(将来)。
-- **SRS-HUB-008** [→SYS-PLY-002] 曲ページ: 系譜(fork 元/先、使用モジュール、演奏者)、
-  バージョン一覧(歌い手違い・リミックス)、コードブラウズ(public)。
+- **SRS-HUB-001** [→SYS-HUB-001] Git-compatible hosting (smart HTTP). Private repositories allow
+  normal git operation.
+- **SRS-HUB-002** [→SYS-HUB-002] Public repositories: git clone/fetch is rejected at the
+  authorization layer; replication is provided only via the fork API (lineage recording +
+  ownership grant).
+- **SRS-HUB-003** [→SYS-HUB-002,003] Lineage graph DB: nodes = repository/release/asset/user,
+  edges = fork/depends/performed/released. Queryable via a public API.
+- **SRS-HUB-004** [→SYS-HUB-004] Release pipeline: tag push → clean-room deterministic build on
+  the build farm → hash comparison against the submitted build proof → publish on match.
+  A mismatch blocks publication (enforced reproducibility).
+- **SRS-HUB-005** [→SYS-HUB-005] Distribution is streaming only (segmentation + signed URLs).
+  There is no download API (on the premise that complete copy prevention is impossible,
+  complemented by terms of service + detection).
+- **SRS-HUB-006** [→SYS-REC-005] Maintain acoustic fingerprints (of all released audio), with a
+  matching job against new assets/releases plus a reporting flow.
+- **SRS-HUB-007** [→SYS-HUB-006] Implement only the **data foundation** of the point ledger
+  first: playback events → contribution aggregation over the lineage (batch). No redemption or
+  spending features are implemented (future).
+- **SRS-HUB-008** [→SYS-PLY-002] Song page: lineage (fork source/destinations, modules used,
+  performers), version list (different vocalists, remixes), code browsing (public).
 
-## 9. プレイヤー (PLY)
+## 9. Player (PLY)
 
-- **SRS-PLY-001** [→SYS-PLY-001] Web プレイヤー(ログイン不要再生、ゲイン正規化)。
-- **SRS-PLY-002** [→SYS-PLY-003] 類似検索 v1: 使用モジュール・コード進行(言語 AST から
-  抽出した進行の正規形)・テンポ/キーでの検索。埋め込みベースの類似は v2。
+- **SRS-PLY-001** [→SYS-PLY-001] Web player (playback without login, gain normalization).
+- **SRS-PLY-002** [→SYS-PLY-003] Similarity search v1: search by modules used, chord progression
+  (canonical form of the progression extracted from the language AST), and tempo/key.
+  Embedding-based similarity is v2.
 
-## 10. セキュリティ / プライバシー (SEC)
+## 10. Security / Privacy (SEC)
 
-- **SRS-SEC-001** [→SYS-GOV-002] private リポジトリ/アセットは保存時暗号化、
-  アクセス監査ログ。運営の閲覧は明示的同意フローなしに不可。
-- **SRS-SEC-002** [→RSK-02] クライアント署名鍵はデバイスローカルに生成し、
-  来歴ブロックに署名する。鍵の登録/失効を Hub で管理。
-- **SRS-SEC-003** WASM モジュール(サードパーティ音源)はサンドボックス実行
-  (メモリ隔離、ホスト API は音声処理のみ、ファイル/ネットワークアクセスなし)。
+- **SRS-SEC-001** [→SYS-GOV-002] Private repositories/assets have encryption at rest and access
+  audit logs. Operator viewing is impossible without an explicit consent flow.
+- **SRS-SEC-002** [→RSK-02] Client signing keys are generated device-locally and sign provenance
+  blocks. Key registration/revocation is managed on the Hub.
+- **SRS-SEC-003** WASM modules (third-party instruments) run sandboxed
+  (memory isolation, host API limited to audio processing, no file/network access).
 
-## 付録 A: トレーサビリティマトリクス(抜粋)
+## Appendix A: Traceability Matrix (Excerpt)
 
 | SYS | SRS |
 | --- | --- |

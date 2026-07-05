@@ -1,150 +1,154 @@
-# ソフトウェアアーキテクチャ設計 (SAD) — Forte
+# Software Architecture Design (SAD) — Forte
 
 Status: Draft v0.1 / 2026-07-02
-上位文書: 03-software-requirements.md (SRS)
-下位文書: 05-detailed-design.md (SDD)
+Upstream document: 03-software-requirements.md (SRS)
+Downstream document: 05-detailed-design.md (SDD)
 
 ---
 
-## 1. アーキテクチャ上の決定 (Architecture Decision Records)
+## 1. Architecture Decision Records
 
-| ID | 決定 | 根拠 | 状態 |
+| ID | Decision | Rationale | Status |
 | --- | --- | --- | --- |
-| **D-01** | コアエンジン+コンパイラの実装言語は **Rust**(C ABI で API 化) | 既存 dawcore 資産(ロックフリー設計・DSP・オフラインレンダ)、wasm32 ツールチェーンの成熟、メモリ安全。創業者要望は「C++ で組み API 化」だが、要件(ネイティブコア+API+WASM)は Rust で同等以上に満たせる | **承認済 2026-07-02** |
-| D-02 | Forte lang は**独自 DSL**(汎用言語への埋め込みではない) | 決定論(SRS-LANG-003)と入力制限(SRS-REC-001)を言語仕様レベルで強制するため。TS/Python 埋め込みでは任意 I/O を排除できない | **承認済 2026-07-02** |
-| D-03 | 言語は「宣言的な曲記述層」+「DSP 記述層」の 2 層 | 作曲者には簡易な宣言層、音源開発者には低レベル層。単一言語内のサブセットとして提供 | 承認待ち |
-| D-04 | リアルタイムとオフラインは**同一レンダーグラフ実装** | SYS-ENG-002。dawcore の bounce.rs 方式を踏襲 | 承認待ち |
-| D-05 | ブラウザ実行は AudioWorklet(シンク)+ WASM + SAB リング | 業界標準パターン(00-research §3.1)。COOP/COEP 配備必須 | 承認待ち |
-| D-06 | サードパーティ音源/エフェクトの配布形式は **Forte ソース**(public 必須)。コンパイル済み WASM は private のみ | ホワイトボックス原則(SYS-LNG-004)。WAM 2.0 は採用しない(バイナリ+任意 JS UI を許すため原則に反する)が、ホスト API 設計の参考にする | 承認待ち |
-| D-07 | Hub の VCS は **git 互換**(独自 VCS を作らない)。fork 制約は認可層で実装 | git のエコシステム(diff/merge/歴史)をそのまま使う。public clone 拒否はサーバー側認可で実現(SRS-HUB-002) | 承認待ち |
-| D-08 | 録音アセットはコンテンツアドレス(SHA-256)で git LFS 相当の別ストアに置き、リポジトリには参照+来歴のみ | CRDT/git にバイナリを入れない業界定石(00-research §3.5) | 承認待ち |
-| D-09 | 系譜グラフは Hub のファーストクラスデータ(グラフ DB)。git の履歴とは独立に管理 | fork/depends/performed/released は git では表現できない | 承認待ち |
-| D-10 | エディタ戦略は「VSCode 拡張が主、Web エディタ(Monaco)が従」で開始 | 中〜上級者ターゲット。LSP を共通化し二重開発を避ける | 承認待ち |
-| D-11 | 決定論規約: f32、自前 libm、denormal flush、決定論的並列リダクション | SYS-ENG-001 の成立条件。SDD §4 に詳細。**スパイクで実証済み(07-determinism-spike.md): libm 統一のみで native/wasm ビット同一を達成** | 承認待ち |
-| D-12 | ポイント経済は「イベント収集+系譜集計」のみ先行、経済ルールは後付け可能な台帳設計 | 法規制・ゲーム理論の検討前に不可逆な設計をしない | 承認待ち |
+| **D-01** | The implementation language for the core engine + compiler is **Rust** (exposed as an API via a C ABI) | Existing dawcore assets (lock-free design, DSP, offline rendering), maturity of the wasm32 toolchain, memory safety. The founder's request was "build in C++ and expose an API," but the requirements (native core + API + WASM) can be met equally well or better with Rust | **Approved 2026-07-02** |
+| D-02 | Forte lang is a **custom DSL** (not an embedding in a general-purpose language) | To enforce determinism (SRS-LANG-003) and input restrictions (SRS-REC-001) at the language-specification level. A TS/Python embedding cannot exclude arbitrary I/O | **Approved 2026-07-02** |
+| D-03 | The language has 2 layers: a "declarative song-description layer" + a "DSP-description layer" | A simple declarative layer for composers, a low-level layer for instrument developers. Provided as subsets within a single language | Pending approval |
+| D-04 | Real-time and offline use the **same render-graph implementation** | SYS-ENG-002. Follows dawcore's bounce.rs approach | Pending approval |
+| D-05 | Browser execution is AudioWorklet (sink) + WASM + SAB ring | Industry-standard pattern (00-research §3.1). COOP/COEP deployment required | Pending approval |
+| D-06 | The distribution format for third-party instruments/effects is **Forte source** (mandatory for public). Precompiled WASM is private-only | White-box principle (SYS-LNG-004). WAM 2.0 is not adopted (it permits binaries + arbitrary JS UI, contrary to the principle), but its host API design serves as a reference | Pending approval |
+| D-07 | The Hub's VCS is **git-compatible** (no custom VCS). The fork constraint is implemented at the authorization layer | Use git's ecosystem (diff/merge/history) as-is. Public clone rejection is achieved via server-side authorization (SRS-HUB-002) | Pending approval |
+| D-08 | Recorded assets are content-addressed (SHA-256) in a separate git LFS-like store; the repository holds only references + provenance | The industry rule of not putting binaries in CRDTs/git (00-research §3.5) | Pending approval |
+| D-09 | The lineage graph is first-class Hub data (graph DB), managed independently of git history | fork/depends/performed/released cannot be expressed in git | Pending approval |
+| D-10 | Editor strategy starts as "VSCode extension primary, web editor (Monaco) secondary" | Targeting intermediate-to-advanced users. Share the LSP to avoid double development | Pending approval |
+| D-11 | Determinism conventions: f32, in-house libm, denormal flush, deterministic parallel reduction | Precondition for SYS-ENG-001. Details in SDD §4. **Proven by spike (07-determinism-spike.md): native/wasm bit-identity achieved with libm unification alone** | Pending approval |
+| D-12 | The point economy ships only "event collection + lineage aggregation" first, with a ledger design allowing economic rules to be added later | Make no irreversible design before regulatory and game-theoretic study | Pending approval |
 
-## 2. システム分割
+## 2. System Decomposition
 
 ```
-┌─────────────────────────── SS1 ツールチェーン (Rust) ───────────────────────────┐
+┌─────────────────────────── SS1 Toolchain (Rust) ───────────────────────────┐
 │                                                                                  │
-│  forte-lang     パーサ / 型検査 / モジュール解決 / 正規化(fmt) / AST→IR         │
-│  forte-compile  IR → レンダーグラフ定義 + DSP カーネル(native/wasm コード生成)   │
-│  forte-core     レンダーグラフ実行系(RT/offline 共通)・スケジューラ・ミキサー    │
-│                 ← 既存 dawcore の engine/dsp/bounce を改造して流用               │
-│  forte-pkg      forte.toml / forte.lock / Hub fork API クライアント              │
+│  forte-lang     parser / type checking / module resolution / canonicalization (fmt) / AST→IR │
+│  forte-compile  IR → render-graph definition + DSP kernels (native/wasm code generation)   │
+│  forte-core     render-graph executor (shared RT/offline), scheduler, mixer      │
+│                 ← adapted and reused from existing dawcore engine/dsp/bounce     │
+│  forte-pkg      forte.toml / forte.lock / Hub fork API client                    │
 │  forte-cli      build / play / fmt / test / publish                              │
-│  forte-lsp      LSP サーバー(forte-lang を組み込み)                              │
-│  C ABI: forte_ffi (libforte.so / .dylib / .dll) — ML/外部ツールから利用可能      │
+│  forte-lsp      LSP server (embedding forte-lang)                                │
+│  C ABI: forte_ffi (libforte.so / .dylib / .dll) — usable from ML/external tools  │
 └──────────────────────────────────────────────────────────────────────────────────┘
 
-┌──────────── SS2 エディタ ────────────┐   ┌──────────────── SS3 Hub ────────────────┐
-│ VSCode 拡張(TS)                      │   │ git ホスティング + 認可層(public=fork限定)│
-│  ├ LSP クライアント                   │   │ 系譜グラフサービス(GraphDB)              │
-│  ├ 再生コントロール / 可視化 Webview  │   │ アセットストア(CAS, S3系+署名URL)        │
-│  └ ローカル forte-core (native)       │   │ ビルドファーム(決定論ビルド+検証)        │
-│ Web エディタ(Monaco + WASM 一式)      │   │ ストリーミング配信 / プレイヤー           │
-│  ├ forte-lsp (wasm)                   │   │ 指紋照合 / モデレーション                 │
-│  ├ forte-core (wasm, AudioWorklet)    │   │ イベント台帳(再生→貢献集計)             │
-│  └ OPFS プロジェクトストア             │   │ アカウント / 署名鍵管理                   │
+┌──────────── SS2 Editor ────────────┐   ┌──────────────── SS3 Hub ────────────────┐
+│ VSCode extension (TS)               │   │ git hosting + authorization layer (public=fork-only) │
+│  ├ LSP client                       │   │ lineage graph service (GraphDB)          │
+│  ├ playback controls / visualization Webview │   │ asset store (CAS, S3-like + signed URLs) │
+│  └ local forte-core (native)        │   │ build farm (deterministic build + verification) │
+│ Web editor (Monaco + WASM suite)    │   │ streaming distribution / player          │
+│  ├ forte-lsp (wasm)                 │   │ fingerprint matching / moderation        │
+│  ├ forte-core (wasm, AudioWorklet)  │   │ event ledger (playback → contribution aggregation) │
+│  └ OPFS project store               │   │ accounts / signing key management        │
 └───────────────────────────────────────┘   └───────────────────────────────────────────┘
 ```
 
-## 3. ランタイムアーキテクチャ(再生・録音経路)
+## 3. Runtime Architecture (Playback and Recording Paths)
 
-### 3.1 ネイティブ(CLI / VSCode 拡張内)
+### 3.1 Native (CLI / Inside the VSCode Extension)
 
 ```
 forte-lang ──AST──► forte-compile ──graph+kernels──► forte-core
                                                         │
-エディタ/CLI ──コマンド(SPSC ring)──► RT スレッド(cpal コールバック)
-                                    ◄──ガベージ返却 / メーター(atomics)
-録音: 入力コールバック ──SPSC──► 書き込みスレッド ──► .frec 逐次書き込み
+editor/CLI ──commands (SPSC ring)──► RT thread (cpal callback)
+                                    ◄──garbage return / meters (atomics)
+Recording: input callback ──SPSC──► writer thread ──► sequential .frec writes
 ```
 
-### 3.2 ブラウザ
+### 3.2 Browser
 
 ```
-Main thread: Monaco / 可視化(Canvas/WebGPU) / トランスポート UI
-   │ postMessage(制御) / SAB リング(オーディオ・メーター)
-Worker(compile): forte-lang + forte-compile (wasm) — 差分ビルド
-Worker(asset):   OPFS SyncAccessHandle — プロジェクト/録音の永続化
-AudioWorklet:    forte-core (wasm) — 128 フレーム毎に SAB リングから
-                 コマンド消費・レンダー・メーター publish
-録音: AudioWorklet(入力 tap) ──SAB ring──► Worker(asset) ──► OPFS .frec
+Main thread: Monaco / visualization (Canvas/WebGPU) / transport UI
+   │ postMessage (control) / SAB rings (audio, meters)
+Worker(compile): forte-lang + forte-compile (wasm) — incremental builds
+Worker(asset):   OPFS SyncAccessHandle — persistence of projects/recordings
+AudioWorklet:    forte-core (wasm) — every 128 frames, consumes commands
+                 from the SAB ring, renders, publishes meters
+Recording: AudioWorklet (input tap) ──SAB ring──► Worker(asset) ──► OPFS .frec
 ```
 
-- グラフ差し替え(ホットリロード)は「新グラフを Worker 側で構築 → Box 相当を
-  リング経由で移送 → RT 側で swap → 旧グラフをガベージ返却」(dawcore の既存プロトコルと同型)。
-- COOP/COEP 必須。サードパーティ資産は同一オリジン配信(自社 CDN)に限定する。
-  ※ D-06 により任意オリジンのプラグイン読込は存在しないため、WAM で問題になる
-  クロスオリジン緊張は発生しない。
+- Graph swapping (hot reload) is "build the new graph on the Worker side → transfer the
+  Box equivalent via the ring → swap on the RT side → return the old graph as garbage"
+  (isomorphic to dawcore's existing protocol).
+- COOP/COEP required. Third-party assets are restricted to same-origin delivery (own CDN).
+  * Because D-06 means there is no plugin loading from arbitrary origins, the cross-origin
+  tensions that afflict WAM do not arise.
 
-## 4. 言語アーキテクチャ(2 層構造, D-03)
+## 4. Language Architecture (2-Layer Structure, D-03)
 
-| 層 | 対象ユーザー | 内容 | 実行形態 |
+| Layer | Target users | Contents | Execution form |
 | --- | --- | --- | --- |
-| **Score 層**(宣言的) | 作曲者 | song/track/pattern/arrangement/mix。時間は拍単位。制御フローは限定(map/repeat/条件はコンパイル時評価) | コンパイル時に完全展開 → イベント列+グラフ |
-| **DSP 層**(手続き的) | 音源・エフェクト開発者 | `process(frame)` カーネル、状態変数、フィルタ/オシレータプリミティブ | native/wasm へコード生成、RT 実行 |
+| **Score layer** (declarative) | Composers | song/track/pattern/arrangement/mix. Time is in beats. Control flow is limited (map/repeat/conditionals evaluated at compile time) | Fully expanded at compile time → event sequence + graph |
+| **DSP layer** (procedural) | Instrument/effect developers | `process(frame)` kernels, state variables, filter/oscillator primitives | Code-generated to native/wasm, executed in RT |
 
-- 両層とも決定論(SRS-LANG-003)。I/O・時計・非シード乱数は言語に存在しない。
-- Score 層は「コンパイル時に全展開できる」ことが決定論とビルド速度の鍵。
-  生成的な作曲(アルゴリズム作曲)はシード付きで Score 層のコンパイル時関数として書ける。
+- Both layers are deterministic (SRS-LANG-003). I/O, clocks, and unseeded randomness do not exist in the language.
+- The Score layer's property of being "fully expandable at compile time" is the key to determinism
+  and build speed. Generative composition (algorithmic composition) can be written as seeded
+  compile-time functions in the Score layer.
 
-## 5. データアーキテクチャ
+## 5. Data Architecture
 
-### 5.1 リポジトリ内容物
+### 5.1 Repository Contents
 
 ```
 song-repo/
-  forte.toml          マニフェスト(名前・版・依存・ライセンス・公開範囲)
-  forte.lock          解決済み依存(コミット+コンテンツハッシュ+系譜ID)
-  src/*.forte         コード(曲・トラック・カスタムデバイス)
-  assets/*.frec       録音参照ではなく実体は CAS。ここにはポインタファイル
-                      (ハッシュ+来歴ブロック+署名)のみ置く (D-08)
-  build.manifest.json 最新ビルド証明(出力ハッシュ+全来歴) — release 時に検証される
+  forte.toml          manifest (name, version, dependencies, license, visibility)
+  forte.lock          resolved dependencies (commit + content hash + lineage ID)
+  src/*.forte         code (songs, tracks, custom devices)
+  assets/*.frec       actual content lives in the CAS, not recording references. Only pointer
+                      files (hash + provenance block + signature) are placed here (D-08)
+  build.manifest.json latest build proof (output hash + full provenance) — verified at release
 ```
 
-### 5.2 系譜グラフ(D-09)
+### 5.2 Lineage Graph (D-09)
 
-- ノード: `User / Repo / Release / Asset / ModuleVersion`
-- エッジ: `forked_from / depends_on(version) / performed_on / released_as / recorded_by`
-- 不変条件: public Repo の複製操作は必ず `forked_from` エッジを生成する(SRS-HUB-002)。
-- 再生イベントは `Release` に紐付き、バッチで依存閉包に沿って貢献度を按分集計する(D-12)。
+- Nodes: `User / Repo / Release / Asset / ModuleVersion`
+- Edges: `forked_from / depends_on(version) / performed_on / released_as / recorded_by`
+- Invariant: any replication operation on a public Repo always creates a `forked_from` edge (SRS-HUB-002).
+- Playback events are tied to a `Release` and contribution is apportioned in batch along the
+  dependency closure (D-12).
 
-## 6. 縮退マトリクス(ブラウザ)
+## 6. Degradation Matrix (Browser)
 
-| 機能 | Chromium | Firefox | Safari |
+| Feature | Chromium | Firefox | Safari |
 | --- | --- | --- | --- |
-| 編集・ビルド・再生(WASM+AudioWorklet+SAB) | ○ | ○ | ○(要 COOP/COEP) |
-| MIDI 入力 | ○ | ○ | **×(Web MIDI 非対応)→ 画面鍵盤のみ** |
-| マイク録音(制約 off) | ○ | ○ | △(EC 制約バグ・44.1kHz 明示) |
-| OPFS 永続 | ○ | ○ | △ **7 日消去 → Hub 同期を必須化** |
-| 実フォルダ保存 | ○(FSA) | × zip DL | × zip DL |
-| 推奨ポジション | フル機能 | ほぼフル | 「試す・聴く」+要同期 |
+| Edit, build, play (WASM+AudioWorklet+SAB) | Yes | Yes | Yes (COOP/COEP required) |
+| MIDI input | Yes | Yes | **No (Web MIDI unsupported) → on-screen keyboard only** |
+| Microphone recording (constraints off) | Yes | Yes | Partial (EC constraint bug, must specify 44.1kHz) |
+| OPFS persistence | Yes | Yes | Partial **7-day deletion → Hub sync made mandatory** |
+| Real-folder saving | Yes (FSA) | No, zip DL | No, zip DL |
+| Recommended position | Full features | Nearly full | "Try and listen" + sync required |
 
-ネイティブ(CLI+VSCode)がプロ用途の一級環境であるため、ブラウザ格差は
-「Web は入口・共有・軽作業」という位置づけで吸収する。
+Since native (CLI + VSCode) is the first-class environment for professional use, browser
+disparities are absorbed by positioning "the web as entry point, sharing, and light work."
 
-## 7. dawcore からの流用マップ
+## 7. Reuse Map from dawcore
 
-| dawcore(既存) | Forte での扱い |
+| dawcore (existing) | Treatment in Forte |
 | --- | --- |
-| dsp/(polyBLEP, SVF, ADSR, delay, FDN reverb, sampler) | **流用**: 標準ライブラリ `@std/*` の DSP カーネル実装に転用 |
-| engine.rs(サンプル精度スケジューラ、ミキサー) | **改造流用**: レンダーグラフ化(固定 3 ステージ → 任意グラフ) |
-| command.rs(SPSC+ガベージチャネル) | **流用**: ホットリロード/制御プロトコルの基盤 |
-| bounce.rs(オフラインレンダ) | **流用**: `forte build` の中核。決定論規約を追加適用 |
-| model.rs(インデックス参照のプロジェクトモデル) | **廃棄**: モデルはコンパイラ出力(IR)に置き換わる |
-| dawapp(egui UI) | **廃棄**(可視化の参考のみ)。編集 UI は作らない方針のため |
-| tests/(オフラインレンダ検証) | **流用**: 決定論 CI(2 環境ハッシュ比較)に発展させる |
+| dsp/ (polyBLEP, SVF, ADSR, delay, FDN reverb, sampler) | **Reuse**: repurposed as DSP kernel implementations for the standard library `@std/*` |
+| engine.rs (sample-accurate scheduler, mixer) | **Adapt and reuse**: render-graphification (fixed 3 stages → arbitrary graph) |
+| command.rs (SPSC + garbage channel) | **Reuse**: foundation of the hot-reload/control protocol |
+| bounce.rs (offline rendering) | **Reuse**: the core of `forte build`. Determinism conventions additionally applied |
+| model.rs (index-referenced project model) | **Discard**: the model is replaced by compiler output (IR) |
+| dawapp (egui UI) | **Discard** (visualization reference only), per the policy of not building an editing UI |
+| tests/ (offline render verification) | **Reuse**: evolve into determinism CI (two-environment hash comparison) |
 
-## 8. 検証アーキテクチャ
+## 8. Verification Architecture
 
-- **決定論 CI**: リファレンス曲コーパスを native(Linux x86_64)と wasm(Node)で
-  ビルドし SHA-256 比較。PR 毎に実行(SYS-ENG-001)。
-- **RT ベンチ**: アンダーランカウンタ+コールバック使用率をリファレンス曲で計測
-  (SYS-NFR-003)。
-- **ゴールデンオーディオテスト**: dawcore の visual test に相当する音の回帰テスト
-  (出力ハッシュ固定。意図した変更時のみ更新)。
-- **言語テスト**: `forte test`(モジュールの単体テスト: 期待イベント列/期待スペクトル)。
-- **Hub 統合テスト**: fork 制約(clone 拒否)、リリース再現検証の E2E。
+- **Determinism CI**: build the reference-song corpus on native (Linux x86_64) and wasm (Node)
+  and compare SHA-256. Run on every PR (SYS-ENG-001).
+- **RT bench**: measure the underrun counter + callback utilization on the reference song
+  (SYS-NFR-003).
+- **Golden audio tests**: audio regression tests equivalent to dawcore's visual tests
+  (output hash pinned; updated only on intended changes).
+- **Language tests**: `forte test` (module unit tests: expected event sequences / expected spectra).
+- **Hub integration tests**: E2E for the fork constraint (clone rejection) and release
+  reproduction verification.

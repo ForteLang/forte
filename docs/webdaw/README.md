@@ -1,54 +1,56 @@
-# Forte — ドキュメント体系
+# Forte — Documentation Structure
 
-「コードで作曲し、fork 系譜で貢献が追跡される」音楽制作プラットフォームの設計文書。
-IEC 62304 のプロセス規律(要求→アーキテクチャ→詳細設計のトレーサビリティ)を採用。
+Design documents for a music production platform where "music is composed in code and contributions are tracked through fork lineage."
+Adopts the process discipline of IEC 62304 (traceability from requirements → architecture → detailed design).
 
-| # | 文書 | 内容 |
+| # | Document | Contents |
 | --- | --- | --- |
-| 00 | [research-report](00-research-report.md) | Web DAW 市場・技術調査(2026-07)。競合・OSS・プラットフォーム成熟度・AI トレンド |
-| 01 | [vision](01-vision.md) | 製品ビジョン: 音楽のホワイトボックス化 / fork 系譜 / 決定論的ビルド |
-| 02 | [system-requirements](02-system-requirements.md) | システム要求仕様(SYS)+リスク管理 |
-| 03 | [software-requirements](03-software-requirements.md) | ソフトウェア要求仕様(SRS)+トレーサビリティ |
-| 04 | [software-architecture](04-software-architecture.md) | アーキテクチャ設計(SAD)+意思決定記録(ADR) |
-| 05 | [detailed-design](05-detailed-design.md) | 詳細設計(SDD): 言語スケッチ・エンジン・録音・Hub |
-| 06 | [roadmap](06-roadmap.md) | 開発ロードマップ(Phase 0–5)+リスクレジスタ |
-| 07 | [determinism-spike](07-determinism-spike.md) | Phase 0.4 スパイク結果: native/wasm ビット同一レンダリング達成 |
-| spec | [forte-lang-v1](spec/forte-lang-v1.md) | **言語仕様 v1(実装準拠): 文法 EBNF・意味論・診断カタログ・決定論契約** |
-| spec | [forte-lang-v0](spec/forte-lang-v0.md) | 言語仕様 v0 ドラフト(設計意図・将来構想) |
+| 00 | [research-report](00-research-report.md) | Web DAW market and technology research (2026-07). Competitors, OSS, platform maturity, AI trends |
+| 01 | [vision](01-vision.md) | Product vision: white-boxing music / fork lineage / deterministic builds |
+| 02 | [system-requirements](02-system-requirements.md) | System requirements specification (SYS) + risk management |
+| 03 | [software-requirements](03-software-requirements.md) | Software requirements specification (SRS) + traceability |
+| 04 | [software-architecture](04-software-architecture.md) | Architecture design (SAD) + architecture decision records (ADR) |
+| 05 | [detailed-design](05-detailed-design.md) | Detailed design (SDD): language sketch, engine, recording, Hub |
+| 06 | [roadmap](06-roadmap.md) | Development roadmap (Phase 0–5) + risk register |
+| 07 | [determinism-spike](07-determinism-spike.md) | Phase 0.4 spike results: native/wasm bit-identical rendering achieved |
+| spec | [forte-lang-v1](spec/forte-lang-v1.md) | **Language specification v1 (implementation-conformant): grammar EBNF, semantics, diagnostics catalog, determinism contract** |
+| spec | [forte-lang-v0](spec/forte-lang-v0.md) | Language specification v0 draft (design intent, future concepts) |
 
-## 実装の現在地
+## Current State of Implementation
 
-- **`crates/fortelang`** — 言語 v0 スライス: lexer/parser/検査(診断コード付き)、
-  dawcore へのコンパイル、`forte check` / `forte build`(WAV + build.manifest.json)/
-  `forte play`(リアルタイム再生+保存で即反映のホットリロード。音声デバイスがなければ
-  無音バックエンドで走行)。
-- **`songs/`** — リファレンス曲 4 曲(`first-light` 4/4、`slow-circles` 6/8、
-  `night-parade`: prog/section/send-return、`handmade`: **`device` 構文で音源を
-  コード定義し、`songs/devices/warm.forte` ライブラリから `import`** —
-  シンセが fork できるコードであり、モジュールとして流通することの最小実証)。
-- **`editor/vscode-forte`** — VSCode 拡張: シンタックスハイライト、`forte lsp` に
-  よるリアルタイム診断、Play(ホットリロード)/Build/Stop コマンド。
-- **`web/` + `crates/forteweb`** — ブラウザエディタのプロトタイプ:
-  メインスレッドの wasm がタイプ中診断・ビルド証明・可視化データ、AudioWorklet 内の
-  wasm が再生+ホットリロード。読み取り専用アレンジビュー(コードが唯一の真実)。
-  **OPFS 自動保存(複数曲・リロード後も残存)+ Service Worker で完全オフライン動作**
-  = ローカルファースト(SYS-NFR-001)の最初の実証。`scripts/build_web.sh` でビルドし、
-  リポジトリルートを静的配信して `/web/` を開く。E2E は `scripts/web_e2e.mjs`
-  (実 Chromium 7 項目: **native / wasip1 / ブラウザの三者ビット同一**、OPFS 永続、
-  ネットワーク切断での起動・コンパイル・再生)。
-- **`scripts/determinism_test.sh`** — 決定論ゲート 2 段(エンジン単体 / forte build 経由)。
-  どちらも native x86_64 と wasm32-wasip1 でビット同一を CI 検証できる。
-- **ローカル Hub(`forte hub`)** — fork 系譜レジストリの最初の実装。
-  `publish`(曲/ライブラリを import ごとスナップショット、要コンパイル成功)、
-  `fork`(**取得の唯一の手段**。来歴スタンプ `.forte-lineage.json` を書き込む)、
-  `release`(スナップショットの決定論ビルド → ダイジェストを台帳に記録)、
-  `verify`(クリーンルーム再ビルドで再現検証。改竄は MISMATCH 検出)、
-  `lineage`(祖先チェーン+fork 一覧+リリースと検証回数)、`list`。
-  シーケンス番号ベースで決定論的。リリースダイジェストはブラウザの
-  ビルド証明と同一値(= 誰でもどの環境でも監査できる)。
+- **`crates/fortelang`** — Language v0 slice: lexer/parser/checking (with diagnostic codes),
+  compilation to dawcore, `forte check` / `forte build` (WAV + build.manifest.json) /
+  `forte play` (real-time playback plus hot reload that applies changes immediately on save.
+  Falls back to a silent backend when no audio device is present).
+- **`songs/`** — Four reference songs (`first-light` 4/4, `slow-circles` 6/8,
+  `night-parade`: prog/section/send-return, `handmade`: **instruments defined in code
+  via the `device` syntax and `import`-ed from the `songs/devices/warm.forte` library** —
+  the minimal proof that synths are forkable code and can circulate as modules).
+- **`editor/vscode-forte`** — VSCode extension: syntax highlighting, real-time diagnostics
+  via `forte lsp`, Play (hot reload) / Build / Stop commands.
+- **`web/` + `crates/forteweb`** — Browser editor prototype:
+  wasm on the main thread provides as-you-type diagnostics, build proofs, and visualization
+  data; wasm inside the AudioWorklet handles playback plus hot reload. Read-only arrange
+  view (code is the single source of truth).
+  **OPFS auto-save (multiple songs, persists across reloads) + full offline operation via
+  Service Worker** = the first proof of local-first (SYS-NFR-001). Build with
+  `scripts/build_web.sh`, serve the repository root statically, and open `/web/`.
+  E2E is `scripts/web_e2e.mjs`
+  (7 checks in real Chromium: **three-way bit-identity across native / wasip1 / browser**,
+  OPFS persistence, startup/compile/playback with the network disconnected).
+- **`scripts/determinism_test.sh`** — Two-stage determinism gate (engine alone / via forte build).
+  Both can be CI-verified as bit-identical across native x86_64 and wasm32-wasip1.
+- **Local Hub (`forte hub`)** — The first implementation of the fork-lineage registry.
+  `publish` (snapshots a song/library including its imports; requires successful compilation),
+  `fork` (**the only means of acquisition**; writes the provenance stamp `.forte-lineage.json`),
+  `release` (deterministic build of a snapshot → records the digest in the ledger),
+  `verify` (reproducibility verification via clean-room rebuild; tampering is detected as MISMATCH),
+  `lineage` (ancestor chain + fork list + releases and verification counts), `list`.
+  Deterministic, based on sequence numbers. Release digests are identical to the browser's
+  build proofs (= anyone can audit from any environment).
 
-## 意思決定の状態
+## Decision Status
 
-- **D-01 承認済(2026-07-02)**: コアは Rust(C ABI で API 化)
-- **D-02 承認済(2026-07-02)**: 独自 DSL
-- 未決: 名称(Forte は仮)、系譜保存ライセンスの法的レビュー着手時期
+- **D-01 approved (2026-07-02)**: Core in Rust (exposed as an API via C ABI)
+- **D-02 approved (2026-07-02)**: Custom DSL
+- Open: naming (Forte is provisional), timing for starting legal review of the lineage-preservation license
