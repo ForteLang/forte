@@ -70,16 +70,40 @@ fn find_device(name: &str) -> Option<(String, String)> {
     }
 }
 
-/// `forte instruments <arg>` does what you mean: an exact instrument name
-/// (case-insensitive, optionally with `(args)`) enters play mode; anything
-/// else filters the catalog.
-pub fn play_or_list(arg: &str, from: Option<&str>) -> Result<(), String> {
-    let bare = arg.split('(').next().unwrap_or(arg).trim();
-    let is_builtin = matches!(bare.to_ascii_lowercase().as_str(), "polymer" | "grid" | "sampler");
-    if from.is_some() || is_builtin || find_device(bare).is_some() {
-        return run(arg, from);
+/// `forte instruments names [PREFIX]` — machine-readable name list, one per
+/// line, for shell completion (`forte complete bash`). Dynamic on purpose:
+/// the library keeps growing, so completion asks the CLI instead of a list.
+pub fn names(prefix: Option<&str>) -> Result<(), String> {
+    let mut dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let std_dir = loop {
+        let candidate = dir.join("lib/std");
+        if candidate.is_dir() {
+            break candidate;
+        }
+        if !dir.pop() {
+            return Ok(()); // outside a repo: no names, no error (completion stays quiet)
+        }
+    };
+    let p = prefix.map(str::to_ascii_lowercase);
+    let mut out: Vec<String> = vec!["polymer".into(), "grid".into(), "sampler".into()];
+    if let Ok(entries) = std::fs::read_dir(&std_dir) {
+        for f in entries.flatten().map(|e| e.path()) {
+            if f.extension().is_none_or(|x| x != "forte") {
+                continue;
+            }
+            let Ok(src) = std::fs::read_to_string(&f) else { continue };
+            let Ok(ast) = crate::parser::parse(&src) else { continue };
+            out.extend(ast.devices.iter().map(|d| d.name.clone()));
+        }
     }
-    list(Some(arg))
+    out.sort();
+    out.dedup();
+    for n in out {
+        if p.as_deref().is_none_or(|p| n.to_ascii_lowercase().starts_with(p)) {
+            println!("{n}");
+        }
+    }
+    Ok(())
 }
 
 /// `forte instruments [QUERY]` — the catalog: every device in lib/std with
@@ -343,7 +367,7 @@ pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
 
     println!("♪ {name} — キーボードが鍵盤になります(120bpm 相当で記録)");
     println!("   a w s e d f t g y h u j k o l p ;  =  C C# D D# E F F# G G# A A# B C…");
-    println!("   z/x オクターブ ↑/↓   c/v ベロシティ ↑/↓   q で終了(演奏が notes リテラルになります)");
+    println!("   z/x オクターブ ↓/↑   c/v ベロシティ ↓/↑   q で終了(演奏が notes リテラルになります)");
     if !knobs.is_empty() {
         println!(
             "   ノブ: 1..{} で選択、-/= で下げ/上げ — {}",
@@ -402,19 +426,19 @@ pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
         match byte[0] {
             b'q' | 0x03 | 0x04 => break, // q / Ctrl+C / Ctrl+D
             b'z' => {
-                octave = (octave + 1).min(7);
-                status(None, octave, velocity, &knobs, sel);
-            }
-            b'x' => {
                 octave = (octave - 1).max(-1);
                 status(None, octave, velocity, &knobs, sel);
             }
+            b'x' => {
+                octave = (octave + 1).min(7);
+                status(None, octave, velocity, &knobs, sel);
+            }
             b'c' => {
-                velocity = (velocity + 10).min(127);
+                velocity = (velocity - 10).max(1);
                 status(None, octave, velocity, &knobs, sel);
             }
             b'v' => {
-                velocity = (velocity - 10).max(1);
+                velocity = (velocity + 10).min(127);
                 status(None, octave, velocity, &knobs, sel);
             }
             // knobs: a digit selects, -/= turn (5% of the declared range),
