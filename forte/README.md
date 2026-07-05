@@ -187,6 +187,16 @@ loop: "on", reverse: "on")`, turn beatboxing into a drum kit with
 material via the `take` slot + `sample()` node. Devices don't own takes, so an
 instrument can be published and anyone can plug their own recording into it.
 
+### Releases
+
+`forte upgrade` first looks at the latest GitHub Release: if it carries a
+prebuilt binary for the running platform, upgrading is a download-and-swap
+(no toolchain needed); otherwise it falls back to `cargo install` from the
+checkout or from GitHub. Release assets follow the naming convention
+`forte-<arch>-<os>` — e.g. `forte-x86_64-linux`, `forte-aarch64-macos`,
+`forte-x86_64-windows.exe` (a release workflow will build these once
+Actions is back; hand-uploaded assets work the same).
+
 ### The listening site (GitHub Pages)
 
 `scripts/publish_web.sh` assembles the whole listening experience —
