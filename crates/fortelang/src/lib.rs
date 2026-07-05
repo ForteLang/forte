@@ -5,6 +5,8 @@
 pub mod ast;
 #[cfg(not(target_family = "wasm"))]
 pub mod audio;
+#[cfg(not(target_family = "wasm"))]
+pub mod browser;
 pub mod calib;
 pub mod compile;
 pub mod diag;
@@ -22,6 +24,8 @@ pub mod hub_remote;
 #[cfg(not(target_family = "wasm"))]
 pub mod hub_server;
 pub mod lexer;
+#[cfg(not(target_family = "wasm"))]
+pub mod live;
 pub mod lsp;
 pub mod music;
 pub mod parser;

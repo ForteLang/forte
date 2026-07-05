@@ -155,12 +155,52 @@ fn main() -> ExitCode {
                 .and_then(|s| s.parse::<f64>().ok());
             play(&args[1], for_secs)
         }
+        #[cfg(not(target_family = "wasm"))]
+        Some("browser") => {
+            let port = args
+                .iter()
+                .position(|a| a == "--port")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(8000);
+            match fortelang::browser::run(port, !args.iter().any(|a| a == "--no-open")) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("browser: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        #[cfg(not(target_family = "wasm"))]
+        Some("instrument") if args.len() >= 2 => {
+            let from = args
+                .iter()
+                .position(|a| a == "--from")
+                .and_then(|i| args.get(i + 1))
+                .cloned();
+            match fortelang::live::run(&args[1], from.as_deref()) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("instrument: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Some("upgrade") => upgrade(),
+        Some("version") | Some("--version") | Some("-V") => {
+            println!("forte {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
         _ => {
             eprintln!("usage: forte check <song.forte>");
             eprintln!("       forte build <song.forte> [-o out.wav] [--stems]");
             eprintln!("       forte export <song.forte> [-o out.zip]  (曲+履歴+証明の自己完結 zip)");
-            eprintln!("       forte play  <song.forte> [--for SECS]");
+            eprintln!("       forte play  <song.forte> [--for SECS]   (トラックタイムラインを表示しながら再生)");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
+            eprintln!("       forte instrument <Name[(args)]> [--from lib.forte]");
+            eprintln!("                                   (キーボードが鍵盤に: a w s e d …、z/x oct、c/v velo)");
+            eprintln!("       forte browser [--port 8000] [--no-open]  (ブラウザエディタを起動)");
+            eprintln!("       forte upgrade               (forte コマンド自体を更新)");
             eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
             eprintln!("       forte lsp");
@@ -182,6 +222,64 @@ fn main() -> ExitCode {
             eprintln!("       forte hub list                     [--hub DIR]");
             eprintln!("       forte hub serve [--port 9377]      [--hub DIR]");
             ExitCode::from(2)
+        }
+    }
+}
+
+/// `forte upgrade` — rebuild/reinstall the CLI. Inside a checkout the local
+/// sources win; anywhere else cargo pulls the repository.
+fn upgrade() -> ExitCode {
+    println!("forte {} — 更新を確認します…", env!("CARGO_PKG_VERSION"));
+    // find a checkout (crates/fortelang next to us or above the cwd)
+    let mut checkout = None;
+    if let Ok(mut dir) = std::env::current_dir() {
+        loop {
+            if dir.join("crates/fortelang/Cargo.toml").is_file() {
+                checkout = Some(dir.join("crates/fortelang"));
+                break;
+            }
+            if !dir.pop() {
+                break;
+            }
+        }
+    }
+    let status = match &checkout {
+        Some(path) => {
+            println!("checkout からインストールします: {}", path.display());
+            std::process::Command::new("cargo")
+                .args(["install", "--path"])
+                .arg(path)
+                .arg("--force")
+                .status()
+        }
+        None => {
+            println!("GitHub からインストールします: ForteLang/forte");
+            std::process::Command::new("cargo")
+                .args([
+                    "install",
+                    "--git",
+                    "https://github.com/ForteLang/forte",
+                    "fortelang",
+                    "--force",
+                ])
+                .status()
+        }
+    };
+    match status {
+        Ok(s) if s.success() => {
+            println!("upgraded: forte を更新しました(forte version で確認)");
+            ExitCode::SUCCESS
+        }
+        Ok(_) => {
+            eprintln!("upgrade: cargo install が失敗しました(上のログを確認してください)");
+            ExitCode::FAILURE
+        }
+        Err(e) => {
+            eprintln!(
+                "upgrade: cargo が見つかりません({e})。\n\
+                 手動更新: cargo install --git https://github.com/ForteLang/forte fortelang --force"
+            );
+            ExitCode::FAILURE
         }
     }
 }
@@ -498,6 +596,47 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
         std::fs::metadata(path).and_then(|m| m.modified()).ok()
     }
 
+    /// The console timeline: one lane per track, bars mapped onto LANE_W
+    /// cells — see at a glance which track enters when and where the song ends.
+    fn print_timeline(p: &Project) {
+        const LANE_W: usize = 40;
+        let bpb = p.time_sig.0 as f64 * 4.0 / p.time_sig.1 as f64;
+        let len_beats = dawcore::bounce::arrangement_len(p);
+        let bars = (len_beats / bpb).ceil().max(1.0);
+        let secs = len_beats * 60.0 / p.tempo;
+        println!(
+            "♪ {} bpm {}/{} — {} bars({}:{:02.0})  ファイル保存で即反映、Ctrl+C で終了",
+            p.tempo,
+            p.time_sig.0,
+            p.time_sig.1,
+            bars as i64,
+            (secs / 60.0) as i64,
+            secs % 60.0,
+        );
+        let name_w = p.tracks.iter().map(|t| t.name.chars().count()).max().unwrap_or(4).max(4);
+        for t in &p.tracks {
+            let mut lane = ['·'; LANE_W];
+            for a in &t.arranger {
+                let s = ((a.start / len_beats) * LANE_W as f64).floor() as usize;
+                let e = (((a.start + a.duration) / len_beats) * LANE_W as f64).ceil() as usize;
+                for c in lane.iter_mut().take(e.min(LANE_W)).skip(s.min(LANE_W)) {
+                    *c = '█';
+                }
+            }
+            let inst = if t.kind == dawcore::model::TrackKind::Effect {
+                "(return)".to_string()
+            } else {
+                t.devices.first().map(|d| d.kind.label().to_string()).unwrap_or_default()
+            };
+            println!(
+                "  {:<name_w$} ▕{}▏ {}",
+                t.name,
+                lane.iter().collect::<String>(),
+                inst,
+            );
+        }
+    }
+
     let mut project = match compile_file(path) {
         Ok(p) => p,
         Err(c) => return c,
@@ -510,18 +649,16 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
     }
     apply(&mut audio.handle, &project, 0);
     audio.handle.send(Command::Play);
-    println!(
-        "playing: \"{}\" — {} tracks, tempo {} bpm(ループ再生中。ファイルを保存すると即反映、Ctrl+C で終了)",
-        path,
-        project.tracks.len(),
-        project.tempo
-    );
+    println!("playing: \"{path}\"");
+    print_timeline(&project);
 
     let started = Instant::now();
     let mut last_mtime = mtime(path);
     let mut last_status = Instant::now();
-    let beats_per_bar = project.time_sig.0 as f64 * 4.0 / project.time_sig.1 as f64;
-    let mut bpb = beats_per_bar;
+    let mut bpb = project.time_sig.0 as f64 * 4.0 / project.time_sig.1 as f64;
+    let mut len_beats = dawcore::bounce::arrangement_len(&project).max(1.0);
+    let mut loops = 0i64;
+    let mut last_pos = 0.0f64;
     loop {
         std::thread::sleep(Duration::from_millis(100));
         audio.handle.collect_garbage();
@@ -535,11 +672,9 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
                     let prev = project.tracks.len();
                     apply(&mut audio.handle, &p, prev);
                     bpb = p.time_sig.0 as f64 * 4.0 / p.time_sig.1 as f64;
-                    println!(
-                        "\nreloaded: {} tracks, tempo {} bpm",
-                        p.tracks.len(),
-                        p.tempo
-                    );
+                    len_beats = dawcore::bounce::arrangement_len(&p).max(1.0);
+                    println!("\nreloaded:");
+                    print_timeline(&p);
                     project = p;
                 }
                 Err(_) => {
@@ -548,15 +683,45 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
             }
         }
 
-        if last_status.elapsed() >= Duration::from_millis(500) {
+        if last_status.elapsed() >= Duration::from_millis(200) {
             last_status = Instant::now();
             let pos = audio.handle.shared.position_beats();
+            if pos < last_pos - 1.0 {
+                loops += 1; // the loop wrapped
+            }
+            last_pos = pos;
             let bar = (pos / bpb).floor() as i64 + 1;
             let beat = (pos % bpb).floor() as i64 + 1;
+            // progress bar over the arrangement
+            const PROG_W: usize = 24;
+            let frac = (pos / len_beats).clamp(0.0, 1.0);
+            let filled = (frac * PROG_W as f64).round() as usize;
+            let bar_str: String =
+                (0..PROG_W).map(|i| if i < filled { '█' } else { '░' }).collect();
+            // which tracks are sounding right now (clip covers the playhead)
+            let mut active = String::new();
+            for t in &project.tracks {
+                if t.arranger.iter().any(|a| pos >= a.start && pos < a.start + a.duration) {
+                    if !active.is_empty() {
+                        active.push(' ');
+                    }
+                    if active.chars().count() + t.name.chars().count() > 32 {
+                        active.push('…');
+                        break;
+                    }
+                    active.push_str(&t.name);
+                }
+            }
+            let secs = pos * 60.0 / project.tempo;
+            let total = len_beats * 60.0 / project.tempo;
             print!(
-                "\r  bar {bar:>3}.{beat} | peak {:>5.2} | voices {:>2} ",
+                "\r▶ bar {bar:>3}.{beat} ▕{bar_str}▏ {}:{:02.0}/{}:{:02.0}{} peak {:>4.2} [{active}]\x1b[K",
+                (secs / 60.0) as i64,
+                secs % 60.0,
+                (total / 60.0) as i64,
+                total % 60.0,
+                if loops > 0 { format!(" loop{}", loops + 1) } else { String::new() },
                 audio.handle.shared.master_peak(),
-                audio.handle.shared.active_voices.load(std::sync::atomic::Ordering::Relaxed)
             );
             let _ = std::io::stdout().flush();
         }
