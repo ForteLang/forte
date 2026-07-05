@@ -305,20 +305,20 @@ fn modulate_routes_an_lfo_at_the_instrument() {
 
 #[test]
 fn automate_and_modulate_errors_are_reported() {
-    // only volume can be automated in v1
+    // an unknown automate target lists what exists
     let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) automate pan from 0.0 to 1.0 over bars(1..2) } }"#;
     assert!(err_codes(src).contains(&"E-AUTO-001"));
     // unknown modulate parameter lists what exists
     let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutof with lfo(rate: 0.3, amount: 0.4) } }"#;
     assert!(err_codes(src).contains(&"E-LFO-001"));
-    // grid instruments expose no named params
+    // raw grid instruments expose no named params
     let src = r#"song "X" { tempo 120bpm track A { instrument grid() play beat`x---` at bars(1..2) modulate cutoff with lfo(rate: 0.3, amount: 0.4) } }"#;
-    assert!(err_codes(src).contains(&"E-LFO-002"));
+    assert!(err_codes(src).contains(&"E-LFO-001"));
     // amount is required
     let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutoff with lfo(rate: 0.3) } }"#;
     assert!(err_codes(src).contains(&"E-LFO-003"));
-    // only lfo modulators exist in v1
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutoff with random(amount: 0.4) } }"#;
+    // modulator kinds are lfo / steps / random — anything else is a parse error
+    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutoff with wobble(amount: 0.4) } }"#;
     assert!(err_codes(src).contains(&"E-PARSE-021"));
 }
 

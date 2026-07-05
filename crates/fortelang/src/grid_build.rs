@@ -105,6 +105,8 @@ fn prim(name: &str) -> Option<Prim> {
 
 struct Builder<'a> {
     graph: GridGraph,
+    /// param name → node param slots it was compiled into
+    binds: std::collections::HashMap<String, Vec<(u32, u32)>>,
     named: HashMap<&'a str, usize>,
     params: HashMap<&'a str, f32>,
     /// Declared `take` slots → resolved asset key (None while probing a
@@ -175,7 +177,9 @@ pub fn instantiate(
             }],
             conns: Vec::new(),
             glide,
+            param_binds: Vec::new(),
         },
+        binds: std::collections::HashMap::new(),
         named: HashMap::new(),
         params,
         takes,
@@ -204,6 +208,16 @@ pub fn instantiate(
     let src = b.build_expr(out_expr, dev)?;
     let out_idx = b.add_module(GridModuleKind::Out, Vec::new());
     b.graph.conns.push(GridConn { from: src, to: (out_idx, 0) });
+
+    // expose declared params for runtime control, in declaration order
+    b.graph.param_binds = dev
+        .params
+        .iter()
+        .map(|p| {
+            let v = b.params.get(p.name.as_str()).copied().unwrap_or(p.default as f32);
+            (p.name.clone(), v, b.binds.remove(p.name.as_str()).unwrap_or_default())
+        })
+        .collect();
 
     Ok(b.graph)
 }
@@ -283,6 +297,7 @@ impl<'a> Builder<'a> {
                     ));
                 }
                 // params first (defaults), then wire inputs
+                let mut pending_binds: Vec<(String, usize)> = Vec::new();
                 let mut pvals: Vec<f32> = {
                     let max_idx = spec
                         .params
@@ -353,6 +368,13 @@ impl<'a> Builder<'a> {
                     } else if let Some((_, idx, _)) = spec.params.iter().find(|(n, _, _)| n == key) {
                         let v = self.numeric_arg(name, key, arg, dev)?;
                         pvals[*idx] = v;
+                        // a declared param used directly: remember the slot so
+                        // the engine can retarget it at runtime (modulate/automate)
+                        if let NodeArg::Expr(NodeExpr::Ref(pname, _)) = arg {
+                            if self.params.contains_key(pname.as_str()) {
+                                pending_binds.push((pname.to_string(), *idx));
+                            }
+                        }
                     } else if let Some((_, idx, choices, values)) =
                         spec.options.iter().find(|(n, _, _, _)| n == key)
                     {
@@ -391,6 +413,9 @@ impl<'a> Builder<'a> {
                     ));
                 }
                 let idx = self.add_module(spec.kind, pvals);
+                for (pname, slot) in pending_binds {
+                    self.binds.entry(pname).or_default().push((idx as u32, slot as u32));
+                }
                 self.graph.modules[idx].sample = sample_src;
                 for (port, src) in pending_inputs {
                     self.graph.conns.push(GridConn { from: src, to: (idx, port) });

@@ -366,10 +366,21 @@ impl Parser {
                             self.err("E-PARSE-021", "modulate は `with lfo(rate: …, amount: …)` で書きます");
                         }
                         let call = self.call()?;
-                        if call.name != "lfo" {
-                            self.err("E-PARSE-021", format!("v1 の modulate は lfo のみです(見つかったのは {})", call.name));
+                        if !matches!(call.name.as_str(), "lfo" | "steps" | "random") {
+                            self.err(
+                                "E-PARSE-021",
+                                format!(
+                                    "modulate に使えるのは lfo / steps / random です(見つかったのは {})",
+                                    call.name
+                                ),
+                            );
                         }
-                        t.modulations.push(ModulateAst { param, args: call.args, pos: mpos });
+                        t.modulations.push(ModulateAst {
+                            param,
+                            kind: call.name.clone(),
+                            args: call.args,
+                            pos: mpos,
+                        });
                     }
                     "volume" => {
                         self.bump();

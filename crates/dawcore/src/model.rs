@@ -333,6 +333,10 @@ pub struct GridConn {
     pub to: (usize, usize),
 }
 
+/// A declared device param exposed for runtime control: (name, initial
+/// value, node param slots the value was compiled into).
+pub type GridParamBind = (String, f32, Vec<(u32, u32)>);
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GridGraph {
     pub modules: Vec<GridModule>,
@@ -341,6 +345,11 @@ pub struct GridGraph {
     /// overlapping notes glide instead of retriggering (the 303 slide).
     #[serde(default)]
     pub glide: f32,
+    /// Exposed params, in the order the device declared them — the same
+    /// order as the owning Device's `params`, so modulators and automation
+    /// can route to grid instruments exactly like builtin ones.
+    #[serde(default)]
+    pub param_binds: Vec<GridParamBind>,
 }
 
 impl GridGraph {
@@ -370,6 +379,7 @@ impl GridGraph {
                 GridConn { from: (4, 0), to: (5, 0) }, // gain → out
             ],
             glide: 0.0,
+            param_binds: Vec::new(),
         }
     }
 }
@@ -524,7 +534,15 @@ pub struct AudioClip {
 
 /// One point on an automation lane. `hold` is Bitwig 6's point behaviour:
 /// the value stays flat until the next point instead of ramping linearly.
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ParamAutomation {
+    /// device index within the track, param index within that device
+    pub device: usize,
+    pub param: usize,
+    pub points: Vec<AutomationPoint>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct AutomationPoint {
     pub beat: f64,
     pub value: f32, // 0..1
@@ -552,6 +570,8 @@ pub struct Track {
     /// Volume automation on the timeline (overrides the fader while playing).
     #[serde(default)]
     pub volume_automation: Vec<AutomationPoint>,
+    #[serde(default)]
+    pub param_automation: Vec<ParamAutomation>,
     /// Post-fader sends: (destination effect-track id, level 0..1).
     #[serde(default)]
     pub sends: Vec<(usize, f32)>,
@@ -578,6 +598,7 @@ impl Track {
             arranger: Vec::new(),
             audio_clips: Vec::new(),
             volume_automation: Vec::new(),
+            param_automation: Vec::new(),
             sends: Vec::new(),
         }
     }

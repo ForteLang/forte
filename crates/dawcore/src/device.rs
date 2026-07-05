@@ -529,7 +529,11 @@ impl Instrument for GridSynth {
     fn next(&mut self) -> f32 {
         GridSynth::next(self)
     }
-    fn configure(&mut self, _p: &[f32]) {}
+    fn configure(&mut self, p: &[f32]) {
+        // exposed device params (declaration order) → their node slots, so
+        // modulators and automation drive grid instruments like builtins
+        self.apply_exposed_params(p);
+    }
     fn voices(&self) -> usize {
         self.active_voices()
     }

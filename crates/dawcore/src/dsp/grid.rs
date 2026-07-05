@@ -65,6 +65,8 @@ pub struct GridSynth {
     /// mono/legato mode (graph.glide > 0): one voice, overlapping notes glide
     mono: bool,
     glide_coef: f32,
+    /// exposed device params → node param slots (declaration order)
+    param_binds: Vec<Vec<(usize, usize)>>,
 }
 
 fn topo_order(n: usize, conns: &[GridConn]) -> Vec<usize> {
@@ -334,6 +336,28 @@ impl GridSynth {
             values: vec![[0.0; MAX_OUTPUTS]; n],
             mono: graph.glide > 0.0,
             glide_coef,
+            param_binds: graph
+                .param_binds
+                .iter()
+                .map(|(_, _, slots)| {
+                    slots.iter().map(|&(n, s)| (n as usize, s as usize)).collect()
+                })
+                .collect(),
+        }
+    }
+
+    /// Write exposed device params (declaration order) into their bound
+    /// node slots. Called from `Instrument::configure` at block rate.
+    pub fn apply_exposed_params(&mut self, p: &[f32]) {
+        for (i, slots) in self.param_binds.iter().enumerate() {
+            let Some(&v) = p.get(i) else { break };
+            for &(n, s) in slots {
+                if let Some(node) = self.nodes.get_mut(n) {
+                    if let Some(slot) = node.params.get_mut(s) {
+                        *slot = v;
+                    }
+                }
+            }
         }
     }
 
