@@ -739,6 +739,97 @@ fn lower_body(
                 lane.points.sort_by(|x, y| x.beat.total_cmp(&y.beat));
             }
         }
+
+        // volume: 0.6 — scale the whole instance across THIS span only.
+        // Emitted as fader-relative volume-automation steps, so a block
+        // placed twice can whisper in one chorus and roar in the other
+        // while its internal mix stays intact.
+        if let Some((v, vpos)) = place.volume {
+            if !(0.0..=1.0).contains(&v) {
+                diags.push(Diag::new("E-TYPE-002", vpos, format!("volume {v} は 0..1 の範囲外です")));
+            } else {
+                for t in out.iter_mut().filter(|t| t.track.name.starts_with(&child_prefix)) {
+                    let fader = t.track.volume;
+                    let lane = &mut t.track.volume_automation;
+                    if lane.iter().all(|p| p.beat > 1e-9) {
+                        // before the first point eval returns that point's
+                        // value — pin the fader at 0 so the scale can't leak
+                        lane.push(AutomationPoint { beat: 0.0, value: fader, hold: true });
+                    }
+                    lane.push(AutomationPoint {
+                        beat: offset,
+                        value: v as f32 * fader,
+                        hold: true,
+                    });
+                    lane.push(AutomationPoint { beat: offset + span, value: fader, hold: true });
+                    lane.sort_by(|x, y| x.beat.total_cmp(&y.beat));
+                }
+            }
+        }
+    }
+
+    // ---- placement automation: fade an instance from the outside -------------
+    //   automate Riff.volume from 0 to 1 over intro
+    // Values are fader-relative (1.0 = the track's own mix level), applied
+    // to every track of the instance, in THIS body's timeline.
+    for auto in &body.place_autos {
+        let Some((inst, param)) = auto.target.split_once('.') else {
+            diags.push(Diag::new(
+                "E-AUTO-002",
+                auto.pos,
+                format!("配置 automation は `<配置名>.volume` で書きます(見つかったのは {})", auto.target),
+            ));
+            continue;
+        };
+        if param != "volume" {
+            diags.push(Diag::new(
+                "E-AUTO-002",
+                auto.pos,
+                format!("配置 automation で使えるのは volume です(見つかったのは {param})"),
+            ));
+            continue;
+        }
+        if !body.places.iter().any(|p| p.block == inst) {
+            let mut names: Vec<&str> = body.places.iter().map(|p| p.block.as_str()).collect();
+            names.sort();
+            names.dedup();
+            diags.push(Diag::new(
+                "E-AUTO-002",
+                auto.pos,
+                format!("'{inst}' はこの body に配置されていません(配置済み: {})", names.join(", ")),
+            ));
+            continue;
+        }
+        if !(0.0..=1.0).contains(&auto.from) || !(0.0..=1.0).contains(&auto.to) {
+            diags.push(Diag::new(
+                "E-TYPE-002",
+                auto.pos,
+                format!("automate volume の値 {} → {} は 0..1 の範囲外です", auto.from, auto.to),
+            ));
+            continue;
+        }
+        let Some((a, b)) = resolve_at(&auto.at, &sections, diags) else { continue };
+        if a == 0 || b < a {
+            diags.push(Diag::new(
+                "E-TIME-001",
+                auto.pos,
+                format!("bars({a}..{b}) が不正です(小節は 1 始まり、開始 ≤ 終了)"),
+            ));
+            continue;
+        }
+        let start = (a - 1) as f64 * beats_per_bar;
+        let end = b as f64 * beats_per_bar;
+        let inst_prefix = format!("{prefix}{inst}.");
+        for t in out.iter_mut().filter(|t| t.track.name.starts_with(&inst_prefix)) {
+            let fader = t.track.volume;
+            let lane = &mut t.track.volume_automation;
+            if lane.iter().all(|p| p.beat > 1e-9) {
+                lane.push(AutomationPoint { beat: 0.0, value: fader, hold: true });
+            }
+            lane.push(AutomationPoint { beat: start, value: auto.from as f32 * fader, hold: false });
+            lane.push(AutomationPoint { beat: end, value: auto.to as f32 * fader, hold: true });
+            lane.sort_by(|x, y| x.beat.total_cmp(&y.beat));
+        }
     }
 
     // content length, rounded up to whole bars (used for placement looping)
@@ -887,6 +978,7 @@ fn merge_block(parent: &SongAst, child: &SongAst) -> SongAst {
         }
     }
     out.places.extend(child.places.iter().cloned());
+    out.place_autos.extend(child.place_autos.iter().cloned());
     out
 }
 

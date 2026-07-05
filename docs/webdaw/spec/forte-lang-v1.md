@@ -53,9 +53,11 @@ bodyItem  = "desc" string | "tags" string | "license" string
           | "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
           | "let" ident "=" musicLit
           | "section" ident "=" "bars" "(" num ".." num ")"
-          | track | return | block | place ;
+          | track | return | block | place | placeAuto ;
 place     = "play" ident [ "(" placeArg { "," placeArg } ")" ] atRef ;
-placeArg  = "key" ":" string | "from" ":" num | "to" ":" num ;
+placeArg  = "key" ":" string | "from" ":" num | "to" ":" num
+          | "volume" ":" num ;                                       (* scale the instance, this span only *)
+placeAuto = "automate" ident "." "volume" "from" num "to" num "over" overRef ;
 track     = "track" ident "{" { trackItem } "}" ;
 trackItem = "instrument" call | "insert" call
           | "play" patternExpr atRef
@@ -284,6 +286,16 @@ it to other blocks. The outermost block you build is "the song".
 - **Placement**: `play Groove(key: "E minor", from: 2, to: 5) at bars(9..16)`
   (also `at <section>`). Content loops when the placement span is longer
   than the block (window length rounded up to whole bars).
+- **External control** (placement-level, the placing body's timeline):
+  - `play Riff(volume: 0.6) at bars(9..16)` scales the WHOLE instance —
+    every track's fader — for that span only, then restores it. The same
+    block placed elsewhere is untouched, and the block's internal mix
+    (per-track volumes, its own automation) is preserved: values are
+    fader-relative.
+  - `automate Riff.volume from 0 to 1 over intro` fades a placed instance
+    from the outside (0 = silent, 1 = the block's own mix). Targets must
+    be `<placement>.volume` in v1; unknown placements are E-AUTO-002 with
+    the placed names listed.
 - **The block above always wins**: the root's `tempo` / `swing` / `meter` /
   `key` govern the entire render. A placed block's own `tempo` is ignored;
   its own `key` is the *reference* its transposition is computed from.

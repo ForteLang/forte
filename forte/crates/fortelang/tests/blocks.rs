@@ -291,3 +291,84 @@ fn desc_and_tags_ride_the_root_block() {
     // …but an undescribed empty root is still an error
     assert!(compile_str(r#"block Nope { tempo 120bpm }"#).is_err());
 }
+
+// ---------------------------------------------------------------------------
+// external control of a placed instance (issue #43 第三弾)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn placement_volume_scales_the_instance_for_its_span_only() {
+    let src = format!(
+        "{RIFF}\nsong \"S\" {{\n  tempo 120bpm\n  key A minor\n  track Bass {{ instrument prisma() volume 0.9 play notes`A1:1` at bars(1..8) }}\n  play Riff at bars(1..4)\n  play Riff(volume: 0.5) at bars(5..8)\n}}"
+    );
+    let p = compile_str(&src).unwrap();
+    let lead = p.tracks.iter().find(|t| t.name == "Riff.Lead").unwrap();
+    let fader = lead.volume;
+    // span 5..8 = beats 16..32: scaled step in, fader restored after
+    let at = |beat: f64| {
+        lead.volume_automation
+            .iter()
+            .filter(|pt| (pt.beat - beat).abs() < 1e-9)
+            .collect::<Vec<_>>()
+    };
+    assert!(at(0.0).iter().any(|pt| (pt.value - fader).abs() < 1e-6), "guard pins the fader at 0");
+    assert!(
+        at(16.0).iter().any(|pt| (pt.value - 0.5 * fader).abs() < 1e-6),
+        "scaled at the span start: {:?}",
+        lead.volume_automation.iter().map(|p| (p.beat, p.value)).collect::<Vec<_>>()
+    );
+    assert!(at(32.0).iter().any(|pt| (pt.value - fader).abs() < 1e-6), "restored at the span end");
+    // the un-scaled sibling track outside the block is untouched
+    let bass = p.tracks.iter().find(|t| t.name == "Bass").unwrap();
+    assert!(bass.volume_automation.is_empty());
+    // range check
+    let bad = format!("{RIFF}\nsong \"S\" {{ tempo 120bpm play Riff(volume: 1.5) at bars(1..2) }}");
+    let errs = match fortelang::compile_str(&bad) {
+        Err(e) => e,
+        Ok(_) => panic!("volume 1.5 must be rejected"),
+    };
+    assert!(errs.iter().any(|d| d.code == "E-TYPE-002"), "{errs:?}");
+}
+
+#[test]
+fn placement_automation_fades_an_instance_in() {
+    let src = format!(
+        "{RIFF}\nsong \"S\" {{\n  tempo 120bpm\n  key A minor\n  section intro = bars(1..4)\n  play Riff at bars(1..8)\n  automate Riff.volume from 0 to 1 over intro\n}}"
+    );
+    let p = compile_str(&src).unwrap();
+    for name in ["Riff.Lead", "Riff.Drums"] {
+        let t = p.tracks.iter().find(|t| t.name == name).unwrap();
+        let fader = t.volume;
+        let ramp_start = t
+            .volume_automation
+            .iter()
+            .find(|pt| pt.beat.abs() < 1e-9 && pt.value.abs() < 1e-6)
+            .unwrap_or_else(|| panic!("{name} must start the fade at 0: {:?}",
+                t.volume_automation.iter().map(|p| (p.beat, p.value)).collect::<Vec<_>>()));
+        assert!(!ramp_start.hold, "the fade ramps (lerp), not steps");
+        assert!(
+            t.volume_automation
+                .iter()
+                .any(|pt| (pt.beat - 16.0).abs() < 1e-9 && (pt.value - fader).abs() < 1e-6),
+            "{name} reaches its fader at bar 5"
+        );
+    }
+
+    // errors speak the language: unknown instance, non-volume target
+    let bad = format!(
+        "{RIFF}\nsong \"S\" {{ tempo 120bpm play Riff at bars(1..2) automate Ghost.volume from 0 to 1 over bars(1..2) }}"
+    );
+    let errs = match fortelang::compile_str(&bad) {
+        Err(e) => e,
+        Ok(_) => panic!("unknown instance must be rejected"),
+    };
+    assert!(errs.iter().any(|d| d.code == "E-AUTO-002" && d.message.contains("Riff")), "{errs:?}");
+    let bad2 = format!(
+        "{RIFF}\nsong \"S\" {{ tempo 120bpm play Riff at bars(1..2) automate Riff.cutoff from 0 to 1 over bars(1..2) }}"
+    );
+    let errs = match fortelang::compile_str(&bad2) {
+        Err(e) => e,
+        Ok(_) => panic!("non-volume target must be rejected"),
+    };
+    assert!(errs.iter().any(|d| d.code == "E-AUTO-002" && d.message.contains("volume")), "{errs:?}");
+}
