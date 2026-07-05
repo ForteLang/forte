@@ -1,8 +1,57 @@
-// Old Tape — ブームバップ 24 小節。B ループで上物が差し替わる
-// 「ビートの二枚使い」構成。ヴィブラフォンが埃を被ったサンプル役。
+// Old Tape — boom bap, 24 bars, composed from blocks. Classic "two copies
+// of the beat" structure: the drums keep looping while whole loops (bass +
+// top layer) get swapped like records. The vibraphone plays the dusty sample.
 import { Kick808, SnareTight, HatClosed, HatOpen } from "../../lib/std/drums.forte"
 import { UprightBass } from "../../lib/std/bass.forte"
 import { Vibraphone, EPiano } from "../../lib/std/keys.forte"
+
+// The beat — it never changes, only the loops on top do.
+block Boom {
+  track Kick  { instrument Kick808(punch: 0.55, decay: 0.5) volume 0.9 play beat`x--- --x- -x-- ----` at bars(1..4) }
+  track Snare { instrument SnareTight(snap: 0.7) volume 0.75 play beat`---- X--- ---- X---` at bars(1..4) }
+  track Hat   { instrument HatClosed(bright: 0.8) volume 0.45 pan 0.15 play beat`x-x- x-x- x-x- x-xx` at bars(1..4) }
+}
+
+// B-side beat: same kit with an open hat lifting the end of the loop.
+block BoomOpen : Boom {
+  track Open { instrument HatOpen(decay: 0.25) volume 0.3 play beat`---- ---- ---- --x-` at bars(1..4) }
+}
+
+// The A loop: upright bass under dusty vibraphone chords.
+block LoopA {
+  key F minor
+  let dusta = prog`Fm7 | Bbm7 | Ebmaj7 | C7`
+  track Bass {
+    instrument UprightBass()
+    volume 0.8
+    play bass(dusta, rate: 0.5) at bars(1..4)
+  }
+  track Vibes {
+    instrument Vibraphone(motor: 0.5)
+    insert reverb(size: 0.5, decay: 0.4, mix: 0.2)
+    volume 0.5
+    pan 0.15
+    play chords(dusta) at bars(1..4)
+  }
+}
+
+// The B loop: the second record — new changes, e-piano instead of vibes.
+block LoopB {
+  key F minor
+  let dustb = prog`Abmaj7 | Dbmaj7 | Gm7 | C7`
+  track Bass {
+    instrument UprightBass()
+    volume 0.8
+    play bass(dustb, rate: 0.5) at bars(1..4)
+  }
+  track Keys {
+    instrument EPiano(tine: 0.25)
+    insert reverb(size: 0.45, decay: 0.4, mix: 0.15)
+    volume 0.55
+    pan -0.1
+    play chords(dustb) at bars(1..4)
+  }
+}
 
 song "Old Tape" {
   tempo 90bpm
@@ -13,40 +62,11 @@ song "Old Tape" {
   section loopb = bars(9..16)
   section backa = bars(17..24)
 
-  let kick  = beat`x--- --x- -x-- ----`
-  let snare = beat`---- X--- ---- X---`
-  let hat   = beat`x-x- x-x- x-x- x-xx`
-  let open  = beat`---- ---- ---- --x-`
-  let dusta = prog`Fm7 | Bbm7 | Ebmaj7 | C7`
-  let dustb = prog`Abmaj7 | Dbmaj7 | Gm7 | C7`
+  play Boom at loopa
+  play BoomOpen at loopb
+  play Boom at backa
 
-  track Kick  { instrument Kick808(punch: 0.55, decay: 0.5) volume 0.9 play kick at bars(1..24) }
-  track Snare { instrument SnareTight(snap: 0.7) volume 0.75 play snare at bars(1..24) }
-  track Hat   { instrument HatClosed(bright: 0.8) volume 0.45 pan 0.15 play hat at bars(1..24) }
-  track Open  { instrument HatOpen(decay: 0.25) volume 0.3 play open at loopb }
-
-  track Bass {
-    instrument UprightBass()
-    volume 0.8
-    play bass(dusta, rate: 0.5) at loopa
-    play bass(dustb, rate: 0.5) at loopb
-    play bass(dusta, rate: 0.5) at backa
-  }
-
-  track Vibes {
-    instrument Vibraphone(motor: 0.5)
-    insert reverb(size: 0.5, decay: 0.4, mix: 0.2)
-    volume 0.5
-    pan 0.15
-    play chords(dusta) at loopa
-    play chords(dusta) at backa
-  }
-
-  track Keys {
-    instrument EPiano(tine: 0.25)
-    insert reverb(size: 0.45, decay: 0.4, mix: 0.15)
-    volume 0.55
-    pan -0.1
-    play chords(dustb) at loopb
-  }
+  play LoopA at loopa
+  play LoopB at loopb
+  play LoopA at backa
 }

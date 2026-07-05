@@ -1,33 +1,45 @@
-// Pattern: Chiptune (150bpm) — 矩形波 2 声+ノイズハット。
-// 制約(3 声)の中のメロディ書きがチップの美学。
+// Pattern: Chiptune (150bpm) — two square-wave voices plus a noise hat.
+// Writing melody inside the constraint (3 voices) is the chip aesthetic.
 import { BitLead } from "../../lib/std/leads.forte"
 import { HollowBass } from "../../lib/std/bass.forte"
 import { HatClosed, Kick606, SnareTight } from "../../lib/std/drums.forte"
 
-song "Pattern: Chiptune" {
-  tempo 150bpm
-  meter 4/4
-  key A minor
-
+block ChiptuneRunDrums {
   let kick  = beat`x--- ---- x--- ----`
   let snare = beat`---- x--- ---- x---`
   let hat   = beat`x-x- x-x- x-x- xxxx`
-  let run   = prog`Am | F | C | G`
 
   track Kick  { instrument Kick606(decay: 0.2) volume 0.8 play kick at bars(1..8) }
   track Snare { instrument SnareTight(snap: 0.6) volume 0.6 play snare at bars(1..8) }
   track Hat   { instrument HatClosed(bright: 1.0) volume 0.3 play hat at bars(1..8) }
+}
 
+block ChiptuneRunLead {
+  key A minor
   track Melody {
     instrument BitLead()
     volume 0.55
     pan 0.1
     play notes`A4:0.5 C5:0.5 E5:0.5 A5:0.5 G5:0.5 E5:0.5 C5:0.5 E5:0.5 F5:0.5 A5:0.5 G5:0.5 E5:0.5 D5:0.5 E5:0.25 D5:0.25 C5:0.5 B4:0.5` at bars(1..8)
   }
+}
 
+block ChiptuneRunBass {
+  key A minor
+  let run = prog`Am | F | C | G`
   track Bass {
     instrument HollowBass()
     volume 0.6
     play arp(run, rate: 0.25, style: "up") at bars(1..8)
   }
+}
+
+block ChiptuneRun {
+  tempo 150bpm
+  meter 4/4
+  key A minor
+
+  play ChiptuneRunDrums at bars(1..8)
+  play ChiptuneRunLead at bars(1..8)
+  play ChiptuneRunBass at bars(1..8)
 }

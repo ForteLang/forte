@@ -1,9 +1,68 @@
-// Desert Caravan — パーカッション主体 24 小節。フリジア風の旋法、
-// 太鼓の会話が主役でメロディは香辛料程度。
+// Desert Caravan — 24 bars, percussion-led, block-composed. Phrygian
+// color; the drum conversation is the lead role and the melody is just
+// a pinch of spice.
 import { Conga, Bongo, Timbale, Cabasa, Woodblock } from "../../lib/std/percussion.forte"
 import { KickSub, TomFloor } from "../../lib/std/drums.forte"
 import { DubBass } from "../../lib/std/bass.forte"
 import { VoxLead } from "../../lib/std/leads.forte"
+
+// The caravan's feet: sub kick and conga, walking the whole way.
+block CaravanFeet {
+  let deep  = beat`x--- ---- x--- ----`
+  let conga = beat`--x- x--x --x- x-xX`
+  track Deep  { instrument KickSub(weight: 0.7) volume 0.85 play deep at bars(1..1) }
+  track Conga { instrument Conga(open: 0.55) volume 0.65 pan -0.15 play conga at bars(1..1) }
+}
+
+// Bongo answer — joins for the dance and stays for the far horizon.
+block Bongos {
+  let bongo = beat`x-x- -x-- x-xx -x--`
+  track Bongo { instrument Bongo() volume 0.5 pan 0.3 play bongo at bars(1..1) }
+}
+
+// Cabasa eighth-note bed.
+block Sand {
+  let cbs = beat`x-x- x-x- x-x- x-x-`
+  track Cbs { instrument Cabasa() volume 0.3 pan -0.3 play cbs at bars(1..1) }
+}
+
+// Dance-only chatter: woodblock accents and a floor-tom turnaround.
+block DanceFills {
+  let block = beat`---- --x- ---- -x--`
+  let toms  = beat`---- ---- ---- x-xx`
+  track Block { instrument Woodblock() volume 0.4 pan 0.15 play block at bars(1..1) }
+  track Toms  { instrument TomFloor(decay: 0.35) volume 0.6 play toms at bars(1..1) }
+}
+
+// One-bar Phrygian bass camel-walk.
+block CamelBass {
+  key E minor
+  track Bass {
+    instrument DubBass(depth: 0.75)
+    volume 0.8
+    play notes`E2:0.75 _:0.25 F2:0.5 E2:0.5 _:1 B1:0.5 E2:0.5` at bars(1..1)
+  }
+}
+
+// The voice: a call over the dance, and its fading reply from afar.
+block DesertVoice {
+  key E minor
+  section call  = bars(1..8)
+  section reply = bars(9..16)
+  return Dunes {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.6
+  }
+  track Voice {
+    instrument VoxLead()
+    insert delay(time: 0.375, fdbk: 0.4, mix: 0.3)
+    send Dunes 0.5
+    volume 0.35
+    pan 0.1
+    play notes`_:2 E4:1 F4:0.5 E4:0.5 D4:1 B3:1.5 _:1.5 G4:1 F4:0.5 E4:1.5` at call
+    play notes`_:2 B4:1 A4:0.5 G4:0.5 F4:1 E4:2 _:1` at reply
+  }
+}
 
 song "Desert Caravan" {
   tempo 96bpm
@@ -14,38 +73,12 @@ song "Desert Caravan" {
   section dance = bars(9..16)
   section far   = bars(17..24)
 
-  let deep   = beat`x--- ---- x--- ----`
-  let conga  = beat`--x- x--x --x- x-xX`
-  let bongo  = beat`x-x- -x-- x-xx -x--`
-  let cbs    = beat`x-x- x-x- x-x- x-x-`
-  let block  = beat`---- --x- ---- -x--`
-  let toms   = beat`---- ---- ---- x-xx`
+  play CaravanFeet at bars(1..24)
+  play Sand at bars(5..20)
+  play Bongos at dance
+  play Bongos at far
+  play DanceFills at dance
 
-  return Dunes {
-    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
-    volume 0.6
-  }
-
-  track Deep  { instrument KickSub(weight: 0.7) volume 0.85 play deep at bars(1..24) }
-  track Conga { instrument Conga(open: 0.55) volume 0.65 pan -0.15 play conga at bars(1..24) }
-  track Bongo { instrument Bongo() volume 0.5 pan 0.3 play bongo at dance play bongo at far }
-  track Cbs   { instrument Cabasa() volume 0.3 pan -0.3 play cbs at bars(5..20) }
-  track Block { instrument Woodblock() volume 0.4 pan 0.15 play block at dance }
-  track Toms  { instrument TomFloor(decay: 0.35) volume 0.6 play toms at dance }
-
-  track Bass {
-    instrument DubBass(depth: 0.75)
-    volume 0.8
-    play notes`E2:0.75 _:0.25 F2:0.5 E2:0.5 _:1 B1:0.5 E2:0.5` at bars(1..20)
-  }
-
-  track Voice {
-    instrument VoxLead()
-    insert delay(time: 0.375, fdbk: 0.4, mix: 0.3)
-    send Dunes 0.5
-    volume 0.35
-    pan 0.1
-    play notes`_:2 E4:1 F4:0.5 E4:0.5 D4:1 B3:1.5 _:1.5 G4:1 F4:0.5 E4:1.5` at dance
-    play notes`_:2 B4:1 A4:0.5 G4:0.5 F4:1 E4:2 _:1` at far
-  }
+  play CamelBass at bars(1..20)
+  play DesertVoice at bars(9..24)
 }

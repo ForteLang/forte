@@ -1,65 +1,105 @@
-// First Snow — エレクトリックグランドのバラード 24 小節。
-// ピアノ独奏で始まり、ストリングスとベルが静かに支える。
+// First Snow — 24-bar electric-grand ballad, block-composed. Piano
+// alone at first; strings and bells settle in quietly. The turnaround
+// section is the same chord block with its progression swapped by
+// inheritance.
 import { ElectricGrand, StringMachine } from "../../lib/std/synths.forte"
 import { Celesta } from "../../lib/std/keys.forte"
 import { UprightBass } from "../../lib/std/bass.forte"
+
+// The piano's chord bed over the winter changes.
+block SnowChords {
+  key G minor
+  let winter = prog`Gm | Ebmaj7 | Bb | F`
+  return Snow {
+    insert reverb(size: 0.75, decay: 0.6, mix: 1.0)
+    volume 0.7
+  }
+  track Piano {
+    instrument ElectricGrand()
+    send Snow 0.35
+    volume 0.7
+    play chords(winter) at bars(1..4)
+  }
+}
+
+// Same piano, but the progression turns toward home.
+block TurnChords : SnowChords {
+  let winter = prog`Cm7 | D7 | Gm | Gm`
+}
+
+// Melody, strings and upright bass as one ensemble over the winter set.
+block Voices {
+  key G minor
+  let winter = prog`Gm | Ebmaj7 | Bb | F`
+  return Snow {
+    insert reverb(size: 0.75, decay: 0.6, mix: 1.0)
+    volume 0.7
+  }
+  track Melody {
+    instrument ElectricGrand()
+    send Snow 0.4
+    volume 0.55
+    pan 0.1
+    play notes`_:2 D5:1 Bb4:0.5 G4:1.5 _:2 Eb5:1 D5:0.5 Bb4:1.5 _:2 F5:1 D5:0.5 C5:0.5 Bb4:2` at bars(1..8)
+  }
+  track Strings {
+    instrument StringMachine()
+    send Snow 0.45
+    volume 0.4
+    play chords(winter) at bars(1..8)
+  }
+  track Bass {
+    instrument UprightBass()
+    volume 0.6
+    play bass(winter, rate: 2) at bars(1..8)
+  }
+}
+
+// First entrance: the strings fade up from almost nothing.
+block WarmVoices : Voices {
+  track Strings {
+    automate volume from 0.15 to 0.4 over bars(1..8)
+  }
+}
+
+// The still ending: turnaround changes, and the melody comes to rest.
+block StillVoices : Voices {
+  let winter = prog`Cm7 | D7 | Gm | Gm`
+  track Melody {
+    play notes`_:1 G4:1 A4:1 Bb4:1 C5:1.5 D5:0.5 A4:2 G4:4 _:4` at bars(1..8)
+  }
+}
+
+// Celesta snowfall for the last section.
+block Chimes {
+  key G minor
+  let winter = prog`Gm | Ebmaj7 | Bb | F`
+  return Snow {
+    insert reverb(size: 0.75, decay: 0.6, mix: 1.0)
+    volume 0.7
+  }
+  track Chime {
+    instrument Celesta()
+    send Snow 0.5
+    volume 0.3
+    pan -0.2
+    play arp(winter, rate: 1, style: "up") at bars(1..4)
+  }
+}
 
 song "First Snow" {
   tempo 72bpm
   meter 4/4
   key G minor
 
-  section solo   = bars(1..8)
-  section warm   = bars(9..16)
-  section still  = bars(17..24)
+  section solo  = bars(1..8)
+  section warm  = bars(9..16)
+  section still = bars(17..24)
 
-  let winter = prog`Gm | Ebmaj7 | Bb | F`
-  let turn   = prog`Cm7 | D7 | Gm | Gm`
-
-  return Snow {
-    insert reverb(size: 0.75, decay: 0.6, mix: 1.0)
-    volume 0.7
-  }
-
-  track Piano {
-    instrument ElectricGrand()
-    send Snow 0.35
-    volume 0.7
-    play chords(winter) at solo
-    play chords(winter) at warm
-    play chords(turn) at still
-  }
-
-  track Melody {
-    instrument ElectricGrand()
-    send Snow 0.4
-    volume 0.55
-    pan 0.1
-    play notes`_:2 D5:1 Bb4:0.5 G4:1.5 _:2 Eb5:1 D5:0.5 Bb4:1.5 _:2 F5:1 D5:0.5 C5:0.5 Bb4:2` at warm
-    play notes`_:1 G4:1 A4:1 Bb4:1 C5:1.5 D5:0.5 A4:2 G4:4 _:4` at still
-  }
-
-  track Strings {
-    instrument StringMachine()
-    send Snow 0.45
-    volume 0.4
-    play chords(winter) at warm
-    play chords(turn) at still
-    automate volume from 0.15 to 0.4 over warm
-  }
-
-  track Bass {
-    instrument UprightBass()
-    volume 0.6
-    play bass(winter, rate: 2) at warm
-    play bass(turn, rate: 2) at still
-  }
-
-  track Chime {
-    instrument Celesta()
-    send Snow 0.5
-    volume 0.3
-    pan -0.2
-    play arp(winter, rate: 1, style: "up") at still
-  }
+  play SnowChords at solo
+  play SnowChords at warm
+  play WarmVoices at warm
+  play TurnChords at still
+  play StillVoices at still
+  play Chimes at still
 }

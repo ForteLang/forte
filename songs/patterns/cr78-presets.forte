@@ -1,12 +1,8 @@
-// Pattern: CR-78 Presets (100bpm) — 実機はプリセットパターンこそが文化。
-// Rock / Disco / Bossa Nova の内蔵リズム風を 8 小節ずつ。
+// Pattern: CR-78 Presets (100bpm) — on the real unit the preset patterns
+// ARE the culture. Rock / Disco / Bossa Nova built-in rhythm homages, 8 bars each.
 import { BD78, SD78, HH78, CY78, Tamb78, Bongo78, Claves78, Cowbell78 } from "../../lib/std/cr78.forte"
 
-song "Pattern: CR-78 Presets" {
-  tempo 100bpm
-  meter 4/4
-  key C minor
-
+block CR78PresetsKit {
   section rock  = bars(1..8)
   section disco = bars(9..16)
   section bossa = bars(17..24)
@@ -44,4 +40,12 @@ song "Pattern: CR-78 Presets" {
     insert reverb(size: 0.4, decay: 0.35, mix: 1.0)
     volume 0.5
   }
+}
+
+block CR78Presets {
+  tempo 100bpm
+  meter 4/4
+  key C minor
+
+  play CR78PresetsKit at bars(1..24)
 }

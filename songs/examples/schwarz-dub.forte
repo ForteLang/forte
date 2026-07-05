@@ -1,9 +1,92 @@
-// Schwarz Dub — ダブテクノ 32 小節。ディレイに送られたコードスタブが
-// 空間で滲み、pump が呼吸を作る。要素は少なく、空間が主役。
+// Schwarz Dub — dub techno, 32 bars, composed from blocks. Chord stabs
+// sent into a long delay smear across the room; pump makes it breathe.
+// Few elements — the space is the lead. Each block keeps its own sends.
 import { Kick909, HatClosed, Rim } from "../../lib/std/drums.forte"
 import { SubBass } from "../../lib/std/bass.forte"
 import { Stab } from "../../lib/std/fx.forte"
 import { DronePad } from "../../lib/std/pads.forte"
+
+// The dry four-to-the-floor heartbeat.
+block Floor {
+  track Kick { instrument Kick909(click: 0.35) insert comp(thresh: 0.45, ratio: 0.5) volume 0.9 play beat`x--- x--- x--- x---` at bars(1..4) }
+}
+
+// Offbeat closed hats — the only crisp thing in the room.
+block Hats {
+  track Hat { instrument HatClosed(bright: 0.8) volume 0.3 pan 0.2 play beat`--x- --x- --x- --x.` at bars(1..4) }
+}
+
+// A rimshot dubbed into its own echo chamber.
+block Rims {
+  return Echo {
+    insert delay(time: 0.381, fdbk: 0.55, mix: 1.0)
+    insert width(amount: 0.9)
+    volume 0.6
+  }
+  track Rim { instrument Rim() send Echo 0.4 volume 0.35 pan -0.2 play beat`---- --x- ---- -x--` at bars(1..4) }
+}
+
+// The sub holding the floor down.
+block Bassline {
+  key D minor
+  track Bass {
+    instrument SubBass()
+    volume 0.85
+    play notes`D1:0.75 _:0.25 D1:0.5 _:0.5 D1:0.75 _:0.25 A1:0.25 _:0.25 D1:0.5` at bars(1..4)
+  }
+}
+
+// The chord stabs: pumped, then thrown into the echo and the sea.
+block Stabs {
+  key D minor
+  let dub = prog`Dm7 | Dm7 | Am7 | Am7`
+  return Echo {
+    insert delay(time: 0.381, fdbk: 0.55, mix: 1.0)
+    insert width(amount: 0.9)
+    volume 0.6
+  }
+  return Sea {
+    insert reverb(size: 0.85, decay: 0.7, mix: 1.0)
+    volume 0.65
+  }
+  track Stab {
+    instrument Stab()
+    insert pump(amount: 0.6)
+    send Echo 0.55
+    send Sea 0.3
+    volume 0.45
+    play chords(dub) at bars(1..4)
+  }
+}
+
+// First entrance of the stabs: fading up out of the smear.
+block StabsRise : Stabs {
+  track Stab { automate volume from 0.15 to 0.45 over bars(1..4) }
+}
+
+// The drone bed — placed only through its fading variants below.
+block Drone {
+  key D minor
+  let dub = prog`Dm7 | Dm7 | Am7 | Am7`
+  return Sea {
+    insert reverb(size: 0.85, decay: 0.7, mix: 1.0)
+    volume 0.65
+  }
+  track Drone {
+    instrument DronePad()
+    send Sea 0.5
+    volume 0.4
+    play chords(dub) at bars(1..8)
+  }
+}
+
+// The drone breathing in (the fade) and out (the tail).
+block DroneIn : Drone {
+  track Drone { automate volume from 0.1 to 0.4 over bars(1..8) }
+}
+block DroneOut : Drone {
+  track Drone { automate volume from 0.4 to 0.1 over bars(1..8) }
+}
 
 song "Schwarz Dub" {
   tempo 118bpm
@@ -14,49 +97,17 @@ song "Schwarz Dub" {
   section body  = bars(9..24)
   section tail  = bars(25..32)
 
-  let four = beat`x--- x--- x--- x---`
-  let hat  = beat`--x- --x- --x- --x.`
-  let rim  = beat`---- --x- ---- -x--`
-  let dub  = prog`Dm7 | Dm7 | Am7 | Am7`
+  play Floor at bars(1..30)
+  play Hats at body
+  play Rims at body
+  play Rims at tail
 
-  return Echo {
-    insert delay(time: 0.381, fdbk: 0.55, mix: 1.0)
-    insert width(amount: 0.9)
-    volume 0.6
-  }
-  return Sea {
-    insert reverb(size: 0.85, decay: 0.7, mix: 1.0)
-    volume 0.65
-  }
+  play Bassline at bars(5..30)
 
-  track Kick { instrument Kick909(click: 0.35) insert comp(thresh: 0.45, ratio: 0.5) volume 0.9 play four at bars(1..30) }
-  track Hat  { instrument HatClosed(bright: 0.8) volume 0.3 pan 0.2 play hat at body }
-  track Rim  { instrument Rim() send Echo 0.4 volume 0.35 pan -0.2 play rim at body play rim at tail }
+  play StabsRise at bars(9..12)
+  play Stabs at bars(13..24)
+  play Stabs at tail
 
-  track Bass {
-    instrument SubBass()
-    volume 0.85
-    play notes`D1:0.75 _:0.25 D1:0.5 _:0.5 D1:0.75 _:0.25 A1:0.25 _:0.25 D1:0.5` at bars(5..30)
-  }
-
-  track Stab {
-    instrument Stab()
-    insert pump(amount: 0.6)
-    send Echo 0.55
-    send Sea 0.3
-    volume 0.45
-    play chords(dub) at body
-    play chords(dub) at tail
-    automate volume from 0.15 to 0.45 over bars(9..12)
-  }
-
-  track Drone {
-    instrument DronePad()
-    send Sea 0.5
-    volume 0.4
-    play chords(dub) at fade
-    play chords(dub) at tail
-    automate volume from 0.1 to 0.4 over fade
-    automate volume from 0.4 to 0.1 over tail
-  }
+  play DroneIn at fade
+  play DroneOut at tail
 }

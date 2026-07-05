@@ -1,13 +1,10 @@
-// Pattern: Ambient (60bpm) — ドラムレス。ドローンの上を
-// ベルの旋律がゆっくり歩く。空間が主役。
+// Pattern: Ambient (60bpm) — drumless. A bell melody walks slowly
+// over a drone. Space itself is the lead role.
 import { DronePad, GlassPad } from "../../lib/std/pads.forte"
 import { Bell } from "../../lib/std/keys.forte"
 
-song "Pattern: Ambient" {
-  tempo 60bpm
-  meter 4/4
+block AmbientDriftPads {
   key D minor
-
   let float = prog`Dm7 | Bbmaj7 | Fmaj7 | Cmaj7`
 
   return Space {
@@ -38,4 +35,12 @@ song "Pattern: Ambient" {
     pan -0.15
     play notes`_:2 D5:2 _:1 A4:2 F4:1 _:2 E5:2 D5:1 C5:3` at bars(3..8)
   }
+}
+
+block AmbientDrift {
+  tempo 60bpm
+  meter 4/4
+  key D minor
+
+  play AmbientDriftPads at bars(1..8)
 }

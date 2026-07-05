@@ -1,17 +1,32 @@
-// Pattern: 6/8 Soul (58bpm) — 12/8 フィールのバラード。
-// ハットが 3 連を刻み、ベースは 1 拍目と 4 拍目で歌う。
+// Pattern: 6/8 Soul (58bpm) — a ballad with a 12/8 feel.
+// The hat ticks triplets while the bass sings on beats 1 and 4.
 import { Kick808, SnareBrush, HatClosed } from "../../lib/std/drums.forte"
 import { UprightBass } from "../../lib/std/bass.forte"
 import { Wurli, Celesta } from "../../lib/std/keys.forte"
 
-song "Pattern: 6/8 Soul" {
-  tempo 58bpm
-  meter 6/8
-  key C minor
+block Soul68Drums {
+  let kick = beat`x--- --x- ----`
+  let hat  = beat`x.x- x.x- x.x-`
 
-  let kick  = beat`x--- --x- ----`
+  track Kick { instrument Kick808(punch: 0.35, decay: 0.6) volume 0.85 play kick at bars(1..8) }
+  track Hat  { instrument HatClosed(bright: 0.75) volume 0.35 pan 0.15 play hat at bars(1..8) }
+}
+
+block Soul68Bass {
+  key C minor
+  let heart = prog`Cm | Ab | Fm7 | G7`
+
+  track Bass {
+    instrument UprightBass()
+    volume 0.75
+    play bass(heart, rate: 3) at bars(1..8)
+  }
+}
+
+// Brush, keys and bell share the Chapel reverb — they stay with the return.
+block Soul68Chapel {
+  key C minor
   let snare = beat`---- --x- ----`
-  let hat   = beat`x.x- x.x- x.x-`
   let heart = prog`Cm | Ab | Fm7 | G7`
 
   return Chapel {
@@ -19,15 +34,7 @@ song "Pattern: 6/8 Soul" {
     volume 0.65
   }
 
-  track Kick  { instrument Kick808(punch: 0.35, decay: 0.6) volume 0.85 play kick at bars(1..8) }
   track Brush { instrument SnareBrush(soft: 0.4) send Chapel 0.3 volume 0.6 play snare at bars(1..8) }
-  track Hat   { instrument HatClosed(bright: 0.75) volume 0.35 pan 0.15 play hat at bars(1..8) }
-
-  track Bass {
-    instrument UprightBass()
-    volume 0.75
-    play bass(heart, rate: 3) at bars(1..8)
-  }
 
   track Keys {
     instrument Wurli(bark: 0.3)
@@ -44,4 +51,14 @@ song "Pattern: 6/8 Soul" {
     pan -0.2
     play notes`_:3 G4:1 Eb4:0.5 C4:1.5 _:1.5 F4:1 G4:0.5 Ab4:1 G4~:2 _:1.5 D4:1 Eb4:0.5 C4:1.5` at bars(5..8)
   }
+}
+
+block Soul68 {
+  tempo 58bpm
+  meter 6/8
+  key C minor
+
+  play Soul68Drums at bars(1..8)
+  play Soul68Bass at bars(1..8)
+  play Soul68Chapel at bars(1..8)
 }
