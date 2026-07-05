@@ -54,11 +54,35 @@ forte:Bass> :quit
 
 `:help` で全コマンド。`:save` した曲は `forte play jam.forte` でそのまま続きを作れます。
 
-## 0.7 キーボードで弾く(forte instrument)
+## 0.7 楽器を選ぶ・弾く(forte instruments / instrument)
+
+**選ぶ**: カタログから探します。ライブラリ名がそのままカテゴリです
+(drums / percussion / bass / keys / leads / pads / synths / fx と、
+実機クローンの tr808 / tr909 / tb303 / juno60 / sh101 / prophet5 / cr78):
+
+```bash
+forte instruments             # 全 148 楽器: 名前・パラメータ・使い方が並ぶ
+forte instruments 808         # 絞り込み(名前でもライブラリ名でも)
+forte instruments acid        # tb303 が出てくる
+```
+
+一覧の各行はそのまま曲に持っていけます:
+
+```forte
+import { Bass303 } from "lib/std/tb303.forte"   // ← 一覧が教えてくれる import 行
+track Acid { instrument Bass303(cutoff: 0.4) … }
+```
+
+パラメータの意味や作りが気になったら `lib/std/*.forte` を開いてください —
+全部 device DSL のコードなので、読める・fork できる・一字単位で改造できます。
+10 楽器同時のデモは `forte play songs/std-tour.forte`、ジャンル別の使用例は
+`songs/patterns/` にあります。
+
+**弾く**: 気になった楽器はキーボードで試聴します:
 
 ```bash
 forte instrument Bass303                  # lib/std から名前で解決
-forte instrument "Juno60Pad(cutoff: 0.5)" # パラメータ付きも OK
+forte instrument "JunoPad(cutoff: 0.5)"   # パラメータ付きも OK
 forte instrument polymer                  # ビルトインも
 ```
 
