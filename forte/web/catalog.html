@@ -32,6 +32,9 @@
   .files a { color: #d6d9de; text-decoration: none; cursor: pointer;
     display: inline-block; margin-right: 14px; }
   .files a:hover { color: #e8b34c; }
+  .albums .album { display: inline-flex; align-items: center; gap: 10px; }
+  .albums .cover { width: 56px; height: 56px; border-radius: 8px; display: block;
+    border: 1px solid #2b2f38; }
   #src-wrap { display: none; }
   #src-title { font: 13px/1.4 ui-monospace, monospace; color: #e8b34c; margin: 14px 0 6px; }
   pre { background: #14161b; border: 1px solid #2b2f38; border-radius: 8px;
@@ -73,13 +76,16 @@ async function showSrc(rel) {
 function albumList(pkgDir, albums) {
   if (!albums.length) return '';
   const items = albums.map((a) => {
-    const q = a.tracks
-      .map((t) => `src=${encodeURIComponent(`../../packages/${pkgDir}/albums/${a.dir}/${t}`)}`)
-      .join('&');
-    return `<a href="player.html?${q}" title="${esc(a.desc)}">▶ ${esc(a.title)}${
-      a.artist ? ` — ${esc(a.artist)}` : ''} (${a.tracks.length} tracks)</a>`;
+    const base = `../../packages/${pkgDir}/albums/${a.dir}`;
+    let q = a.tracks.map((t) => `src=${encodeURIComponent(`${base}/${t}`)}`).join('&');
+    if (a.cover) q += `&cover=${encodeURIComponent(`${base}/${a.cover}`)}`;
+    const art = a.cover
+      ? `<img class="cover" src="${esc(`${base}/${a.cover}`)}" alt="">`
+      : '';
+    return `<a class="album" href="player.html?${q}" title="${esc(a.desc)}">${art}<span>▶ ${esc(a.title)}${
+      a.artist ? ` — ${esc(a.artist)}` : ''} (${a.tracks.length} tracks)</span></a>`;
   }).join('\n');
-  return `<div class="section-h">albums</div><div class="files">${items}</div>`;
+  return `<div class="section-h">albums</div><div class="files albums">${items}</div>`;
 }
 
 function fileList(pkgDir, sub, files) {
