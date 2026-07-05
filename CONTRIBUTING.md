@@ -18,7 +18,7 @@ sudo apt install libasound2-dev
 rustup target add wasm32-wasip1 wasm32-unknown-unknown
 
 cargo build --release -p fortelang   # the `forte` CLI → target/release/forte
-scripts/build_web.sh                 # browser editor (web/forte.wasm)
+forte web build                      # browser editor (web/forte.wasm)
 
 # for the E2E tests
 npm i playwright
@@ -32,8 +32,8 @@ intentionally off — the gate runs on the maintainer's machine before every
 merge):
 
 ```bash
-scripts/ci_local.sh          # the full gate
-scripts/ci_local.sh quick    # tests + clippy + determinism only
+forte ci                     # the full gate
+forte ci quick               # tests + clippy + determinism only
 
 # or piece by piece:
 cargo test -p dawcore -p fortelang     # engine + language + hub + REPL
@@ -50,7 +50,7 @@ native, wasm, and in the browser. To keep that promise:
 
 - For **changes that shouldn't affect the sound** (refactors, UI, docs), the
   build digests of the reference songs must not move by a single bit.
-  `scripts/determinism_test.sh` is the gate.
+  `forte ci quick` (scripts/determinism_test.sh) is the gate.
 - For **changes that intentionally affect the sound** (DSP fixes, new nodes,
   engine changes), explain **why the digests change** in the PR description,
   and update the expected digests embedded in the E2E scripts
@@ -67,7 +67,7 @@ native, wasm, and in the browser. To keep that promise:
 - One PR = one topic, kept small. Discuss large design changes in an issue
   first.
 - Behavior changes come with tests (Rust unit tests or E2E).
-- `scripts/ci_local.sh` must pass (run locally; GitHub Actions is off).
+- `forte ci` must pass (run locally; GitHub Actions is off).
 - Changes to the language also update the relevant part of
   `docs/webdaw/spec/`. The spec and docs are part of the product.
 - Commit messages: first line says what and why. Japanese or English both

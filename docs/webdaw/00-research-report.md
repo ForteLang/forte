@@ -1,224 +1,225 @@
-# Web DAW 市場・技術調査レポート
+# Web DAW Market and Technology Research Report
 
-調査日: 2026-07-02
-手法: マルチエージェント Web 調査(検索 → 一次ソース取得 → クレーム単位の敵対的検証(3票制) → 統合)。
-検証済みクレームは 23/25(2 件反証・除外)。本文中の確度表記は検証結果に基づく。
+Research date: 2026-07-02
+Method: Multi-agent web research (search → primary-source retrieval → adversarial verification per claim (three-vote system) → synthesis).
+Verified claims: 23/25 (2 refuted and excluded). Confidence annotations in the body are based on verification results.
 
-この文書は、Web アプリとして動く DAW を新規開発するにあたっての
-(1) 競合分析、(2) 利用可能なオープンソース技術、(3) Web プラットフォーム技術の成熟度、
-(4) 市場の空白と差別化機会 をまとめたものであり、後続の IEC 62304 型ドキュメント
-(システム要求 → ソフトウェア要求 → アーキテクチャ設計 → 詳細設計)の入力となる。
+This document summarizes (1) competitive analysis, (2) available open-source technologies,
+(3) the maturity of web platform technologies, and (4) market gaps and differentiation
+opportunities for developing a new DAW that runs as a web application. It serves as input
+to the subsequent IEC 62304-style documents
+(system requirements → software requirements → architecture design → detailed design).
 
 ---
 
-## 1. 競合環境(商用 Web DAW)
+## 1. Competitive Landscape (Commercial Web DAWs)
 
-### 1.1 プレイヤー一覧
+### 1.1 List of Players
 
-| 製品 | ポジション | 価格 | 技術 | 強み | 弱み |
+| Product | Position | Pricing | Technology | Strengths | Weaknesses |
 | --- | --- | --- | --- | --- | --- |
-| **BandLab** | 無料・ソーシャル・オールインワン。登録 1 億人超(2024 年末) | DAW 完全無料。Membership $14.95/月等で収益化(ARR 約 $48M) | Web Audio + クラウド同期 + ネイティブモバイル | 無料での機能量(無制限トラック、24,000+ ループ、AI マスタリング、Splitter、SongStarter)が圧倒的 | プロ向け精密編集(コンピング、深いオートメーション)の欠如。本格制作はデスクトップ移行前提 |
-| **Soundtrap** (Spotify → 2023 年創業者へ売却) | 初心者・教育・ポッドキャスト。「協働型クラウドスタジオ」 | 無料 5 トラック、$9.99〜17.99/月。教育 50 シート $249/年〜 | Web Audio ベース | リアルタイム共同編集の完成度、教育向け管理、Auto-Tune、レイテンシ較正機能 | 無料版が実質デモ。有料でも無料 BandLab に機能で劣る。Spotify が手放した(クリエイターツール戦略撤退) |
-| **Soundation** | 初心者〜中級のループベース制作 | Free(3 プロジェクト/1GB)〜Pro $29.99/月 | Flash → NaCl → **WASM Threads を世界初実装**(最大 6 スレッドで約 300% 性能向上) | 軽快な WASM エンジン、安価 | 上位機能の課金ゲート、オフライン不可、第三者プラグイン非対応 |
-| **Amped Studio** | ビートメーカー〜「本格寄り」。Chromebook 訴求 | 無料〜$12.99/月 | Web Audio + WAM | **WAM 対応(OBXD/DEXED 同梱+ショップ)、VST3 サポート(有料)、商用唯一級のオフライン PWA** | UI の親切さとコミュニティが弱い |
-| **Audiotool** | モジュラー配線型。エレクトロニック系ホビイスト。MAU 30 万+ | **完全無料**(異例) | Flash(2008)→ HTML5。Worker で DSP → SAB リングバッファ → AudioWorklet のマルチコア設計 | 独自のモジュラー体験、強いコミュニティ、新ベータで開発者 API「Nexus」 | 学習コスト、大規模プロジェクトの性能、録音/編集が弱い、収益基盤不透明 |
-| **Ableton** (Learning Music/Synths, Note, Move) | ブラウザは教育とファネルに限定。フル Web DAW を意図的に作らない | 教材無料、Note $5.99 買い切り | Learning Synths は **Max/MSP RNBO → Web コンパイル**の先行事例 | ブランド、Cloud 経由の Note→Live 導線 | Web フル DAW の空白を残している(= 参入余地) |
-| **Splice** | 素材サブスクが本業。クラウド DAW(Splice Studio)からは**撤退** | $12.99〜39.99/月 | — | 素材供給+モバイル着想(CoSo) | 「Web フル DAW より素材供給が収益的に合理的」と判断した実例 |
-| **Sesh.fm** | ビートメーカー向け「マルチプレイヤー DAW」 | 無料 + Pro 買い切り志向 | — | リアルタイムカーソル共有、バージョン管理、AI ステム分離無料 | 新興でエコシステム小 |
+| **BandLab** | Free, social, all-in-one. Over 100M registered users (end of 2024) | DAW completely free. Monetized via Membership at $14.95/mo etc. (ARR ~$48M) | Web Audio + cloud sync + native mobile | Overwhelming feature volume for free (unlimited tracks, 24,000+ loops, AI mastering, Splitter, SongStarter) | Lacks pro-grade precision editing (comping, deep automation). Serious production assumes migration to desktop |
+| **Soundtrap** (Spotify → sold back to founders in 2023) | Beginners, education, podcasts. "Collaborative cloud studio" | Free 5 tracks, $9.99–17.99/mo. Education 50 seats from $249/yr | Web Audio based | Polished real-time co-editing, education administration, Auto-Tune, latency calibration feature | Free tier is effectively a demo. Even paid tiers trail free BandLab on features. Spotify divested it (retreat from creator-tools strategy) |
+| **Soundation** | Loop-based production for beginners to intermediates | Free (3 projects/1GB) to Pro $29.99/mo | Flash → NaCl → **world's first WASM Threads implementation** (up to 6 threads for ~300% performance gain) | Snappy WASM engine, inexpensive | Paywalled upper-tier features, no offline, no third-party plugins |
+| **Amped Studio** | Beat makers to the "more serious" end. Chromebook appeal | Free to $12.99/mo | Web Audio + WAM | **WAM support (OBXD/DEXED bundled + shop), VST3 support (paid), the only commercial-grade offline PWA** | Weak UI friendliness and community |
+| **Audiotool** | Modular patching style. Electronic-music hobbyists. 300K+ MAU | **Completely free** (unusual) | Flash (2008) → HTML5. Multicore design: DSP in Workers → SAB ring buffer → AudioWorklet | Unique modular experience, strong community, developer API "Nexus" in new beta | Learning curve, performance on large projects, weak recording/editing, unclear revenue base |
+| **Ableton** (Learning Music/Synths, Note, Move) | Browser presence deliberately limited to education and funnel. Intentionally not building a full web DAW | Learning materials free, Note $5.99 one-time | Learning Synths is a pioneering case of **Max/MSP RNBO → Web compilation** | Brand, Note→Live pipeline via Cloud | Leaves the full web DAW space vacant (= room for entry) |
+| **Splice** | Core business is sample subscription. **Withdrew** from cloud DAW (Splice Studio) | $12.99–39.99/mo | — | Sample supply + mobile ideation (CoSo) | A real-world case of judging "sample supply is more economically rational than a full web DAW" |
+| **Sesh.fm** | "Multiplayer DAW" for beat makers | Free + Pro one-time-purchase oriented | — | Real-time cursor sharing, version control, free AI stem separation | New entrant with a small ecosystem |
 
-### 1.2 死んだ製品からの教訓(重要)
+### 1.2 Lessons from Dead Products (Important)
 
-- **AudioSauna**: Flash 終了と共に消滅。プラットフォーム基盤への依存がプロダクトの死に直結。
-- **Endlesss**(2024 年 5 月閉鎖): サーバー停止でアプリ自体が機能不能に。ユーザーは期日までに自作音源を DL するよう告知された。CDM の総括は「SaaS 音楽ツールはサービスが終わればツールも作品も消える」。→ **クラウド専用アーキテクチャは作品の可用性リスク**。
-- **WavTool**(2024 年 11 月停止 → 2025 年 6 月 Suno が買収): 「GPT-4 搭載の世界初テキスト駆動 DAW」。単体事業として存続できず、ユーザーは約 7 ヶ月ツールにアクセス不能のまま放置された。チームは Suno Studio(2025 年 9 月ローンチ、$30/月)の母体に。
+- **AudioSauna**: Vanished together with the end of Flash. Dependence on a platform foundation directly caused the product's death.
+- **Endlesss** (shut down May 2024): When the servers stopped, the app itself became inoperable. Users were told to download their own creations by a deadline. CDM's post-mortem: "with SaaS music tools, when the service ends, both the tool and the works disappear." → **Cloud-only architecture is an availability risk for users' works**.
+- **WavTool** (halted November 2024 → acquired by Suno in June 2025): "The world's first text-driven DAW powered by GPT-4." Could not survive as a standalone business; users were left without access to the tool for roughly 7 months. The team became the nucleus of Suno Studio (launched September 2025, $30/mo).
 
-### 1.3 横断検証の結果
+### 1.3 Results of Cross-Verification
 
-1. **第三者プラグイン**: WAM 2.0 という標準がありながら、商用実装は Amped Studio ほぼ唯一。BandLab/Soundtrap/Soundation はプラグインエコシステムを持たない。
-2. **オフライン PWA**: Amped Studio がほぼ唯一の商用実装。他は常時接続前提。
-3. **プロ級レコーディング**: どの商用 Web DAW も未達。テイク管理・コンピング UI を備えた商用 Web DAW は確認できなかった。ブラウザの往復レイテンシ(ベスト約 14〜30ms)と正確なレイテンシ報告 API の欠如が原因。
-4. **日本市場**: BandLab が「無料で始める DTM」として圧倒的推奨。ブラウザ DAW は「入門・スケッチ用」で本格制作は Cubase/Studio One/Logic への移行が前提という論調。日本語 UI・教材はほぼ空白。
+1. **Third-party plugins**: Despite the existence of the WAM 2.0 standard, Amped Studio is virtually the only commercial implementation. BandLab/Soundtrap/Soundation have no plugin ecosystem.
+2. **Offline PWA**: Amped Studio is virtually the only commercial implementation. Others assume an always-on connection.
+3. **Pro-grade recording**: No commercial web DAW has achieved it. No commercial web DAW with take management and comping UI could be confirmed. Causes: browser round-trip latency (best ~14–30ms) and the lack of an accurate latency-reporting API.
+4. **Japanese market**: BandLab is overwhelmingly recommended as "free entry-level DTM." The prevailing narrative is that browser DAWs are "for beginners and sketching," with serious production assumed to migrate to Cubase/Studio One/Logic. Japanese UI and learning materials are largely a blank space.
 
-### 1.4 市場の空白(証拠から推論される未充足ニーズ)
+### 1.4 Market Gaps (Unmet Needs Inferred from the Evidence)
 
-1. **中級〜プロ向け Web DAW の不在** — 全プレイヤーが初心者/教育/スケッチに収斂。
-2. **プラグインエコシステム** — WAM 2.0 実装が Amped と学術のみ。開発者が収益を得られる Web プラグインマーケットは未開拓。
-3. **オフライン/ローカルファースト** — Endlesss/WavTool の死が「所有できる Web DAW」の価値を実証。
-4. **低遅延録音技術** — WASM+AudioWorklet+マルチスレッドを録音品質(較正・補正・コンピング)に振り向けたプレイヤー不在。
-5. **持続可能なビジネスモデル** — 完全無料(Audiotool)は持続性に疑問、サブスク疲れも顕在。
-6. **「生成 AI 後」の編集需要** — 生成 AI と本格編集を中立的立場で橋渡しする Web DAW は空席。
-7. **日本語圏ローカライズ** — GIGA スクール(Chromebook)との相性が良い教育市場が手つかず。
+1. **Absence of an intermediate-to-pro web DAW** — All players converge on beginners/education/sketching.
+2. **Plugin ecosystem** — WAM 2.0 implementations exist only at Amped and in academia. A web plugin marketplace where developers can earn revenue remains unexplored.
+3. **Offline/local-first** — The deaths of Endlesss/WavTool proved the value of a "web DAW you can own."
+4. **Low-latency recording technology** — No player has directed WASM + AudioWorklet + multithreading toward recording quality (calibration, compensation, comping).
+5. **Sustainable business model** — Completely free (Audiotool) has questionable sustainability; subscription fatigue is also evident.
+6. **Post-generative-AI editing demand** — The seat for a web DAW that neutrally bridges generative AI and serious editing is empty.
+7. **Japanese-language localization** — The education market, a good fit with GIGA School (Chromebooks), is untouched.
 
 ---
 
-## 2. オープンソース・ビルディングブロック
+## 2. Open-Source Building Blocks
 
-### 2.1 Web DAW 本体(検証済み・確度高)
+### 2.1 Web DAWs Proper (Verified, High Confidence)
 
-| プロジェクト | 概要 | ライセンス | 利用可否の判断 |
+| Project | Overview | License | Suitability Assessment |
 | --- | --- | --- | --- |
-| **openDAW** (Audiotool 創業者 André Michelle) | TypeScript 製次世代 Web DAW。教育・プライバシー重視 | **AGPL v3 + 商用のデュアル** | プロトタイプ段階。オーディオエンジンは未 WASM 化(TS が AudioWorklet 上で動作)、WASM エンジンは 2026 Q2 予定・1.0 は Q3 予定。土台採用は時期尚早、**設計参考+動向追跡対象** |
-| **GridSound** | Web Audio 製ブラウザ DAW。活発にメンテ(2026 年 6 月 v1.58.5) | **AGPL-3.0**、かつ「half open-source」(バックエンド非公開) | コード流用は AGPL 义務が発生。参考実装として閲覧価値のみ |
-| **Signal** | Web MIDI エディタ | — | ピアノロール UI の参考 |
-| **WAM-studio** | WAM 2.0 のリファレンス DAW(学術) | OSS | WAM ホスト実装の参考 |
+| **openDAW** (Audiotool founder André Michelle) | Next-generation web DAW in TypeScript. Education and privacy focused | **Dual AGPL v3 + commercial** | Prototype stage. Audio engine not yet WASM-ified (TS runs on the AudioWorklet); WASM engine planned for 2026 Q2, 1.0 for Q3. Too early to adopt as a foundation; **design reference + tracking target** |
+| **GridSound** | Browser DAW built on Web Audio. Actively maintained (v1.58.5 in June 2026) | **AGPL-3.0**, and "half open-source" (backend not public) | Reusing code triggers AGPL obligations. Value only as a reference implementation to read |
+| **Signal** | Web MIDI editor | — | Reference for piano-roll UI |
+| **WAM-studio** | Reference DAW for WAM 2.0 (academic) | OSS | Reference for a WAM host implementation |
 
-**要注意**: 再利用候補の主要 OSS Web DAW は軒並み AGPL 系。プロプライエタリ製品に組み込むなら商用ライセンス取得(openDAW)かソース公開が必要。**エンジンは自前開発が現実的**。
+**Caution**: The major OSS web DAWs that are reuse candidates are uniformly AGPL-family. Incorporating them into a proprietary product requires either a commercial license (openDAW) or source disclosure. **Building the engine in-house is the realistic path**.
 
-### 2.2 プラグイン標準: Web Audio Modules 2.0(検証済み・確度高)
+### 2.2 Plugin Standard: Web Audio Modules 2.0 (Verified, High Confidence)
 
-- Web Audio API には VST/AU/AAX/LV2 相当の高レベルプラグイン抽象が**存在しない**(これが「Web に VST がない」の根本原因)。
-- **WAM 2.0**(2015 年開始、2021 年 v2.0)がこのギャップを埋める「Web 版 VST」標準。DSP+UI コンポーネント、パラメータオートメーション、MIDI、状態保存/読込をサポート。
-- ホスト統合: メタデータ JSON 取得 → ES Module 動的 import → 標準 AudioNode として接続(DSP は AudioWorklet 上の WamProcessor)。
-- エコシステム: 多数のプラグイン/ホスト、DAW 2 つ(WAM-studio、商用 Amped Studio)、Sequencer.party 等。ただし規模は OSS プラグイン数十個のニッチで、W3C 標準ではない。
-- **C/C++/Faust/Csound を WASM にコンパイルして WAM 化できる**。Faust オンライン IDE には WAM 2.0 エクスポート(wam2-ts / wam2-poly-ts、ポリフォニック MIDI 対応)がある。
+- The Web Audio API has **no** high-level plugin abstraction equivalent to VST/AU/AAX/LV2 (this is the root cause of "there is no VST on the web").
+- **WAM 2.0** (started 2015, v2.0 in 2021) is the "web VST" standard that fills this gap. Supports DSP + UI components, parameter automation, MIDI, and state save/load.
+- Host integration: fetch metadata JSON → dynamic import of an ES Module → connect as a standard AudioNode (DSP is a WamProcessor on the AudioWorklet).
+- Ecosystem: many plugins/hosts, 2 DAWs (WAM-studio, commercial Amped Studio), Sequencer.party, etc. However, the scale is a niche of a few dozen OSS plugins, and it is not a W3C standard.
+- **C/C++/Faust/Csound can be compiled to WASM and packaged as WAMs**. The Faust online IDE has WAM 2.0 export (wam2-ts / wam2-poly-ts, with polyphonic MIDI support).
 
-### 2.3 ライブラリ・DSP 資産
+### 2.3 Libraries and DSP Assets
 
-| 資産 | 用途 | 状態 |
+| Asset | Purpose | Status |
 | --- | --- | --- |
-| **Tone.js** | Transport(サンプル精度スケジューリング)、シンセ群、Sampler、エフェクト | 活発(2026-07-01 に v15.5.26、14.7k スター)。ただし本格 DAW エンジンには抽象が高すぎる面もあり、UI 層/プロトタイプ向き |
-| **ringbuf.js** (Paul Adenot) | SAB 上の wait-free SPSC リングバッファ | W3C Web Audio 仕様共同エディタによる実装。エンジンの中核部品 |
-| **Faust** | DSP 言語 → WASM/WAM | 成熟。エフェクト/シンセの量産に有効 |
-| **Csound-WASM** | 同上 | 成熟 |
-| **RNBO** (Cycling '74) | Max パッチ → Web | 商用だが実績あり(Ableton Learning Synths) |
-| Rust クレート(fundsp, oxisynth, dasp 等) | Rust DSP → WASM | 本リポジトリの既存 dawcore(Rust 製エンジン)を wasm32 ターゲットでコンパイルする路線と親和 |
-| **Magenta.js** | ブラウザ内 MIDI 生成(MusicVAE 等) | 実質メンテナンスモードだが、ブラウザで動く数少ない MIDI 生成資産 |
-| **demucs-rs / demucs-web / demucs-onnx** | ブラウザ内ステム分離(WASM/WebGPU、完全クライアントサイド) | 2026 年時点で実用段階。モデル約 172MB |
-| **Transformers.js v3 / onnxruntime-web** | WebGPU 推論(musicgen-small 等) | 短いサンプル生成が現実的 |
+| **Tone.js** | Transport (sample-accurate scheduling), synths, Sampler, effects | Active (v15.5.26 on 2026-07-01, 14.7k stars). However, its abstractions are in places too high-level for a serious DAW engine; suited to the UI layer/prototyping |
+| **ringbuf.js** (Paul Adenot) | Wait-free SPSC ring buffer over SAB | Implementation by a co-editor of the W3C Web Audio spec. A core engine component |
+| **Faust** | DSP language → WASM/WAM | Mature. Effective for mass-producing effects/synths |
+| **Csound-WASM** | Same as above | Mature |
+| **RNBO** (Cycling '74) | Max patches → Web | Commercial but proven (Ableton Learning Synths) |
+| Rust crates (fundsp, oxisynth, dasp, etc.) | Rust DSP → WASM | Compatible with the path of compiling this repository's existing dawcore (Rust engine) for the wasm32 target |
+| **Magenta.js** | In-browser MIDI generation (MusicVAE, etc.) | Effectively in maintenance mode, but one of the few MIDI-generation assets that runs in the browser |
+| **demucs-rs / demucs-web / demucs-onnx** | In-browser stem separation (WASM/WebGPU, fully client-side) | Practical as of 2026. Model ~172MB |
+| **Transformers.js v3 / onnxruntime-web** | WebGPU inference (musicgen-small, etc.) | Generating short samples is realistic |
 
 ---
 
-## 3. Web プラットフォーム技術の成熟度
+## 3. Maturity of Web Platform Technologies
 
-### 3.1 オーディオエンジン(検証済み・確度高)
+### 3.1 Audio Engine (Verified, High Confidence)
 
-Chrome チーム公式のデザインパターンが確立している:
+The Chrome team's official design patterns are well established:
 
-- **実時間予算**: レンダー量子は **128 フレーム固定**、44.1kHz でコールバックあたり**約 3ms**。超えると可聴グリッチ。(Chrome の `renderSizeHint` はオリジントライアル段階)
-- **AudioWorklet + WASM**: C/C++/Rust 資産の持ち込み + JS JIT/GC オーバーヘッドの排除。
-- **重量級エンジンの標準形**: AudioWorklet + SharedArrayBuffer + Atomics + 専用 Worker。MessagePort は割り当てとレイテンシのため実時間オーディオに不適。AudioWorklet は「オーディオシンク」として振る舞い、DSP は Worker 側で実行(Audiotool が実運用)。
-- **前提条件**: SAB には COOP/COEP によるクロスオリジン分離が必要(配備・埋め込み・サードパーティ資産読込に制約)。
+- **Real-time budget**: The render quantum is **fixed at 128 frames**, **about 3ms** per callback at 44.1kHz. Exceeding it produces audible glitches. (Chrome's `renderSizeHint` is at the origin-trial stage.)
+- **AudioWorklet + WASM**: Brings in C/C++/Rust assets + eliminates JS JIT/GC overhead.
+- **Standard shape for heavyweight engines**: AudioWorklet + SharedArrayBuffer + Atomics + dedicated Worker. MessagePort is unsuited to real-time audio due to allocation and latency. The AudioWorklet acts as an "audio sink" while DSP executes on the Worker side (Audiotool runs this in production).
+- **Precondition**: SAB requires cross-origin isolation via COOP/COEP (constraints on deployment, embedding, and loading third-party assets).
 
-### 3.2 レイテンシ実測値
+### 3.2 Measured Latency Figures
 
-| 環境 | 往復レイテンシ |
+| Environment | Round-trip latency |
 | --- | --- |
-| Chrome デフォルト | 約 67ms |
-| Firefox デフォルト | 約 55ms |
-| Chrome チューニング済(latencyHint:0、EC/NS/AGC オフ) | **約 19ms** |
-| Firefox 同上 | **約 14ms** |
-| ネイティブ ASIO/CoreAudio | < 10ms(1 桁 ms) |
+| Chrome default | ~67ms |
+| Firefox default | ~55ms |
+| Chrome tuned (latencyHint:0, EC/NS/AGC off) | **~19ms** |
+| Firefox, same tuning | **~14ms** |
+| Native ASIO/CoreAudio | < 10ms (single-digit ms) |
 
-- チューニング済みブラウザは**ネイティブ比 +10〜15ms のハンデ**。ソフト音源演奏は可能圏、スルーモニタリング+エフェクトは厳しい。
-- `outputLatency` / `MediaTrackSettings.latency` は信頼できない値を返す既知問題 → **ループバック較正が実務解**(Soundtrap が較正機能を提供する唯一級の例)。
-- 録音時の必須制約: `echoCancellation/noiseSuppression/autoGainControl: false`(未指定だと通話向け処理が音楽録音を破壊)。Chrome/Safari に制約が効かないバグ履歴あり。iOS Safari は 44.1kHz 明示指定が必要。
-- 高品質録音は MediaRecorder ではなく **AudioWorklet で PCM 直取り**が推奨。
+- A tuned browser carries a **+10–15ms handicap versus native**. Playing soft synths is within reach; through-monitoring plus effects is difficult.
+- `outputLatency` / `MediaTrackSettings.latency` are known to return unreliable values → **loopback calibration is the practical solution** (Soundtrap is virtually the only example offering a calibration feature).
+- Mandatory constraints when recording: `echoCancellation/noiseSuppression/autoGainControl: false` (if unspecified, call-oriented processing destroys music recordings). Chrome/Safari have a history of bugs where the constraints do not take effect. iOS Safari requires explicitly specifying 44.1kHz.
+- For high-quality recording, **direct PCM capture in an AudioWorklet** is recommended over MediaRecorder.
 
-### 3.3 ストレージ
+### 3.3 Storage
 
-- **OPFS SyncAccessHandle(Worker 専用)**: 100MB 書き込み約 90ms(≈1.1GB/s)、IndexedDB の約 9 倍速。録音ストリームの逐次書き込みに最適。全主要ブラウザ対応。
-- **クォータ**: Chrome はディスクの 60%。Firefox は 10GiB(persist で拡大)。**Safari は「7 日間非利用で全消去」(ITP)** → Safari ではクラウド同期必須。
-- **File System Access API(実フォルダ読み書き)は Chromium 限定**。Firefox/Safari はフォールバック必要。
+- **OPFS SyncAccessHandle (Worker-only)**: ~90ms to write 100MB (≈1.1GB/s), about 9x faster than IndexedDB. Ideal for sequential writes of recording streams. Supported in all major browsers.
+- **Quota**: Chrome is 60% of the disk. Firefox is 10GiB (expandable with persist). **Safari deletes everything after 7 days of non-use (ITP)** → cloud sync is mandatory on Safari.
+- **File System Access API (reading/writing real folders) is Chromium-only**. Firefox/Safari need fallbacks.
 
-### 3.4 その他 I/O
+### 3.4 Other I/O
 
-- **Web MIDI**: Chrome/Edge/Firefox ○。**Safari は全バージョン非対応**(iOS は全ブラウザ WebKit 強制のため不可)。USB MIDI 実測約 1ms、BLE MIDI は +10〜30ms ジッタ。
-- **WebCodecs AudioEncoder**: エクスポート本命は Opus + WAV フォールバック。AAC は Safari/Chrome 限定(Linux 不可)、Firefox は AAC エンコード不可。
-- **WebGPU**: リアルタイム(128 サンプル毎)の GPU DSP はディスパッチ遅延のため**非現実的**。リアルタイム DSP は WASM(+SIMD)一択。**オフライン処理(ステム分離、解析、マスタリング)は WebGPU で実用域**。
+- **Web MIDI**: Chrome/Edge/Firefox yes. **Safari unsupported in all versions** (impossible on iOS since all browsers are forced onto WebKit). USB MIDI measured at ~1ms; BLE MIDI adds +10–30ms jitter.
+- **WebCodecs AudioEncoder**: The primary export path is Opus with a WAV fallback. AAC is Safari/Chrome-only (not on Linux); Firefox cannot encode AAC.
+- **WebGPU**: Real-time (per 128 samples) GPU DSP is **unrealistic** due to dispatch latency. Real-time DSP is WASM (+SIMD) or nothing. **Offline processing (stem separation, analysis, mastering) is within practical range on WebGPU**.
 
-### 3.5 協調編集・ローカルファースト
+### 3.5 Collaborative Editing and Local-First
 
-- **CRDT 三強**: Yjs(最大エコシステム、純 JS)/ Automerge 3.0(完全履歴 DAG、メモリ 10〜100 倍改善)/ **Loro 1.x(ベンチ首位、MovableList/Movable Tree 標準搭載 — クリップのドラッグ&ドロップ・トラック階層に最適)**。
-- **Figma 方式**(サーバ権威 + プロパティ単位 LWW、CRDT ではない)は「クリップ=オブジェクト、パラメータ=プロパティ」の DAW モデルと極めて相性が良い。
-- **波形データは CRDT に入れない**が業界の共通結論 → コンテンツアドレス(SHA-256)参照で分離し、blob は OPFS + オブジェクトストレージで同期。
-- DAW 特有の「アンドゥは自分の操作のみ」は Yjs/Loro の UndoManager が標準サポート。
-- 同期インフラ: PartyKit(Cloudflare 買収済、Durable Objects)、Liveblocks、Jazz(FileStream で blob 同期内蔵)、PowerSync/ElectricSQL。
-
----
-
-## 4. AI 音楽制作トレンド(2024–2026)
-
-### 4.1 市場構造
-
-- **ステム分離と AI マスタリングは「テーブルステークス」**。Logic 11(Stem Splitter/Mastering Assistant)、FL 2025、Ableton 12.3(ローカル実行ステム分離)、BandLab(全部無料)が標準装備済み。あっても加点なし、ないと減点。
-- **Tracklib 調査(2025 年 11 月)**: プロデューサーの AI 利用は約 25–32%。内訳は**ステム分離 73.9%、マスタリング/EQ 45.5%**、フル楽曲生成は**わずか 3%**。**80% 超が AI 生成楽曲に反対**。
-- **Suno Studio**(WavTool 買収 → 2025 年 9 月ローンチ、$30/月): 「Generative Audio Workstation」。生成起点のブラウザ DAW。「DAW の皮を被ったジェネレーター」との辛口評価もあり、既存 DAW ユーザーの代替には遠い。公式パブリック API なし。
-- **法務**: UMG×Udio 和解(2025/10、生成曲 DL 不可の囲い込み化)、Warner×Suno 和解(2025/11)、**Sony は未和解で 2026 年 7 月にサマリージャッジメント審理予定**。無許諾学習系と組むのはブランドリスク。
-- **「商用セーフ」の成立例**: Stable Audio 2.5(AudioSparx 完全ライセンスデータ学習、API 提供)、Lyria RealTime(Gemini API)、Magenta RealTime 2(オープンウェイト、230M の Small は MacBook Air でも動作)。
-
-### 4.2 評価される AI vs ギミック
-
-- **評価される**: ステム分離、マスタリングアシスタント(出発点として)、Logic Session Players 型の「編集可能な素材を返す伴奏生成」、text-to-sample(短い素材)、音声修復。
-- **敵視される**: フル楽曲ワンショット生成、プロンプトだけの「作曲」、学習元不明モデル、オーディオ解析なしのチャットボット(FL Gopher への薄い反応)。
-
-### 4.3 現実的な AI 差別化ポジション(調査エージェントの評価)
-
-1. **「プライバシー保証つきローカル AI」**(最有力) — WebGPU/WASM でステム分離等を完全クライアントサイド実行。「音声を一切アップロードしない AI」は未発表曲の漏洩を懸念するプロの信頼に直結。FL(クラウド必須)/Ableton(ローカルを売りに)の流れとも整合。
-2. **アシスト特化・生成非依存** — 分離(74% が使う)+API マスタリング(LANDR/Music.ai が API 開放済)+「編集可能な MIDI を返す」伴奏生成。ブラウザ完結 MIDI 生成は Magenta.js 以降決定版不在の**空白地帯**。
-3. **生成を載せるなら商用セーフな text-to-sample 限定** — Stable Audio 2.5 API で「生成素材は 100% ライセンス済みデータ由来」を宣言。
-4. **リアルタイム・インタラクティブ生成(中期)** — Lyria RealTime / Magenta RT 2 による「ジャム相手」はどの DAW も本格搭載していない。
+- **The big three CRDTs**: Yjs (largest ecosystem, pure JS) / Automerge 3.0 (full-history DAG, 10–100x memory improvement) / **Loro 1.x (benchmark leader, MovableList/Movable Tree built in — ideal for clip drag-and-drop and track hierarchies)**.
+- **The Figma approach** (server-authoritative + per-property LWW, not a CRDT) fits the DAW model of "clip = object, parameter = property" extremely well.
+- "Don't put waveform data in the CRDT" is the industry-wide conclusion → separate it via content-addressed (SHA-256) references, syncing blobs with OPFS + object storage.
+- The DAW-specific requirement "undo applies only to your own operations" is supported out of the box by the Yjs/Loro UndoManager.
+- Sync infrastructure: PartyKit (acquired by Cloudflare, Durable Objects), Liveblocks, Jazz (built-in blob sync via FileStream), PowerSync/ElectricSQL.
 
 ---
 
-## 5. 統合的な結論
+## 4. AI Music Production Trends (2024–2026)
 
-### 5.1 技術スタックの確立事項(確度高)
+### 4.1 Market Structure
+
+- **Stem separation and AI mastering are "table stakes."** Logic 11 (Stem Splitter/Mastering Assistant), FL 2025, Ableton 12.3 (locally executed stem separation), and BandLab (all free) already ship them as standard. Having them earns no points; lacking them loses points.
+- **Tracklib survey (November 2025)**: Producer AI usage is about 25–32%. Breakdown: **stem separation 73.9%, mastering/EQ 45.5%**, full-song generation a **mere 3%**. **Over 80% oppose AI-generated songs**.
+- **Suno Studio** (WavTool acquisition → launched September 2025, $30/mo): a "Generative Audio Workstation." A generation-first browser DAW. Also drew the harsh review "a generator wearing a DAW's skin," and is far from a replacement for existing DAW users. No official public API.
+- **Legal**: UMG×Udio settlement (2025/10, walled-garden model with no downloads of generated songs), Warner×Suno settlement (2025/11), **Sony unsettled with a summary judgment hearing scheduled for July 2026**. Partnering with unlicensed-training players is a brand risk.
+- **Established "commercially safe" examples**: Stable Audio 2.5 (trained on fully licensed AudioSparx data, API available), Lyria RealTime (Gemini API), Magenta RealTime 2 (open weights; the 230M Small runs even on a MacBook Air).
+
+### 4.2 AI That Is Valued vs. Gimmicks
+
+- **Valued**: stem separation, mastering assistants (as a starting point), Logic Session Players-style "accompaniment generation that returns editable material," text-to-sample (short material), audio restoration.
+- **Resented**: one-shot full-song generation, "composing" by prompt alone, models with unknown training sources, chatbots without audio analysis (the tepid reception of FL Gopher).
+
+### 4.3 Realistic AI Differentiation Positions (Research Agents' Assessment)
+
+1. **"Local AI with a privacy guarantee"** (strongest) — Run stem separation and similar fully client-side via WebGPU/WASM. "AI that never uploads your audio" speaks directly to the trust of professionals worried about leaks of unreleased songs. Also consistent with the current dynamics of FL (cloud-required) vs. Ableton (selling local execution).
+2. **Assist-focused, generation-independent** — Separation (used by 74%) + API mastering (LANDR/Music.ai have opened APIs) + accompaniment generation that "returns editable MIDI." Browser-complete MIDI generation has had no definitive successor since Magenta.js — a **blank space**.
+3. **If adding generation, restrict to commercially safe text-to-sample** — Use the Stable Audio 2.5 API and declare "generated material derives 100% from licensed data."
+4. **Real-time interactive generation (mid-term)** — A "jam partner" via Lyria RealTime / Magenta RT 2 is not seriously shipped by any DAW.
+
+---
+
+## 5. Integrated Conclusions
+
+### 5.1 Established Elements of the Technology Stack (High Confidence)
 
 ```
 UI (TypeScript / any framework)
-  │  コマンド/スナップショット
+  │  commands/snapshots
   ▼
-プロジェクトモデル: サーバ権威 LWW or CRDT (Loro) + コンテンツアドレス blob
-  │  lock-free SPSC ring (ringbuf.js 型, SharedArrayBuffer + Atomics)
+Project model: server-authoritative LWW or CRDT (Loro) + content-addressed blobs
+  │  lock-free SPSC ring (ringbuf.js style, SharedArrayBuffer + Atomics)
   ▼
-オーディオエンジン: WASM (Rust/C++) — 専用 Worker + AudioWorklet(シンク)
-  │  プラグイン: WAM 2.0 ホスト(AudioWorklet 内 WamProcessor)
+Audio engine: WASM (Rust/C++) — dedicated Worker + AudioWorklet (sink)
+  │  Plugins: WAM 2.0 host (WamProcessor inside the AudioWorklet)
   ▼
-ストレージ: OPFS SyncAccessHandle(Worker) + クラウド同期 / File System Access(Chromium)
-AI: WebGPU/WASM オフライン推論(ステム分離等) — リアルタイム DSP は WASM のみ
-配備: COOP/COEP(クロスオリジン分離)必須、PWA
+Storage: OPFS SyncAccessHandle (Worker) + cloud sync / File System Access (Chromium)
+AI: WebGPU/WASM offline inference (stem separation, etc.) — real-time DSP is WASM only
+Deployment: COOP/COEP (cross-origin isolation) required, PWA
 ```
 
-- 本リポジトリの **Rust 製 dawcore(ロックフリー設計・オフラインテスト済)は wasm32 コンパイルでこのアーキテクチャにほぼそのまま適合**する(cpal → AudioWorklet ブリッジへの置換、ringbuf クレート → SAB リングへの置換が主な作業)。
-- ブラウザ間格差が大きい(Safari: Web MIDI 不可、7 日消去、WebCodecs 制限)。**フル機能は Chromium、他は縮退運転**の段階的戦略が現実的。
+- This repository's **Rust dawcore (lock-free design, offline-tested) fits this architecture almost as-is when compiled for wasm32** (the main work is replacing cpal → an AudioWorklet bridge and the ringbuf crate → an SAB ring).
+- Cross-browser disparities are large (Safari: no Web MIDI, 7-day deletion, WebCodecs limits). A staged strategy of **full features on Chromium, degraded operation elsewhere** is realistic.
 
-### 5.2 差別化候補(議論用)
+### 5.2 Differentiation Candidates (For Discussion)
 
-| # | 候補 | 根拠となる空白 | リスク |
+| # | Candidate | Underlying gap | Risk |
 | --- | --- | --- | --- |
-| A | **ローカルファーストの「所有できる Web DAW」**: オフライン PWA、OPFS+実フォルダ保存、オープンなプロジェクト形式、サービス終了でも作品が残る設計 | Endlesss/WavTool の死、Amped 以外オフライン不在、サブスク疲れ | 同期インフラの複雑さ。クラウド囲い込みによる収益化と緊張関係 |
-| B | **プライバシー保証つきローカル AI**: ブラウザ内ステム分離(WebGPU)、編集可能 MIDI を返すアシスト、商用セーフ text-to-sample | AI 差別化ポジション 1–3。「アップロードしない AI」は Web DAW では逆説的に新しい | モデルサイズ(~170MB)の配信、WebGPU 非対応環境 |
-| C | **中級〜プロ向けの本格録音/編集**: ループバック較正、レイテンシ補正、テイク管理/コンピング、精密ミキシング | 市場の空白 #1・#4。商用 Web DAW で未達 | ブラウザのレイテンシ天井(+10〜15ms)。ハード寄りの検証コスト |
-| D | **「音楽の Figma」= リアルタイム共同編集 + WAM プラグインエコシステム**: Loro/LWW 同期、カーソル共有、開発者マーケット | 市場の空白 #2、Soundtrap 以外に本格協調なし、WAM 実装 1 社のみ | ネットワーク効果が出るまでの立ち上げ、マーケット運営コスト |
-| E | (補助軸)**日本語圏・教育(GIGA スクール/Chromebook)** | 市場の空白 #7 | 教育営業チャネルが別事業 |
+| A | **A local-first "web DAW you can own"**: offline PWA, OPFS + real-folder saving, open project format, works survive service shutdown by design | The deaths of Endlesss/WavTool, no offline besides Amped, subscription fatigue | Complexity of sync infrastructure. Tension with monetization via cloud lock-in |
+| B | **Local AI with a privacy guarantee**: in-browser stem separation (WebGPU), assistance that returns editable MIDI, commercially safe text-to-sample | AI differentiation positions 1–3. "AI that doesn't upload" is paradoxically novel for a web DAW | Distribution of model size (~170MB), environments without WebGPU |
+| C | **Serious recording/editing for intermediates to pros**: loopback calibration, latency compensation, take management/comping, precision mixing | Market gaps #1 and #4. Unachieved by commercial web DAWs | Browser latency ceiling (+10–15ms). Hardware-adjacent verification costs |
+| D | **"Figma for music" = real-time co-editing + WAM plugin ecosystem**: Loro/LWW sync, cursor sharing, developer marketplace | Market gap #2, no serious collaboration besides Soundtrap, only one company implements WAM | Ramp-up until network effects kick in, marketplace operating costs |
+| E | (Auxiliary axis) **Japanese-language and education (GIGA School/Chromebook)** | Market gap #7 | Education sales channel is a separate business |
 
-これらは排他ではないが、「最初の 1 本」を決めることが要求仕様の優先度・アーキテクチャのトレードオフ(例: ローカルファースト vs リアルタイム協調はどちらを既定にするか)を規定する。
-
----
-
-## 6. 未解決の調査課題
-
-- openDAW の WASM エンジン(2026 Q2 予定)と 1.0(Q3)が予定通り出るか — 出れば商用ライセンス込みで土台候補になりうるため追跡。
-- Soundtrap/BandLab の同期プロトコルの詳細(非公開)。
-- Chrome `renderSizeHint`(レンダー量子可変化)のオリジントライアル進捗。
-- Sony v. Suno のサマリージャッジメント(2026 年 7 月審理予定)の帰結 — AI 機能の法務前提が変わる。
+These are not mutually exclusive, but deciding on "the first one" determines requirement priorities and architectural trade-offs (e.g., which of local-first vs. real-time collaboration is the default).
 
 ---
 
-## 主要ソース(抜粋)
+## 6. Open Research Questions
+
+- Whether openDAW's WASM engine (planned 2026 Q2) and 1.0 (Q3) ship on schedule — if they do, it could become a foundation candidate including a commercial license, so keep tracking.
+- Details of Soundtrap's/BandLab's sync protocols (not public).
+- Progress of the Chrome `renderSizeHint` (variable render quantum) origin trial.
+- The outcome of the Sony v. Suno summary judgment (hearing scheduled July 2026) — it would change the legal premises for AI features.
+
+---
+
+## Key Sources (Excerpt)
 
 - Chrome: Audio Worklet Design Pattern — developer.chrome.com/blog/audio-worklet-design-pattern/
-- ringbuf.js(Paul Adenot) — github.com/padenot/ringbuf.js
-- WAM 2.0 論文(Buffa et al., WWW '22)— dl.acm.org/doi/fullHtml/10.1145/3487553.3524225
+- ringbuf.js (Paul Adenot) — github.com/padenot/ringbuf.js
+- WAM 2.0 paper (Buffa et al., WWW '22) — dl.acm.org/doi/fullHtml/10.1145/3487553.3524225
 - openDAW — github.com/andremichelle/openDAW / GridSound — github.com/gridsound/daw
-- W3C/SMPTE Media Production Workshop(Soundtrap のレイテンシ講演)— w3.org/2021/03/media-production-workshop/
-- ブラウザ実測レイテンシ — jefftk.com/p/browser-audio-latency
-- OPFS 性能 — rxdb.info/rx-storage-opfs.html / renderlog.in
-- CRDT ベンチ — github.com/dmonad/crdt-benchmarks / loro.dev/docs/performance
-- Figma のマルチプレイヤー — figma.com/blog/how-figmas-multiplayer-technology-works/
-- Endlesss 閉鎖の総括 — cdm.link/endlesss-discontinued/
-- Suno×WavTool — suno.com/blog/suno-acquires-wavtool / techcrunch.com(2025-06-26)
-- Tracklib プロデューサー調査(2025-11)— musicbusinessworldwide.com
-- demucs-rs(ブラウザ内ステム分離)— github.com/nikhilunni/demucs-rs
+- W3C/SMPTE Media Production Workshop (Soundtrap's latency talk) — w3.org/2021/03/media-production-workshop/
+- Measured browser latency — jefftk.com/p/browser-audio-latency
+- OPFS performance — rxdb.info/rx-storage-opfs.html / renderlog.in
+- CRDT benchmarks — github.com/dmonad/crdt-benchmarks / loro.dev/docs/performance
+- Figma's multiplayer — figma.com/blog/how-figmas-multiplayer-technology-works/
+- Endlesss shutdown post-mortem — cdm.link/endlesss-discontinued/
+- Suno×WavTool — suno.com/blog/suno-acquires-wavtool / techcrunch.com (2025-06-26)
+- Tracklib producer survey (2025-11) — musicbusinessworldwide.com
+- demucs-rs (in-browser stem separation) — github.com/nikhilunni/demucs-rs
 - Amped Studio PWA/WAM — ampedstudio.com
-- 各項の詳細な出典は本文中の記載を参照。
+- See citations in the body of each section for detailed sources.

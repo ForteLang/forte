@@ -1,75 +1,75 @@
-# Forte lang 仕様 v0 (ドラフト)
+# Forte lang Specification v0 (Draft)
 
-> **📌 実装準拠の仕様は [forte-lang-v1.md](forte-lang-v1.md) を参照。**
-> 本文書は設計意図と将来構想(任意式 DSP、ジェネリクス、単位型の完全検査など)を
-> 含む上位ドラフトとして残す。
+> **📌 For the implementation-conformant specification, see [forte-lang-v1.md](forte-lang-v1.md).**
+> This document is retained as a higher-level draft containing design intent and future plans
+> (arbitrary-expression DSP, generics, full unit-type checking, etc.).
 
 Status: Draft v0.1 / 2026-07-02
-対応要求: SRS-LANG-001..008 / 上位: 05-detailed-design.md §1
+Corresponding requirements: SRS-LANG-001..008 / Parent: 05-detailed-design.md §1
 
-本書は Phase 0 実装のための最小仕様。構文はリファレンス曲の移植(0.6)による
-実地検証を経て v1 で固定する。**太字の DECISION** は実装前に確定が必要な項目。
+This document is the minimal specification for the Phase 0 implementation. The syntax will be fixed in v1
+after field validation via porting the reference song (0.6). **Bold DECISION** items must be settled before implementation.
 
 ---
 
-## 1. 設計原理
+## 1. Design Principles
 
-1. **すべてが値** — ノート、パターン、進行、トラック、デバイス、曲はすべて式が返す値。
-2. **決定論** — 実行時 I/O・時計・非シード乱数は存在しない。プログラムの意味は
-   「イベント列+レンダーグラフ」への純粋な写像である。
-3. **2 層** — Score 層(宣言的・コンパイル時に完全展開)と DSP 層(サンプル毎の
-   手続き的カーネル)。同一言語のサブセットとして提供し、DSP 層のみ `process` を持つ。
-4. **単位は型** — 拍・秒・Hz・dB・ピッチは別型。裸の数値との混同はコンパイルエラー。
-5. **diff 可能** — `forte fmt` による唯一の正規形。1 ファイル 1 モジュール。
+1. **Everything is a value** — notes, patterns, progressions, tracks, devices, and songs are all values returned by expressions.
+2. **Determinism** — runtime I/O, clocks, and unseeded randomness do not exist. A program's meaning is
+   a pure mapping to "an event sequence + a render graph".
+3. **Two layers** — the Score layer (declarative, fully expanded at compile time) and the DSP layer (a per-sample
+   procedural kernel). Provided as subsets of the same language; only the DSP layer has `process`.
+4. **Units are types** — beats, seconds, Hz, dB, and pitch are distinct types. Mixing them with bare numbers is a compile error.
+5. **diff-able** — a single canonical form via `forte fmt`. One file, one module.
 
-## 2. 字句
+## 2. Lexical Structure
 
-- エンコーディング: UTF-8。識別子: `[a-zA-Z_][a-zA-Z0-9_]*`(v0 は ASCII のみ)。
-- コメント: `//` 行、`/* */` ブロック。
-- 数値リテラルに単位サフィックスを許す: `92bpm`, `4bars`, `1/8beat`, `440Hz`,
-  `-0.3dB`, `20ms`, `0.5`(無次元)。
-- 音楽リテラル(バッククォート DSL、§5):
-  `beat` … ステップ列 / `notes` … ノート列 / `prog` … コード進行。
-- ピッチリテラル: `C4`, `F#3`, `Bb2`(オクターブは中央 C=C4)。
+- Encoding: UTF-8. Identifiers: `[a-zA-Z_][a-zA-Z0-9_]*` (v0 is ASCII only).
+- Comments: `//` line, `/* */` block.
+- Numeric literals allow unit suffixes: `92bpm`, `4bars`, `1/8beat`, `440Hz`,
+  `-0.3dB`, `20ms`, `0.5` (dimensionless).
+- Music literals (backquote DSL, §5):
+  `beat` … step sequence / `notes` … note sequence / `prog` … chord progression.
+- Pitch literals: `C4`, `F#3`, `Bb2` (octaves with middle C = C4).
 
-## 3. 型システム(v0 コア)
+## 3. Type System (v0 core)
 
 ```
-基本    : Bool, Int, Float, String(コンパイル時のみ)
-単位付き: Beats, Bars, Sec, Hz, Db, Bpm, Pitch, Velocity(0..1)
-音楽    : Note{pitch, start: Beats, dur: Beats, vel},
-          Pattern = List<Note>(長さ: Beats 付き),
+Basic     : Bool, Int, Float, String (compile-time only)
+Unit-typed: Beats, Bars, Sec, Hz, Db, Bpm, Pitch, Velocity (0..1)
+Musical   : Note{pitch, start: Beats, dur: Beats, vel},
+          Pattern = List<Note> (with length: Beats),
           Chord, Progression = List<(Chord, Beats)>
-信号    : Audio(チャネル数は型パラメータ: Audio<1>, Audio<2>), Control
-構造    : Track, Bus, Song, Section
-デバイス: Instrument(Note→Audio), Effect(Audio→Audio), NoteFx(Pattern→Pattern)
-アセット: RecordedAudio(来歴検証済みのマイク録音のみ。§8)
-汎用    : List<T>, Map<K,V>, Option<T>, 関数型 (T)->U, レコード型 {a: T, b: U}
+Signal    : Audio (channel count is a type parameter: Audio<1>, Audio<2>), Control
+Structural: Track, Bus, Song, Section
+Devices   : Instrument (Note→Audio), Effect (Audio→Audio), NoteFx (Pattern→Pattern)
+Assets    : RecordedAudio (provenance-verified microphone recordings only. §8)
+Generic   : List<T>, Map<K,V>, Option<T>, function types (T)->U, record types {a: T, b: U}
 ```
 
-- 変換は明示のみ: `beats(2.0)`, `sec(1.5)`, `(1/8).beats * 3` など。
-  `Beats → Sec` の変換は tempo が確定するコンテキスト(song 内)でのみ可能。
-- **DECISION-T1**: ジェネリクスの範囲(v0 は `List<T>` と関数の単相化のみで開始し、
-  ユーザー定義ジェネリクスは v1 に送る案を推奨)。
+- Conversions are explicit only: `beats(2.0)`, `sec(1.5)`, `(1/8).beats * 3`, etc.
+  The `Beats → Sec` conversion is possible only in a context where tempo is fixed (inside a song).
+- **DECISION-T1**: scope of generics (the recommended proposal is to start v0 with only `List<T>` and monomorphized functions,
+  deferring user-defined generics to v1).
 
-## 4. モジュールと import
+## 4. Modules and import
 
 ```forte
-// 外部依存(forte.toml の [deps] と forte.lock で解決)
+// External dependencies (resolved via [deps] in forte.toml and forte.lock)
 import { tr909, Kick }  from "@rhythm/tr909@^2.1"
-// ローカル
+// Local
 import { hook }         from "./sections/hook.forte"
-// 録音アセット(来歴検証がコンパイル時に走る)
+// Recording asset (provenance verification runs at compile time)
 import vocalTake        from "../assets/vocal_take3.frec"
 ```
 
-- 循環 import はエラー。公開は `pub` キーワード。
-- モジュールのトップレベルは宣言のみ(式の実行はない)。
-- public レジストリへの公開時はソース必須(SRS-PKG-003)。
+- Circular imports are an error. Publishing uses the `pub` keyword.
+- A module's top level contains declarations only (no expression execution).
+- Publishing to the public registry requires source (SRS-PKG-003).
 
-## 5. Score 層
+## 5. Score Layer
 
-### 5.1 曲の構造
+### 5.1 Song Structure
 
 ```forte
 pub song "Aozora" {
@@ -77,25 +77,25 @@ pub song "Aozora" {
   meter 4/4
   key   D maj
 
-  let kick   = beat`x--- x--- x-x- x---`          // 1 小節、16 分解像度
-  let chords = prog`Dmaj7 | Bm7 | Em7 A7`          // '|' が小節区切り
+  let kick   = beat`x--- x--- x-x- x---`          // 1 bar, 16th-note resolution
+  let chords = prog`Dmaj7 | Bm7 | Em7 A7`          // '|' is a bar separator
 
   section verse = bars(1..16)
   section hook  = bars(17..32)
 
   track Drums {
     instrument tr909(kick: .deep)
-    play kick at verse.repeat()                     // セクション全体に反復
+    play kick at verse.repeat()                     // repeat across the whole section
   }
 
   track Keys {
     instrument juno(voices: 8)
     play arp(chords, style: .updown, rate: 1/8beat) at hook
-    automate cutoff from 0.2 to 0.8 over hook       // パラメータ名は型検査される
+    automate cutoff from 0.2 to 0.8 over hook       // parameter names are type-checked
   }
 
   track Vocal {
-    audio vocalTake at bars(17)                     // RecordedAudio の配置
+    audio vocalTake at bars(17)                     // placement of RecordedAudio
     insert comp(ratio: 3.0, threshold: -18dB)
   }
 
@@ -105,37 +105,36 @@ pub song "Aozora" {
 }
 ```
 
-### 5.2 意味論
+### 5.2 Semantics
 
-- `song` ブロックはコンパイル時に評価され、**イベント列**(サンプル精度の
-  ノート/オートメーション/クリップ配置)と**レンダーグラフ**(instrument/effect/bus の
-  接続)に完全展開される。
-- 制御構造(`let` / `fn` / `if` / `for` / `map` / `repeat`)はすべてコンパイル時。
-  実行時に評価されるのは DSP 層の `process` のみ。
-- ルーティング既定: `track` → 暗黙の `Master`。send/return は
-  `return Space { insert reverb(...) }` ブロック+トラック内の `send Space 0.35`
-  (**DECISION-S1 解決済 — v0 実装に準拠**)。
-- 乱数: `random(seed: 42)` が返す純粋な生成器のみ。シードは省略不可。
-- `song` は値なので、関数が `Song` を返す・変奏を `map` で作る等が可能
-  (アルゴリズム作曲はこの経路で行う)。
+- The `song` block is evaluated at compile time and fully expanded into an **event sequence** (sample-accurate
+  notes / automation / clip placement) and a **render graph** (the connections between instrument/effect/bus).
+- Control structures (`let` / `fn` / `if` / `for` / `map` / `repeat`) are all compile-time.
+  The only thing evaluated at runtime is the DSP layer's `process`.
+- Default routing: `track` → implicit `Master`. send/return is a
+  `return Space { insert reverb(...) }` block + `send Space 0.35` inside a track
+  (**DECISION-S1 resolved — conforms to the v0 implementation**).
+- Randomness: only the pure generator returned by `random(seed: 42)`. The seed cannot be omitted.
+- Since `song` is a value, a function can return a `Song`, variations can be built with `map`, etc.
+  (algorithmic composition goes through this path).
 
-### 5.3 音楽リテラルの意味
+### 5.3 Meaning of Music Literals
 
-- `beat` … `x`=ヒット、`-`=休符、`X`=アクセント、空白=グルーピング(無意味)。
-  解像度はリテラル長から推論(1 小節を等分)。**DECISION-S2**: 3 連符等の非 2 冪。
-- `notes` … `notes\`C4:1/4 E4:1/4 G4:1/2\``(ピッチ:長さ)。
-- `prog` … コード名と `|`(小節区切り。1 小節内の複数コードは時間を等分)。
-  `Progression` 値になり、パターン関数 `chords(x)` / `arp(x, rate:, style: "up|down|updown")` /
-  `bass(x, rate:)` の入力になる。裸の `prog` はブロックコードとして鳴る。
-  クオリティ: (メジャー), m, min, 7, maj7, m7, min7, dim, aug, sus2, sus4。
-  **進行が一級の値であることが類似検索(SRS-PLY-002)の基盤**。
-- `section verse = bars(1..8)` で名前付き区間を定義し、`play x at verse` で参照する。
+- `beat` … `x` = hit, `-` = rest, `X` = accent, whitespace = grouping (no meaning).
+  Resolution is inferred from the literal length (one bar divided equally). **DECISION-S2**: non-power-of-two divisions such as triplets.
+- `notes` … `notes\`C4:1/4 E4:1/4 G4:1/2\`` (pitch:length).
+- `prog` … chord names and `|` (bar separator. Multiple chords within one bar divide the time equally).
+  Becomes a `Progression` value, input to the pattern functions `chords(x)` / `arp(x, rate:, style: "up|down|updown")` /
+  `bass(x, rate:)`. A bare `prog` sounds as block chords.
+  Qualities: (major), m, min, 7, maj7, m7, min7, dim, aug, sus2, sus4.
+  **The fact that progressions are first-class values is the foundation of similarity search (SRS-PLY-002)**.
+- `section verse = bars(1..8)` defines a named range, referenced with `play x at verse`.
 
-## 6. DSP 層
+## 6. DSP Layer
 
 ```forte
 pub device MonoSaw : Instrument {
-  param cutoff: Hz = 800Hz in 20Hz..18kHz    // Hub/可視化はこの宣言から UI を導出
+  param cutoff: Hz = 800Hz in 20Hz..18kHz    // Hub/visualization derives the UI from this declaration
   param res:    Float = 0.3 in 0.0..0.99
 
   state phase: Float = 0.0
@@ -150,67 +149,67 @@ pub device MonoSaw : Instrument {
 }
 ```
 
-- `process` は 1 サンプル(または 1 フレーム)毎に呼ばれる唯一の実行時コード。
-  割り当て・再帰・無限ループ不可(コンパイル時に停止性を保証できる構文サブセット:
-  上限付き `for` のみ)。
-- `state` はボイス毎に複製される。`param` は Score 層から `automate` 可能。
-- 数学関数は `std.math`(= forte-core の dmath、libm 固定)のみ。
-  **決定論スパイク(07)により、この規約で native/wasm ビット同一が実証済み。**
-- v0 実装はインタープリタ(Rust のオペレータ木)で開始(SDD §2)。
+- `process` is the only runtime code, called once per sample (or per frame).
+  No allocation, recursion, or infinite loops (a syntactic subset whose termination can be guaranteed at compile time:
+  only bounded `for`).
+- `state` is duplicated per voice. `param` can be `automate`d from the Score layer.
+- Math functions come only from `std.math` (= forte-core's dmath, fixed to libm).
+  **The determinism spike (07) has demonstrated native/wasm bit-identity under this convention.**
+- The v0 implementation starts as an interpreter (a Rust operator tree) (SDD §2).
 
-### 6.1 v0 実装済みサブセット: ノードグラフ型 device
+### 6.1 v0 Implemented Subset: node-graph devices
 
-任意式の `process` に先行して、**宣言的なノードグラフとしての device** を v0 で実装済み
-(ボイス毎インタープリタ=dawcore Grid に展開):
+Ahead of arbitrary-expression `process`, **devices as declarative node graphs** are implemented in v0
+(expanded into a per-voice interpreter = dawcore Grid):
 
 ```forte
 device WarmLead : Instrument {
-  param cutoff = 0.6 in 0.0..1.0       // 使用側: instrument WarmLead(cutoff: 0.7)
-  node o   = osc(shape: "saw")          // freq 省略時は note.freq
-  node env = adsr(a: 0.03, d: 0.25, s: 0.6, r: 0.3)   // gate 省略時は note.gate
+  param cutoff = 0.6 in 0.0..1.0       // call site: instrument WarmLead(cutoff: 0.7)
+  node o   = osc(shape: "saw")          // when freq is omitted, note.freq
+  node env = adsr(a: 0.03, d: 0.25, s: 0.6, r: 0.3)   // when gate is omitted, note.gate
   node f   = svf(in: o, cutoff: cutoff, reso: 0.3, mod: lfo(rate: 0.25))
   out gain(in: f, mod: env, level: 0.9)
 }
 ```
 
-- プリミティブ: `osc(shape, freq)` / `lfo(rate, shape)` / `adsr(a,d,s,r, gate)` /
-  `svf(in, cutoff, reso, mod)` / `gain(in, level, mod)` / `mix(a, b)`。
-  信号ソース: `note.freq` / `note.gate` / `note.vel`、宣言済み `node` 名、入れ子呼び出し。
-- `param` は**インスタンス化時に束縛**(コンパイル時定数)。範囲は `in lo..hi`
-  (既定 0..1)で検査される。実行時オートメーション対応は forte-core で。
-- 前方参照は不可(E-GRID-002)。数値引数はすべて正規化 0..1。
+- Primitives: `osc(shape, freq)` / `lfo(rate, shape)` / `adsr(a,d,s,r, gate)` /
+  `svf(in, cutoff, reso, mod)` / `gain(in, level, mod)` / `mix(a, b)`.
+  Signal sources: `note.freq` / `note.gate` / `note.vel`, declared `node` names, nested calls.
+- `param` is **bound at instantiation time** (compile-time constant). The range is checked via `in lo..hi`
+  (default 0..1). Runtime automation support lands in forte-core.
+- Forward references are disallowed (E-GRID-002). All numeric arguments are normalized 0..1.
 
-## 7. 標準ライブラリ `@std` (v0 収録)
+## 7. Standard Library `@std` (included in v0)
 
-| モジュール | 内容(dawcore からの移植元) |
+| Module | Contents (source of the port from dawcore) |
 | --- | --- |
 | std.osc | polyBLEP saw/square/tri, sine (oscillator.rs) |
 | std.env | ADSR (envelope.rs) |
 | std.filter | TPT SVF, OnePole (filter.rs) |
 | std.fx | delay, FDN reverb, drive, EQ3, limiter (effects.rs) |
-| std.inst | Polymer 相当のリファレンスシンセ (synth.rs/voice.rs) |
-| std.note | arp, transpose, repeat, quantize (device.rs の NoteFx) |
+| std.inst | Polymer-equivalent reference synth (synth.rs/voice.rs) |
+| std.note | arp, transpose, repeat, quantize (NoteFx from device.rs) |
 | std.math | sin/cos/tan/exp/tanh/powf (dmath.rs) |
-| std.rand | シード付き xorshift |
+| std.rand | seeded xorshift |
 
-サンプラー(sampler.rs)は `RecordedAudio` 専用に制限して移植する(外部ファイル
-再生を持たない。SYS-REC-001)。
+The sampler (sampler.rs) will be ported restricted to `RecordedAudio` only (no external-file
+playback. SYS-REC-001).
 
-## 8. アセット参照と来歴
+## 8. Asset References and Provenance
 
-- `import x from "*.frec"` は `RecordedAudio` 型。コンパイル時に
-  (a) CAS 実体の存在、(b) ed25519 署名、(c) `device_class ∈ {microphone}` を検証。
-  失敗は `E-PROV-001`。
-- `.frec` ポインタ形式は SDD §4.1 に定義。
+- `import x from "*.frec"` has type `RecordedAudio`. At compile time it verifies
+  (a) the existence of the CAS entity, (b) the ed25519 signature, (c) `device_class ∈ {microphone}`.
+  Failure is `E-PROV-001`.
+- The `.frec` pointer format is defined in SDD §4.1.
 
-## 9. 診断とエラー
+## 9. Diagnostics and Errors
 
-- エラーコード体系: `E-TYPE-*`(型)、`E-TIME-*`(拍/秒の不整合)、
-  `E-PROV-*`(来歴)、`E-DSP-*`(process 制約違反)、`E-MOD-*`(import)。
-- メッセージは音楽語彙で(SRS-LANG-008)。例:
-  `E-TIME-002: Track 'Vocal' の 3 小節目: Pattern(3/4 拍分)が meter 4/4 と一致しません`
+- Error code scheme: `E-TYPE-*` (types), `E-TIME-*` (beat/second inconsistencies),
+  `E-PROV-*` (provenance), `E-DSP-*` (process constraint violations), `E-MOD-*` (import).
+- Messages use musical vocabulary (SRS-LANG-008). Example:
+  `E-TIME-002: Track 'Vocal', bar 3: Pattern (worth 3/4 beats) does not match meter 4/4`
 
-## 10. 文法スケッチ (EBNF 抜粋)
+## 10. Grammar Sketch (EBNF excerpt)
 
 ```
 file        := { import } { decl }
@@ -227,19 +226,19 @@ expr        := literal | musicLit | ident | call | lambda | binop | ...
 musicLit    := ("beat"|"notes"|"prog") "`" raw "`"
 ```
 
-## 11. v0 で作らないもの(v1 以降)
+## 11. Not Built in v0 (v1 and later)
 
-- ユーザー定義ジェネリクス、trait 相当の抽象
-- マクロ / メタプログラミング
-- Score 層のリアルタイム入力反映(ライブコーディング) — 設計上は可能だが後回し
-- MIDI 2.0、マイクロチューニング(型は Pitch に拡張余地を残す)
+- User-defined generics, trait-like abstraction
+- Macros / metaprogramming
+- Real-time input reflection in the Score layer (live coding) — possible by design, but deferred
+- MIDI 2.0, microtuning (the Pitch type leaves room for extension)
 
-## 12. 未決事項一覧
+## 12. List of Open Decisions
 
-| ID | 内容 | 期限 |
+| ID | Content | Deadline |
 | --- | --- | --- |
-| DECISION-T1 | ジェネリクスの範囲 | パーサ実装前 |
-| ~~DECISION-S1~~ | ~~send/return ルーティング構文~~ → **解決: `return Name {}` + `send Name level`** | 済 |
-| DECISION-S2 | 非 2 冪分割(3 連)の beat リテラル表現 | リファレンス曲移植時 |
-| DECISION-S3 | `section` の反復(A-B-A)の一級表現(単純な `section` は実装済) | 同上 |
-| DECISION-D1 | `process` のフレーム粒度(1 サンプル vs 小ブロック) | インタープリタ実装時 |
+| DECISION-T1 | Scope of generics | Before parser implementation |
+| ~~DECISION-S1~~ | ~~send/return routing syntax~~ → **Resolved: `return Name {}` + `send Name level`** | Done |
+| DECISION-S2 | beat-literal representation of non-power-of-two divisions (triplets) | When porting the reference song |
+| DECISION-S3 | First-class expression of `section` repetition (A-B-A) (plain `section` is implemented) | Same as above |
+| DECISION-D1 | Frame granularity of `process` (1 sample vs. small blocks) | When implementing the interpreter |

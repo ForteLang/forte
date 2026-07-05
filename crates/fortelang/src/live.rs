@@ -204,6 +204,43 @@ pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
         ds.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n")
     })?;
 
+    // the instrument's live knobs: exposed device params (grid instruments)
+    // or the builtin's parameter table, tweakable while playing
+    let dev = &project.tracks[0].devices[0];
+    let mut knobs: Vec<(String, f32, f32, f32)> = if let Some(g) = dev.grid.as_ref() {
+        // declared ranges come from the device AST when we know the library
+        let ranges: std::collections::HashMap<String, (f32, f32)> = import
+            .as_deref()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|s| crate::parser::parse(&s).ok())
+            .and_then(|ast| ast.devices.into_iter().find(|d| d.name == name))
+            .map(|d| {
+                d.params
+                    .iter()
+                    .map(|p| {
+                        let (lo, hi) = p.range.unwrap_or((0.0, 1.0));
+                        (p.name.clone(), (lo as f32, hi as f32))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        g.param_binds
+            .iter()
+            .map(|(n, v, _)| {
+                let (lo, hi) = ranges.get(n).copied().unwrap_or((0.0, 1.0));
+                (n.clone(), *v, lo, hi)
+            })
+            .collect()
+    } else {
+        dev.kind
+            .params()
+            .iter()
+            .zip(dev.params.iter())
+            .map(|(n, v)| (n.to_ascii_lowercase(), *v, 0.0, 1.0))
+            .collect()
+    };
+    knobs.truncate(9); // one digit key per knob
+
     let mut audio = crate::audio::start();
     if audio.silent {
         eprintln!("audio: 出力デバイスなし — 無音バックエンドです({})", audio.device_name);
@@ -215,15 +252,41 @@ pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
     println!("♪ {name} — キーボードが鍵盤になります(120bpm 相当で記録)");
     println!("   a w s e d f t g y h u j k o l p ;  =  C C# D D# E F F# G G# A A# B C…");
     println!("   z/x オクターブ ↑/↓   c/v ベロシティ ↑/↓   q で終了(演奏が notes リテラルになります)");
+    if !knobs.is_empty() {
+        println!(
+            "   ノブ: 1..{} で選択、-/= で下げ/上げ — {}",
+            knobs.len(),
+            knobs.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>().join(" ")
+        );
+    }
 
     let _raw = RawTerm::enter();
     let mut stdin = std::io::stdin();
     let mut octave: i32 = 3; // C3 スタート(MIDI 48)
     let mut velocity: i32 = 100;
+    let mut sel = 0usize;
     let started = Instant::now();
     let mut offs: Vec<(u8, Instant)> = Vec::new();
     let mut played: Vec<crate::perform::PlayedNote> = Vec::new();
     const BPM: f64 = 120.0;
+
+    // one status line: note · oct/vel · every knob, the selected one bracketed
+    let status = |note: Option<u8>, octave: i32, velocity: i32, knobs: &[(String, f32, f32, f32)], sel: usize| {
+        let mut line = match note {
+            Some(p) => format!("♪ {:<4}", pitch_name(p)),
+            None => "♪     ".to_string(),
+        };
+        line.push_str(&format!(" oct{octave} vel{velocity}"));
+        for (i, (n, v, ..)) in knobs.iter().enumerate() {
+            if i == sel {
+                line.push_str(&format!("  [{n} {v:.2}]"));
+            } else {
+                line.push_str(&format!("  {n} {v:.2}"));
+            }
+        }
+        print!("\r{line}\x1b[K");
+        let _ = std::io::stdout().flush();
+    };
 
     loop {
         audio.handle.collect_garbage();
@@ -248,23 +311,32 @@ pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
             b'q' | 0x03 | 0x04 => break, // q / Ctrl+C / Ctrl+D
             b'z' => {
                 octave = (octave + 1).min(7);
-                print!("\r  oct {octave}  vel {velocity}          ");
-                let _ = std::io::stdout().flush();
+                status(None, octave, velocity, &knobs, sel);
             }
             b'x' => {
                 octave = (octave - 1).max(-1);
-                print!("\r  oct {octave}  vel {velocity}          ");
-                let _ = std::io::stdout().flush();
+                status(None, octave, velocity, &knobs, sel);
             }
             b'c' => {
                 velocity = (velocity + 10).min(127);
-                print!("\r  oct {octave}  vel {velocity}          ");
-                let _ = std::io::stdout().flush();
+                status(None, octave, velocity, &knobs, sel);
             }
             b'v' => {
                 velocity = (velocity - 10).max(1);
-                print!("\r  oct {octave}  vel {velocity}          ");
-                let _ = std::io::stdout().flush();
+                status(None, octave, velocity, &knobs, sel);
+            }
+            // knobs: a digit selects, -/= turn (5% of the declared range),
+            // applied live through the same path automation uses
+            d @ b'1'..=b'9' if ((d - b'1') as usize) < knobs.len() => {
+                sel = (d - b'1') as usize;
+                status(None, octave, velocity, &knobs, sel);
+            }
+            k @ (b'-' | b'=' | b'+') if !knobs.is_empty() => {
+                let (_, v, lo, hi) = &mut knobs[sel];
+                let step = (*hi - *lo) * 0.05;
+                *v = if k == b'-' { (*v - step).max(*lo) } else { (*v + step).min(*hi) };
+                audio.handle.send(Command::SetParam { track: 0, device: 0, param: sel, value: *v });
+                status(None, octave, velocity, &knobs, sel);
             }
             k => {
                 if let Some(&(_, semi)) = KEYMAP.iter().find(|(key, _)| *key == k) {
@@ -283,8 +355,7 @@ pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
                             len: GATE.as_secs_f64() * BPM / 60.0,
                             pitch: note,
                         });
-                        print!("\r♪ {:<4} oct {octave}  vel {velocity}     ", pitch_name(note));
-                        let _ = std::io::stdout().flush();
+                        status(Some(note), octave, velocity, &knobs, sel);
                     }
                 }
             }

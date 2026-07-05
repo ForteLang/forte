@@ -1,121 +1,123 @@
-# 開発ロードマップ — Forte
+# Development Roadmap — Forte
 
 Status: Draft v0.1 / 2026-07-02
-前提: コア開発 1〜3 名+創業者。期間は目安であり、各フェーズ末の Exit 基準で判断する。
+Assumptions: 1–3 core developers + founder. Durations are guidelines; decisions are made against the Exit criteria at the end of each phase.
 
-戦略原則:
-1. **言語とエンジンが製品の心臓。Hub は系譜データが貯まる前に凝らない。**
-2. 各フェーズで「外に見せられる体験」を必ず 1 つ出す(採用・仲間集め・検証のため)。
-3. ポイント経済は最後。**系譜の記録**だけは Phase 2 から必ず行う(後から経済を乗せる資産)。
+Strategic principles:
+1. **The language and engine are the product's heart. Do not over-engineer the Hub before lineage data accumulates.**
+2. Each phase must ship exactly one "experience that can be shown externally" (for hiring, gathering allies, and validation).
+3. The point economy comes last. **Lineage recording** alone must start from Phase 2 (an asset onto which the economy can be layered later).
 
 ---
 
-## Phase 0 — 言語仕様とコアの証明 (〜3 ヶ月)
+## Phase 0 — Language Specification and Core Proof (~3 months)
 
-**ゴール: 「コードだけで曲が 1 曲ビルドできる」ことの技術証明。**
+**Goal: technical proof that "a song can be built from code alone."**
 
-| # | 成果物 | 対応要求 |
+| # | Deliverable | Requirements |
 | --- | --- | --- |
-| 0.1 | Forte lang 仕様書 v0(構文・型・決定論規約)+パーサ/型検査 — **🔶 v0 スライス実装済(crates/fortelang: lexer/parser/検査、診断コード付き)。ローカル `import { X } from "./lib.forte"`(循環検出・再帰解決・ライブラリ単体検証)も実装済。v1.1 で `automate volume`(線形ランプ)+`modulate … with lfo`(パラメータモジュレーション)を追加(spec §4.9)** | SRS-LANG-001..006 |
-| 0.2 | forte-core: dawcore の engine/dsp/bounce をレンダーグラフ化して移植(単スレッド) — 🔶 v0 は dawcore を直接ターゲットにコンパイル(グラフ IR は次段) | SRS-CORE-001/003/005 |
-| 0.3 | `forte build`(WAV+build.manifest.json)と `forte play`(CLI 再生) — **✅ `forte check/build/play` 実装済。play はファイル監視ホットリロード付き(再生を止めずに再コンパイル反映、エラー時は直前版を維持)** | SRS-BLD-001/002 |
-| 0.4 | **決定論 CI**: native/wasm の出力ハッシュ一致ゲート — **✅ スパイク成功(07-determinism-spike.md)。`scripts/determinism_test.sh` がゲートの原型** | SYS-ENG-001 |
-| 0.5 | `@std` 初期ライブラリ(シンセ 2、EQ、delay、reverb、limiter) — **🔶 ビルトイン 8 デバイス+`device` 構文による言語内音源定義(ノードグラフ→Grid 展開、`songs/handmade.forte` で実証)。音作り拡充: DSP プリミティブに `noise`(決定論 xorshift)と `shaper`(tanh/clip/fold)を追加し、ドラムキットの完全自作が可能に(`songs/handmade-kit.forte`)。録音テイクの楽器化 `sampler(take: x, root: A3)` — マイクで録った音がクロマチックに演奏できるサンプラー音源になる(SYS-REC-001 の白箱原則そのまま)。**エフェクトの device DSL**(`device X : Effect`、入力は `audio.in`、ステレオ各チャンネル独立評価)— fuzz / tremolo / オートワウがコードで書けて insert に挿せる。**標準楽器ライブラリ `lib/std/`**: device DSL 製 29 楽器(drums 10 / bass 5 / keys 5 / pads 4 / leads 5)を同梱 — 全部ユーザー空間のコードなので fork して作り替えられる。デモ `songs/std-tour.forte`(10 トラック)は決定論ゲート入り。**sampler v2**: `start`/`end`(再生範囲トリム)、`loop: "on"`(ノート保持中の範囲ループ)、`reverse: "on"`(逆再生)— 1 本の録音テイクを刻んで何種類もの楽器にできる(ノートオン時確定で決定論、既存曲はビット同一のまま)。**soundnote**: device DSL に `take` スロット+`sample()` ノード — 録音テイクをノードグラフの音源にして svf/shaper/adsr の後段で加工できる。デバイスはテイクを持たず使う側が差すので、楽器として publish/fork 可能。**`kit()`**: 音名キーで複数テイクをパッドに割り当てるドラムキット(`kit(C2: kickTake, D2: snareTake)`、原速再生)。いずれも native/wasm ビット同一を検証済** | D-06 |
-| 0.6 | リファレンス曲 3 曲をコードで移植(ユーザーテスト素材) — **✅ 3 曲(`first-light` 4/4、`slow-circles` 6/8、`night-parade` prog/section/send-return/arp 行使)。native/wasm 同一ダイジェスト** | SYS-LNG-001 受入 |
+| 0.1 | Forte lang specification v0 (syntax, types, determinism conventions) + parser/type checker — **🔶 v0 slice implemented (crates/fortelang: lexer/parser/checking, with diagnostic codes). Local `import { X } from "./lib.forte"` (cycle detection, recursive resolution, standalone library validation) also implemented. v1.1 added `automate volume` (linear ramp) + `modulate … with lfo` (parameter modulation) (spec §4.9)** | SRS-LANG-001..006 |
+| 0.2 | forte-core: port dawcore's engine/dsp/bounce as a render graph (single-threaded) — 🔶 v0 compiles directly targeting dawcore (graph IR is the next step) | SRS-CORE-001/003/005 |
+| 0.3 | `forte build` (WAV + build.manifest.json) and `forte play` (CLI playback) — **✅ `forte check/build/play` implemented. play has file-watch hot reload (recompiled changes applied without stopping playback; on error, the previous version is kept)** | SRS-BLD-001/002 |
+| 0.4 | **Determinism CI**: native/wasm output-hash equality gate — **✅ Spike succeeded (07-determinism-spike.md). `scripts/determinism_test.sh` is the prototype of the gate** | SYS-ENG-001 |
+| 0.5 | Initial `@std` library (2 synths, EQ, delay, reverb, limiter) — **🔶 8 built-in devices + in-language instrument definition via the `device` syntax (node graph → Grid expansion, demonstrated in `songs/handmade.forte`). Sound-design expansion: added `noise` (deterministic xorshift) and `shaper` (tanh/clip/fold) to the DSP primitives, making a fully hand-built drum kit possible (`songs/handmade-kit.forte`). Instrumentalizing recorded takes with `sampler(take: x, root: A3)` — a sound recorded with a microphone becomes a sampler instrument playable chromatically (exactly the white-box principle of SYS-REC-001). **Effect device DSL** (`device X : Effect`, input is `audio.in`, each stereo channel evaluated independently) — fuzz / tremolo / auto-wah can be written in code and inserted as inserts. **Standard instrument library `lib/std/`**: 29 instruments built with the device DSL (drums 10 / bass 5 / keys 5 / pads 4 / leads 5) bundled — all user-space code, so they can be forked and remade. The demo `songs/std-tour.forte` (10 tracks) is in the determinism gate. **sampler v2**: `start`/`end` (playback-range trim), `loop: "on"` (range looping while the note is held), `reverse: "on"` (reverse playback) — a single recorded take can be sliced into many different instruments (fixed at note-on for determinism; existing songs remain bit-identical). **soundnote**: a `take` slot + `sample()` node in the device DSL — a recorded take becomes a node-graph sound source that can be processed downstream through svf/shaper/adsr. The device holds no take; the user plugs one in, so it can be published/forked as an instrument. **`kit()`**: a drum kit that assigns multiple takes to pads keyed by note names (`kit(C2: kickTake, D2: snareTake)`, played at original speed). All verified bit-identical across native/wasm** | D-06 |
+| 0.6 | Port 3 reference songs to code (user-test material) — **✅ 3 songs (`first-light` 4/4, `slow-circles` 6/8, `night-parade` exercising prog/section/send-return/arp). Identical digests across native/wasm** | SYS-LNG-001 acceptance |
 
-**Exit 基準**: 外部の作曲経験者 2 名がドキュメントだけを頼りに 8 小節を書けて、
-2 環境ハッシュが一致する。
-**主要リスク**: 決定論(特に wasm/native の数値一致)。→ 0.4 を最初の 2 週間で
-スパイクし、破綻するなら「同一ターゲット(wasm 統一)での決定論」に後退する判断を早期に行う。
+**Exit criteria**: two external people with composing experience can write 8 bars relying on the
+documentation alone, and the two-environment hashes match.
+**Key risk**: determinism (especially numeric equality between wasm/native). → Spike 0.4 in the
+first 2 weeks, and if it breaks down, decide early to fall back to "determinism on a single
+target (wasm-unified)."
 
-## Phase 1 — 作曲体験 (〜3 ヶ月, 累計 6 ヶ月)
+## Phase 1 — Composing Experience (~3 months, cumulative 6 months)
 
-**ゴール: 「VSCode で聴きながら曲を改善する」体験の成立。**
+**Goal: establish the experience of "improving a song in VSCode while listening to it."**
 
-| # | 成果物 | 対応要求 |
+| # | Deliverable | Requirements |
 | --- | --- | --- |
-| 1.1 | forte-lsp(補完・診断・ホバー)+ VSCode 拡張(再生コントロール) — **🔶 LSP(診断・補完・ホバー・整形)+ **Forte Studio**(`editor/vscode-forte`): ハイライト・診断・Play/Build/Stop・REPL(Shift+Enter 送信)・アレンジビューに加え、サイドバーに **History**(commit / 音楽語彙 diff / checkout / merge — リポジトリがなければ commit 時に自動 init)と **Hub**(一覧 → ▶ ストア直接試聴 / 履歴ごと Fork / Publish / verify / lineage)。全 UI は `forte` CLI の薄いラッパー(`forte log --json` / `hub list --json` / `hub entry` を追加)** | SRS-LSP-001/002 |
-| 1.2 | 差分ビルド+ホットリロード(変更→音まで 1 秒以内) | SRS-LANG-007, SRS-CORE-006 |
-| 1.3 | 可視化 Webview(ピアノロール/アレンジ/メーター、読み取り専用+コードジャンプ) | SRS-VIS-001/002 |
-| 1.4 | MIDI 入力→パターン記録(演奏をコードとして書き起こす) — **✅ ブラウザ演奏モード(🎹): Web MIDI + PC キー鍵盤で live モニタしながら演奏 → 停止時に 1/16 量子化・和音グループ化・休符挿入で `notes` リテラルに書き起こし(Rust 実装+単体テスト、生成コードのコンパイル通過を E2E 検証)** | SRS-REC-001 |
-| 1.5 | マイク録音 v1: `.frec`+来歴+クラッシュ回復+ループバック較正 — **🔶 `.frec` フォーマット+来歴強制(来歴なしはコンパイルエラー E-PROV-001)+`import take from "*.frec"`+`audio take at …` 構文+エンジン再生を実装。ブラウザ録音 UI 実装済(getUserMedia EC/NS/AGC オフ → AudioWorklet PCM 直取り → 来歴付き .frec を OPFS へ。E2E はフェイクマイクで検証)。ループバック較正実装済(チャープ再生→同一 AudioContext クロックで捕捉→wasm 相関でサンプル精度の往復実測、結果はテイクの来歴に latency_samples として記録)。逐次 OPFS 書き込み(専用 Worker + SyncAccessHandle、毎秒 flush)によるクラッシュ回復も実装済 — 録音中にタブが死んでも次回起動時にテイクとして復元される(E2E で検証)** | SRS-REC-002..005 |
+| 1.1 | forte-lsp (completion, diagnostics, hover) + VSCode extension (playback controls) — **🔶 LSP (diagnostics, completion, hover, formatting) + **Forte Studio** (`editor/vscode-forte`): highlighting, diagnostics, Play/Build/Stop, REPL (Shift+Enter to send), arrangement view, plus sidebar **History** (commit / musical-vocabulary diff / checkout / merge — auto-inits the repository on commit if absent) and **Hub** (list → ▶ direct in-store audition / Fork with history / Publish / verify / lineage). All UI is a thin wrapper over the `forte` CLI (added `forte log --json` / `hub list --json` / `hub entry`)** | SRS-LSP-001/002 |
+| 1.2 | Incremental build + hot reload (change → sound within 1 second) | SRS-LANG-007, SRS-CORE-006 |
+| 1.3 | Visualization Webview (piano roll/arrangement/meters, read-only + code jump) | SRS-VIS-001/002 |
+| 1.4 | MIDI input → pattern recording (transcribing performances as code) — **✅ Browser performance mode (🎹): play with Web MIDI + PC-key keyboard while live monitoring → on stop, transcribed into a `notes` literal with 1/16 quantization, chord grouping, and rest insertion (Rust implementation + unit tests; E2E verifies the generated code compiles)** | SRS-REC-001 |
+| 1.5 | Microphone recording v1: `.frec` + provenance + crash recovery + loopback calibration — **🔶 Implemented the `.frec` format + provenance enforcement (missing provenance is compile error E-PROV-001) + `import take from "*.frec"` + the `audio take at …` syntax + engine playback. Browser recording UI implemented (getUserMedia with EC/NS/AGC off → direct AudioWorklet PCM capture → provenance-carrying .frec into OPFS; E2E verified with a fake microphone). Loopback calibration implemented (chirp playback → capture on the same AudioContext clock → sample-accurate round-trip measurement via wasm correlation; the result is recorded in the take's provenance as latency_samples). Crash recovery via sequential OPFS writes (dedicated Worker + SyncAccessHandle, flushed every second) also implemented — even if the tab dies mid-recording, the take is restored on next startup (E2E verified)** | SRS-REC-002..005 |
 | 1.6 | `forte test` / `forte fmt` | SRS-LANG-002 |
 
-**Exit 基準**: 作曲者 5 名のクローズド試用で、1 曲を録音込みで完成させられる。
-「コードで作曲は成立するか」の定性検証がここで出る(最大の製品リスクの検証点)。
+**Exit criteria**: in a closed trial with 5 composers, each can complete one song including
+recording. The qualitative validation of "does composing in code work?" emerges here (the
+validation point of the biggest product risk).
 
-## Phase 2 — Hub と系譜 (〜4 ヶ月, 累計 10 ヶ月)
+## Phase 2 — Hub and Lineage (~4 months, cumulative 10 months)
 
-**ゴール: fork 系譜+リリースが動く最小エコシステム(クローズドβ)。**
+**Goal: a minimal ecosystem where fork lineage + releases work (closed beta).**
 
-| # | 成果物 | 対応要求 |
+| # | Deliverable | Requirements |
 | --- | --- | --- |
-| 2.1 | git ホスティング+認可層(**public は clone 拒否・fork API のみ**) — **🔶 ローカル VCS を前倒し実装(`forte init/commit/log/branch/checkout/diff`): SHA-256 content-addressed オブジェクトストア(blob/tree/commit)を `.forte/` に持ち、`*.forte`+`*.frec`+系譜スタンプを追跡。`forte diff` は行差分ではなく**コンパイル済みモデルの意味差分**(「tempo: 108 → 116 bpm」「track Keys: Polymer の wave: square → saw」「小節 13..16: 配置を削除」)。ライブラリ編集は import している曲側に「音が変わる」として表面化。`forte merge` は三方マージ(fast-forward / LCS 行マージ / 競合マーカー+MERGE_HEAD で解消コミットが両親を記録)に加え、**マージ結果をコンパイル検証** — テキストとして綺麗に合流しても音楽として壊れていれば警告する。**ブラウザにもリポジトリ**: web エディタの History パネル(commit / log / 音楽語彙 diff / 復元)。オブジェクト形式は CLI と同一(SHA-256 content-addressed、OPFS 格納)、意味差分は wasm コンパイラの fw_semdiff が計算。ホスティング(サーバー側 push/pull)は 2.2 のリモート hub として実装済み** | SRS-HUB-001/002 |
-| 2.2 | 系譜グラフ DB+公開 API(fork/depends/performed/released) — **🔶 ローカル Hub として前倒し実装(`forte hub publish/fork/lineage/list`): 取得は fork のみ、fork 先に来歴スタンプ、再 publish で forked_from が構造的に記録される。**VCS 統合済**: publish はクリーンなリポジトリなら到達可能オブジェクトごと履歴を push(Version.commit に記録)、fork は `.forte` リポジトリ付きで降りてきて fork スタンプ自体が(元作者の HEAD を親に持つ)コミットになる — 系譜が履歴そのもの。forked_from は正確なコミットまで指す。**サーバー化済み**: `forte hub serve` した hub に `--hub http://host:9377` で複数人が push/pull できる。`forte hub signup` でトークン発行(サーバーは SHA-256 ハッシュのみ保存)、登録ユーザーがいる hub は publish にトークン必須で **author はトークンから導出**(なりすまし不可)。publish は VCS 履歴オブジェクトごと HTTP で push(サーバーが内容ハッシュを検証してから保存 — ストアは誰が push しても content-addressed)、リモート fork は履歴ごと降りてきて系譜スタンプがコミットされる — ローカル fork と同型。HTTP クライアントも std のみ。統合テスト(実 HTTP での signup→401→publish→fork→再publish の一周+改竄オブジェクト拒否)済。TLS は前段のリバースプロキシで。**GitHub バックエンド(個人〜仲間内の常用形)**: hub はただの git リポジトリという定義で `--hub github:you/forte-hub`(/ `git@…:….git` / GitLab / NAS の bare repo)に publish/fork/list/release/verify/lineage/serve が全部向く。transport は system git なので認証は既存の git 資格情報、author は `git config user.name`、台帳の変更履歴も git に残る。並行 publish は push の compare-and-swap(拒否→同期→操作リプレイ)で自動解決 — bare repo 相手の完全オフライン統合テストで並行 publish 収束まで検証済。`serve --hub <git-URL>` が同期 checkout をローカル配信するのでブラウザ系譜ページも無変更で動く。構造的 fork-only の強制は git ホスト上では成立しない(来歴スタンプによる規約に縮退)— それが必要な公開 hub は認証付きサーバーの領分** | SRS-HUB-003 |
-| 2.3 | forte-pkg: Hub fork 経由の依存解決+forte.lock | SRS-PKG-001..004 |
-| 2.4 | リリースパイプライン(クリーンルーム決定論ビルド+ハッシュ検証+Opus 配信) — **🔶 ローカル版実装(`forte hub release/verify`): スナップショットからの決定論ビルドでダイジェストを台帳に記録し、誰でも再現検証できる(改竄はMISMATCHで検出、検証回数は系譜に表示)。配信(Opus)はサーバー段** | SRS-HUB-004/005 |
-| 2.5 | 曲ページ(系譜表示・コードブラウズ)+Web プレイヤー | SRS-HUB-008, SRS-PLY-001 |
-| 2.6 | 再生イベント台帳(記録のみ) | SRS-HUB-007 |
-| 2.7 | 系譜保存ライセンス v1(法的レビュー込み) | SYS-GOV-001 |
+| 2.1 | git hosting + authorization layer (**public rejects clone; fork API only**) — **🔶 Local VCS implemented ahead of schedule (`forte init/commit/log/branch/checkout/diff`): a SHA-256 content-addressed object store (blob/tree/commit) held in `.forte/`, tracking `*.forte` + `*.frec` + lineage stamps. `forte diff` is not a line diff but a **semantic diff of the compiled model** ("tempo: 108 → 116 bpm", "track Keys: Polymer wave: square → saw", "bars 13..16: placement removed"). Library edits surface on the importing song's side as "the sound changes." `forte merge` performs a three-way merge (fast-forward / LCS line merge / conflict markers + MERGE_HEAD so the resolution commit records both parents), and additionally **compile-verifies the merge result** — even if the text merges cleanly, it warns if the music is broken. **Repositories in the browser too**: the web editor's History panel (commit / log / musical-vocabulary diff / restore). Object format identical to the CLI (SHA-256 content-addressed, stored in OPFS); semantic diff computed by the wasm compiler's fw_semdiff. Hosting (server-side push/pull) is implemented as the remote hub of 2.2** | SRS-HUB-001/002 |
+| 2.2 | Lineage graph DB + public API (fork/depends/performed/released) — **🔶 Implemented ahead of schedule as a local Hub (`forte hub publish/fork/lineage/list`): acquisition is fork-only, provenance stamps go to the fork destination, and re-publish structurally records forked_from. **VCS-integrated**: publish pushes the history with all reachable objects when the repository is clean (recorded in Version.commit); fork comes down with a `.forte` repository, and the fork stamp itself becomes a commit (whose parent is the original author's HEAD) — the lineage is the history itself. forked_from points to the exact commit. **Server-ready**: multiple people can push/pull to a hub run via `forte hub serve` with `--hub http://host:9377`. `forte hub signup` issues tokens (the server stores only SHA-256 hashes); on a hub with registered users, publish requires a token, and the **author is derived from the token** (no impersonation). publish pushes the VCS history objects over HTTP (the server verifies content hashes before storing — the store is content-addressed regardless of who pushes); remote fork brings the history down and commits a lineage stamp — isomorphic to local fork. The HTTP client also uses std only. Integration tests done (a full loop over real HTTP: signup → 401 → publish → fork → re-publish, plus rejection of tampered objects). TLS via a reverse proxy in front. **GitHub backend (the everyday form for individuals to small groups)**: with the definition that a hub is just a git repository, publish/fork/list/release/verify/lineage/serve can all point at `--hub github:you/forte-hub` (/ `git@…:….git` / GitLab / a bare repo on a NAS). Transport is system git, so authentication uses existing git credentials, the author is `git config user.name`, and the ledger's change history also stays in git. Concurrent publishes auto-resolve via push compare-and-swap (reject → sync → replay the operation) — verified through fully offline integration tests against a bare repo up to convergence of concurrent publishes. `serve --hub <git-URL>` serves a synchronized checkout locally, so the browser lineage page works unchanged. Structural fork-only enforcement does not hold on a git host (it degrades to a convention via provenance stamps) — a public hub that needs it is the domain of the authenticated server** | SRS-HUB-003 |
+| 2.3 | forte-pkg: dependency resolution via Hub fork + forte.lock | SRS-PKG-001..004 |
+| 2.4 | Release pipeline (clean-room deterministic build + hash verification + Opus distribution) — **🔶 Local version implemented (`forte hub release/verify`): a deterministic build from the snapshot records the digest in the ledger, and anyone can verify reproduction (tampering detected as MISMATCH; verification counts shown in the lineage). Distribution (Opus) is the server stage** | SRS-HUB-004/005 |
+| 2.5 | Song page (lineage display, code browsing) + web player | SRS-HUB-008, SRS-PLY-001 |
+| 2.6 | Playback event ledger (recording only) | SRS-HUB-007 |
+| 2.7 | Lineage-preserving license v1 (including legal review) | SYS-GOV-001 |
 
-**Exit 基準**: β参加者 30 名、公開モジュール 50 個、fork 由来の依存を含む
-リリース 10 曲。系譜グラフが実データで描ける。
+**Exit criteria**: 30 beta participants, 50 public modules, 10 released songs containing
+fork-derived dependencies. The lineage graph can be drawn from real data.
 
-## Phase 3 — Web エディタと演奏 fork (〜4 ヶ月, 累計 14 ヶ月)
+## Phase 3 — Web Editor and Performance Fork (~4 months, cumulative 14 months)
 
-**ゴール: ブラウザだけで「聴く→fork→歌入れ→リリース」が閉じる。**
+**Goal: "listen → fork → add vocals → release" closes in the browser alone.**
 
-| # | 成果物 | 対応要求 |
+| # | Deliverable | Requirements |
 | --- | --- | --- |
-| 3.1 | Web エディタ(Monaco+wasm LSP+AudioWorklet 再生+OPFS+PWA オフライン) — **🔶 プロトタイプ前倒しで実装(`web/`+`crates/forteweb`): タイプ中診断・ビルド証明ダイジェスト・AudioWorklet 再生+ホットリロード・読み取り専用アレンジビュー・OPFS 自動保存(複数曲、リロード後も残存)・Service Worker による完全オフライン動作(worklet は blob URL 経由で SW キャッシュから)。実 Chromium E2E 7 項目(`scripts/web_e2e.mjs`): ブラウザ==ネイティブのビット同一、OPFS 永続、**ネットワーク切断状態での起動・コンパイル・再生**まで検証済** | SRS-WEB-001..003 |
-| 3.2 | open-stems リリース+**演奏 fork モード**(最小録音 GUI) — **🔶 ブラウザで「聴く→fork→歌入れ→publish」が一周: hub の POST /api/publish(スナップショットをコンパイル検証してから登録、CORS 対応)、publish/fork の .frec バイナリ同梱(クリーンルーム release/verify もテイク込みで成立)、ブラウザ fork に系譜スタンプ書込(来歴の穴を修正)、録音停止→ワンタップで import+Voice トラック自動追記、エディタの ⇪ Publish。E2E で全周検証(fake mic 録音→差し込み→publish→forked_from+テイク同梱を確認)。**open-stems**: `forte build --stems`(トラック別 WAV をソロ+センド込みでレンダ、ステム別 digest を manifest に記録 — 決定論テスト済)と Hub 試聴のトラック M/S(fw_set_mute/solo → worklet、再生中に抜き差し、E2E 検証)** | SRS-BLD-003, SRS-REC-006 |
-| 3.3 | Safari/Firefox 縮退モード実装 | SRS-WEB-004 |
-| 3.4 | 指紋照合+通報モデレーション v1 | SRS-HUB-006 |
-| 3.5 | エクスポート(zip/git bundle)・データ可搬性 — **🔶 `forte export <song.forte>`: 自己完結 zip(エントリ+import+録音テイク+レンダー digest 入り `export.manifest.json`+クリーンリポジトリなら `.forte/` 履歴オブジェクト+refs+HEAD)。zip ライター自作(store-only、CRC-32、タイムスタンプ固定)で **zip 自体がバイト単位に決定論的**。往復テスト: 展開→コンパイル→digest が manifest と一致、復元した `.forte/` で `forte log` が動くところまで検証済** | SRS-WEB-005 |
+| 3.1 | Web editor (Monaco + wasm LSP + AudioWorklet playback + OPFS + PWA offline) — **🔶 Prototype implemented ahead of schedule (`web/` + `crates/forteweb`): as-you-type diagnostics, build-proof digests, AudioWorklet playback + hot reload, read-only arrangement view, OPFS auto-save (multiple songs, persists across reloads), full offline operation via Service Worker (the worklet loads from the SW cache via a blob URL). 7 real-Chromium E2E checks (`scripts/web_e2e.mjs`): browser==native bit-identity, OPFS persistence, and **startup, compile, and playback with the network disconnected** all verified** | SRS-WEB-001..003 |
+| 3.2 | open-stems release + **performance fork mode** (minimal recording GUI) — **🔶 "listen → fork → add vocals → publish" completes a full loop in the browser: the hub's POST /api/publish (registers the snapshot after compile verification, CORS-enabled), .frec binaries bundled with publish/fork (clean-room release/verify also holds with takes included), lineage stamp written on browser fork (fixing the provenance gap), record-stop → one-tap import + automatic Voice track addition, the editor's ⇪ Publish. The full loop is E2E-verified (fake-mic recording → insertion → publish → confirm forked_from + bundled takes). **open-stems**: `forte build --stems` (renders per-track WAVs solo with sends included, records per-stem digests in the manifest — determinism-tested) and per-track M/S in Hub audition (fw_set_mute/solo → worklet, toggled during playback, E2E-verified)** | SRS-BLD-003, SRS-REC-006 |
+| 3.3 | Safari/Firefox degraded-mode implementation | SRS-WEB-004 |
+| 3.4 | Fingerprint matching + report moderation v1 | SRS-HUB-006 |
+| 3.5 | Export (zip/git bundle), data portability — **🔶 `forte export <song.forte>`: a self-contained zip (entry + imports + recorded takes + `export.manifest.json` with render digest + when the repository is clean, the `.forte/` history objects + refs + HEAD). Hand-written zip writer (store-only, CRC-32, fixed timestamps) so **the zip itself is byte-for-byte deterministic**. Round-trip test: extract → compile → digest matches the manifest, and `forte log` works on the restored `.forte/` — verified that far** | SRS-WEB-005 |
 
-**Exit 基準**: 「有名曲の open-stems に 10 人が歌入れ fork する」イベントが成立する。
-これがバイラルの型(§聴き手体験)の最初の実証になる。
+**Exit criteria**: an event where "10 people add vocal forks to a well-known song's open-stems"
+succeeds. This becomes the first proof of the viral pattern (§ listener experience).
 
-## Phase 4 — 発見とディグ (〜3 ヶ月, 累計 17 ヶ月)
+## Phase 4 — Discovery and Digging (~3 months, cumulative 17 months)
 
-**ゴール: 系譜が聴き手の体験になる。**
+**Goal: the lineage becomes the listener's experience.**
 
-- 4.1 系譜ディグ UI(fork ツリー、演奏者横断、モジュール横断「この楽器を使う曲」) — **🔶 fork 家系図を前倒し実装: GET /api/lineage(fork の森 JSON、循環安全)+ hub トップにツリー表示(♪/📚、release・再生数バッジ、クリックで曲ページへ)。多世代ネストを Rust テスト+E2E で検証。**モジュール横断**: publish 時に使用デバイス名を記録(Version.uses)し、曲ページ「使っている楽器」(定義元ライブラリへリンク)⇄ ライブラリページ「この楽器を使う曲」を双方向に。**演奏者横断**: 一覧の作者名クリックで絞り込み。残: 全文検索**
-- 4.2 類似検索 v1(進行の正規形・使用モジュール・テンポ/キー) [SRS-PLY-002]
-- 4.3 公開ローンチ(一般登録開放)
-- 4.4 コミュニティ運営(公式モジュールコンテスト、教育コンテンツ)
+- 4.1 Lineage-digging UI (fork tree, cross-performer, cross-module "songs using this instrument") — **🔶 Fork family tree implemented ahead of schedule: GET /api/lineage (fork-forest JSON, cycle-safe) + tree display on the hub top page (♪/📚, release and play-count badges, click through to the song page). Multi-generation nesting verified with Rust tests + E2E. **Cross-module**: device names used are recorded at publish (Version.uses); the song page's "instruments used" (linked to the defining library) ⇄ the library page's "songs using this instrument" bidirectionally. **Cross-performer**: click an author name in the list to filter. Remaining: full-text search** |
+- 4.2 Similarity search v1 (canonical progression form, modules used, tempo/key) [SRS-PLY-002]
+- 4.3 Public launch (open general registration)
+- 4.4 Community operations (official module contests, educational content)
 
-## Phase 5 — 経済 (時期はデータ次第)
+## Phase 5 — Economy (timing depends on data)
 
-- 5.1 ポイント制設計(台帳データの実績分析→按分ルールのシミュレーション)
-- 5.2 法規制レビュー(資金決済法等。換金を伴う場合は特に)
-- 5.3 段階導入: still 記録のみ → 表示(あなたの貢献が X 回聴かれた) → 利用権還流 → (要判断)換金
+- 5.1 Point system design (analysis of ledger data → simulation of apportionment rules)
+- 5.2 Regulatory review (Payment Services Act, etc. — especially if monetary conversion is involved)
+- 5.3 Staged introduction: still recording only → display ("your contribution was listened to X times") → usage-entitlement recirculation → (decision required) monetary conversion
 
 ---
 
-## 横断ワークストリーム
+## Cross-Cutting Workstreams
 
-- **決定論 CI**(Phase 0〜恒久): 全 PR ゲート。
-- **リファレンス曲コーパス**: フェーズ毎に拡充し、性能/回帰/決定論の共通ベンチにする。
-- **セキュリティ**: Phase 2 から保存時暗号化・署名鍵管理(SRS-SEC-001/002)。
-- **ドキュメント**: 言語仕様と `@std` リファレンスは製品の一部として扱う(採用の主導線)。
+- **Determinism CI** (Phase 0 onward, permanent): gate on all PRs.
+- **Reference song corpus**: expand each phase; serves as the shared bench for performance/regression/determinism.
+- **Security**: from Phase 2, encryption at rest and signing-key management (SRS-SEC-001/002).
+- **Documentation**: the language specification and the `@std` reference are treated as part of the product (the primary adoption funnel).
 
-## 主要リスクレジスタ
+## Key Risk Register
 
-| リスク | 影響 | 早期検証 |
+| Risk | Impact | Early validation |
 | --- | --- | --- |
-| wasm/native 数値決定論が成立しない | リリース検証の設計変更 | Phase 0.4 を最初にスパイク |
-| 「コードで作曲」の学習曲線が高すぎる | 製品前提の崩壊 | Phase 1 Exit の定性テスト。可視化とエラー品質に投資 |
-| fork 強制が摩擦になり private に閉じこもる | 系譜が貯まらない | Phase 2 βで fork 率を計測。fork の UX を 1 クリックに |
-| 録音来歴の偽装 | 信頼毀損 | 完全防止は不可能と明示済み。指紋照合+コミュニティ規範を Phase 3 で |
-| 経済設計の失敗(換金の法規制・投機化) | 事業リスク | Phase 5 まで不可逆な約束をしない |
-| openDAW 等の後追い | 競合 | 系譜データとコーパスが堀。先行してコミュニティを作る |
+| wasm/native numeric determinism fails to hold | Redesign of release verification | Spike Phase 0.4 first |
+| The learning curve of "composing in code" is too steep | Collapse of the product premise | Qualitative test at Phase 1 Exit. Invest in visualization and error quality |
+| Fork enforcement becomes friction and users retreat into private | Lineage does not accumulate | Measure fork rate in the Phase 2 beta. Make fork UX one click |
+| Forged recording provenance | Damaged trust | Complete prevention explicitly impossible. Fingerprint matching + community norms in Phase 3 |
+| Failed economy design (monetary-conversion regulation, speculation) | Business risk | Make no irreversible promises before Phase 5 |
+| Fast-follow by openDAW and others | Competition | Lineage data and the corpus are the moat. Build the community first |
 
-## 直近のアクション(Phase 0 開始時)
+## Immediate Actions (At Phase 0 Start)
 
-1. ~~D-01(Rust vs C++)と D-02(独自 DSL)の最終承認~~ ✅ 承認済(2026-07-02)
-2. ~~決定論スパイク: dawcore の bounce を wasm32 でビルドし native とハッシュ比較~~
-   ✅ 成功 — libm 統一でビット同一(07-determinism-spike.md)
-3. 言語仕様 v0 のドラフト(spec/forte-lang-v0.md に着手済)+リファレンス曲 1 曲の手書き移植
-4. ~~プロジェクト名の決定~~ ✅ **Forte** で正式化(MIT ライセンス。2026-07-04 に公開リポジトリ [ForteLang/forte](https://github.com/ForteLang/forte) へ移行し、以後の開発はそちらで行う)
-5. forte-lang パーサ/型検査の実装開始(0.1)
+1. ~~Final approval of D-01 (Rust vs C++) and D-02 (custom DSL)~~ ✅ Approved (2026-07-02)
+2. ~~Determinism spike: build dawcore's bounce on wasm32 and compare hashes with native~~
+   ✅ Succeeded — bit-identical via libm unification (07-determinism-spike.md)
+3. Draft language specification v0 (started in spec/forte-lang-v0.md) + hand-port one reference song
+4. ~~Decide the project name~~ ✅ Formalized as **Forte** (MIT license. Migrated on 2026-07-04 to the public repository [ForteLang/forte](https://github.com/ForteLang/forte); development continues there)
+5. Start implementing the forte-lang parser/type checker (0.1)

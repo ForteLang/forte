@@ -1,44 +1,44 @@
-# Forte lang 仕様 v1
+# Forte lang Specification v1
 
-Status: **実装準拠**(この文書はリポジトリの実装が受理する言語を正確に記述する)。
-v0 ドラフト(forte-lang-v0.md)は設計意図・将来構想を含む上位文書として残す。
-対応実装: `crates/fortelang`(パーサ/検査/コンパイラ)、検証: `cargo test -p fortelang`。
+Status: **Implementation-conformant** (this document precisely describes the language accepted by the implementation in the repository).
+The v0 draft (forte-lang-v0.md) is retained as a higher-level document containing design intent and future plans.
+Corresponding implementation: `crates/fortelang` (parser/checker/compiler); verification: `cargo test -p fortelang`.
 
 ---
 
-## 1. ファイル構造
+## 1. File Structure
 
 ```
 file := { import } { device } [ song ]
 ```
 
-- `song` を持つファイル = **曲**。持たないファイル = **デバイスライブラリ**
-  (import 可能。`forte check` は全デバイスを既定値でインスタンス化して検証する)。
-- 評価は完全にコンパイル時。実行時 I/O・時計・非シード乱数は言語に存在しない。
+- A file with a `song` = a **song**. A file without one = a **device library**
+  (importable; `forte check` instantiates every device with default values and verifies it).
+- Evaluation is entirely compile-time. Runtime I/O, clocks, and unseeded randomness do not exist in the language.
 
-## 2. 字句
+## 2. Lexical Structure
 
-- エンコーディング UTF-8。識別子 `[A-Za-z_@][A-Za-z0-9_@#]*`。
-- コメント: `// 行末まで`、`/* … */`(複数行可)。
-- 数値: `12`、`0.5`、負号は前置 `-`。**単位サフィックス**は数値に密着して書く:
-  `96bpm` など(v1 で意味を持つのは `bpm` のみ。他は無視されず検査対象)。
-- 文字列: `"…"`(1 行)。
-- 音楽リテラル: `beat` / `notes` / `prog` の直後のバッククォート `` `…` ``(複数行可)。
-- 記号: `{ } ( ) : , / - .. . =`
+- Encoding is UTF-8. Identifiers: `[A-Za-z_@][A-Za-z0-9_@#]*`.
+- Comments: `// to end of line`, `/* … */` (multi-line allowed).
+- Numbers: `12`, `0.5`; negation is a prefix `-`. **Unit suffixes** are written immediately adjacent to the number:
+  e.g. `96bpm` (only `bpm` carries meaning in v1; others are not ignored but are subject to checking).
+- Strings: `"…"` (single line).
+- Music literals: a backquote `` `…` `` immediately following `beat` / `notes` / `prog` (multi-line allowed).
+- Symbols: `{ } ( ) : , / - .. . =`
 
-## 3. 文法 (EBNF、実装準拠)
+## 3. Grammar (EBNF, implementation-conformant)
 
 ```ebnf
 file      = { import } { device } [ song ] ;
-import    = "import" "{" ident { "," ident } "}" "from" string     (* モジュール *)
-          | "import" ident "from" string ;                          (* .frec アセット *)
+import    = "import" "{" ident { "," ident } "}" "from" string     (* module *)
+          | "import" ident "from" string ;                          (* .frec asset *)
 device    = "device" ident [ ":" "Instrument" ] "{" { devItem } "}" ;
 devItem   = "param" ident "=" num [ "in" num ".." num ]
           | "node" ident "=" nodeExpr
           | "out" nodeExpr ;
 nodeExpr  = ident "(" [ ident ":" nodeArg { "," ident ":" nodeArg } ] ")"
           | "note" "." ident                                        (* freq | gate | vel *)
-          | ident ;                                                 (* node 名 / param 名 *)
+          | ident ;                                                 (* node name / param name *)
 nodeArg   = string | num | nodeExpr ;
 song      = "song" string "{" { songItem } "}" ;
 songItem  = "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
@@ -53,7 +53,7 @@ trackItem = "instrument" call | "insert" call
           | "automate" ident "from" num "to" num "over" overRef
           | "modulate" ident "with" call
           | "volume" num | "pan" num ;
-overRef   = "bars" "(" num ".." num ")" | ident ;                   (* セクション名 *)
+overRef   = "bars" "(" num ".." num ")" | ident ;                   (* section name *)
 return    = "return" ident "{" { "insert" call | "volume" num | "pan" num } "}" ;
 call      = ident [ "(" [ ident ":" ( num | string ) { "," … } ] ")" ] ;
 patternExpr = musicLit | ident
@@ -63,215 +63,216 @@ musicLit  = ( "beat" | "notes" | "prog" ) "`" raw "`" ;
 num       = [ "-" ] NUMBER [ UNIT ] ;
 ```
 
-## 4. 意味論
+## 4. Semantics
 
-### 4.1 song ヘッダ
+### 4.1 song Header
 
-| 要素 | 意味 | 制約 |
+| Element | Meaning | Constraints |
 | --- | --- | --- |
-| `tempo 96bpm` | テンポ | **必須**。20..400(E-TIME-003) |
-| `swing 0.62` | 偶数位置の 16 分を遅らせる(MPC 表記: 0.5=ストレート、0.66≒シャッフル、範囲 0.5..0.8)。グリッド上の音のみ対象 |
-| `meter 4/4` | 拍子 | 分母 2/4/8/16(E-TIME-004)。エンジン拍 = 分子×4/分母 |
-| `key D minor` | キー | ルート C..B(+#/b)、スケール major/minor/dorian/phrygian/lydian/mixolydian/locrian/harmonicminor/chromatic |
+| `tempo 96bpm` | Tempo | **Required**. 20..400 (E-TIME-003) |
+| `swing 0.62` | Delays even-position 16th notes (MPC notation: 0.5 = straight, 0.66 ≈ shuffle, range 0.5..0.8). Applies only to notes on the grid |
+| `meter 4/4` | Time signature | Denominator 2/4/8/16 (E-TIME-004). Engine beats = numerator × 4 / denominator |
+| `key D minor` | Key | Root C..B (+#/b), scales major/minor/dorian/phrygian/lydian/mixolydian/locrian/harmonicminor/chromatic |
 
-### 4.2 配置
+### 4.2 Placement
 
-- 小節は **1 始まり・両端含む**: `bars(1..8)` = 小節 1〜8。
-- `section verse = bars(1..8)` で名前付けし `at verse` で参照(E-MOD-003)。
-- クリップ内容は配置区間内でループする(パターン長 < 区間長のとき)。
+- Bars are **1-based and inclusive at both ends**: `bars(1..8)` = bars 1 through 8.
+- `section verse = bars(1..8)` names a range, referenced with `at verse` (E-MOD-003).
+- Clip content loops within the placement range (when the pattern length < the range length).
 
-### 4.3 音楽リテラル
+### 4.3 Music Literals
 
-| リテラル | 内容 | 生成 |
+| Literal | Content | Generation |
 | --- | --- | --- |
-| `` beat`x--- X.x-` `` | `x`=ヒット(vel 100), `X`=アクセント(120), `.`=ゴースト(55), `-`=休符。空白は視覚グルーピング | ステップ数で 1 小節を等分。長さ=ステップの 60%。ベロシティは全音源でゲインに反映(100 = 等倍) |
-| `` notes`C4:1/2 [E4 G4]:1 _:1` `` | `ピッチ:長さ`(拍)。`[…]`=和音、`_`=休符、長さは `1` `0.5` `1/2` | 逐次配置。C4 = MIDI 60 |
-| `` notes`C2!:1/4 C2~:1/4 D2:1/2` `` | `!`=アクセント(vel 120)、`~`=タイ: 次の音までゲートを保持。mono/glide の楽器ではスライドになる(303 の記法)。両方付けるなら `C2!~` | タイは長さ 102% で重ねる |
-| `` prog`Em \| C G \| D` `` | `\|`=小節。1 小節内の複数コードは時間を等分 | ChordEvent 列。裸で play するとブロックコード |
+| `` beat`x--- X.x-` `` | `x` = hit (vel 100), `X` = accent (120), `.` = ghost (55), `-` = rest. Whitespace is visual grouping | The step count divides one bar equally. Length = 60% of a step. Velocity is reflected as gain on all sound sources (100 = unity) |
+| `` notes`C4:1/2 [E4 G4]:1 _:1` `` | `pitch:length` (in beats). `[…]` = chord, `_` = rest; lengths are `1` `0.5` `1/2` | Placed sequentially. C4 = MIDI 60 |
+| `` notes`C2!:1/4 C2~:1/4 D2:1/2` `` | `!` = accent (vel 120), `~` = tie: holds the gate until the next note. Becomes a slide on mono/glide instruments (303 notation). To use both, write `C2!~` | Ties overlap at 102% of the length |
+| `` prog`Em \| C G \| D` `` | `\|` = bar. Multiple chords within one bar divide the time equally | ChordEvent sequence. Playing it bare produces block chords |
 
-コードクオリティ: (無印=メジャー), `m`, `min`, `7`, `maj7`, `m7`, `min7`, `dim`,
-`aug`, `sus2`, `sus4`。
+Chord qualities: (unmarked = major), `m`, `min`, `7`, `maj7`, `m7`, `min7`, `dim`,
+`aug`, `sus2`, `sus4`.
 
-### 4.4 パターン関数(進行 → 演奏)
+### 4.4 Pattern Functions (progression → performance)
 
-| 関数 | 引数 | ボイシング |
+| Function | Arguments | Voicing |
 | --- | --- | --- |
-| `chords(p)` | — | 全構成音をコード長で保持(ルート oct3, vel 90) |
-| `bass(p, rate: 0.5)` | rate 省略時 1 コード 1 音 | ルート音 oct2, vel 100 |
-| `arp(p, rate: 0.5, style: "up\|down\|updown")` | rate は 0<r≤1 小節 | 構成音 oct4 を巡回, vel 95 |
+| `chords(p)` | — | Holds all chord tones for the chord duration (root oct3, vel 90) |
+| `bass(p, rate: 0.5)` | If rate omitted, one note per chord | Root note oct2, vel 100 |
+| `arp(p, rate: 0.5, style: "up\|down\|updown")` | rate is 0<r≤1 bar | Cycles through chord tones at oct4, vel 95 |
 
-### 4.5 デバイス DSL(音源とエフェクトをコードで定義)
+### 4.5 Device DSL (defining instruments and effects in code)
 
-`device 名前 : Instrument`(音源)または `device 名前 : Effect`(エフェクト、
-`insert` で使う)。`param` はインスタンス化時に束縛(範囲は `in lo..hi`、
-既定 0..1)。Instrument のグラフはボイス毎インタープリタに展開され、
-ポリフォニー(8 声・最古スチール)・エンベロープ解放はエンジンが担う。
-Effect のグラフはステレオ各チャンネルが独立の状態で同一グラフを評価する。
+`device Name : Instrument` (sound source) or `device Name : Effect` (effect,
+used with `insert`). `param` is bound at instantiation time (range via `in lo..hi`,
+default 0..1). An Instrument's graph is expanded into a per-voice interpreter;
+polyphony (8 voices, oldest-steal) and envelope release are handled by the engine.
+An Effect's graph is evaluated as the same graph with independent state for each stereo channel.
 
-- Instrument の信号ソースは `note.freq / note.gate / note.vel`。
-- Effect の信号ソースは **`audio.in`**(入力信号)。note.* は使えず
-  (E-GRID-003)、`adsr` は gate の明示が必要(E-GRID-001)。
-- Effect を instrument に、Instrument を insert に書くと E-DEV-009。
-- **予約 param 名 `glide`**: 宣言すると mono/レガートになり、値がポルタメント秒。
-  重なった(タイされた)ノートはリトリガーせず周波数がスライドする(303 のスライド)。
+- An Instrument's signal sources are `note.freq / note.gate / note.vel`.
+- An Effect's signal source is **`audio.in`** (the input signal). note.* cannot be used
+  (E-GRID-003), and `adsr` requires an explicit gate (E-GRID-001).
+- Writing an Effect as an instrument, or an Instrument as an insert, is E-DEV-009.
+- **Reserved param name `glide`**: declaring it makes the device mono/legato, with the value as portamento seconds.
+  Overlapping (tied) notes do not retrigger; the frequency slides instead (the 303 slide).
 
-| プリミティブ | 信号入力(既定) | パラメータ(既定) |
+| Primitive | Signal inputs (defaults) | Parameters (defaults) |
 | --- | --- | --- |
-| `osc` | `freq`(note.freq), `mod`(±4oct), `pwm`(パルス幅 ±0.45) | `shape`: sine/saw/square/tri/pulse、`pw`(pulse の基準幅、既定 0.5) |
-| `noise` | — | —(決定論: per-voice xorshift、ノート毎に再シード) |
-| `lfo` | — | `rate` 0..1(=0.05..12Hz), `shape`: sine/tri/saw/square |
-| `adsr` | `gate`(note.gate) | `a` .05, `d` .3, `s` .6, `r` .25(正規化) |
-| `svf` | `in`(必須), `mod`(±4oct) | `cutoff` .65(=30..18kHz 指数), `reso` .2 |
-| `shaper` | `in`(必須), `mod`(drive 加算) | `drive` .3, `mode`: tanh/clip/fold |
-| `gain` | `in`(必須), `mod`(0..2 倍) | `level` .8 |
-| `mix` | `a`, `b`(必須) | — |
-| `sample` | —(Instrument 専用: Effect では E-GRID-003) | `take`(必須: 宣言済み take スロット), `start` 0, `end` 1, `loop`: off/on, `reverse`: off/on |
+| `osc` | `freq` (note.freq), `mod` (±4oct), `pwm` (pulse width ±0.45) | `shape`: sine/saw/square/tri/pulse; `pw` (base width for pulse, default 0.5) |
+| `noise` | — | — (deterministic: per-voice xorshift, reseeded per note) |
+| `lfo` | — | `rate` 0..1 (= 0.05..12Hz), `shape`: sine/tri/saw/square |
+| `adsr` | `gate` (note.gate) | `a` .05, `d` .3, `s` .6, `r` .25 (normalized) |
+| `svf` | `in` (required), `mod` (±4oct) | `cutoff` .65 (= 30..18kHz exponential), `reso` .2 |
+| `shaper` | `in` (required), `mod` (added to drive) | `drive` .3, `mode`: tanh/clip/fold |
+| `gain` | `in` (required), `mod` (0..2×) | `level` .8 |
+| `mix` | `a`, `b` (required) | — |
+| `sample` | — (Instrument only: E-GRID-003 in an Effect) | `take` (required: a declared take slot), `start` 0, `end` 1, `loop`: off/on, `reverse`: off/on |
 
-信号ソース: `note.freq`(Hz) / `note.gate` / `note.vel`、宣言済み `node` 名
-(前方参照不可 E-GRID-002)、入れ子呼び出し。数値位置には `param` 名を書ける。
+Signal sources: `note.freq` (Hz) / `note.gate` / `note.vel`, declared `node` names
+(forward references disallowed, E-GRID-002), and nested calls. A `param` name may be written in a numeric position.
 
-**take スロット(soundnote)**: device 冒頭の `take voice` は「使う側が録音を
-差し込む」宣言。`sample(take: voice)` がそのテイクをグラフの音源として再生し
-(基準 C4、演奏ノートに再ピッチ、ノートオン毎に先頭から)、svf/shaper/gain の
-後段で加工できる。束縛は呼び出し側 `instrument MyVox(voice: myTake)`(未束縛は
-E-DEV-002、Ident 以外は E-TYPE-004)。デバイス自体はテイクを持たないため、
-ライブラリ単体の検証(`forte check lib.forte`)はスロット未束縛のまま通る —
-publish した楽器に各自が自分の録音を差せる。
+**take slots (soundnote)**: `take voice` at the top of a device declares that "the user
+plugs in a recording". `sample(take: voice)` plays that take as the graph's sound source
+(reference pitch C4, repitched to the played note, restarting from the beginning on each note-on),
+and it can be processed downstream by svf/shaper/gain. Binding happens at the call site:
+`instrument MyVox(voice: myTake)` (unbound is E-DEV-002; a non-Ident is E-TYPE-004).
+Since the device itself carries no take, verifying a library alone
+(`forte check lib.forte`) passes with the slot unbound —
+anyone can plug their own recording into a published instrument.
 
-### 4.6 ビルトインデバイス
+### 4.6 Built-in Devices
 
-| instrument | パラメータ |
+| instrument | Parameters |
 | --- | --- |
 | `sampler(sample: "Kick"\|"Snare"\|"Hat")` | gain, attack, decay, sustain, release, pitch, start, end, loop("off"/"on"), reverse("off"/"on") |
-| `sampler(take: <import した録音>, root: A3)` | 同上。録音テイクが楽器になる: `root` はテイクを演奏した音名(C2..C6)で、その音で弾くと原音、他はクロマチックに再ピッチ |
-| `sampler(…, start: 0.25, end: 0.6, loop: "on", reverse: "on")` | 音作り: `start`/`end` は再生範囲(0..1 の割合)、`loop: "on"` はノート保持中に範囲をループ(短い範囲は持続音化)、`reverse: "on"` は逆再生。全てノートオン時に確定するため決定論を保つ |
-| `kit(C2: kickTake, D2: snareTake, …)` | gain, attack, decay, sustain, release。音名キーが録音テイクをパッドに割り当てる(完全一致した音程のみ発音・原速再生・再ピッチなし)。`beat` リテラルは最低音のパッドを叩く |
+| `sampler(take: <imported recording>, root: A3)` | Same as above. A recorded take becomes an instrument: `root` is the note name (C2..C6) at which the take was performed; playing that note gives the original sound, others are repitched chromatically |
+| `sampler(…, start: 0.25, end: 0.6, loop: "on", reverse: "on")` | Sound design: `start`/`end` set the playback range (as a 0..1 fraction), `loop: "on"` loops the range while the note is held (short ranges become sustained tones), `reverse: "on"` plays in reverse. All are fixed at note-on time, preserving determinism |
+| `kit(C2: kickTake, D2: snareTake, …)` | gain, attack, decay, sustain, release. Note-name keys assign recorded takes to pads (only an exactly matching pitch sounds; original-speed playback, no repitching). A `beat` literal strikes the lowest-pitched pad |
 | `polymer` | wave(sine/saw/square/tri), cutoff, reso, attack, decay, sustain, release, detune, sub, filtenv |
-| `grid()` | 既定パッチのモジュラー音源 |
+| `grid()` | Modular sound source with a default patch |
 
-ビルトインの他に、標準楽器ライブラリ `lib/std/`(drums / percussion / bass /
-keys / leads / pads / synths / fx の計 103 楽器)が同梱される。これらは言語機能ではなく §4.5 の
-device DSL で書かれたユーザー空間のコードであり、通常の `import` で使う。
+Beyond the built-ins, a standard instrument library `lib/std/` (drums / percussion / bass /
+keys / leads / pads / synths / fx, 103 instruments in total) is bundled. These are not a language feature but
+user-space code written in the device DSL of §4.5, used via ordinary `import`.
 
-| effect | パラメータ |
+| effect | Parameters |
 | --- | --- |
 | `filter` | type(lp/hp/bp/notch), cutoff, reso |
 | `eq` | low, mid, high |
-| `drive` | drive(別名 amount) |
-| `delay` | time, fdbk(別名 feedback), mix |
+| `drive` | drive (alias amount) |
+| `delay` | time, fdbk (alias feedback), mix |
 | `reverb` | size, decay, mix |
-| `comp` | thresh, ratio, attack, release, makeup — ステレオリンク・コンプレッサ |
-| `chorus` | rate, depth, mix — L/R 直交位相の変調ディレイ |
-| `pump` | amount, beats — テンポ同期ダッキング(サイドチェイン・ポンピングの決定論版。beats は 1 サイクルの拍数、既定 1)|
-| `width` | amount — M/S ステレオ幅(0.5 が等倍。insert はパン前段なのでステレオ源に使う)|
+| `comp` | thresh, ratio, attack, release, makeup — stereo-linked compressor |
+| `chorus` | rate, depth, mix — modulated delay with L/R quadrature phase |
+| `pump` | amount, beats — tempo-synced ducking (a deterministic version of sidechain pumping. beats is the number of beats per cycle, default 1)|
+| `width` | amount — M/S stereo width (0.5 is unity. Since insert is pre-pan, use on stereo sources)|
 
-数値ノブはすべて正規化 0..1(範囲外は E-TYPE-002)。volume 0..1、pan -1..1、
-send レベル 0..1。
+All numeric knobs are normalized 0..1 (out of range is E-TYPE-002). volume 0..1, pan -1..1,
+send level 0..1.
 
-### 4.7 録音アセット(.frec)
+### 4.7 Recording Assets (.frec)
 
-- `import take from "./take1.frec"` → `audio take at bars(2..3)`。
-- **来歴のないオーディオは参照すら不能**(E-PROV-001): ヘッダの provenance に
-  `device_class`(microphone / midi-render), `recorded_at`, `by`, `session`,
-  `sig` が必須。ループバック較正値は `latency_samples` として同梱される。
-- レイアウト: `FREC1\n` + u32-le ヘッダ長 + JSON ヘッダ + f32-le PCM。
-  レート 8k..192k、1..2ch(ステレオはモノミックスで再生)。
-- 外部オーディオ(WAV/MP3 等)の import は**文法ごと存在しない**。
+- `import take from "./take1.frec"` → `audio take at bars(2..3)`.
+- **Audio without provenance cannot even be referenced** (E-PROV-001): the header's provenance requires
+  `device_class` (microphone / midi-render), `recorded_at`, `by`, `session`,
+  and `sig`. The loopback calibration value is bundled as `latency_samples`.
+- Layout: `FREC1\n` + u32-le header length + JSON header + f32-le PCM.
+  Rate 8k..192k, 1..2ch (stereo plays back as a mono mix).
+- Importing external audio (WAV/MP3, etc.) **does not exist at the grammar level**.
 
-### 4.8 モジュール解決
+### 4.8 Module Resolution
 
-- パスは import 元ファイルからの相対。再帰解決、循環は E-MOD-007。
-- 名前がない場合はライブラリの実エクスポートを列挙(E-MOD-006)。
-- 環境: CLI/LSP=ファイルシステム、ブラウザ=エディタのファイルマップ(OPFS+同梱)。
+- Paths are relative to the importing file. Resolution is recursive; cycles are E-MOD-007.
+- If a name is absent, the library's actual exports are listed (E-MOD-006).
+- Environments: CLI/LSP = filesystem, browser = the editor's file map (OPFS + bundled).
 
-### 4.9 オートメーションとモジュレーション
+### 4.9 Automation and Modulation
 
-対象パラメータの解決は automate / modulate で共通(大文字小文字は区別しない):
+Resolution of the target parameter is shared by automate / modulate (case-insensitive):
 
-- `volume`(automate のみ)/ instrument のパラメータ名 — ビルトイン
-  (polymer / sampler)はパラメータ表、**自作 device は宣言した `param` が
-  そのまま名前になる**。
-- `<insert名>.<パラメータ>` — insert エフェクトを書いた名前で指す:
-  `delay.mix`、`Muffle.cutoff`(自作 Effect の `param` も公開される)。
-  同名 insert が複数あるときは最初のものに差さる。
+- `volume` (automate only) / an instrument's parameter name — built-ins
+  (polymer / sampler) use the parameter tables; **for user-defined devices, the declared `param`
+  is the name as-is**.
+- `<insertName>.<parameter>` — refers to an insert effect by the name it was written with:
+  `delay.mix`, `Muffle.cutoff` (a user-defined Effect's `param`s are also exposed).
+  If multiple inserts share a name, the first one is targeted.
 
-未知の名前は「使えるもの」を列挙して E-AUTO-001 / E-LFO-001。
+Unknown names produce E-AUTO-001 / E-LFO-001 with a list of "what is available".
 
-- `automate <param> from 0.2 to 0.8 over bars(1..8)` — 区間の頭から末尾へ
-  線形ランプ(`over` にはセクション名も可)。値は 0..1(E-TYPE-002)。
-  レーンがあるパラメータでは基準値はレーンに置き換わる: ランプ開始前は
-  `from`、終了後は `to` を保持する。複数の `automate` は対象ごとに
-  ひとつのレーンへ拍順でマージされる。
-- `modulate <param> with <modulator>(…)` — パラメータにモジュレータを
-  差し込む。種類は 4 つ(それ以外は E-PARSE-021):
-  - `lfo(rate: 0.4, amount: 0.5, shape: "tri")` — 周期波。`rate` 0..1
-    (0.05..8.05 Hz、省略時 0.3)、`shape` sine / tri / saw / square
-    (省略時 sine)。
+- `automate <param> from 0.2 to 0.8 over bars(1..8)` — a linear ramp from the start to the end
+  of the range (`over` also accepts a section name). Values are 0..1 (E-TYPE-002).
+  For parameters with a lane, the base value is replaced by the lane: before the ramp begins
+  it holds `from`, and after it ends it holds `to`. Multiple `automate`s are merged, per target,
+  into a single lane in beat order.
+- `modulate <param> with <modulator>(…)` — plugs a modulator into a parameter.
+  There are 4 kinds (anything else is E-PARSE-021):
+  - `lfo(rate: 0.4, amount: 0.5, shape: "tri")` — periodic wave. `rate` 0..1
+    (0.05..8.05 Hz, default 0.3), `shape` sine / tri / saw / square
+    (default sine).
   - `steps(seq: "0.1 0.6 0.3 0.9", every: "1/16", amount: 0.5)` —
-    ステップシーケンサ。`seq` は空白区切りの 0..1(E-TYPE-002)。
-    `every`(1/2, 1/4, 1/8, 1/16。E-TYPE-005)を書くと**テンポ同期**:
-    1 ステップ = その音価。省くと `rate` の自走周期で 1 周する。
-  - `random(rate: 0.4, amount: 0.4, smooth: 0.5)` — サンプル&ホールド
-    乱数(決定論: 同一ソースなら同一乱数列)。`smooth` 0..1 でステップ間を
-    滑らかに補間。`every` でテンポ同期も可。
-  - `adsr(a: 0.02, d: 0.4, s: 0.3, r: 0.1)` — **ノートゲート駆動**の外付け
-    エンベロープ: トラックの音が鳴り始めると立ち上がり、無音になると
-    リリースする(フィルターエンベロープの後付け)。各値 0..1
-    (時間は 2 乗カーブで最大 3 秒)。ブロックレート評価。
-  共通: `amount` -1..1 は**必須**(E-LFO-003)。揺れは基準値
-  (automate レーンがあればその時点のレーン値)に amount 幅で乗り、
-  0..1 に飽和する。ひとつのパラメータに `automate` と `modulate` を
-  **重ねられる**(ランプの上にモジュレーションが乗る)し、`modulate` を
-  複数並べてスタックすることもできる。
+    step sequencer. `seq` is whitespace-separated 0..1 values (E-TYPE-002).
+    Writing `every` (1/2, 1/4, 1/8, 1/16. E-TYPE-005) makes it **tempo-synced**:
+    1 step = that note value. If omitted, it cycles once per the free-running period of `rate`.
+  - `random(rate: 0.4, amount: 0.4, smooth: 0.5)` — sample & hold
+    randomness (deterministic: the same source yields the same random sequence). `smooth` 0..1 smoothly
+    interpolates between steps. Tempo sync via `every` is also possible.
+  - `adsr(a: 0.02, d: 0.4, s: 0.3, r: 0.1)` — a **note-gate-driven** external
+    envelope: rises when the track starts sounding and
+    releases when it goes silent (a retrofitted filter envelope). Each value 0..1
+    (times follow a squared curve up to 3 seconds max). Evaluated at block rate.
+  Common: `amount` -1..1 is **required** (E-LFO-003). The wobble rides on the base value
+  (the lane value at that moment, if an automate lane exists) with a width of amount,
+  saturating to 0..1. `automate` and `modulate` **can be layered** on a single parameter
+  (modulation rides on top of the ramp), and multiple `modulate`s can be
+  stacked as well.
 
-## 5. 決定論の契約
+## 5. The Determinism Contract
 
-1. 同一ソース+同一アセット → **ビット同一のビルド**(native x86_64 / wasm32-wasip1 /
-   ブラウザ wasm で検証済み。`scripts/determinism_test.sh` が CI ゲート)。
-2. 成立条件: f32 固定、超越関数は libm 単一実装(dawcore::dmath)、
-   レンダーは 48kHz・512 サンプルブロック・8 拍テール。
-3. ビルド証明: 出力ダイジェスト = 全サンプルの f32 LE ビットパターンの
-   FNV-1a 64(v1。製品版は SHA-256 へ)。`build.manifest.json` と Hub release
-   台帳に記録され、`forte hub verify` / ブラウザの Verify が再現照合する。
+1. Same source + same assets → **bit-identical builds** (verified on native x86_64 / wasm32-wasip1 /
+   browser wasm. `scripts/determinism_test.sh` is the CI gate).
+2. Conditions: fixed f32, transcendental functions from a single libm implementation (dawcore::dmath),
+   rendering at 48kHz, 512-sample blocks, 8-beat tail.
+3. Build proof: output digest = FNV-1a 64 over the f32 LE bit patterns of all samples
+   (v1; the production version will move to SHA-256). Recorded in `build.manifest.json` and the Hub release
+   ledger; `forte hub verify` / the browser's Verify performs reproduction matching.
 
-## 6. 正規形(fmt)
+## 6. Canonical Form (fmt)
 
-`forte fmt` が唯一の整形: ブレース深度×2 スペースのインデント、行末空白なし、
-空行は 1 行まで、末尾改行 1 つ。文字列・音楽リテラル・コメントは不変。
-**整形前後の字句列が一致しない場合は適用を拒否**(E-FMT-001)——意味を変える
-整形は構造的に不可能。
+`forte fmt` is the sole formatter: indentation of brace depth × 2 spaces, no trailing whitespace,
+at most 1 blank line, exactly 1 trailing newline. Strings, music literals, and comments are unchanged.
+**If the token sequences before and after formatting do not match, application is refused** (E-FMT-001) — a
+meaning-changing format is structurally impossible.
 
-## 7. 診断カタログ
+## 7. Diagnostics Catalog
 
-| 系列 | 意味 |
+| Series | Meaning |
 | --- | --- |
-| E-LEX-001..005 | 字句(未閉の文字列/リテラル/ブロックコメント、不正文字) |
-| E-PARSE-001..021 | 構文(各構文要素の期待と実際、automate/modulate の形) |
-| E-TYPE-001..005 | 値(単位、0..1 範囲、文字列/数値の取り違え、選択肢外) |
-| E-TIME-001..004 | 時間(小節範囲、rate、tempo、拍子) |
-| E-SONG-001..004 | 曲構造(tempo 必須、キー、track なし、song なし) |
-| E-MOD-001..007 | 名前解決(パターン/section/return/import/循環) |
-| E-DEV-001..009 | デバイス(未知、パラメータ、ビルトインサンプル、衝突、Instrument/Effect の取り違え) |
-| E-GRID-001..006 | デバイス DSL(必須入力、前方参照、信号/数値、未知プリミティブ) |
-| E-PAT-001..003 | パターン関数(prog 必須、引数、入れ子) |
-| E-BEAT / E-NOTE / E-PROG | 各リテラルの内容 |
-| E-PROV-001..003 | 録音来歴(必須ブロック、.frec 限定、未 import) |
-| E-AUTO-001 | automate(未知のパラメータ名。使えるものを列挙) |
-| E-LFO-001..003 | modulate(パラメータ名、instrument なし、モジュレータ引数) |
-| E-FMT-001 | フォーマッタの安全弁 |
+| E-LEX-001..005 | Lexical (unclosed string/literal/block comment, invalid character) |
+| E-PARSE-001..021 | Syntax (expected vs. actual for each construct, shape of automate/modulate) |
+| E-TYPE-001..005 | Values (units, 0..1 range, string/number mix-up, out of choices) |
+| E-TIME-001..004 | Time (bar range, rate, tempo, meter) |
+| E-SONG-001..004 | Song structure (tempo required, key, no track, no song) |
+| E-MOD-001..007 | Name resolution (pattern/section/return/import/cycles) |
+| E-DEV-001..009 | Devices (unknown, parameters, built-in samples, collisions, Instrument/Effect mix-up) |
+| E-GRID-001..006 | Device DSL (required inputs, forward references, signal/number, unknown primitives) |
+| E-PAT-001..003 | Pattern functions (prog required, arguments, nesting) |
+| E-BEAT / E-NOTE / E-PROG | Content of each literal |
+| E-PROV-001..003 | Recording provenance (required block, .frec only, not imported) |
+| E-AUTO-001 | automate (unknown parameter name. Lists what is available) |
+| E-LFO-001..003 | modulate (parameter name, no instrument, modulator arguments) |
+| E-FMT-001 | The formatter's safety valve |
 
-メッセージは音楽家の語彙・日本語・位置付き。「使えるもの」を必ず列挙する。
+Messages use musicians' vocabulary, are in Japanese, and carry positions. "What is available" is always listed.
 
-## 8. v0 ドラフトからの差分 / 未実装
+## 8. Differences from the v0 Draft / Unimplemented
 
-- 実装済みで v0 から確定: send/return 構文(DECISION-S1)、prog クオリティ集合、
-  デバイス DSL はノードグラフ形式(任意式 `process` は将来)。
-- 実装済み(v1.1): `automate`(volume + instrument / insert の全パラメータ、
-  §4.9)、`modulate … with lfo / steps / random / adsr`(自作 device・
-  自作 Effect の `param`、`<insert>.<param>` 含む、§4.9)。
-- 未実装(v2 候補): ユーザー定義ジェネリクス、automate pan、マクロ
-  (1 ノブ → 多パラメータ)、モジュレータ自体のオートメーション
-  (`wobble.amount`)、song レベル共有モジュレータ、3 連符 beat リテラル
-  (DECISION-S2)、セクション反復の一級表現(DECISION-S3)、
-  単位型の完全な検査(Hz/dB/ms)、`route` 明示ルーティング、
-  ed25519 署名の実検証。(エフェクトの device DSL は §4.5 で実装済み)
+- Implemented and finalized from v0: send/return syntax (DECISION-S1), the prog quality set,
+  the device DSL in node-graph form (arbitrary-expression `process` is future work).
+- Implemented (v1.1): `automate` (volume + all parameters of instrument / insert,
+  §4.9), `modulate … with lfo / steps / random / adsr` (including user-defined devices'
+  and user-defined Effects' `param`s, and `<insert>.<param>`, §4.9).
+- Unimplemented (v2 candidates): user-defined generics, automate pan, macros
+  (1 knob → many parameters), automation of modulators themselves
+  (`wobble.amount`), song-level shared modulators, triplet beat literals
+  (DECISION-S2), first-class expression of section repetition (DECISION-S3),
+  full unit-type checking (Hz/dB/ms), explicit `route` routing,
+  actual verification of ed25519 signatures. (The effect device DSL is implemented per §4.5)

@@ -1,167 +1,177 @@
-# システム要求仕様 (SYS) — Forte
+# System Requirements Specification (SYS) — Forte
 
 Status: Draft v0.1 / 2026-07-02
-上位文書: 01-vision.md
-下位文書: 03-software-requirements.md (SRS), 04-software-architecture.md (SAD), 05-detailed-design.md (SDD)
+Upstream document: 01-vision.md
+Downstream documents: 03-software-requirements.md (SRS), 04-software-architecture.md (SAD), 05-detailed-design.md (SDD)
 
-本プロダクトは医療機器ではないが、IEC 62304 のプロセス規律
-(システム要求 → ソフトウェア要求 → アーキテクチャ → 詳細設計のトレーサビリティ、
-リスクベースの検証)を採用する。安全クラスは全項目 Class A 相当として扱うが、
-「ユーザー作品の喪失」「来歴の改竄」を最上位ハザードとするリスク管理を行う(§6)。
+This product is not a medical device, but we adopt the process discipline of IEC 62304
+(traceability from system requirements → software requirements → architecture → detailed design,
+plus risk-based verification). All items are treated as equivalent to safety Class A, but risk
+management treats "loss of user works" and "tampering with provenance" as the top-level hazards (§6).
 
-表記: SYS-<領域>-<番号>。各要求は検証可能な受け入れ基準を持つ。
-領域: LNG(言語), ENG(エンジン), EDT(エディタ), HUB(エコシステム), REC(録音/入力),
-PLY(聴取), GOV(ガバナンス/ライセンス), NFR(非機能)。
+Notation: SYS-<area>-<number>. Every requirement has verifiable acceptance criteria.
+Areas: LNG (language), ENG (engine), EDT (editor), HUB (ecosystem), REC (recording/input),
+PLY (listening), GOV (governance/licensing), NFR (non-functional).
 
 ---
 
-## 1. システムコンテキスト
+## 1. System Context
 
 ```
- 作曲者 ──(VSCode系エディタ / Webエディタ)──► Forte ツールチェーン
-                                              │  言語処理系 + オーディオエンジン
+ Composer ──(VSCode-family editor / web editor)──► Forte toolchain
+                                              │  language processor + audio engine
                                               ▼
- 演奏者/歌い手 ──(MIDI・マイクのみ)──►  録音アセット(来歴付き)
+ Performer/vocalist ──(MIDI and microphone only)──►  Recorded assets (with provenance)
                                               │
                                               ▼  push / fork / release
- 聴き手 ◄──(プレイヤー/系譜グラフ)──  Forte Hub(レジストリ+ビルドファーム+配信)
+ Listener ◄──(player / lineage graph)──  Forte Hub (registry + build farm + distribution)
 ```
 
-システムは3つのサブシステムから成る:
-- **SS1 ツールチェーン**: 言語処理系、パッケージマネージャ、オーディオエンジン、CLI
-- **SS2 エディタ**: VSCode拡張 + Webエディタ(ブラウザ)、ライブプレビュー、可視化
-- **SS3 Hub**: リポジトリホスティング、fork系譜、リリース/ビルドファーム、プレイヤー、(将来)ポイント
+The system consists of three subsystems:
+- **SS1 Toolchain**: language processor, package manager, audio engine, CLI
+- **SS2 Editor**: VSCode extension + web editor (browser), live preview, visualization
+- **SS3 Hub**: repository hosting, fork lineage, release/build farm, player, (future) points
 
-## 2. ステークホルダー要求 → システム要求
+## 2. Stakeholder Requirements → System Requirements
 
-### 2.1 言語とモジュール (LNG)
+### 2.1 Language and Modules (LNG)
 
-- **SYS-LNG-001** 曲・トラック・音源・エフェクト・シーケンス・ユーティリティのすべてを、
-  単一のプログラミング言語(Forte lang)のソースコードとして表現できること。
-  - 受入基準: リファレンス曲 1 曲(ドラム+ベース+シンセ+ボーカル録音+マスタリング)が
-    バイナリ形式のプロジェクトファイルを一切使わずにソースのみ+録音アセットで表現され、ビルドできる。
-- **SYS-LNG-002** 任意のモジュールを `import` により再利用でき、依存はマニフェスト+
-  ロックファイルで固定されること(semver 互換)。
-- **SYS-LNG-003** 言語はGUI編集を前提とせず、**人間が読み書きするテキスト**として
-  レビュー・diff・マージが可能であること(git 互換のテキスト形式)。
-  - 受入基準: 2 つのブランチで別トラックを編集し、コンフリクトなしで git マージできる。
-- **SYS-LNG-004** プラグイン相当(音源/エフェクト)は Forte lang で記述するか、
-  規定の WASM ABI に準拠したモジュールとして提供できること。
-  publicレジストリに公開する場合は**ソース公開を必須**とする(ホワイトボックス原則)。
+- **SYS-LNG-001** It shall be possible to express songs, tracks, instruments, effects, sequences,
+  and utilities entirely as source code in a single programming language (Forte lang).
+  - Acceptance criteria: one reference song (drums + bass + synth + vocal recording + mastering)
+    can be expressed and built with source plus recorded assets only, using no binary-format
+    project files whatsoever.
+- **SYS-LNG-002** Any module shall be reusable via `import`, with dependencies pinned by a
+  manifest plus a lock file (semver compatible).
+- **SYS-LNG-003** The language shall not presuppose GUI editing; it shall be **human-readable and
+  human-writable text** that supports review, diff, and merge (a git-compatible text format).
+  - Acceptance criteria: two branches editing different tracks can be git-merged without conflicts.
+- **SYS-LNG-004** Plugin equivalents (instruments/effects) shall be written in Forte lang or be
+  providable as modules conforming to a prescribed WASM ABI.
+  Publishing to the public registry **requires source disclosure** (white-box principle).
 
-### 2.2 決定論的ビルド (ENG)
+### 2.2 Deterministic Builds (ENG)
 
-- **SYS-ENG-001** 同一のコミット+ロックファイル+ビルド設定から、
-  **ビット同一のオーディオ**が再現されること(決定論的ビルド)。
-  - 受入基準: 異なる 2 環境(x86_64 Linux / ブラウザ WASM)でビルドした出力の
-    ハッシュが一致する。
-- **SYS-ENG-002** 同一エンジンでリアルタイム再生(プレビュー)とオフラインレンダリング
-  (ビルド)の両方ができ、両者の音が一致すること。
-- **SYS-ENG-003** リアルタイム再生はグリッチなく動作すること
-  (ブラウザ: AudioWorklet 128 フレーム/約 3ms 予算内。00-research-report.md §3.1)。
-- **SYS-ENG-004** ビルド成果物は来歴マニフェスト(全依存のリポジトリ+コミット+fork系譜、
-  全録音アセットのハッシュ+収録来歴)を必ず伴うこと。
+- **SYS-ENG-001** From the same commit + lock file + build configuration,
+  **bit-identical audio** shall be reproduced (deterministic build).
+  - Acceptance criteria: the hashes of outputs built in two different environments
+    (x86_64 Linux / browser WASM) match.
+- **SYS-ENG-002** The same engine shall handle both real-time playback (preview) and offline
+  rendering (build), and the two shall sound identical.
+- **SYS-ENG-003** Real-time playback shall run without glitches
+  (browser: AudioWorklet 128 frames / within the ~3ms budget. 00-research-report.md §3.1).
+- **SYS-ENG-004** Build artifacts shall always be accompanied by a provenance manifest
+  (repository + commit + fork lineage for all dependencies, hash + recording provenance for all
+  recorded assets).
 
-### 2.3 エディタ体験 (EDT)
+### 2.3 Editor Experience (EDT)
 
-- **SYS-EDT-001** VSCode(または互換エディタ)でのコーディングを一級の作曲体験として
-  サポートすること(LSP: 補完・型検査・エラー表示・定義ジャンプ)。
-- **SYS-EDT-002** 編集はコードのみで完結し、保存/評価から音への反映(ホットリロード)が
-  1 秒以内であること(差分ビルド)。
-- **SYS-EDT-003** コードから生成される**読み取り専用の可視化**(ピアノロール、波形、
-  ミキサー、系譜)を提供すること。可視化から編集はできない(編集の唯一の真実はコード)。
-- **SYS-EDT-004** ブラウザのみでも同等のコア体験(編集・ビルド・再生)が成立すること
-  (インストール障壁の排除。Webエディタは Monaco 系)。
+- **SYS-EDT-001** Coding in VSCode (or a compatible editor) shall be supported as a first-class
+  composing experience (LSP: completion, type checking, error display, go-to-definition).
+- **SYS-EDT-002** Editing shall be completed entirely in code, with save/evaluate reflected in
+  sound (hot reload) within 1 second (incremental build).
+- **SYS-EDT-003** **Read-only visualizations** generated from code (piano roll, waveform, mixer,
+  lineage) shall be provided. Editing from the visualizations is not possible (code is the single
+  source of truth for editing).
+- **SYS-EDT-004** The equivalent core experience (edit, build, play) shall work in the browser
+  alone (removing the installation barrier; the web editor is Monaco-based).
 
-### 2.4 エコシステム (HUB)
+### 2.4 Ecosystem (HUB)
 
-- **SYS-HUB-001** リポジトリは private / public を選択でき、git 互換プロトコルで
-  push/pull できること。
-- **SYS-HUB-002** **public リポジトリは clone 不可・fork 必須**であること。
-  fork は系譜グラフ(誰が何を元に作ったか)として永続記録される。
-  - 受入基準: public リポジトリへの生 git clone アクセスは拒否され、
-    Hub 経由の fork 操作でのみ手元に取得できる。
-- **SYS-HUB-003** 依存解決(パッケージ取得)も fork 系譜に記録されること(依存=系譜)。
-- **SYS-HUB-004** タグからのリリース(Hub のビルドファームで決定論ビルド→検証→公開)が
-  できること。リリースは full mix / open-stems の 2 形態を持つ。
-- **SYS-HUB-005** リリース音源はダウンロード/再利用不可(ストリーミング聴取のみ)。
-  内容の取得は fork によってのみ行えること。
-- **SYS-HUB-006** (将来) ポイント制: モジュール/アセットが他者の
-  リリースに使われた実績を系譜から集計し、利用権として還流できること。
-  初期リリースでは**系譜の記録のみ**を行い、経済は導入しない。
+- **SYS-HUB-001** Repositories can be private / public and support push/pull over a
+  git-compatible protocol.
+- **SYS-HUB-002** **Public repositories shall be non-clonable; fork is mandatory.**
+  Forks are permanently recorded as a lineage graph (who made what from what).
+  - Acceptance criteria: raw git clone access to a public repository is rejected; the content can
+    only be obtained locally through the Hub's fork operation.
+- **SYS-HUB-003** Dependency resolution (package retrieval) shall also be recorded in the fork
+  lineage (dependency = lineage).
+- **SYS-HUB-004** Releases from tags (deterministic build on the Hub's build farm → verification →
+  publication) shall be supported. Releases come in two forms: full mix / open-stems.
+- **SYS-HUB-005** Released audio shall not be downloadable/reusable (streaming listening only).
+  Obtaining the content shall be possible only by forking.
+- **SYS-HUB-006** (Future) Point system: aggregate from the lineage the track record of
+  modules/assets being used in others' releases, and recirculate it as usage entitlements.
+  The initial release performs **lineage recording only** and introduces no economy.
 
-### 2.5 録音と入力の制限 (REC)
+### 2.5 Recording and Input Restrictions (REC)
 
-- **SYS-REC-001** 音声入力は **MIDI 入力とマイク(ライン)入力のみ**とし、
-  外部オーディオファイルの import 機能を持たないこと(ホワイトボックス原則)。
-- **SYS-REC-002** 録音アセットには収録来歴(セッション ID、デバイス情報、収録時刻、
-  収録者、システム署名)が自動付与され、来歴のないオーディオはビルドに参加できないこと。
-- **SYS-REC-003** 録音時のレイテンシは較正され、タイムライン上に補正配置されること
-  (ループバック較正。目標精度 ±1ms、00-research-report.md §3.2)。
-- **SYS-REC-004** open-stems リリース上での「演奏 fork」(fork+録音トラック追加)を、
-  最小限の録音 GUI(トランスポート+テイク管理)でサポートすること。
-- **SYS-REC-005** リリース音源のマイク再録・外部生成オーディオの偽装持ち込みは
-  規約違反とし、通報+音響指紋照合によるモデレーション機構を持つこと
-  (技術的完全防止は不可能であることを設計前提とする)。
+- **SYS-REC-001** Audio input shall be limited to **MIDI input and microphone (line) input only**,
+  with no import feature for external audio files (white-box principle).
+- **SYS-REC-002** Recorded assets shall automatically receive recording provenance (session ID,
+  device information, recording time, recordist, system signature), and audio without provenance
+  shall not be able to participate in builds.
+- **SYS-REC-003** Recording latency shall be calibrated and compensated placement applied on the
+  timeline (loopback calibration; target accuracy ±1ms, 00-research-report.md §3.2).
+- **SYS-REC-004** The "performance fork" (fork + adding recorded tracks) on open-stems releases
+  shall be supported with a minimal recording GUI (transport + take management).
+- **SYS-REC-005** Microphone re-recording of released audio and disguised introduction of
+  externally generated audio shall be terms-of-service violations, with a moderation mechanism
+  based on reporting + acoustic fingerprint matching
+  (the design assumes complete technical prevention is impossible).
 
-### 2.6 聴取 (PLY)
+### 2.6 Listening (PLY)
 
-- **SYS-PLY-001** Hub 上のプレイヤーでリリースを聴取できること(ログイン不要の public 再生)。
-- **SYS-PLY-002** 曲の**系譜ページ**: 使用モジュール・録音参加者・fork 元/fork 先・
-  派生バージョン(歌い手違い、リミックス、rock版等)が辿れること。
-- **SYS-PLY-003** コードベースの類似検索(進行・構造・使用モジュール)により
-  「似ている曲」「同じ道具を使う作者」を発見できること(段階導入可)。
+- **SYS-PLY-001** Releases shall be listenable in the player on the Hub (public playback without login).
+- **SYS-PLY-002** A song's **lineage page**: the modules used, recording participants, fork
+  sources/destinations, and derived versions (different vocalists, remixes, rock versions, etc.)
+  shall be traversable.
+- **SYS-PLY-003** Code-based similarity search (progressions, structure, modules used) shall
+  enable discovery of "similar songs" and "creators using the same tools" (may be introduced in stages).
 
-### 2.7 ガバナンス (GOV)
+### 2.7 Governance (GOV)
 
-- **SYS-GOV-001** public 投稿には**系譜保存ライセンス**(fork 必須・帰属表示・
-  トラック単位来歴の保存を要求する独自パブリックライセンス)を標準適用すること。
-  現行著作権法の上に実装し、法的レビューを受けること。
-- **SYS-GOV-002** private リポジトリの内容(未発表曲)はエンドツーエンドで運営を含む
-  第三者から保護されること(最低限: 保存時暗号化+アクセス監査)。
-- **SYS-GOV-003** ユーザーは自分の全データ(リポジトリ、アセット、系譜記録)を
-  標準形式でエクスポートできること(ロックイン拒否。Endlesss の教訓)。
+- **SYS-GOV-001** Public submissions shall by default carry the **lineage-preserving license**
+  (a custom public license requiring mandatory forking, attribution, and preservation of per-track
+  provenance). Implement it on top of current copyright law and subject it to legal review.
+- **SYS-GOV-002** The contents of private repositories (unreleased songs) shall be protected
+  end-to-end from third parties including the operator (at minimum: encryption at rest + access
+  auditing).
+- **SYS-GOV-003** Users shall be able to export all of their data (repositories, assets, lineage
+  records) in standard formats (lock-in rejection; the lesson of Endlesss).
 
-### 2.8 非機能 (NFR)
+### 2.8 Non-Functional (NFR)
 
-- **SYS-NFR-001** ローカルファースト: エディタとビルドはオフラインで完全動作すること。
-  Hub はコラボと公開のためのものであり、制作の必須依存にしないこと。
-- **SYS-NFR-002** 対応環境: デスクトップ(CLI+VSCode: Win/macOS/Linux)、
-  ブラウザ(Chromium フル機能、Firefox/Safari は縮退マトリクスを SAD で定義)。
-- **SYS-NFR-003** リアルタイム再生: 44.1/48kHz、10 トラック+20 デバイスのリファレンス曲を
-  ミッドレンジ PC(4 コア)でアンダーラン率 0 で再生できること。
-- **SYS-NFR-004** ビルド性能: リファレンス曲(3 分)のフルビルドが実時間の 5 倍速以上、
-  差分ビルド(1 モジュール変更)が 1 秒以内。
-- **SYS-NFR-005** コアエンジンはネイティブ(サーバー/CLI)と WASM(ブラウザ)の
-  両ターゲットで単一ソースからビルドされること。
+- **SYS-NFR-001** Local-first: the editor and builds shall work fully offline.
+  The Hub is for collaboration and publication and shall not be a mandatory dependency of production.
+- **SYS-NFR-002** Supported environments: desktop (CLI + VSCode: Win/macOS/Linux),
+  browser (Chromium full-featured; the degradation matrix for Firefox/Safari is defined in the SAD).
+- **SYS-NFR-003** Real-time playback: a reference song with 10 tracks + 20 devices at 44.1/48kHz
+  shall play with a 0 underrun rate on a mid-range PC (4 cores).
+- **SYS-NFR-004** Build performance: a full build of the reference song (3 minutes) at 5x
+  real time or faster; an incremental build (one module changed) within 1 second.
+- **SYS-NFR-005** The core engine shall be built from a single source for both native
+  (server/CLI) and WASM (browser) targets.
 
-## 3. スコープ外(明示)
+## 3. Out of Scope (Explicit)
 
-- GUI による編集(ピアノロールでのノート編集等) — 恒久的にスコープ外(可視化は提供)
-- 外部オーディオファイルの import — 恒久的にスコープ外(発明の前提)
-- VST/AU 等ネイティブプラグインのホスト — スコープ外(ホワイトボックス原則に反する)
-- DAW プロジェクト(Ableton/Logic 等)のインポート — スコープ外
-- ポイント経済の金銭換金 — 初期スコープ外(法規制の検討後)
+- Editing via GUI (note editing in a piano roll, etc.) — permanently out of scope (visualization is provided)
+- Importing external audio files — permanently out of scope (a premise of the invention)
+- Hosting native plugins such as VST/AU — out of scope (contrary to the white-box principle)
+- Importing DAW projects (Ableton/Logic, etc.) — out of scope
+- Monetary conversion of the point economy — out of initial scope (after regulatory review)
 
-## 4. 前提と依存
+## 4. Assumptions and Dependencies
 
-- ブラウザ実行は COOP/COEP(クロスオリジン分離)を配備前提とする(SharedArrayBuffer)。
-- 決定論ビルドのため、エンジンの DSP は浮動小数点決定論を保証する実装規約に従う(SDD §4)。
-- 録音来歴の信頼性はクライアント署名に依存する(完全な耐改竄は将来課題)。
+- Browser execution assumes deployment with COOP/COEP (cross-origin isolation) (SharedArrayBuffer).
+- For deterministic builds, the engine's DSP follows implementation conventions that guarantee
+  floating-point determinism (SDD §4).
+- The trustworthiness of recording provenance depends on client signatures (full tamper
+  resistance is a future topic).
 
-## 5. 検証方針
+## 5. Verification Policy
 
-- 各 SYS 要求は SRS の 1 つ以上のソフトウェア要求にトレースされ、
-  トレーサビリティマトリクスを 03 文書の付録に置く。
-- 決定論(SYS-ENG-001)は CI で 2 環境ハッシュ比較を常時実行する。
-- リアルタイム性(SYS-ENG-003)はアンダーランカウンタを計測するベンチハーネスで検証する。
+- Each SYS requirement is traced to one or more software requirements in the SRS, and the
+  traceability matrix is placed in the appendix of document 03.
+- Determinism (SYS-ENG-001) is continuously verified in CI via two-environment hash comparison.
+- Real-time behavior (SYS-ENG-003) is verified with a bench harness that measures underrun counters.
 
-## 6. リスク管理(最上位ハザード)
+## 6. Risk Management (Top-Level Hazards)
 
-| ID | ハザード | 影響 | 軽減策(要求へのトレース) |
+| ID | Hazard | Impact | Mitigation (trace to requirements) |
 | --- | --- | --- | --- |
-| RSK-01 | ユーザー作品(コード/録音)の喪失 | 致命的(信頼喪失) | ローカルファースト(SYS-NFR-001)、エクスポート(SYS-GOV-003)、録音の逐次永続化(SRS で規定) |
-| RSK-02 | 系譜の改竄・偽装(他人の音の持ち込み) | エコシステムの信頼毀損 | 来歴強制(SYS-REC-002)、入力制限(SYS-REC-001)、モデレーション(SYS-REC-005) |
-| RSK-03 | 決定論の破れ(ビルド再現失敗) | リリース検証・貢献証明の崩壊 | 決定論規約+CI 検証(SYS-ENG-001) |
-| RSK-04 | private 曲の漏洩 | 法的・信頼リスク | SYS-GOV-002 |
-| RSK-05 | リアルタイム音切れ | 制作体験の毀損 | SYS-ENG-003 / SYS-NFR-003 |
+| RSK-01 | Loss of user works (code/recordings) | Fatal (loss of trust) | Local-first (SYS-NFR-001), export (SYS-GOV-003), incremental persistence of recordings (specified in SRS) |
+| RSK-02 | Tampering with/forging lineage (bringing in others' audio) | Damage to ecosystem trust | Provenance enforcement (SYS-REC-002), input restrictions (SYS-REC-001), moderation (SYS-REC-005) |
+| RSK-03 | Determinism breakage (build reproduction failure) | Collapse of release verification and contribution proof | Determinism conventions + CI verification (SYS-ENG-001) |
+| RSK-04 | Leakage of private songs | Legal and trust risk | SYS-GOV-002 |
+| RSK-05 | Real-time audio dropouts | Damage to the production experience | SYS-ENG-003 / SYS-NFR-003 |

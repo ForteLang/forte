@@ -1,134 +1,148 @@
-# Vision — 音楽制作のホワイトボックス化とfork系譜エコシステム
+# Vision — White-Boxing Music Production and the Fork-Lineage Ecosystem
 
-作業名(仮): **Forte** — 言語・エンジン・ハブからなる「コードで作曲する」プラットフォーム。
-(名称はすべて仮。言語 = Forte lang、ハブ = Forte Hub、エンジン = forte-core と呼ぶ)
+Working name (provisional): **Forte** — a "compose in code" platform consisting of a language, an engine, and a hub.
+(All names are provisional. Language = Forte lang, hub = Forte Hub, engine = forte-core.)
 
-Status: Draft / 2026-07-02 / 本文書は要求仕様(02〜)の上位にある製品ビジョンを定義する。
+Status: Draft / 2026-07-02 / This document defines the product vision that sits above the requirements specifications (02 onward).
 
 ---
 
-## 1. 一文で
+## 1. In One Sentence
 
-**音楽制作を、ブラックボックスなプロジェクトファイルと売り切りオーディオ素材の世界から、
-「コード・fork・ビルド・リリース」によるオープン開発の世界へ移行させる。**
+**Move music production from the world of black-box project files and one-off audio-sample sales
+to a world of open development through "code, fork, build, release."**
 
-GitHubがソフトウェア開発に対してやったことを、作曲に対してやる。
+Do for composition what GitHub did for software development.
 
-## 2. 現状への問題意識(なぜやるか)
+## 2. Problems with the Status Quo (Why We Do This)
 
-1. **プロジェクトのブラックボックス化** — DAWのプロジェクトファイルは不透明なバイナリで、
-   曲がどう作られたかは共有されない。学習は「耳コピと違法スレスレのサンプリング」に退化している。
-2. **素材経済の貧しさ** — Splice等は「スネア1個を売り買いする」構造であり、
-   曲がサブスクで陳腐化する時代のコスト構造と合っていない。
-   オーディオファイルの切り売りは、再利用の**系譜**を残さない。
-3. **貢献の不可視性** — J-POPの多くが特定の進行(例: 丸の内サディスティック)や手法を再利用しているのに、
-   根源を作った人には何も還元されず、焦点も当たらない。
-   コアな道具・進行・設計を生んだ個人開発者が大手に貢献できる市場が存在しない。
-4. **AI以後の人間の役割** — AIがオーディオを生成する時代に「オーディオを作る作業」の価値は下がった。
-   人間の次の仕事は、モーツァルトが楽譜を書いたように、**楽曲の構造をホワイトボックスで作り込み、共有すること**である。
+1. **Black-boxed projects** — DAW project files are opaque binaries, and how a song was made
+   is never shared. Learning has degenerated into "transcribing by ear and borderline-illegal sampling."
+2. **The poverty of the sample economy** — Splice and the like are structured around "buying and
+   selling a single snare," which does not match the cost structure of an era where songs are
+   commoditized by subscriptions. Selling audio files piecemeal leaves no **lineage** of reuse.
+3. **Invisibility of contribution** — Much of J-POP reuses particular progressions (e.g.,
+   "Marunouchi Sadistic") and techniques, yet the person who created the origin receives nothing
+   and gets no spotlight. There is no market where individual developers who created core tools,
+   progressions, and designs can contribute to major players.
+4. **The human role after AI** — In an era when AI generates audio, the value of "the work of
+   producing audio" has fallen. The next job for humans is, as Mozart did when writing scores,
+   **to craft and share the structure of a piece as a white box**.
 
-## 3. 三つの発明
+## 3. Three Inventions
 
-### 発明1: 音楽のホワイトボックス化 (Music as Code)
+### Invention 1: White-Boxing Music (Music as Code)
 
-- 曲、プロジェクト、トラック、音源(シンセ)、エフェクト、MIDIシーケンサー、進行、便利ツール——
-  **すべてがプログラミング言語(Forte lang)のコード**として表現される。
-- コードは**モジュール**であり、`import` で再利用する。プラグインという概念は
-  「特別なバイナリ」ではなく「importするモジュール」に一般化される。
-- プラグインより上の抽象レベル(曲の骨子、アレンジのテンプレート、ミックスの設計)も
-  モジュール化・import可能にする。ソフトウェア工学のモジュール化と依存管理を作曲に持ち込む。
+- Songs, projects, tracks, instruments (synths), effects, MIDI sequencers, progressions,
+  utility tools — **everything is expressed as code in a programming language (Forte lang)**.
+- Code is a **module**, reused via `import`. The concept of a plugin is generalized from
+  "a special binary" to "a module you import."
+- Abstraction levels above plugins (a song's skeleton, arrangement templates, mix designs)
+  are also modularized and importable. Bring software engineering's modularization and
+  dependency management into composition.
 
-### 発明2: fork系譜の強制 (Provenance by Construction)
+### Invention 2: Enforced Fork Lineage (Provenance by Construction)
 
-- 曲もモジュールも **リポジトリ**(private / public)として管理される。
-- **publicリポジトリはcloneできない。利用は必ずforkを経由する。**
-  fork系譜を辿ることで、より根源的なモジュールを作った人が可視化され、利がある構造を作る。
-- 音源モジュールで演奏すればその音源のfork情報が残る。マイク録音のトラックには収録来歴が残る。
-- 将来、**ポイント制**を導入する: 他人に使われた分だけ自分も使える。オーディオファイル自体は
-  売買**されない**。価値は系譜への貢献として流れる。
+- Both songs and modules are managed as **repositories** (private / public).
+- **Public repositories cannot be cloned. Use always goes through a fork.**
+  By walking the fork lineage, whoever created the more fundamental module becomes visible,
+  creating a structure in which they benefit.
+- Playing through an instrument module leaves that instrument's fork information behind.
+  A microphone-recorded track carries its recording provenance.
+- In the future, a **point system** will be introduced: you can use as much as others have used
+  your work. Audio files themselves are **not** bought or sold. Value flows as contribution to
+  the lineage.
 
-### 発明3: 決定論的ビルドとしての楽曲 (Song as Reproducible Build)
+### Invention 3: Songs as Deterministic Builds (Song as Reproducible Build)
 
-- **バウンス = ビルド。** 同一コミット+同一ロックファイルからは、ビット同一のオーディオが再現される。
-- GitHubのリリース機能と同様、タグからビルドされた曲を**リリース**し、
-  エコシステム上のプレイヤーで聴取できる。
-- リリースされたオーディオそのものは再利用できない。内容が欲しければ**リポジトリをfork**する。
-  (リリース音源をマイク再録して自分のアセットにする行為は規約違反とする)
+- **Bounce = build.** From the same commit plus the same lock file, bit-identical audio is reproduced.
+- Just like GitHub's release feature, a song built from a tag is **released** and can be listened to
+  on players within the ecosystem.
+- The released audio itself cannot be reused. If you want the content, **fork the repository**.
+  (Re-recording released audio with a microphone to make it your own asset is a terms-of-service violation.)
 
-## 4. 新しい作曲体験
+## 4. A New Composing Experience
 
-> VSCodeのようなエディタで音楽を作る。ビルドしたら(GUI操作なしで)曲が聴ける。
-> 聴きながらコードで曲を改善する。
+> Make music in an editor like VSCode. Build it, and (without any GUI operation) you can hear the song.
+> Improve the song in code while listening to it.
 
-- 編集の唯一の真実は**コード**。GUIでの編集は行わない。
-- ただし**読み取り専用の可視化**(コードから生成されるピアノロール・波形・ミキサービュー)は提供する。
-  コーディングにおけるデバッガ/プロファイラに相当する。
-- ライブプレビュー: 保存/評価のたびに差分ビルドされ、再生位置を保ったまま音が更新される
-  (ホットリロード)。
-- 入力は **MIDI入力**(演奏をコード化されたノート列として記録)と **マイク入力**(来歴付き録音アセット)のみ。
-  外部オーディオファイルのimportは仕様として存在しない。
-  ブラックボックスなオーディオの持ち込みを構造的に排除するための意図的な制限である。
+- The single source of truth for editing is **code**. There is no editing in a GUI.
+- However, **read-only visualizations** (piano roll, waveform, and mixer views generated from
+  the code) are provided. They correspond to a debugger/profiler in coding.
+- Live preview: every save/evaluation triggers an incremental build, and the sound updates while
+  preserving the playback position (hot reload).
+- The only inputs are **MIDI input** (recording performances as code-level note sequences) and
+  **microphone input** (recorded assets with provenance).
+  Importing external audio files does not exist in the specification.
+  This is a deliberate restriction to structurally exclude bringing in black-box audio.
 
-## 5. エコシステムの規則(GitHubとの差分)
+## 5. Rules of the Ecosystem (Differences from GitHub)
 
-| 項目 | GitHub | Forte Hub |
+| Item | GitHub | Forte Hub |
 | --- | --- | --- |
-| リポジトリ | private/public | 同じ |
-| 再利用 | clone自由 | **publicはfork必須・clone不可** |
-| 依存 | パッケージレジストリ(npm等)は別システム | レジストリとfork系譜が**一体**(依存=系譜) |
-| リリース | 任意のバイナリ | **決定論ビルドされたオーディオ+来歴マニフェスト** |
-| ライセンス | 選択自由 | publicは**系譜保存ライセンス**(fork必須・帰属表示・トラック単位来歴)を標準とする |
-| 経済 | なし(スポンサー等) | **ポイント制**(使われた分だけ使える)を段階導入 |
+| Repositories | private/public | Same |
+| Reuse | Free to clone | **Public requires fork; clone not allowed** |
+| Dependencies | Package registries (npm, etc.) are separate systems | Registry and fork lineage are **one** (dependency = lineage) |
+| Releases | Arbitrary binaries | **Deterministically built audio + provenance manifest** |
+| License | Free choice | Public defaults to a **lineage-preserving license** (fork required, attribution, per-track provenance) |
+| Economics | None (sponsors, etc.) | **Point system** (use as much as you are used) introduced in stages |
 
-- 生歌・生演奏のアセットは「自身の演奏を公開して使ってもらう」Splice的な流通をする。
-  ただし**ファイル売買ではなく、fork+来歴+ポイント**で流れる。
-- リリース形態として **full mix** と **open-stems**(ステム群を公開し、歌入れ・生音入れのfork
-  を招待する形)を検討する(§7)。
+- Assets of live vocals and live performances circulate Splice-style, as "publishing your own
+  performance for others to use." However, they flow **not as file sales but as fork + provenance + points**.
+- As release forms, we are considering **full mix** and **open-stems** (publishing the stems and
+  inviting forks that add vocals or live instruments) (§7).
 
-## 6. 聴き手の体験(新しいディグり方)
+## 6. The Listener's Experience (A New Way of Digging)
 
-- 「この曲を櫻井さんが歌ったバージョン」「桑田さんバージョン」「松本さんがギターを入れたrock版」
-  「この曲をリファレンスにforkされた曲一覧」が**系譜グラフとして辿れる**。
-- 明示的なforkがなくても、進行・構造の類似が言語レベルで解析可能になる
-  (コードなので類似検索が意味を持つ)。「このアーティストはこの人と作曲が似ている」
-  「同じ楽器(音源モジュール)を使っている」「この楽器のソロ演奏をしている人」に辿り着ける。
-- 30年後のリバイバル(山下達郎→city pop)のように、**エフェクト・進行・作り方**そのものに
-  焦点が当たり、根源の作者が発見される。
-- 長期ビジョン: 作詞作曲の権利の一枚岩は解体され、トラック単位の貢献者がforkで追跡され、
-  便利ツールや全体設計の開発者もクレジットされ、聴かれた曲の貢献度が分配される。
-  バンドは固定編成から「コンポーズユーザーが人の演奏を組み合わせる」流動的な形態へ。
+- "The version of this song sung by Sakurai," "the Kuwata version," "the rock version where
+  Matsumoto added guitar," "the list of songs forked with this song as a reference" — all
+  **traversable as a lineage graph**.
+- Even without an explicit fork, similarity of progressions and structures becomes analyzable at
+  the language level (because it is code, similarity search is meaningful). You can reach
+  "this artist composes similarly to this person," "they use the same instrument (instrument module),"
+  "people who play solos on this instrument."
+- As with revivals 30 years later (Tatsuro Yamashita → city pop), the spotlight lands on
+  **effects, progressions, and ways of making** themselves, and the original creators are discovered.
+- Long-term vision: the monolith of songwriting rights is dismantled; per-track contributors are
+  tracked through forks; developers of utility tools and overall designs are also credited; and the
+  contribution shares of listened-to songs are distributed. Bands shift from fixed lineups to a
+  fluid form where "a composing user combines other people's performances."
 
-## 7. 未解決の設計課題(要検討として明示)
+## 7. Unresolved Design Questions (Explicitly Flagged for Study)
 
-1. **生歌・生演奏の組み込み範囲** — 歌入れをどこまでコード世界に統合するか。
-   現案: open-stemsリリース上で「演奏fork」(fork + 録音トラック追加のみの派生)を
-   一級市民として扱い、録音UIだけは最小限のGUI(トランスポート+テイク管理)を許す。
-2. **エコシステム外オーディオの持ち込み検出** — 完全検出は不可能。
-   方針は「防止」ではなく「来歴の証明が価値を持つ」構造+事後モデレーション(指紋照合)。
-3. **ポイント経済の設計** — 初期は導入せず、系譜の記録だけを先に始める
-   (経済を後から乗せられるのは系譜データがあるからこそ)。
-4. **既存権利との接続** — 現行著作権法の上に「系譜保存ライセンス」として理想を実装する。
-   法的レビューが必要。
+1. **Scope of incorporating live vocals/performances** — How far to integrate vocal recording into
+   the code world. Current proposal: on open-stems releases, treat the "performance fork"
+   (a derivation consisting only of fork + adding recorded tracks) as a first-class citizen, and
+   allow a minimal GUI only for recording (transport + take management).
+2. **Detecting audio brought in from outside the ecosystem** — Perfect detection is impossible.
+   The policy is not "prevention" but a structure where "proof of provenance carries value," plus
+   after-the-fact moderation (fingerprint matching).
+3. **Design of the point economy** — Do not introduce it initially; start by recording lineage only
+   (the economy can be layered on later precisely because the lineage data exists).
+4. **Connection to existing rights** — Implement the ideal as a "lineage-preserving license" on top
+   of current copyright law. Legal review is required.
 
-## 8. 我々(運営)の仕事
+## 8. Our (the Operator's) Job
 
-- **コアライブラリ**(ネイティブ実装のオーディオエンジン+DSP、API化) の開発
-- **言語とツールチェーン**(コンパイラ、パッケージマネージャ、LSP)の開発
-- **エコシステム**(Hub: レジストリ、fork系譜、リリース、プレイヤー、ポイント)の運営
-- 作曲者には「より簡易なプログラミング言語」を提供し、コアはその下に隠す。
-  (創業者はMLエンジニア。コアはネイティブ言語で組み、API化し、上物のDSLで操作させる)
+- Develop the **core library** (natively implemented audio engine + DSP, exposed as an API)
+- Develop the **language and toolchain** (compiler, package manager, LSP)
+- Operate the **ecosystem** (Hub: registry, fork lineage, releases, player, points)
+- Give composers "a simpler programming language" and hide the core beneath it.
+  (The founder is an ML engineer. Build the core in a native language, expose it as an API, and
+  drive it via the DSL on top.)
 
-## 9. 先行事例との差別化
+## 9. Differentiation from Prior Art
 
-Sonic Pi / TidalCycles / Strudel / Glicol / Faust / SuperCollider / LilyPond 等の
-「コードで音楽」は存在するが、いずれも**ライブコーディング(演奏)または記譜**のツールである。
-以下を統合したものは存在しない:
+"Music in code" exists — Sonic Pi / TidalCycles / Strudel / Glicol / Faust / SuperCollider /
+LilyPond, etc. — but all of them are tools for **live coding (performance) or notation**.
+Nothing exists that integrates the following:
 
-1. パッケージマネージャと**fork系譜**(依存=系譜のレジストリ)
-2. **決定論的ビルド→リリース**のパイプライン
-3. DAW品質のオーディオエンジン(オフライン=リアルタイム同一エンジン)
-4. 聴取プラットフォーム(系譜でディグる体験)
+1. A package manager and **fork lineage** (a registry where dependency = lineage)
+2. A **deterministic build → release** pipeline
+3. A DAW-quality audio engine (identical engine for offline and real-time)
+4. A listening platform (the experience of digging through lineage)
 
-勝負所は言語そのものではなく、**言語を中心としたエコシステム**である。
-なお2026年時点のWeb DAW市場は初心者向けに収斂しており(00-research-report.md)、
-「コードで作る中〜上級者」層はどのプレイヤーとも競合しない新市場である。
+The battleground is not the language itself but the **ecosystem centered on the language**.
+Note that as of 2026 the web DAW market has converged on beginners (00-research-report.md),
+so the "intermediate-to-advanced users composing in code" segment is a new market that does not
+compete with any existing player.

@@ -96,9 +96,11 @@ forte instrument BD808       # audition it: the keyboard becomes a piano
 `forte instrument <Name>` resolves any standard instrument by name, takes
 parameters (`forte instrument "Bass303(cutoff: 0.5)"`), and maps the keys —
 `a w s e d f t g y h u j k ...` is a chromatic run from C, `z`/`x` shift the
-octave, `c`/`v` the velocity. When you quit, the jam is printed as a
-quantized `notes` literal — the performance is source code you can paste
-straight into a song. Then wire it in:
+octave, `c`/`v` the velocity. The instrument's knobs are live too: press
+`1`-`9` to grab a parameter (cutoff, reso, ...) and `-`/`=` to turn it while
+you play. When you quit, the jam is printed as a quantized `notes` literal —
+the performance is source code you can paste straight into a song. Then wire
+it in:
 
 ```forte
 import { BD808, SD808, CH808 } from "lib/std/tr808.forte"
@@ -116,7 +118,7 @@ Diagnostics as you type, AudioWorklet playback, OPFS autosave, fully offline PWA
 ```bash
 forte browser                 # serves web/ and opens the editor
 forte browser --port 9000 --no-open
-scripts/build_web.sh          # rebuild the wasm after engine changes
+forte web build               # rebuild the wasm after engine changes
 ```
 
 ### Version control for music
@@ -150,7 +152,7 @@ with glide. They are plain code: fork one and rewrite it character by
 character (demo: `forte play songs/std-tour.forte`). For full arrangements to
 learn from, `songs/patterns/` holds genre grooves (house, DnB, bossa nova,
 afrobeat, trap, …) and `songs/examples/` holds complete songs with sections —
-every one of them compiles and renders under the merge gate (scripts/ci_local.sh).
+every one of them compiles and renders under the merge gate (forte ci).
 
 Recorded takes become instruments too: slice, stretch, and reverse one recording
 into many instruments with `sampler(take: voice, start: 0.25, end: 0.6,
@@ -223,14 +225,15 @@ scripts/          determinism gate, browser E2E
 
 ## Documentation
 
-- **[User guide](docs/GUIDE.md)** — hands-on tutorial (Japanese)
-- **[Language reference](docs/webdaw/spec/forte-lang-v1.md)** — the `.forte` language, v1 (Japanese)
-- **[Vision, requirements, architecture](docs/webdaw/README.md)** — full design docs (Japanese)
+- **[User guide](docs/GUIDE.md)** — hands-on tutorial
+- **[Language reference](docs/webdaw/spec/forte-lang-v1.md)** — the `.forte` language, v1
+- **[Vision, requirements, architecture](docs/webdaw/README.md)** — full design docs
 
 ## Testing
 
 ```bash
-scripts/ci_local.sh                    # the full merge gate (all of the below)
+forte ci                               # the full merge gate (all of the below)
+forte ci quick                         # tests + clippy + determinism only
 cargo test -p dawcore -p fortelang     # engine + language + hub + REPL
 scripts/determinism_test.sh            # native/wasm bit-identity gate
 node scripts/web_e2e.mjs               # browser E2E (needs playwright)

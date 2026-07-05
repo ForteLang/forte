@@ -197,6 +197,10 @@ fn main() -> ExitCode {
             }
         }
         Some("upgrade") => upgrade(),
+        #[cfg(not(target_family = "wasm"))]
+        Some("ci") => ci(args.get(1).map(String::as_str) == Some("quick")),
+        #[cfg(not(target_family = "wasm"))]
+        Some("web") if args.get(1).map(String::as_str) == Some("build") => web_build(),
         Some("version") | Some("--version") | Some("-V") => {
             println!("forte {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
@@ -211,6 +215,8 @@ fn main() -> ExitCode {
             eprintln!("       forte instrument <Name[(args)]> [--from lib.forte]");
             eprintln!("                                   (キーボードが鍵盤に: a w s e d …、z/x oct、c/v velo)");
             eprintln!("       forte browser [--port 8000] [--no-open]  (ブラウザエディタを起動)");
+            eprintln!("       forte web build             (ブラウザエディタの wasm を再ビルド)");
+            eprintln!("       forte ci [quick]            (マージゲート: test+clippy/決定論/corpus/E2E)");
             eprintln!("       forte upgrade               (forte コマンド自体を更新)");
             eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
@@ -233,6 +239,112 @@ fn main() -> ExitCode {
             eprintln!("       forte hub list                     [--hub DIR]");
             eprintln!("       forte hub serve [--port 9377]      [--hub DIR]");
             ExitCode::from(2)
+        }
+    }
+}
+
+/// Walk up from the cwd to the repository root (the dir holding Cargo.toml
+/// with crates/), so repo-wide commands work from any subdirectory.
+fn repo_root() -> Option<PathBuf> {
+    let mut dir = std::env::current_dir().ok()?;
+    loop {
+        if dir.join("crates/fortelang/Cargo.toml").is_file() {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+fn run_step(name: &str, mut cmd: std::process::Command) -> bool {
+    println!("== {name} ==");
+    match cmd.status() {
+        Ok(s) if s.success() => true,
+        Ok(_) => {
+            eprintln!("FAILED: {name}");
+            false
+        }
+        Err(e) => {
+            eprintln!("FAILED: {name}: {e}");
+            false
+        }
+    }
+}
+
+/// `forte ci [quick]` — the merge gate, all in one command (GitHub Actions is
+/// off; this runs the same jobs locally). quick = tests + clippy + determinism.
+#[cfg(not(target_family = "wasm"))]
+fn ci(quick: bool) -> ExitCode {
+    let Some(root) = repo_root() else {
+        eprintln!("ci: run inside the Forte repository");
+        return ExitCode::FAILURE;
+    };
+    let cargo = |args: &[&str]| {
+        let mut c = std::process::Command::new("cargo");
+        c.args(args).current_dir(&root);
+        c
+    };
+    let script = |path: &str| {
+        let mut c = std::process::Command::new(root.join(path));
+        c.current_dir(&root);
+        c
+    };
+    let ok = run_step("1/4 cargo test", cargo(&["test", "--release", "-p", "dawcore", "-p", "fortelang"]))
+        && run_step(
+            "1/4 clippy (-D warnings)",
+            cargo(&["clippy", "--release", "-p", "dawcore", "-p", "fortelang", "--all-targets", "--", "-D", "warnings"]),
+        )
+        && run_step("2/4 determinism gate", script("scripts/determinism_test.sh"))
+        && (quick || run_step("3/4 corpus", script("scripts/check_corpus.sh")))
+        && (quick || {
+            // E2E needs playwright; skip gracefully when absent
+            if root.join("node_modules/playwright").is_dir() {
+                let mut a = std::process::Command::new("node");
+                a.arg(root.join("scripts/web_e2e.mjs")).current_dir(&root);
+                let mut b = std::process::Command::new("node");
+                b.arg(root.join("scripts/hub_e2e.mjs")).current_dir(&root);
+                run_step("4/4 web E2E", a) && run_step("4/4 hub E2E", b)
+            } else {
+                println!("== 4/4 E2E == skip (playwright not installed)");
+                true
+            }
+        });
+    if ok {
+        println!("OK: gate {} — clear to merge", if quick { "(quick)" } else { "(full)" });
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// `forte web build` — compile the browser editor's wasm and place it in web/.
+#[cfg(not(target_family = "wasm"))]
+fn web_build() -> ExitCode {
+    let Some(root) = repo_root() else {
+        eprintln!("web build: run inside the Forte repository");
+        return ExitCode::FAILURE;
+    };
+    let ok = run_step("wasm build (forteweb)", {
+        let mut c = std::process::Command::new("cargo");
+        c.args(["build", "--release", "-q", "-p", "forteweb", "--target", "wasm32-unknown-unknown"])
+            .current_dir(&root);
+        c
+    });
+    if !ok {
+        eprintln!("hint: rustup target add wasm32-unknown-unknown");
+        return ExitCode::FAILURE;
+    }
+    let src = root.join("target/wasm32-unknown-unknown/release/forteweb.wasm");
+    let dst = root.join("web/forte.wasm");
+    match std::fs::copy(&src, &dst) {
+        Ok(bytes) => {
+            println!("web/forte.wasm updated ({bytes} bytes) — try: forte browser");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("copy {} → {}: {e}", src.display(), dst.display());
+            ExitCode::FAILURE
         }
     }
 }
