@@ -113,15 +113,16 @@ auditioned exactly like songs.
 Three commands take you from "what's in the box" to notes in a song:
 
 ```bash
-forte instruments            # the catalog: 148 devices, params, import lines
-forte instruments 808        # filter by name or library (tr808, juno, acid, ...)
-forte instruments BD808      # an exact name goes straight into play mode
+forte instruments list       # the catalog: 148 devices, params, import lines
+forte instruments list 808   # filter by name or library (tr808, juno, bass, ...)
+forte instruments play BD808 # audition it: the keyboard becomes a piano
+source <(forte complete bash)  # tab-completion: play s<Tab> lists instruments
 ```
 
 `forte instrument <Name>` resolves any standard instrument by name, takes
 parameters (`forte instrument "Bass303(cutoff: 0.5)"`), and maps the keys —
 `a w s e d f t g y h u j k ...` is a chromatic run from C, `z`/`x` shift the
-octave, `c`/`v` the velocity. The instrument's knobs are live too: press
+octave (z down / x up), `c`/`v` the velocity (c down / v up). The instrument's knobs are live too: press
 `1`-`9` to grab a parameter (cutoff, reso, ...) and `-`/`=` to turn it while
 you play. When you quit, the jam is printed as a quantized `notes` literal —
 the performance is source code you can paste straight into a song. Then wire

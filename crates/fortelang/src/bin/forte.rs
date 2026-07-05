@@ -201,17 +201,14 @@ fn main() -> ExitCode {
                     };
                     r.map(|msg| println!("{msg}")).map_err(|e| e.to_string())
                 }
-                // no subcommand: an exact instrument name plays, anything
-                // else filters the catalog (forte instruments SubBass = play)
-                Some(arg) => {
-                    let from = args
-                        .iter()
-                        .position(|a| a == "--from")
-                        .and_then(|i| args.get(i + 1))
-                        .cloned();
-                    fortelang::live::play_or_list(arg, from.as_deref())
-                }
+                Some("list") => fortelang::live::list(args.get(2).map(String::as_str)),
+                // machine-readable name list for shell completion (hidden)
+                Some("names") => fortelang::live::names(args.get(2).map(String::as_str)),
                 None => fortelang::live::list(None),
+                Some(other) => Err(format!(
+                    "instruments のサブコマンドは list / play / edit / add です。\n\
+                     一覧: forte instruments list {other}   演奏: forte instruments play {other}"
+                )),
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
@@ -237,6 +234,7 @@ fn main() -> ExitCode {
             }
         }
         Some("upgrade") => upgrade(),
+        Some("complete") if args.len() >= 2 => complete(&args[1]),
         #[cfg(not(target_family = "wasm"))]
         Some("ci") => ci(args.get(1).map(String::as_str) == Some("quick")),
         #[cfg(not(target_family = "wasm"))]
@@ -251,7 +249,7 @@ fn main() -> ExitCode {
             eprintln!("       forte export <song.forte> [-o out.zip]  (曲+履歴+証明の自己完結 zip)");
             eprintln!("       forte play  <song.forte> [--for SECS]   (トラックタイムラインを表示しながら再生)");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
-            eprintln!("       forte instruments [QUERY|Name]  (名前に一致すればそのまま演奏、他はカタログ検索)");
+            eprintln!("       forte instruments list [QUERY]  (カタログ。list bass / list 808 で絞り込み)");
             eprintln!("       forte instruments play <Name[(args)]>  (キーボードが鍵盤に。1..9/-/= でノブ)");
             eprintln!("       forte instruments edit <Name>          (instruments/ にコピーして編集、自動コミットで履歴)");
             eprintln!("       forte instruments add <Name> [--hub URL] (hub から楽器ライブラリを fork)");
@@ -260,6 +258,7 @@ fn main() -> ExitCode {
             eprintln!("       forte web build             (ブラウザエディタの wasm を再ビルド)");
             eprintln!("       forte ci [quick]            (マージゲート: test+clippy/決定論/corpus/E2E)");
             eprintln!("       forte upgrade               (forte コマンド自体を更新)");
+            eprintln!("       forte complete bash|zsh     (Tab 補完: source <(forte complete bash))");
             eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
             eprintln!("       forte lsp");
@@ -386,6 +385,55 @@ fn web_build() -> ExitCode {
         }
         Err(e) => {
             eprintln!("copy {} → {}: {e}", src.display(), dst.display());
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `forte complete bash|zsh` — emit a shell-completion script. Instrument
+/// names complete dynamically via `forte instruments names`, so the library
+/// can grow without regenerating anything:
+///   bash: echo 'source <(forte complete bash)' >> ~/.bashrc
+///   zsh : echo 'source <(forte complete zsh)'  >> ~/.zshrc
+fn complete(shell: &str) -> ExitCode {
+    const BASH: &str = r#"_forte() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local first="${COMP_WORDS[1]}"
+    local second="${COMP_WORDS[2]}"
+    if [ "$COMP_CWORD" -eq 1 ]; then
+        COMPREPLY=($(compgen -W "check build play export repl instrument instruments browser web ci upgrade version fmt viz lsp init status commit log branch checkout merge diff hub complete" -- "$cur"))
+        return
+    fi
+    if [ "$first" = "instruments" ]; then
+        if [ "$COMP_CWORD" -eq 2 ]; then
+            COMPREPLY=($(compgen -W "list play edit add" -- "$cur"))
+            return
+        fi
+        case "$second" in
+            play|edit) COMPREPLY=($(compgen -W "$(forte instruments names 2>/dev/null)" -- "$cur")); return;;
+        esac
+    fi
+    if [ "$first" = "instrument" ] && [ "$COMP_CWORD" -eq 2 ]; then
+        COMPREPLY=($(compgen -W "$(forte instruments names 2>/dev/null)" -- "$cur"))
+        return
+    fi
+    COMPREPLY=($(compgen -f -- "$cur"))
+}
+complete -F _forte forte
+"#;
+    match shell {
+        "bash" => {
+            print!("{BASH}");
+            ExitCode::SUCCESS
+        }
+        "zsh" => {
+            // ride bash-compatible completion in zsh
+            println!("autoload -U +X bashcompinit && bashcompinit");
+            print!("{BASH}");
+            ExitCode::SUCCESS
+        }
+        other => {
+            eprintln!("complete: '{other}' は未対応です(bash / zsh)");
             ExitCode::FAILURE
         }
     }

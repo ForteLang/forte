@@ -61,10 +61,14 @@ forte:Bass> :quit
 hardware clones tr808 / tr909 / tb303 / juno60 / sh101 / prophet5 / cr78):
 
 ```bash
-forte instruments             # all 148 instruments: names, parameters, usage
-forte instruments 808         # filter (by name or by library name)
-forte instruments acid        # brings up the tb303
-forte instruments SubBass     # an exact name (any case) plays it right away
+forte instruments list        # all 148 instruments: names, parameters, usage
+forte instruments list bass   # filter by genre/library or name
+forte instruments list acid   # brings up the tb303
+forte instruments play SubBass  # audition on the keyboard
+
+# tab-completion (the library keeps growing, so names complete dynamically):
+echo 'source <(forte complete bash)' >> ~/.bashrc   # zsh: forte complete zsh
+# then: forte instruments play S<Tab>  → SD808 SD909 Snare SubBass …
 ```
 
 Every line in the listing can be dropped straight into a song:
@@ -82,16 +86,16 @@ genre-specific usage examples live in `songs/patterns/`.
 **Playing**: audition any instrument that catches your ear with your keyboard:
 
 ```bash
-forte instrument Bass303                  # resolved by name from lib/std
-forte instrument "JunoPad(cutoff: 0.5)"   # parameters work too
-forte instrument polymer                  # built-ins as well
+forte instruments play Bass303                  # resolved by name from lib/std
+forte instruments play "JunoPad(cutoff: 0.5)"   # parameters work too
+forte instruments play polymer                  # built-ins as well
 ```
 
 Your keyboard becomes a piano:
 
 ```
 a w s e d f t g y h u j k o l p ;   =  C C# D D# E F F# G G# A A# B C…
-z / x  octave up/down      c / v  velocity up/down      q  quit
+z / x  octave down/up      c / v  velocity down/up      q  quit
 1..9   select a knob       - / =  turn it down / up
 ```
 
