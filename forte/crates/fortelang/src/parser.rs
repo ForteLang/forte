@@ -73,6 +73,9 @@ impl Parser {
     fn peek(&self) -> &Tok {
         &self.toks[self.i].tok
     }
+    fn peek_ahead(&self, n: usize) -> &Tok {
+        &self.toks[(self.i + n).min(self.toks.len() - 1)].tok
+    }
     fn pos(&self) -> Pos {
         self.toks[self.i].pos
     }
@@ -183,6 +186,7 @@ impl Parser {
             meter: None,
             key: None,
             lets: Vec::new(),
+            mod_lets: Vec::new(),
             sections: Vec::new(),
             tracks: Vec::new(),
             returns: Vec::new(),
@@ -330,8 +334,22 @@ impl Parser {
                         let pos = self.pos();
                         let name = self.ident("let の名前")?;
                         self.expect(Tok::Eq, "`=`");
-                        let lit = self.music_lit()?;
-                        song.lets.push(LetAst { name, value: lit, pos });
+                        // `let groove = lfo(rate: …, amount: …)` — a shared
+                        // modulator; everything else is a music literal
+                        if matches!(self.peek(), Tok::Ident(k) if matches!(k.as_str(), "lfo" | "steps" | "random" | "adsr"))
+                            && self.peek_ahead(1) == &Tok::LParen
+                        {
+                            let call = self.call()?;
+                            song.mod_lets.push(ModLetAst {
+                                name,
+                                kind: call.name,
+                                args: call.args,
+                                pos,
+                            });
+                        } else {
+                            let lit = self.music_lit()?;
+                            song.lets.push(LetAst { name, value: lit, pos });
+                        }
                     }
                     "section" => {
                         self.bump();
@@ -558,6 +576,7 @@ impl Parser {
             audios: Vec::new(),
             automations: Vec::new(),
             modulations: Vec::new(),
+            macros: Vec::new(),
         };
         loop {
             match self.peek().clone() {
@@ -645,22 +664,49 @@ impl Parser {
                         if !self.keyword("with") {
                             self.err("E-PARSE-021", "modulate は `with lfo(rate: …, amount: …)` で書きます");
                         }
+                        // lfo/steps/random/adsr, or the name of a body-level
+                        // `let <name> = lfo(...)` (validated at compile time)
                         let call = self.call()?;
-                        if !matches!(call.name.as_str(), "lfo" | "steps" | "random" | "adsr") {
-                            self.err(
-                                "E-PARSE-021",
-                                format!(
-                                    "modulate に使えるのは lfo / steps / random / adsr です(見つかったのは {})",
-                                    call.name
-                                ),
-                            );
-                        }
+                        let alias = if self.keyword("as") {
+                            Some(self.ident("モジュレータの名前(as の後)")?)
+                        } else {
+                            None
+                        };
                         t.modulations.push(ModulateAst {
                             param,
                             kind: call.name.clone(),
                             args: call.args,
+                            alias,
                             pos: mpos,
                         });
+                    }
+                    "macro" => {
+                        self.bump();
+                        let mpos = self.pos();
+                        let name = self.ident("macro の名前")?;
+                        self.expect(Tok::LBrace, "`{`");
+                        let mut routes = Vec::new();
+                        while !matches!(self.peek(), Tok::RBrace | Tok::Eof) {
+                            let rpos = self.pos();
+                            if !self.keyword("route") {
+                                self.err(
+                                    "E-PARSE-022",
+                                    "macro の中身は `route <パラメータ> amount: <数値>` の並びです",
+                                );
+                                self.bump();
+                                continue;
+                            }
+                            let target =
+                                self.param_target("route 対象(パラメータ / insert名.パラメータ)")?;
+                            if !self.keyword("amount") {
+                                self.err("E-PARSE-022", "route には `amount: <数値>` が必要です");
+                            }
+                            self.expect(Tok::Colon, "`:`");
+                            let amt = self.number("route の amount")?;
+                            routes.push((target, amt.0, rpos));
+                        }
+                        self.expect(Tok::RBrace, "`}`");
+                        t.macros.push(MacroAst { name, routes, pos: mpos });
                     }
                     "volume" => {
                         self.bump();
@@ -678,7 +724,7 @@ impl Parser {
                         self.err(
                             "E-PARSE-014",
                             format!(
-                                "track 内で使えない要素です: {other}(instrument/insert/play/send/volume/pan)"
+                                "track 内で使えない要素です: {other}(instrument/insert/play/send/volume/pan/automate/modulate/macro)"
                             ),
                         );
                         self.bump();

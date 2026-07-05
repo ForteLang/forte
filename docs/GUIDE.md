@@ -410,6 +410,34 @@ song "Name" {
 - Targets include instrument parameters and also **insert effect
   parameters**, addressed as `insertName.parameter` like `delay.mix`
   (a custom Effect's `param`s work the same way).
+- **Name a modulator to automate the modulator itself** — the wobble that
+  deepens into the drop:
+
+```forte
+modulate cutoff with lfo(rate: 0.3, amount: 0.2) as wobble
+automate wobble.amount from 0.0 to 0.6 over build   // depth ramp
+automate wobble.rate   from 0.1 to 0.8 over build   // speed ramp
+```
+
+- **Macros fan one knob out to many parameters** (across devices), and the
+  knob is an automate target. A declared but untouched macro is silent:
+
+```forte
+macro brightness {
+  route cutoff    amount: 0.8
+  route delay.mix amount: 0.3
+}
+automate brightness from 0.1 to 0.9 over drop
+```
+
+- **Share one modulator across tracks** with a body-level `let` — the whole
+  song breathes at the same rate (call-site args override the definition):
+
+```forte
+let groove = lfo(rate: 0.25, amount: 0.3)
+track Keys { … modulate cutoff with groove }
+track Pad  { … modulate delay.mix with groove(amount: 0.15) }
+```
 - All knob-style values are **normalized to 0..1** (volume and cutoff alike).
   Only pan is -1..1.
 - Built-in instruments: `sampler(sample: "Kick"/"Snare"/"Hat")`, `prisma(…)`, `mesh()`.

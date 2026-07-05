@@ -249,3 +249,128 @@ fn builtin_instruments_keep_working() {
     assert_ne!(with, without);
     assert_eq!(with, digest(src));
 }
+
+// ---- issue #38 third wave: macros, named modulators, shared modulators -------
+
+fn digest2(src: &str) -> u64 {
+    let p = compile_str(src).expect("compile");
+    render_digest(&p, 4.0).f32_digest
+}
+
+/// `macro` fans one knob out to many params (across devices), and the knob
+/// itself is an automate target. Unautomated it sits at 0 = inaudible.
+#[test]
+fn macro_knob_reaches_many_params_and_is_automatable() {
+    let base = r#"song "M" {
+  tempo 124bpm
+  key A minor
+  track A {
+    instrument prisma(wave: "saw", cutoff: 0.3)
+    insert delay(time: 0.25, fdbk: 0.4, mix: 0.1)
+    play notes`A2:1 C3:1 E3:1 A2:1` at bars(1..2)
+    macro brightness {
+      route cutoff amount: 0.6
+      route delay.mix amount: 0.3
+    }
+    AUTOMATE
+  }
+}"#;
+    let flat = digest2(&base.replace("AUTOMATE", ""));
+    let ramped = digest2(&base.replace(
+        "AUTOMATE",
+        "automate brightness from 0.0 to 1.0 over bars(1..2)",
+    ));
+    assert_ne!(flat, ramped, "the macro ramp must be audible");
+    // a declared but untouched macro is a no-op (knob starts at 0)
+    let plain = r#"song "M" {
+  tempo 124bpm
+  key A minor
+  track A {
+    instrument prisma(wave: "saw", cutoff: 0.3)
+    insert delay(time: 0.25, fdbk: 0.4, mix: 0.1)
+    play notes`A2:1 C3:1 E3:1 A2:1` at bars(1..2)
+  }
+}"#;
+    assert_eq!(digest2(plain), flat, "an idle macro must not color the sound");
+    // unknown route target is reported with the usual guidance
+    let bad = base
+        .replace("route cutoff amount: 0.6", "route cutof amount: 0.6")
+        .replace("AUTOMATE", "");
+    let errs = compile_str(&bad).err().expect("bad route must fail");
+    assert!(errs.iter().any(|d| d.code == "E-AUTO-001"), "{errs:?}");
+}
+
+/// `modulate … as name` exposes name.amount / name.rate to automation —
+/// the wobble deepens over the build.
+#[test]
+fn named_modulator_fields_are_automatable() {
+    let base = r#"song "W" {
+  tempo 124bpm
+  key A minor
+  track A {
+    instrument prisma(wave: "saw", cutoff: 0.5)
+    play notes`A2:1 C3:1 E3:1 A2:1` at bars(1..2)
+    modulate cutoff with lfo(rate: 0.4, amount: 0.3) as wobble
+    AUTOMATE
+  }
+}"#;
+    let steady = digest2(&base.replace("AUTOMATE", ""));
+    let deepening = digest2(&base.replace(
+        "AUTOMATE",
+        "automate wobble.amount from 0.0 to 1.0 over bars(1..2)",
+    ));
+    assert_ne!(steady, deepening, "depth automation must be audible");
+    let accelerating = digest2(&base.replace(
+        "AUTOMATE",
+        "automate wobble.rate from 0.1 to 0.9 over bars(1..2)",
+    ));
+    assert_ne!(steady, accelerating, "rate automation must be audible");
+    // unknown field on a named modulator lists what exists
+    let errs = compile_str(&base.replace(
+        "AUTOMATE",
+        "automate wobble.depth from 0.0 to 1.0 over bars(1..2)",
+    ))
+    .err()
+    .expect("unknown field must fail");
+    assert!(errs.iter().any(|d| d.code == "E-AUTO-001"), "{errs:?}");
+}
+
+/// A body-level `let groove = lfo(...)` is one shared definition: tracks
+/// reference it by name (args at the call site override), so the whole song
+/// breathes at the same rate.
+#[test]
+fn shared_modulator_lets_resolve_with_overrides() {
+    let src = r#"song "S" {
+  tempo 124bpm
+  key A minor
+  let groove = lfo(rate: 0.25, amount: 0.3)
+  track A {
+    instrument prisma(wave: "saw", cutoff: 0.5)
+    play notes`A2:1 C3:1 E3:1 A2:1` at bars(1..2)
+    modulate cutoff with groove
+  }
+  track B {
+    instrument prisma(wave: "square", cutoff: 0.4)
+    play notes`A1:2 E2:2` at bars(1..2)
+    modulate cutoff with groove(amount: 0.15)
+  }
+}"#;
+    let shared = digest2(src);
+    // the same song with the definitions inlined must be bit-identical
+    let inlined = src
+        .replace("let groove = lfo(rate: 0.25, amount: 0.3)\n", "")
+        .replace(
+            "modulate cutoff with groove(amount: 0.15)",
+            "modulate cutoff with lfo(rate: 0.25, amount: 0.15)",
+        )
+        .replace(
+            "modulate cutoff with groove",
+            "modulate cutoff with lfo(rate: 0.25, amount: 0.3)",
+        );
+    assert_eq!(shared, digest2(&inlined), "a shared modulator is pure sugar");
+    // an unknown name lists the declared shared modulators
+    let errs = compile_str(&src.replace("with groove\n", "with groovy\n"))
+        .err()
+        .expect("unknown modulator name must fail");
+    assert!(errs.iter().any(|d| d.code == "E-LFO-005"), "{errs:?}");
+}

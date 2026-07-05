@@ -154,6 +154,8 @@ pub struct SongAst {
     pub meter: Option<((u32, u32), Pos)>,
     pub key: Option<((String, String), Pos)>, // (root, scale) as written
     pub lets: Vec<LetAst>,
+    /// Body-level shared modulators: `let groove = lfo(...)`.
+    pub mod_lets: Vec<ModLetAst>,
     pub sections: Vec<SectionAst>,
     pub tracks: Vec<TrackAst>,
     pub returns: Vec<ReturnAst>,
@@ -214,6 +216,8 @@ pub struct TrackAst {
     pub automations: Vec<AutomateAst>,
     /// `modulate cutoff with lfo(rate: 0.3, amount: 0.4)`
     pub modulations: Vec<ModulateAst>,
+    /// `macro brightness { route … }` — multi-param knobs.
+    pub macros: Vec<MacroAst>,
 }
 
 #[derive(Clone, Debug)]
@@ -228,7 +232,33 @@ pub struct AutomateAst {
 #[derive(Clone, Debug)]
 pub struct ModulateAst {
     pub param: String,
-    /// modulator kind: "lfo" | "steps" | "random"
+    /// modulator kind: "lfo" | "steps" | "random" | "adsr", or the name of
+    /// a body-level `let <name> = lfo(...)` shared modulator.
+    pub kind: String,
+    pub args: Vec<(String, Arg)>,
+    /// `modulate cutoff with lfo(...) as wobble` — names the modulator so
+    /// its own fields (`wobble.amount` / `wobble.rate`) can be automated.
+    pub alias: Option<String>,
+    pub pos: Pos,
+}
+
+/// `macro brightness { route cutoff amount: 0.8  route reso amount: -0.2 }`
+/// — one knob fanned out to many params. The knob itself is an automate
+/// target (`automate brightness from 0.1 to 0.9 over drop`).
+#[derive(Clone, Debug)]
+pub struct MacroAst {
+    pub name: String,
+    /// (target param name — instrument param or `insert.param`, amount, pos)
+    pub routes: Vec<(String, f64, Pos)>,
+    pub pos: Pos,
+}
+
+/// Body-level `let groove = lfo(rate: 0.25, amount: 0.3)` — a shared
+/// modulator definition tracks reference with `modulate cutoff with groove`
+/// (same parameters everywhere, so the whole song breathes in phase).
+#[derive(Clone, Debug)]
+pub struct ModLetAst {
+    pub name: String,
     pub kind: String,
     pub args: Vec<(String, Arg)>,
     pub pos: Pos,

@@ -135,6 +135,8 @@ pub struct EngineMod {
     gate: bool,
     env: f32,
     stage: u8,
+    /// scales every route amount; automation target "name.amount"
+    depth: f32,
     routes: Vec<(usize, usize, f32)>, // (device idx, param idx, amount)
 }
 
@@ -169,6 +171,8 @@ pub struct EngineTrack {
     automation: Vec<EngineAutoPoint>,
     /// per-device param automation lanes: (device, param, points)
     param_autos: Vec<(usize, usize, Vec<EngineAutoPoint>)>,
+    /// modulator-field automation: (flat mod index, field 0=depth 1=rate 2=value)
+    mod_autos: Vec<(usize, u8, Vec<EngineAutoPoint>)>,
     active_scene: i32,
     /// Quantized launch request awaiting the next quant boundary.
     pending_scene: Option<i32>,
@@ -266,7 +270,8 @@ pub fn build_mods(track: &Track) -> Box<EngineMods> {
                 gate: false,
                 env: 0.0,
                 stage: 0,
-                routes: m.routes.iter().map(|r| (di, r.param, r.amount)).collect(),
+                depth: 1.0,
+                routes: m.routes.iter().map(|r| (r.device.unwrap_or(di), r.param, r.amount)).collect(),
             });
         }
     }
@@ -314,6 +319,7 @@ pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
         sends: track.sends.clone(),
         automation: build_automation(track),
         param_autos: build_param_autos(track),
+        mod_autos: build_mod_autos(track),
         active_scene: -1,
         pending_scene: None,
         clips,
@@ -340,6 +346,22 @@ pub fn build_param_autos(track: &Track) -> Vec<(usize, usize, Vec<EngineAutoPoin
                 .collect();
             pts.sort_by(|a, b| a.beat.partial_cmp(&b.beat).unwrap_or(std::cmp::Ordering::Equal));
             (pa.device, pa.param, pts)
+        })
+        .collect()
+}
+
+pub fn build_mod_autos(track: &Track) -> Vec<(usize, u8, Vec<EngineAutoPoint>)> {
+    track
+        .mod_automation
+        .iter()
+        .map(|ma| {
+            let mut pts: Vec<EngineAutoPoint> = ma
+                .points
+                .iter()
+                .map(|p| EngineAutoPoint { beat: p.beat, value: p.value, hold: p.hold })
+                .collect();
+            pts.sort_by(|a, b| a.beat.partial_cmp(&b.beat).unwrap_or(std::cmp::Ordering::Equal));
+            (ma.mod_index, ma.field, pts)
         })
         .collect()
 }
@@ -974,6 +996,19 @@ impl EngineTrack {
                 }
             }
         }
+        // modulator-field automation (depth / rate / macro value) applies
+        // before the modulators are evaluated this block
+        for (mi, field, pts) in &self.mod_autos {
+            if let Some(v) = eval_auto(pts, beat) {
+                if let Some(m) = self.mods.get_mut(*mi) {
+                    match field {
+                        0 => m.depth = v,
+                        1 => m.rate = v,
+                        _ => m.value = v,
+                    }
+                }
+            }
+        }
         // evaluate each modulator and apply to its routes, then advance state
         let gate = self.note_gate > 0;
         for m in &mut self.mods {
@@ -982,7 +1017,7 @@ impl EngineTrack {
             for &(di, pi, amount) in &m.routes {
                 if let Some(d) = self.devices.get_mut(di) {
                     if let Some(p) = d.eff_params.get_mut(pi) {
-                        *p = (*p + value * amount).clamp(0.0, 1.0);
+                        *p = (*p + value * amount * m.depth).clamp(0.0, 1.0);
                     }
                 }
             }
