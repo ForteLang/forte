@@ -96,6 +96,8 @@ forte init my-album          # scaffold: package.forte + blocks/ songs/ packages
 cd my-album
 forte package add github:fortelang/forte   # vendor a package into packages/
 forte package list           # what you have, in each package's own words
+forte remote add github:you/my-album       # connect the project to GitHub
+forte push                   # publish — the pushed project IS the package
 ```
 
 Every dependency lands flat in `packages/<name>_<version>/` (a package's

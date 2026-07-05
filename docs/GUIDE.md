@@ -205,7 +205,10 @@ forte package list                             # name, version, license, desc
   package's own `requires` are fetched and hoisted next to it, so
   `packages/` never nests. `package.lock` pins what was fetched (source +
   commit) for reproducibility.
-- Distribution is just GitHub: push the project and others
+- Distribution is just GitHub: `forte remote add github:you/my-album`
+  connects the project, and `forte push` publishes it whole (source,
+  assets, history; the commit message defaults to your latest `forte
+  commit` message). `forte pull` brings upstream changes back. Others then
   `forte package add github:you/my-album`. Their copy excludes your
   `packages/` and `.forte/` — dependencies re-resolve from your `requires`.
 

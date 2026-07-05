@@ -125,6 +125,25 @@ fn main() -> ExitCode {
         }
         Some("init") => vcs_print(fortelang::vcs::Repo::init(".")),
         #[cfg(not(target_family = "wasm"))]
+        Some("remote") => {
+            let result = match args.get(1).map(String::as_str) {
+                Some("add") if args.len() >= 3 => fortelang::remote::add(&args[2]),
+                _ => Err("usage: forte remote add <github:owner/repo | git-URL>".into()),
+            };
+            vcs_print(result)
+        }
+        #[cfg(not(target_family = "wasm"))]
+        Some("push") => {
+            let msg = args
+                .iter()
+                .position(|a| a == "-m")
+                .and_then(|i| args.get(i + 1))
+                .cloned();
+            vcs_print(fortelang::remote::push(msg.as_deref()))
+        }
+        #[cfg(not(target_family = "wasm"))]
+        Some("pull") => vcs_print(fortelang::remote::pull()),
+        #[cfg(not(target_family = "wasm"))]
         Some("package") => {
             let result = match args.get(1).map(String::as_str) {
                 Some("add") if args.len() >= 3 => fortelang::package::add(&args[2]),
@@ -295,6 +314,9 @@ fn main() -> ExitCode {
             eprintln!("       forte init [NAME]           (NAME 付きで package プロジェクトを作成 / なしで cwd をリポジトリに)");
             eprintln!("       forte package add <github:owner/repo[@ref] | URL | PATH>  (packages/ にフラット導入)");
             eprintln!("       forte package list          (導入済み package の一覧と説明)");
+            eprintln!("       forte remote add <github:owner/repo | git-URL>  (プロジェクトを GitHub と接続)");
+            eprintln!("       forte push [-m \"メッセージ\"]   (プロジェクト全体を origin へ。これが配信)");
+            eprintln!("       forte pull                  (origin から取り込み)");
             eprintln!("       forte status");
             eprintln!("       forte commit -m \"メッセージ\"");
             eprintln!("       forte log");
