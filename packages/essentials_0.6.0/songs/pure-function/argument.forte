@@ -1,0 +1,24 @@
+// Pure Function — argument parts.
+import { SubBass } from "../../instruments/bass.forte"
+
+// The argument: a sub bass line passed by value, never mutated.
+block Argument {
+  key D minor
+  track Bass {
+    instrument SubBass(drive: 0.28)
+    insert filter(type: "lp", cutoff: 0.3)
+    insert eq(low: 0.6, mid: 0.46, high: 0.42)
+    insert comp(thresh: 0.4, ratio: 0.6, attack: 0.015, release: 0.16, makeup: 0.22)
+    insert pump(amount: 0.35, beats: 1)
+    volume 0.76
+    play notes`D1:0.5 _:0.25 D1:0.25 _:0.5 F1:0.25 D1:0.25 _:0.5 D1:0.25 D2:0.25 _:0.25 C1:0.25 D1:0.5 D1:0.5 _:0.25 D1:0.25 A1:0.5 _:0.25 G1:0.25 F1:0.25 _:0.25 D1:0.25 C1:0.25 D1:0.75 _:0.25` at bars(1..2)
+  }
+}
+
+// the return value: same line, harmonics allowed through
+block ReturnValue : Argument {
+  track Bass {
+    insert filter(type: "lp", cutoff: 0.4)
+    automate filter.cutoff from 0.3 to 0.5 over bars(1..16)
+  }
+}

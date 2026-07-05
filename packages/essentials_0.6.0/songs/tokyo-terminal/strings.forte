@@ -1,0 +1,44 @@
+// Tokyo Terminal — strings parts.
+import { JunoStrings } from "../../instruments/juno60.forte"
+import { P5Strings } from "../../instruments/prophet5.forte"
+import { ChoirPad } from "../../instruments/pads.forte"
+
+// Strings: the wide shot of the city. Prophet strings under Juno strings,
+// two layers breathing at different rates.
+block Skyline {
+  key D minor
+  track P5 {
+    instrument P5Strings()
+    insert eq(low: 0.35, mid: 0.5, high: 0.55)
+    insert width(amount: 0.8)
+    insert reverb(size: 0.8, decay: 0.65, mix: 0.3)
+    volume 0.45
+    pan -0.05
+    play notes`[D3 F3 A3 D4]:8 [A#2 D3 F3 A#3]:8 [C3 E3 G3 C4]:8 [A2 C#3 E3 A3]:8` at bars(1..8)
+  }
+  track Juno {
+    instrument JunoStrings(bright: 0.55)
+    insert eq(low: 0.3, mid: 0.5, high: 0.58)
+    insert chorus(rate: 0.25, depth: 0.5, mix: 0.5)
+    insert pump(amount: 0.25, beats: 1)
+    volume 0.4
+    pan -0.1
+    play notes`[F4 A4 D5]:8 [F4 A#4 D5]:8 [E4 G4 C5]:8 [E4 A4 C#5]:8` at bars(1..8)
+  }
+}
+
+// The vocoder feeling without a vocoder: a choir pad speaking the chords
+// through a pumping gate.
+block Ghost {
+  key D minor
+  track Choir {
+    instrument ChoirPad()
+    insert eq(low: 0.3, mid: 0.5, high: 0.55)
+    insert pump(amount: 0.6, beats: 0.5)
+    insert width(amount: 0.7)
+    insert delay(time: 0.492, fdbk: 0.35, mix: 0.25)
+    volume 0.45
+    pan 0.05
+    play notes`[D4 F4 A4]:4 [A#3 D4 F4]:4 [C4 E4 G4]:4 [A3 C#4 E4]:4` at bars(1..4)
+  }
+}

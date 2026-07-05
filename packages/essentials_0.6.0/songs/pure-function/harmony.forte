@@ -1,0 +1,52 @@
+// Pure Function — harmony parts.
+import { SoftSquare } from "../../instruments/synths.forte"
+import { GlassPad } from "../../instruments/pads.forte"
+import { BitLead } from "../../instruments/leads.forte"
+
+// The one chord — cold glass, struck once per four bars. All the harmony
+// a pure function needs.
+block Constant {
+  key D minor
+  track Chord {
+    instrument SoftSquare()
+    insert filter(type: "lp", cutoff: 0.5, reso: 0.3)
+    insert eq(low: 0.28, mid: 0.5, high: 0.55)
+    insert chorus(rate: 0.25, depth: 0.45, mix: 0.4)
+    insert width(amount: 0.7)
+    insert delay(time: 0.508, fdbk: 0.5, mix: 0.38)
+    volume 0.44
+    pan -0.08
+    play notes`[D3 A3 C4 F4]:1 _:15` at bars(1..4)
+    modulate filter.cutoff with lfo(rate: 0.07, amount: 0.15, shape: "sine")
+  }
+}
+
+// The map: a bit lead iterating over the argument, one element at a time.
+block Map {
+  key D minor
+  track Blip {
+    instrument BitLead()
+    insert filter(type: "lp", cutoff: 0.55, reso: 0.3)
+    insert eq(low: 0.15, mid: 0.5, high: 0.6)
+    insert delay(time: 0.381, fdbk: 0.48, mix: 0.34)
+    volume 0.36
+    pan 0.25
+    play notes`_:0.5 D5:0.25 _:0.75 F5:0.25 _:0.5 D5:0.25 A4:0.25 _:0.75 C5:0.25 _:0.5 G4:0.25 A4:0.25 _:0.5 F4:0.25 _:1.5 D5:0.25 C5:0.25 A4:0.25 _:0.25` at bars(1..2)
+    automate filter.cutoff from 0.4 to 0.65 over bars(1..16)
+  }
+}
+
+// The pad that proves there are no side effects — it never changes state.
+block Stateless {
+  key D minor
+  track Glass {
+    instrument GlassPad()
+    insert eq(low: 0.3, mid: 0.5, high: 0.54)
+    insert width(amount: 0.85)
+    insert pump(amount: 0.3, beats: 1)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.32)
+    volume 0.36
+    pan 0.05
+    play notes`[D3 A3 F4]:16 [C3 G3 E4]:16` at bars(1..8)
+  }
+}

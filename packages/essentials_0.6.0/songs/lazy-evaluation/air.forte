@@ -1,0 +1,17 @@
+// Lazy Evaluation — air parts.
+import { WarmPad } from "../../instruments/pads.forte"
+
+// The pad: warm air conditioning for the whole room.
+block Air {
+  key A major
+  track Pad {
+    instrument WarmPad(cutoff: 0.38)
+    insert eq(low: 0.3, mid: 0.5, high: 0.52)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.85, decay: 0.72, mix: 0.35)
+    volume 0.38
+    pan 0.05
+    play notes`[A2 E3 C#4 G#4]:8 [D3 A3 F#4 C#5]:8` at bars(1..4)
+    automate cutoff from 0.3 to 0.46 over bars(1..16)
+  }
+}

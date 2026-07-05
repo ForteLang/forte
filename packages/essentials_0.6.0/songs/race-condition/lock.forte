@@ -1,0 +1,24 @@
+// Race Condition — lock parts.
+import { LadderBass } from "../../instruments/bass.forte"
+
+// The bass under the fight: a ladder growl locked to the kick.
+block Lock {
+  key G minor
+  track Bass {
+    instrument LadderBass(cutoff: 0.4, drive: 0.5)
+    insert eq(low: 0.6, mid: 0.48, high: 0.45)
+    insert comp(thresh: 0.4, ratio: 0.6, attack: 0.012, release: 0.14, makeup: 0.22)
+    insert pump(amount: 0.5, beats: 1)
+    volume 0.72
+    play notes`G1:0.25 G1:0.25 _:0.25 G1:0.25 _:0.25 G1:0.25 G1:0.25 _:0.25 A#1:0.25 _:0.25 G1:0.25 G1:0.25 _:0.25 F1:0.25 G1:0.25 _:0.25` at bars(1..1)
+    modulate cutoff with adsr(a: 0.01, d: 0.12, s: 0.2, r: 0.1, amount: 0.3)
+  }
+}
+
+// drop: the growl opens its ladder — contention is over
+block LockOpen : Lock {
+  track Bass {
+    instrument LadderBass(cutoff: 0.5, drive: 0.6)
+    automate cutoff from 0.4 to 0.62 over bars(1..24)
+  }
+}

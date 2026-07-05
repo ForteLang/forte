@@ -1,0 +1,26 @@
+// Hello World — rave stabs answering the 303s on the offbeat.
+import { Stab } from "../../instruments/fx.forte"
+
+block Stabs {
+  key A minor
+  track Stab {
+    instrument Stab()
+    insert filter(type: "hp", cutoff: 0.25)
+    insert eq(low: 0.2, mid: 0.55, high: 0.6)
+    insert delay(time: 0.234, fdbk: 0.4, mix: 0.3)
+    insert width(amount: 0.6)
+    volume 0.5
+    pan -0.25
+    play beat`---- --x- ---- ---x ---- --x- ---- ----` at bars(1..2)
+  }
+}
+// peak stabs: busier, delay throws longer, stereo blown wide
+block StabsPeak : Stabs {
+  track Stab {
+    insert delay(time: 0.234, fdbk: 0.52, mix: 0.4)
+    insert width(amount: 0.85)
+    volume 0.55
+    play beat`---- --x- -x-- ---x ---- --x- ---- x-x-` at bars(1..2)
+    automate filter.cutoff from 0.25 to 0.45 over bars(1..16)
+  }
+}

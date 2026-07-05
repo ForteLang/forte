@@ -1,0 +1,36 @@
+// Boot Sequence — engine parts.
+import { FMBass } from "../../instruments/bass.forte"
+
+// ---- the engine room: ONE bass lane, closed → open → sprinting -----------------
+block Engine {
+  key A minor
+  track Bass {
+    instrument FMBass(bite: 0.45)
+    insert eq(low: 0.58, mid: 0.5, high: 0.52)
+    insert comp(thresh: 0.42, ratio: 0.55, attack: 0.012, release: 0.14, makeup: 0.2)
+    insert drive(drive: 0.25)
+    insert pump(amount: 0.45, beats: 1)
+    volume 0.72
+    play notes`A1:0.25 A1:0.25 A2:0.25 A1:0.25 _:0.25 A1:0.25 G1:0.25 A1:0.25 A1:0.25 A2:0.25 _:0.25 A1:0.25 C2:0.25 C2:0.25 G1:0.25 B1:0.25` at bars(1..2)
+    modulate bite with lfo(rate: 0.14, amount: 0.15, shape: "tri")
+  }
+}
+
+// rise: more bite arriving over sixteen bars, drive leaning in
+block EngineRise : Engine {
+  track Bass {
+    instrument FMBass(bite: 0.55)
+    insert drive(drive: 0.32)
+    automate drive.drive from 0.25 to 0.4 over bars(1..16)
+  }
+}
+
+// finale: the line doubles up, octave jumps everywhere
+block EngineWide : Engine {
+  track Bass {
+    instrument FMBass(bite: 0.6)
+    insert drive(drive: 0.38)
+    volume 0.75
+    play notes`A1:0.25 A2:0.25 A1:0.25 A2:0.25 G1:0.25 A1:0.25 A2:0.25 A1:0.25 C2:0.25 C3:0.25 _:0.25 C2:0.25 B1:0.25 G1:0.25 A1:0.25 A2:0.25` at bars(1..2)
+  }
+}

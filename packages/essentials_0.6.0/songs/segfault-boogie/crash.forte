@@ -1,0 +1,27 @@
+// Segfault Boogie — crash parts.
+import { ChorusPulse } from "../../instruments/synths.forte"
+import { Zap } from "../../instruments/fx.forte"
+
+// THE SEGFAULT: everything halts on a wrong chord, a zap panic-scatters,
+// then the beat reboots. Comedy in four bars.
+block Crash {
+  key E minor
+  track Wrong {
+    instrument ChorusPulse()
+    insert filter(type: "lp", cutoff: 0.7, reso: 0.5)
+    insert eq(low: 0.35, mid: 0.55, high: 0.55)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.4)
+    volume 0.6
+    pan -0.05
+    play notes`[E3 F3 A#3 B3]:3 _:1` at bars(1..1)
+    automate filter.cutoff from 0.7 to 0.25 over bars(1..2)
+  }
+  track Panic {
+    instrument Zap()
+    insert eq(low: 0.2, mid: 0.5, high: 0.6)
+    insert delay(time: 0.19, fdbk: 0.65, mix: 0.5)
+    volume 0.5
+    pan 0.3
+    play beat`x-x- xx-- x--- ----` at bars(2..2)
+  }
+}

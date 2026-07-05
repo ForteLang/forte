@@ -1,0 +1,6 @@
+// Night Compiler — transitions parts.
+import { Downlifter, Impact } from "../../instruments/fx.forte"
+
+block Drop { track D { instrument Downlifter() volume 0.45 pan -0.1 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+block Boom { track I { instrument Impact() insert reverb(size: 0.9, decay: 0.7, mix: 0.4) volume 0.55 play beat`x--- ---- ---- ----` at bars(1..1) } }

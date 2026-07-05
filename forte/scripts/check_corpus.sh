@@ -17,7 +17,8 @@ fail=0
 
 echo "== corpus: check every .forte =="
 for f in ../packages/*/instruments/*.forte ../packages/*/songs/devices/*.forte \
-         ../packages/*/blocks/*.forte ../packages/*/songs/*.forte ../packages/*/package.forte; do
+         ../packages/*/blocks/*.forte ../packages/*/songs/*.forte \
+         ../packages/*/songs/*/*.forte ../packages/*/package.forte; do
   if ! $FORTE check "$f" > /dev/null 2>&1; then
     echo "   FAIL check: $f" >&2
     $FORTE check "$f" >&2 || true

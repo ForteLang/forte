@@ -1,0 +1,14 @@
+// Boot Sequence — blips parts.
+import { SH101Zap } from "../../instruments/sh101.forte"
+
+// Startup noises: zaps that ping across the stereo field over the intro.
+block Blips {
+  track Zap {
+    instrument SH101Zap()
+    insert eq(low: 0.2, mid: 0.5, high: 0.6)
+    insert delay(time: 0.318, fdbk: 0.55, mix: 0.45)
+    volume 0.4
+    pan 0.4
+    play beat`x--- ---- --x- ---- ---- x--- ---- --x-` at bars(1..2)
+  }
+}

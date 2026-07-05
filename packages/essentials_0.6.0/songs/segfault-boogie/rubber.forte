@@ -1,0 +1,27 @@
+// Segfault Boogie — rubber parts.
+import { FMBass } from "../../instruments/bass.forte"
+
+// The bassline: rubber FM funk with octave pops and a chromatic walk-up.
+block Rubber {
+  key E minor
+  track Bass {
+    instrument FMBass(bite: 0.5)
+    insert eq(low: 0.58, mid: 0.5, high: 0.52)
+    insert drive(drive: 0.3)
+    insert comp(thresh: 0.45, ratio: 0.5, attack: 0.012, release: 0.14, makeup: 0.2)
+    insert pump(amount: 0.3, beats: 1)
+    volume 0.75
+    play notes`E1:0.25 _:0.25 E2:0.25 E1:0.25 _:0.25 G1:0.25 E1:0.25 _:0.25 B1:0.25 _:0.25 E1:0.25 D2~:0.25 D2:0.25 C2:0.25 B1:0.25 A1!:0.25` at bars(1..2)
+    modulate bite with lfo(rate: 0.2, amount: 0.18, shape: "tri")
+  }
+}
+
+// jam: the walk-up doubles and pops the octave harder
+block RubberJam : Rubber {
+  track Bass {
+    instrument FMBass(bite: 0.6)
+    insert drive(drive: 0.38)
+    volume 0.78
+    play notes`E1:0.25 E2!:0.25 E1:0.25 E2:0.25 _:0.25 G1:0.25 E1:0.25 G2:0.25 B1:0.25 B2!:0.25 E1:0.25 D2~:0.25 D2:0.25 C2:0.25 B1:0.25 A1!:0.25` at bars(1..2)
+  }
+}

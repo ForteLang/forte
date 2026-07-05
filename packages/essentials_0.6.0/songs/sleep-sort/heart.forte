@@ -1,0 +1,50 @@
+// Sleep Sort — heart parts.
+import { KickSub, HatPedal, Shaker, SnareBrush } from "../../instruments/drums.forte"
+import { SubBass } from "../../instruments/bass.forte"
+
+// The heartbeat: a sub kick slowing its breathing, brushed air around it.
+block Heart {
+  track Kick {
+    instrument KickSub(weight: 0.75)
+    insert eq(low: 0.56, mid: 0.44, high: 0.4)
+    insert comp(thresh: 0.46, ratio: 0.5, attack: 0.028, release: 0.2, makeup: 0.14)
+    volume 0.8
+    play beat`X--- ---- x--- ---- X--- ---- x--- -.--` at bars(1..2)
+  }
+  track Brush {
+    instrument SnareBrush()
+    insert eq(low: 0.2, mid: 0.55, high: 0.55)
+    insert reverb(size: 0.6, decay: 0.5, mix: 0.22)
+    volume 0.24
+    pan 0.1
+    play beat`---- ---- x--- ---- ---- ---- ---- x-..` at bars(1..2)
+  }
+  track Ped {
+    instrument HatPedal()
+    insert eq(low: 0.1, mid: 0.5, high: 0.54)
+    volume 0.12
+    pan -0.15
+    play beat`--x- ---- --x- ----` at bars(1..2)
+  }
+  track Shk {
+    instrument Shaker(soft: 0.65)
+    insert eq(low: 0.1, mid: 0.5, high: 0.56)
+    volume 0.12
+    pan 0.22
+    play beat`.x.. .x.. .x.. .x..` at bars(1..2)
+  }
+}
+
+// The ground: a sub bass turning over in its sleep.
+block Duvet {
+  key E major
+  track Bass {
+    instrument SubBass(drive: 0.15)
+    insert filter(type: "lp", cutoff: 0.24)
+    insert eq(low: 0.58, mid: 0.44, high: 0.38)
+    insert comp(thresh: 0.44, ratio: 0.55, attack: 0.03, release: 0.22, makeup: 0.16)
+    insert pump(amount: 0.22, beats: 1)
+    volume 0.68
+    play notes`E1:4 B0~:4 C#1:4 A0~:3 B0:1` at bars(1..4)
+  }
+}

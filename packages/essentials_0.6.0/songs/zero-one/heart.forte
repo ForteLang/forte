@@ -1,0 +1,59 @@
+// Zero One — heart parts.
+import { KickSub, HatClosed, Rim, Shaker } from "../../instruments/drums.forte"
+
+// ---- the heartbeat: ONE lane, resting → carrying -------------------------------
+block Heart {
+  track Kick {
+    instrument KickSub(weight: 0.8)
+    insert eq(low: 0.58, mid: 0.45, high: 0.42)
+    insert comp(thresh: 0.45, ratio: 0.5, attack: 0.025, release: 0.2, makeup: 0.15)
+    volume 0.85
+    play beat`X--- x--- x--- x---` at bars(1..4)
+  }
+}
+
+// carrying: a ghost echo after each beat — the pulse is awake now
+block HeartAwake : Heart {
+  track Kick {
+    insert comp(thresh: 0.42, ratio: 0.55, attack: 0.02, release: 0.18, makeup: 0.18)
+    play beat`X--- x-.- x--- x--- X--- x--- x-.- x---` at bars(1..2)
+  }
+}
+
+// ---- small hours percussion: ONE lane, brushes → breathing ---------------------
+block Small {
+  track Shk {
+    instrument Shaker(soft: 0.5)
+    insert eq(low: 0.1, mid: 0.5, high: 0.58)
+    volume 0.24
+    pan -0.2
+    play beat`x.x. x.x. x.x. x.x.` at bars(1..4)
+  }
+  track Hat {
+    instrument HatClosed(bright: 0.7)
+    insert eq(low: 0.1, mid: 0.45, high: 0.6)
+    volume 0.2
+    pan 0.2
+    play beat`--x- --x- --x- --x-` at bars(1..4)
+  }
+  track Rim {
+    instrument Rim()
+    insert eq(low: 0.2, mid: 0.55, high: 0.55)
+    insert delay(time: 0.536, fdbk: 0.55, mix: 0.5)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.3)
+    volume 0.28
+    pan 0.4
+    play beat`---- ---- x--- ---- ---- ---- ---- -x--` at bars(1..2)
+  }
+}
+
+// breathing: ghost 16ths in the shaker, the rim answering twice
+block SmallBreathe : Small {
+  track Shk { volume 0.26 play beat`x.x. x.xx x.x. x.x. x.x. xxx. x.x. x.x.` at bars(1..2) }
+  track Hat { volume 0.22 play beat`--x- --x. --x- --x- --x- --x- .-x- --x-` at bars(1..2) }
+  track Rim {
+    insert delay(time: 0.536, fdbk: 0.6, mix: 0.55)
+    volume 0.3
+    play beat`---- ---- x--- ---- ---- -x-- ---- --.-` at bars(1..2)
+  }
+}

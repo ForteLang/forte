@@ -1,0 +1,27 @@
+// Sleep Sort — covers parts.
+import { WarmPad, ShimmerPad } from "../../instruments/pads.forte"
+
+// The pads: two layers of covers pulled up to the chin.
+block Covers {
+  key E major
+  track Warm {
+    instrument WarmPad(cutoff: 0.34)
+    insert eq(low: 0.32, mid: 0.5, high: 0.5)
+    insert width(amount: 0.9)
+    insert reverb(size: 0.92, decay: 0.8, mix: 0.4)
+    volume 0.42
+    pan -0.05
+    play notes`[E3 B3 G#4 D#5]:8 [C#3 G#3 E4 B4]:8` at bars(1..4)
+    automate cutoff from 0.28 to 0.4 over bars(1..16)
+  }
+  track Shimmer {
+    instrument ShimmerPad()
+    insert eq(low: 0.28, mid: 0.5, high: 0.54)
+    insert width(amount: 0.85)
+    insert pump(amount: 0.18, beats: 1)
+    insert reverb(size: 0.9, decay: 0.8, mix: 0.4)
+    volume 0.3
+    pan 0.15
+    play notes`[G#3 D#4 B4]:8 [A3 E4 C#5]:8` at bars(1..4)
+  }
+}

@@ -1,0 +1,8 @@
+// Race Condition — transitions parts.
+import { Riser, Impact, NoiseCrash } from "../../instruments/fx.forte"
+
+block Boom  { track I { instrument Impact() insert reverb(size: 0.85, decay: 0.65, mix: 0.35) volume 0.65 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+block Up    { track R { instrument Riser(climb: 0.95) volume 0.6 pan 0.1 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+block Smash { track N { instrument NoiseCrash() volume 0.5 pan 0.15 play beat`x--- ---- ---- ----` at bars(1..1) } }

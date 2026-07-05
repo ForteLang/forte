@@ -1,0 +1,7 @@
+// Boot Sequence — transitions parts.
+import { Riser, Impact } from "../../instruments/fx.forte"
+
+// Transition hardware.
+block Lift { track R { instrument Riser(climb: 0.85) volume 0.5 pan 0.1 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+block Hit  { track I { instrument Impact() insert reverb(size: 0.8, decay: 0.6, mix: 0.3) volume 0.6 play beat`x--- ---- ---- ----` at bars(1..1) } }
