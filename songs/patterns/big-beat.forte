@@ -1,32 +1,35 @@
-// Pattern: Big Beat (136bpm) — でかいブレイク、歪んだベース、
-// 全部を comp で潰す遠慮のなさ。
+// Pattern: Big Beat (136bpm) — a huge break, a distorted bass,
+// and the shamelessness of crushing everything with comp.
 import { Kick909, SnareTight, HatClosed, Crash, TomFloor } from "../../lib/std/drums.forte"
 import { LadderBass } from "../../lib/std/bass.forte"
 import { Stab, Riser } from "../../lib/std/fx.forte"
 
-song "Pattern: Big Beat" {
-  tempo 136bpm
-  meter 4/4
-  key E minor
-
+block BigBeatDrums {
   let kick  = beat`X--- --x- -x-- x--- X--- --x- ---- x-x-`
   let snare = beat`---- X--- ---- X--. ---- X--- ---- X-X-`
   let hat   = beat`x.x. xx.x x.xx .x.x`
   let toms  = beat`---- ---- ---- ---- ---- ---- ---- xxXX`
-  let rave  = prog`Em | Em | G | A7`
 
   track Kick  { instrument Kick909(click: 0.65) insert drive(drive: 0.3) insert comp(thresh: 0.35, ratio: 0.7, makeup: 0.35) volume 0.95 play kick at bars(1..8) }
   track Snare { instrument SnareTight(snap: 0.9) insert comp(thresh: 0.35, ratio: 0.6, makeup: 0.3) volume 0.8 play snare at bars(1..8) }
   track Hat   { instrument HatClosed(bright: 0.9) volume 0.4 pan 0.2 play hat at bars(1..8) }
   track Toms  { instrument TomFloor(decay: 0.4) insert drive(drive: 0.25) volume 0.7 play toms at bars(1..8) }
   track Cym   { instrument Crash(decay: 0.8) volume 0.4 play beat`x--- ---- ---- ---- ---- ---- ---- ----` at bars(1..8) }
+}
 
+block BigBeatBass {
+  key E minor
   track Bass {
     instrument LadderBass(cutoff: 0.4, drive: 0.6)
     insert drive(drive: 0.3)
     volume 0.8
     play notes`E1:0.75 _:0.25 E1:0.5 G1:0.5 E1:0.5 _:0.5 A1:0.5 B1~:0.5` at bars(1..8)
   }
+}
+
+block BigBeatStabs {
+  key E minor
+  let rave = prog`Em | Em | G | A7`
 
   track Stab {
     instrument Stab()
@@ -37,4 +40,14 @@ song "Pattern: Big Beat" {
   }
 
   track Rise { instrument Riser(climb: 0.8) volume 0.35 play notes`C3:4` at bars(7..8) }
+}
+
+block BigBeat {
+  tempo 136bpm
+  meter 4/4
+  key E minor
+
+  play BigBeatDrums at bars(1..8)
+  play BigBeatBass at bars(1..8)
+  play BigBeatStabs at bars(1..8)
 }

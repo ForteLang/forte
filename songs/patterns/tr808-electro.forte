@@ -1,15 +1,12 @@
-// Pattern: 808 Electro (116bpm, swing 0.54) — 実機アーキテクチャの
-// 808 キット全 13 音色のツアー。ゴースト(.)とアクセント(X)で
-// マシンなのに生きているグルーヴを作る。フィルは 4 小節目。
+// Pattern: 808 Electro (116bpm, swing 0.54) — a tour of all 13 voices of the
+// 808 kit, true to the original machine's architecture. Ghosts (.) and
+// accents (X) make a machine groove that feels alive. The fill lands in bar 4.
 import { BD808, SD808, CH808, OH808, CP808, CB808, RS808, CL808, MA808,
          LT808, MT808, HT808, CY808 } from "../../lib/std/tr808.forte"
 
-song "Pattern: 808 Electro" {
-  tempo 116bpm
-  swing 0.54
-  meter 4/4
-  key C minor
-
+// The full kit lives in one block: snare, clap and ride share the Room
+// reverb, so every sender stays with the return.
+block Tr808ElectroKit {
   let kick  = beat`X--- --x- ---. x--- X--- --x- ---- .-x- X--- --x- ---. x--- X--- --x- x--. --x-`
   let snare = beat`---- X--- ---- X--. ---- X--- ---- X--- ---- X--- ---- X..- ---- X--- --.- X-.X`
   let chh   = beat`x.x. x.x. x.x. x.xX x.x. x.x. x.x. x.x. x.x. x.x. x.x. x.xX x.x. x.x. xx.x ....`
@@ -40,4 +37,12 @@ song "Pattern: 808 Electro" {
   track HT   { instrument HT808() volume 0.6 pan 0.2 play tomh at bars(1..8) }
   track MA   { instrument MA808() volume 0.3 pan -0.3 play mrcs at bars(5..8) }
   track CY   { instrument CY808(decay: 0.85) send Room 0.35 volume 0.4 play cym at bars(1..8) }
+}
+
+block Tr808Electro {
+  tempo 116bpm
+  swing 0.54
+  meter 4/4
+
+  play Tr808ElectroKit at bars(1..8)
 }

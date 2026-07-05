@@ -1,17 +1,32 @@
-// Pattern: Halftime Dubstep (140bpm) — スネアは 3 拍目だけ。
-// ウォブルベースの揺れが主役。
+// Halftime Dubstep (140bpm) — the snare lands only on beat 3.
+// The wobble bass sway is the star.
 import { Kick909, SnareTight, HatClosed } from "../../lib/std/drums.forte"
 import { GrowlBass } from "../../lib/std/bass.forte"
 import { DarkPad } from "../../lib/std/pads.forte"
 
-song "Pattern: Halftime Dubstep" {
-  tempo 140bpm
-  meter 4/4
-  key E minor
+block DubstepHalftimeDrums {
+  let kick = beat`x--- ---- ---- --x-`
+  let hat  = beat`x-x- x-xx -xx- x-x-`
 
-  let kick  = beat`x--- ---- ---- --x-`
+  track Kick { instrument Kick909(click: 0.5) insert drive(drive: 0.2) volume 0.95 play kick at bars(1..8) }
+  track Hat  { instrument HatClosed(bright: 0.85) volume 0.3 pan 0.25 play hat at bars(3..8) }
+}
+
+block DubstepHalftimeBass {
+  key E minor
+  let wob = prog`Em | Em | C | B7`
+
+  track Wobble {
+    instrument GrowlBass(growl: 0.65)
+    volume 0.8
+    play bass(wob, rate: 1) at bars(1..8)
+  }
+}
+
+// Snare and pad share the Cave reverb return, so they live together.
+block DubstepHalftimeSpace {
+  key E minor
   let snare = beat`---- ---- X--- ----`
-  let hat   = beat`x-x- x-xx -xx- x-x-`
   let wob   = prog`Em | Em | C | B7`
 
   return Cave {
@@ -19,15 +34,7 @@ song "Pattern: Halftime Dubstep" {
     volume 0.6
   }
 
-  track Kick  { instrument Kick909(click: 0.5) insert drive(drive: 0.2) volume 0.95 play kick at bars(1..8) }
   track Snare { instrument SnareTight(snap: 0.85) volume 0.8 send Cave 0.25 play snare at bars(1..8) }
-  track Hat   { instrument HatClosed(bright: 0.85) volume 0.3 pan 0.25 play hat at bars(3..8) }
-
-  track Wobble {
-    instrument GrowlBass(growl: 0.65)
-    volume 0.8
-    play bass(wob, rate: 1) at bars(1..8)
-  }
 
   track Pad {
     instrument DarkPad()
@@ -35,4 +42,14 @@ song "Pattern: Halftime Dubstep" {
     volume 0.35
     play chords(wob) at bars(1..8)
   }
+}
+
+block DubstepHalftime {
+  tempo 140bpm
+  meter 4/4
+  key E minor
+
+  play DubstepHalftimeDrums at bars(1..8)
+  play DubstepHalftimeBass at bars(1..8)
+  play DubstepHalftimeSpace at bars(1..8)
 }

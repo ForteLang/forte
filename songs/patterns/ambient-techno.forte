@@ -1,31 +1,34 @@
-// Pattern: Ambient Techno (116bpm) — 遠いキック、霧のパッド、
-// width で広げた粒子のアープ。ダンスと環境音楽の中間。
+// Pattern: Ambient Techno (116bpm) — a distant kick, pads of mist,
+// a particle arp widened with width. Halfway between dance and ambient.
 import { Kick808 } from "../../lib/std/drums.forte"
 import { SubBass } from "../../lib/std/bass.forte"
 import { ShimmerPad, HollowPad } from "../../lib/std/pads.forte"
 import { Kalimba } from "../../lib/std/keys.forte"
 
-song "Pattern: Ambient Techno" {
-  tempo 116bpm
-  meter 4/4
-  key E minor
-
+block AmbientTechnoDrums {
   let four = beat`x--- x--- x--- x---`
-  let mist = prog`Em7 | Cmaj7 | Gmaj7 | Bm7`
-
-  return Fog {
-    insert reverb(size: 0.9, decay: 0.75, mix: 1.0)
-    volume 0.8
-  }
-
   track Kick {
     instrument Kick808(punch: 0.25, decay: 0.5)
     insert eq(low: 0.6, mid: 0.35, high: 0.3)
     volume 0.75
     play four at bars(1..8)
   }
+}
 
+block AmbientTechnoBass {
+  key E minor
+  let mist = prog`Em7 | Cmaj7 | Gmaj7 | Bm7`
   track Sub { instrument SubBass() volume 0.7 play bass(mist, rate: 2) at bars(1..8) }
+}
+
+block AmbientTechnoPads {
+  key E minor
+  let mist = prog`Em7 | Cmaj7 | Gmaj7 | Bm7`
+
+  return Fog {
+    insert reverb(size: 0.9, decay: 0.75, mix: 1.0)
+    volume 0.8
+  }
 
   track Pad {
     instrument HollowPad()
@@ -51,4 +54,14 @@ song "Pattern: Ambient Techno" {
     volume 0.3
     play chords(mist) at bars(5..8)
   }
+}
+
+block AmbientTechno {
+  tempo 116bpm
+  meter 4/4
+  key E minor
+
+  play AmbientTechnoDrums at bars(1..8)
+  play AmbientTechnoBass at bars(1..8)
+  play AmbientTechnoPads at bars(1..8)
 }

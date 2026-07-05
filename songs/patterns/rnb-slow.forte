@@ -1,18 +1,33 @@
-// Pattern: Slow R&B (68bpm) — スナップ+サブ+エレピ。
-// コードは 9th 風に上声を足して滑らかに。
+// Pattern: Slow R&B (68bpm) — snap + sub + e-piano.
+// The chords add 9th-ish upper voices to keep things silky.
 import { Kick808, Snap, HatClosed } from "../../lib/std/drums.forte"
 import { DubBass } from "../../lib/std/bass.forte"
 import { EPiano } from "../../lib/std/keys.forte"
 import { VoxLead } from "../../lib/std/leads.forte"
 
-song "Pattern: Slow R&B" {
-  tempo 68bpm
-  meter 4/4
-  key Eb minor
-
+block RnbSlowDrums {
   let kick = beat`x--- --x- ---- x---`
-  let snap = beat`---- x--- ---- x---`
   let hat  = beat`x-xx x-x- xx-x x-xx`
+
+  track Kick { instrument Kick808(punch: 0.4, decay: 0.55) volume 0.85 play kick at bars(1..8) }
+  track Hat  { instrument HatClosed(bright: 0.85) volume 0.35 pan 0.2 play hat at bars(1..8) }
+}
+
+block RnbSlowBass {
+  key Eb minor
+  let silk = prog`Ebm7 | Abm7 | Bmaj7 | Db7`
+
+  track Bass {
+    instrument DubBass(depth: 0.7)
+    volume 0.8
+    play bass(silk, rate: 0.5) at bars(1..8)
+  }
+}
+
+// Snap, keys and voice all breathe through the Air reverb — they stay with the return.
+block RnbSlowAir {
+  key Eb minor
+  let snap = beat`---- x--- ---- x---`
   let silk = prog`Ebm7 | Abm7 | Bmaj7 | Db7`
 
   return Air {
@@ -20,15 +35,7 @@ song "Pattern: Slow R&B" {
     volume 0.65
   }
 
-  track Kick { instrument Kick808(punch: 0.4, decay: 0.55) volume 0.85 play kick at bars(1..8) }
   track Snap { instrument Snap() volume 0.7 send Air 0.2 play snap at bars(1..8) }
-  track Hat  { instrument HatClosed(bright: 0.85) volume 0.35 pan 0.2 play hat at bars(1..8) }
-
-  track Bass {
-    instrument DubBass(depth: 0.7)
-    volume 0.8
-    play bass(silk, rate: 0.5) at bars(1..8)
-  }
 
   track Keys {
     instrument EPiano(tine: 0.4)
@@ -44,4 +51,14 @@ song "Pattern: Slow R&B" {
     pan -0.1
     play notes`_:1 Gb4:0.5 F4:0.5 Eb4:1.5 _:0.5 Bb3:0.5 Db4:1.5 Eb4:2` at bars(5..8)
   }
+}
+
+block RnbSlow {
+  tempo 68bpm
+  meter 4/4
+  key Eb minor
+
+  play RnbSlowDrums at bars(1..8)
+  play RnbSlowBass at bars(1..8)
+  play RnbSlowAir at bars(1..8)
 }

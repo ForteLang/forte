@@ -1,9 +1,66 @@
-// Night Market — 2 ステップ 28 小節。スキップするビートに
-// ハープシコードの怪しい旋律。ブレイクで低音だけ残る。
+// Night Market — 2-step, 28 bars, composed from blocks. A skipping beat
+// under a shady harpsichord tune; in the break only the low end remains.
+// The kick is its own block so it can keep running through the break.
 import { Kick909, SnareTight, HatClosed, Shaker } from "../../lib/std/drums.forte"
 import { PluckBass } from "../../lib/std/bass.forte"
 import { Harpsichord } from "../../lib/std/keys.forte"
 import { DarkPad } from "../../lib/std/pads.forte"
+
+// The kick alone — it never stops, even in the break.
+block Pulse {
+  track Kick { instrument Kick909(click: 0.5) volume 0.9 play beat`x--- ---- --x- -x--` at bars(1..4) }
+}
+
+// Full 2-step kit: the pulse plus skipping snare and hats.
+block Step : Pulse {
+  track Snare { instrument SnareTight(snap: 0.75) volume 0.65 play beat`---- x--- ---- x---` at bars(1..4) }
+  track Hat   { instrument HatClosed(bright: 0.95) volume 0.4 pan 0.2 play beat`x--x -xx- x-x- -xxX` at bars(1..4) }
+}
+
+// A shaker that drifts in and out on its own schedule.
+block Shake {
+  track Shk { instrument Shaker() volume 0.3 pan -0.25 play beat`--x- --x- --x- --x-` at bars(1..4) }
+}
+
+// The wandering bazaar bassline — the low end that survives the break.
+block Bassline {
+  key A minor
+  track Bass {
+    instrument PluckBass()
+    volume 0.8
+    play notes`A1:0.5 _:0.5 A1:0.25 C2:0.25 _:0.5 E2:0.5 _:0.5 D2:0.5 C2:0.5 A1:0.5` at bars(1..4)
+  }
+}
+
+// The harpsichord's shady tune.
+block Harp {
+  key A minor
+  let bazaar = prog`Am | Dm7 | E7 | Am`
+  track Harp {
+    instrument Harpsichord()
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.5
+    pan 0.15
+    play notes`_:2 E5:0.5 F5:0.5 E5:0.5 C5:0.5 A4:1 B4:0.5 C5:0.5 B4:0.5 G#4:0.5 E4:1` at bars(1..4)
+  }
+}
+
+// Second-half answer: the same harpsichord rolls the changes down instead.
+block HarpAnswer : Harp {
+  track Harp { play arp(bazaar, rate: 0.25, style: "down") at bars(1..4) }
+}
+
+// The break: a dark pad swelling up out of the low end.
+block Swell {
+  key A minor
+  let bazaar = prog`Am | Dm7 | E7 | Am`
+  track Pad {
+    instrument DarkPad()
+    volume 0.4
+    play chords(bazaar) at bars(1..4)
+    automate volume from 0.1 to 0.45 over bars(1..4)
+  }
+}
 
 song "Night Market" {
   tempo 134bpm
@@ -14,36 +71,15 @@ song "Night Market" {
   section lowend = bars(13..16)
   section step2 = bars(17..28)
 
-  let kick  = beat`x--- ---- --x- -x--`
-  let snare = beat`---- x--- ---- x---`
-  let hat   = beat`x--x -xx- x-x- -xxX`
-  let shk   = beat`--x- --x- --x- --x-`
-  let bazaar = prog`Am | Dm7 | E7 | Am`
+  play Step at step1
+  play Pulse at lowend
+  play Step at step2
+  play Shake at bars(5..24)
 
-  track Kick  { instrument Kick909(click: 0.5) volume 0.9 play kick at bars(1..28) }
-  track Snare { instrument SnareTight(snap: 0.75) volume 0.65 play snare at step1 play snare at step2 }
-  track Hat   { instrument HatClosed(bright: 0.95) volume 0.4 pan 0.2 play hat at step1 play hat at step2 }
-  track Shk   { instrument Shaker() volume 0.3 pan -0.25 play shk at bars(5..24) }
+  play Bassline at bars(1..28)
 
-  track Bass {
-    instrument PluckBass()
-    volume 0.8
-    play notes`A1:0.5 _:0.5 A1:0.25 C2:0.25 _:0.5 E2:0.5 _:0.5 D2:0.5 C2:0.5 A1:0.5` at bars(1..28)
-  }
+  play Harp at step1
+  play HarpAnswer at step2
 
-  track Harp {
-    instrument Harpsichord()
-    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
-    volume 0.5
-    pan 0.15
-    play notes`_:2 E5:0.5 F5:0.5 E5:0.5 C5:0.5 A4:1 B4:0.5 C5:0.5 B4:0.5 G#4:0.5 E4:1` at step1
-    play arp(bazaar, rate: 0.25, style: "down") at step2
-  }
-
-  track Pad {
-    instrument DarkPad()
-    volume 0.4
-    play chords(bazaar) at lowend
-    automate volume from 0.1 to 0.45 over lowend
-  }
+  play Swell at lowend
 }

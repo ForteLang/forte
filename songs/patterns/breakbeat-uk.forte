@@ -1,17 +1,30 @@
-// Pattern: UK Breakbeat (136bpm) — ずらしたブレイクにレイブスタブ。
+// Pattern: UK Breakbeat (136bpm) — a shifted break with rave stabs.
 import { Kick909, SnareTight, HatClosed, Crash } from "../../lib/std/drums.forte"
 import { OctaveBass } from "../../lib/std/bass.forte"
 import { Stab } from "../../lib/std/fx.forte"
 
-song "Pattern: UK Breakbeat" {
-  tempo 136bpm
-  meter 4/4
-  key G minor
+block BreakbeatUkDrums {
+  let kick = beat`x--- --x- ---- x-x-`
+  let hat  = beat`x-x- xxx- x-x- x-xx`
 
-  let kick  = beat`x--- --x- ---- x-x-`
+  track Kick  { instrument Kick909(click: 0.6) volume 0.9 play kick at bars(1..8) }
+  track Hat   { instrument HatClosed(bright: 0.9) volume 0.4 pan -0.15 play hat at bars(1..8) }
+  track Crash { instrument Crash(decay: 0.7) volume 0.35 play beat`x--- ---- ---- ----` at bars(1..1) }
+}
+
+block BreakbeatUkBass {
+  key G minor
+  let rave = prog`Gm | Gm | Bb | F`
+  track Bass {
+    instrument OctaveBass(blend: 0.5)
+    volume 0.8
+    play bass(rave, rate: 0.5) at bars(1..8)
+  }
+}
+
+block BreakbeatUkStabs {
+  key G minor
   let snare = beat`---- x--- ---x x---`
-  let hat   = beat`x-x- xxx- x-x- x-xx`
-  let stab  = beat`x--- ---- --x- ----`
   let rave  = prog`Gm | Gm | Bb | F`
 
   return Rave {
@@ -19,16 +32,7 @@ song "Pattern: UK Breakbeat" {
     volume 0.7
   }
 
-  track Kick  { instrument Kick909(click: 0.6) volume 0.9 play kick at bars(1..8) }
   track Snare { instrument SnareTight(snap: 0.7) volume 0.7 send Rave 0.2 play snare at bars(1..8) }
-  track Hat   { instrument HatClosed(bright: 0.9) volume 0.4 pan -0.15 play hat at bars(1..8) }
-  track Crash { instrument Crash(decay: 0.7) volume 0.35 play beat`x--- ---- ---- ----` at bars(1..1) }
-
-  track Bass {
-    instrument OctaveBass(blend: 0.5)
-    volume 0.8
-    play bass(rave, rate: 0.5) at bars(1..8)
-  }
 
   track Stab {
     instrument Stab()
@@ -37,4 +41,14 @@ song "Pattern: UK Breakbeat" {
     pan 0.2
     play chords(rave) at bars(3..8)
   }
+}
+
+block BreakbeatUk {
+  tempo 136bpm
+  meter 4/4
+  key G minor
+
+  play BreakbeatUkDrums at bars(1..8)
+  play BreakbeatUkBass at bars(1..8)
+  play BreakbeatUkStabs at bars(1..8)
 }

@@ -1,13 +1,9 @@
-// Pattern: Acid Techno (135bpm) — 303 二丁持ち。1 台はベース、
-// 1 台は高域で鳴き続ける。909 は直進。
+// Pattern: Acid Techno (135bpm) — dual-wielding 303s. One is the bass,
+// one keeps screaming in the highs. The 909 goes straight ahead.
 import { BD909, CH909, OH909, CP909 } from "../../lib/std/tr909.forte"
 import { Bass303, Square303 } from "../../lib/std/tb303.forte"
 
-song "Pattern: Acid Techno" {
-  tempo 135bpm
-  meter 4/4
-  key E minor
-
+block AcidTechnoDrums {
   let four = beat`X--- x--- x--- x---`
   let chh  = beat`x-x- x-x- x-x- x-xx`
   let ohh  = beat`--x- --x- --x- --x-`
@@ -17,14 +13,20 @@ song "Pattern: Acid Techno" {
   track CH { instrument CH909() volume 0.35 pan 0.2 play chh at bars(1..8) }
   track OH { instrument OH909(decay: 0.3) volume 0.45 play ohh at bars(1..8) }
   track CP { instrument CP909(room: 0.4) volume 0.5 play clap at bars(5..8) }
+}
 
+block AcidTechnoBass {
+  key E minor
   track Low303 {
     instrument Bass303(cutoff: 0.25, reso: 0.8, envmod: 0.55, decay: 0.2)
     insert drive(drive: 0.3)
     volume 0.75
     play notes`E1:0.25 E1:0.25 E2~:0.25 E1:0.25 E1!:0.25 G1~:0.25 E1:0.25 E1:0.25 A1:0.25 E1:0.25 E2!:0.25 D2~:0.25 E1:0.25 B1~:0.25 E1!:0.25 E1:0.25` at bars(1..8)
   }
+}
 
+block AcidTechnoLead {
+  key E minor
   track Hi303 {
     instrument Square303(cutoff: 0.45, reso: 0.85, envmod: 0.7, decay: 0.15)
     insert delay(time: 0.222, fdbk: 0.35, mix: 0.2)
@@ -32,4 +34,14 @@ song "Pattern: Acid Techno" {
     pan 0.25
     play notes`E3!:0.25 _:0.25 G3~:0.25 E3:0.25 _:0.25 B3!:0.25 A3~:0.25 G3~:0.25 E3:0.25 _:0.25 D4!:0.25 B3~:0.25 A3:0.25 G3:0.25 E3!:0.25 _:0.25` at bars(3..8)
   }
+}
+
+block AcidTechno {
+  tempo 135bpm
+  meter 4/4
+  key E minor
+
+  play AcidTechnoDrums at bars(1..8)
+  play AcidTechnoBass at bars(1..8)
+  play AcidTechnoLead at bars(1..8)
 }

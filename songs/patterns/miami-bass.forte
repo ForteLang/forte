@@ -1,29 +1,38 @@
-// Pattern: Miami Bass (128bpm) — 808 のブーム、16 分のカウベル、
-// 速いハットロール。低音のグリッサンドは KickSub の音程プレイで。
+// Miami Bass (128bpm) — 808 boom, sixteenth-note cowbell,
+// fast hat rolls. The low-end glissando is KickSub played with pitch.
 import { BD808, SD808, CH808, OH808, CB808, CL808 } from "../../lib/std/tr808.forte"
 import { KickSub } from "../../lib/std/drums.forte"
 
-song "Pattern: Miami Bass" {
-  tempo 128bpm
-  meter 4/4
-  key C minor
-
+block MiamiBassDrums {
   let kick  = beat`X--- --x- ---- x--- X--- --x- x--- ----`
   let snare = beat`---- X--- ---- X--- ---- X--- ---- X-.X`
   let chh   = beat`x-xx x-x- xxx- x-xx x-x- xxxx x-x- xxxx`
   let bell  = beat`x--- -x-- --x- ---x`
   let clv   = beat`---x ---- -x-- x---`
 
-  track BD  { instrument BD808(tone: 0.5, decay: 0.6) insert comp(thresh: 0.4, ratio: 0.6) volume 0.95 play kick at bars(1..8) }
-  track SD  { instrument SD808(snappy: 0.75) volume 0.75 play snare at bars(1..8) }
-  track CH  { instrument CH808() volume 0.45 pan 0.15 play chh at bars(1..8) }
-  track OH  { instrument OH808(decay: 0.25) volume 0.35 play beat`--x- ---- --x- ----` at bars(1..8) }
-  track CB  { instrument CB808() volume 0.4 pan -0.25 play bell at bars(3..8) }
-  track CL  { instrument CL808() volume 0.45 pan 0.3 play clv at bars(5..8) }
+  track BD { instrument BD808(tone: 0.5, decay: 0.6) insert comp(thresh: 0.4, ratio: 0.6) volume 0.95 play kick at bars(1..8) }
+  track SD { instrument SD808(snappy: 0.75) volume 0.75 play snare at bars(1..8) }
+  track CH { instrument CH808() volume 0.45 pan 0.15 play chh at bars(1..8) }
+  track OH { instrument OH808(decay: 0.25) volume 0.35 play beat`--x- ---- --x- ----` at bars(1..8) }
+  track CB { instrument CB808() volume 0.4 pan -0.25 play bell at bars(3..8) }
+  track CL { instrument CL808() volume 0.45 pan 0.3 play clv at bars(5..8) }
+}
+
+block MiamiBassBoom {
+  key C minor
 
   track Boom {
     instrument KickSub(weight: 0.85)
     volume 0.9
     play notes`C1:1.5 _:0.5 C1:0.75 _:0.25 Eb1~:0.5 C1:0.5 _:1 G0:1 _:1 C1:0.5 _:0.5` at bars(1..8)
   }
+}
+
+block MiamiBass {
+  tempo 128bpm
+  meter 4/4
+  key C minor
+
+  play MiamiBassDrums at bars(1..8)
+  play MiamiBassBoom at bars(1..8)
 }

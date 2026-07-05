@@ -1,18 +1,33 @@
-// Pattern: Synthwave (105bpm) — RetroWave のベースが 16 分で走り、
-// 80s パッドとゲートスネアが夜のハイウェイを作る。
+// Pattern: Synthwave (105bpm) — a RetroWave bass running in 16ths,
+// 80s pads and a gated snare painting the midnight highway.
 import { Kick808, SnareTight, HatClosed } from "../../lib/std/drums.forte"
 import { RetroWave } from "../../lib/std/synths.forte"
 import { EightiesPad } from "../../lib/std/pads.forte"
 import { SoftLead } from "../../lib/std/leads.forte"
 
-song "Pattern: Synthwave" {
-  tempo 105bpm
-  meter 4/4
-  key B minor
+block SynthwaveDriveDrums {
+  let kick = beat`x--- ---- x--- ----`
+  let hat  = beat`x-x- x-x- x-x- x-x-`
 
-  let kick  = beat`x--- ---- x--- ----`
+  track Kick { instrument Kick808(punch: 0.5, decay: 0.45) volume 0.9 play kick at bars(1..8) }
+  track Hat  { instrument HatClosed(bright: 0.85) volume 0.3 pan 0.15 play hat at bars(1..8) }
+}
+
+block SynthwaveDriveBass {
+  key B minor
+  let neon = prog`Bm | G | D | A`
+
+  track Bass {
+    instrument RetroWave()
+    volume 0.7
+    play arp(neon, rate: 0.25, style: "up") at bars(1..8)
+  }
+}
+
+// Gated snare, pad and lead all hit the Gate reverb — they stay with the return.
+block SynthwaveDriveGate {
+  key B minor
   let snare = beat`---- X--- ---- X---`
-  let hat   = beat`x-x- x-x- x-x- x-x-`
   let neon  = prog`Bm | G | D | A`
 
   return Gate {
@@ -20,15 +35,7 @@ song "Pattern: Synthwave" {
     volume 0.75
   }
 
-  track Kick  { instrument Kick808(punch: 0.5, decay: 0.45) volume 0.9 play kick at bars(1..8) }
   track Snare { instrument SnareTight(snap: 0.7) volume 0.75 send Gate 0.4 play snare at bars(1..8) }
-  track Hat   { instrument HatClosed(bright: 0.85) volume 0.3 pan 0.15 play hat at bars(1..8) }
-
-  track Bass {
-    instrument RetroWave()
-    volume 0.7
-    play arp(neon, rate: 0.25, style: "up") at bars(1..8)
-  }
 
   track Pad {
     instrument EightiesPad(shimmer: 0.5)
@@ -45,4 +52,14 @@ song "Pattern: Synthwave" {
     pan 0.1
     play notes`_:2 F#4:1 D4:0.5 B3:0.5 _:2 G4:1 F#4:0.5 D4:1.5 _:2 A4:1 F#4:0.5 E4:0.5 D4:2` at bars(5..8)
   }
+}
+
+block SynthwaveDrive {
+  tempo 105bpm
+  meter 4/4
+  key B minor
+
+  play SynthwaveDriveDrums at bars(1..8)
+  play SynthwaveDriveBass at bars(1..8)
+  play SynthwaveDriveGate at bars(1..8)
 }

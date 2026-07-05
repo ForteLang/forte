@@ -1,12 +1,20 @@
-// Pattern: Bassline Styles (110bpm) — ベースラインの型 4 種を
-// 8 小節ずつ: オクターブ / ウォーキング / シンコペ / ペダル。
+// Pattern: Bassline Styles (110bpm) — four bassline archetypes,
+// 8 bars each: octave / walking / syncopated / pedal.
 import { OctaveBass, UprightBass, PickBass } from "../../lib/std/bass.forte"
 import { SH101Bass } from "../../lib/std/sh101.forte"
 import { Kick909, HatClosed, SnareTight } from "../../lib/std/drums.forte"
 
-song "Pattern: Bassline Styles" {
-  tempo 110bpm
-  meter 4/4
+block BasslineStylesDrums {
+  let four = beat`x--- x--- x--- x---`
+  let back = beat`---- x--- ---- x---`
+  let hat  = beat`x-x- x-x- x-x- x-x-`
+
+  track Kick  { instrument Kick909(click: 0.5) volume 0.85 play four at bars(1..32) }
+  track Snare { instrument SnareTight(snap: 0.7) volume 0.6 play back at bars(1..32) }
+  track Hat   { instrument HatClosed(bright: 0.85) volume 0.35 pan 0.15 play hat at bars(1..32) }
+}
+
+block BasslineStylesBass {
   key A minor
 
   section octave  = bars(1..8)
@@ -14,14 +22,7 @@ song "Pattern: Bassline Styles" {
   section syncop  = bars(17..24)
   section pedal   = bars(25..32)
 
-  let four  = beat`x--- x--- x--- x---`
-  let back  = beat`---- x--- ---- x---`
-  let hat   = beat`x-x- x-x- x-x- x-x-`
-  let tour  = prog`Am7 | Dm7 | G7 | Cmaj7`
-
-  track Kick  { instrument Kick909(click: 0.5) volume 0.85 play four at bars(1..32) }
-  track Snare { instrument SnareTight(snap: 0.7) volume 0.6 play back at bars(1..32) }
-  track Hat   { instrument HatClosed(bright: 0.85) volume 0.35 pan 0.15 play hat at bars(1..32) }
+  let tour = prog`Am7 | Dm7 | G7 | Cmaj7`
 
   track Octave {
     instrument OctaveBass(blend: 0.6)
@@ -43,4 +44,13 @@ song "Pattern: Bassline Styles" {
     volume 0.8
     play notes`A1:0.25 A1:0.25 A1:0.25 A1:0.25 A1:0.25 A1:0.25 A2:0.25 A1:0.25` at pedal
   }
+}
+
+block BasslineStyles {
+  tempo 110bpm
+  meter 4/4
+  key A minor
+
+  play BasslineStylesDrums at bars(1..32)
+  play BasslineStylesBass at bars(1..32)
 }

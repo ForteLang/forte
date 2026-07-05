@@ -1,18 +1,33 @@
-// Pattern: New Beat (110bpm) — 遅くて重い。フーバーの唸り、
-// 909 のドスの効いたキック、EBM 由来の直進ベース。
+// Pattern: New Beat (110bpm) — slow and heavy. A growling hoover,
+// a punchy 909 kick, and an EBM-derived straight-ahead bass.
 import { BD909, SD909, CH909, OH909 } from "../../lib/std/tr909.forte"
 import { Hoover } from "../../lib/std/synths.forte"
 import { SH101Bass } from "../../lib/std/sh101.forte"
 
-song "Pattern: New Beat" {
-  tempo 110bpm
-  meter 4/4
-  key C minor
-
+block NewBeatDrums {
   let four = beat`X--- x--- x--- x---`
-  let snr  = beat`---- x--- ---- x---`
   let chh  = beat`x-x- x-x- x-x- x-x-`
   let ohh  = beat`--x- ---- --x- ----`
+
+  track BD { instrument BD909(attack: 0.6, decay: 0.5) insert drive(drive: 0.25) volume 0.95 play four at bars(1..8) }
+  track CH { instrument CH909() volume 0.4 pan 0.15 play chh at bars(1..8) }
+  track OH { instrument OH909(decay: 0.3) volume 0.4 play ohh at bars(1..8) }
+}
+
+block NewBeatBass {
+  key C minor
+  track Bass {
+    instrument SH101Bass(cutoff: 0.32)
+    insert drive(drive: 0.2)
+    volume 0.8
+    play notes`C1:0.5 C1:0.25 C1:0.25 C1:0.5 Eb1:0.5 C1:0.5 C1:0.25 C1:0.25 G0:0.5 Bb0:0.5` at bars(1..8)
+  }
+}
+
+// Snare + hoover share the Bunker reverb, so they live with the return.
+block NewBeatBunker {
+  key C minor
+  let snr  = beat`---- x--- ---- x---`
   let dark = prog`Cm | Cm | Ab | G7`
 
   return Bunker {
@@ -20,17 +35,7 @@ song "Pattern: New Beat" {
     volume 0.6
   }
 
-  track BD { instrument BD909(attack: 0.6, decay: 0.5) insert drive(drive: 0.25) volume 0.95 play four at bars(1..8) }
   track SD { instrument SD909(snappy: 0.7) send Bunker 0.25 volume 0.75 play snr at bars(1..8) }
-  track CH { instrument CH909() volume 0.4 pan 0.15 play chh at bars(1..8) }
-  track OH { instrument OH909(decay: 0.3) volume 0.4 play ohh at bars(1..8) }
-
-  track Bass {
-    instrument SH101Bass(cutoff: 0.32)
-    insert drive(drive: 0.2)
-    volume 0.8
-    play notes`C1:0.5 C1:0.25 C1:0.25 C1:0.5 Eb1:0.5 C1:0.5 C1:0.25 C1:0.25 G0:0.5 Bb0:0.5` at bars(1..8)
-  }
 
   track Hoover {
     instrument Hoover()
@@ -38,4 +43,14 @@ song "Pattern: New Beat" {
     volume 0.45
     play chords(dark) at bars(5..8)
   }
+}
+
+block NewBeat {
+  tempo 110bpm
+  meter 4/4
+  key C minor
+
+  play NewBeatDrums at bars(1..8)
+  play NewBeatBass at bars(1..8)
+  play NewBeatBunker at bars(1..8)
 }
