@@ -150,8 +150,16 @@ impl Parser {
         let pos = self.pos();
         self.bump(); // "block"
         let name = self.ident("block の名前")?;
+        // `block Child : Parent { … }` — inherit and override
+        let parent = if *self.peek() == Tok::Colon {
+            self.bump();
+            let ppos = self.pos();
+            Some((self.ident("継承元 block の名前")?, ppos))
+        } else {
+            None
+        };
         let body = self.body(name.clone())?;
-        Some(BlockAst { name, body, pos })
+        Some(BlockAst { name, parent, body, pos })
     }
 
     /// The shared body of `song`/`block`: header, lets, sections, tracks,

@@ -21,9 +21,19 @@ pub fn compile(
     // A song is just the outermost block — structurally there is no
     // difference; the root's tempo/key/meter/swing govern the whole render
     // (the settings of the block above always win).
+    let mut diags: Vec<Diag> = Vec::new();
+    let resolved_root: SongAst;
     let root: &SongAst = match (&file.song, file.blocks.last()) {
         (Some(song), _) => song,
-        (None, Some(b)) => &b.body,
+        (None, Some(b)) => {
+            if b.parent.is_some() {
+                let mut chain = Vec::new();
+                resolved_root = resolved_body(b, &file.blocks, &[], &mut chain, &mut diags);
+                &resolved_root
+            } else {
+                &b.body
+            }
+        }
         (None, None) => {
             return Err(vec![Diag::new(
                 "E-SONG-004",
@@ -32,7 +42,6 @@ pub fn compile(
             )])
         }
     };
-    let mut diags: Vec<Diag> = Vec::new();
     let mut p = Project::empty();
 
     // ---- user-defined devices ----------------------------------------------
@@ -580,8 +589,17 @@ fn lower_body(
         let mut child_registry: Vec<&[BlockAst]> = Vec::with_capacity(registry.len() + 1);
         child_registry.push(body.blocks.as_slice());
         child_registry.extend_from_slice(registry);
+        // OOP-style inheritance: merge the parent chain before lowering
+        let merged;
+        let child_body: &SongAst = if bdef.parent.is_some() {
+            let mut chain = Vec::new();
+            merged = resolved_body(bdef, body.blocks.as_slice(), &child_registry, &mut chain, diags);
+            &merged
+        } else {
+            &bdef.body
+        };
         let child =
-            lower_body(&bdef.body, &child_prefix, eff_child, &child_registry, stack, env, diags);
+            lower_body(child_body, &child_prefix, eff_child, &child_registry, stack, env, diags);
         stack.pop();
 
         // window inside the child, in beats (defaults: the whole block)
@@ -730,6 +748,154 @@ fn lower_body(
     let len_beats = (end / beats_per_bar).ceil().max(1.0) * beats_per_bar;
 
     Lowered { tracks: out, len_beats }
+}
+
+/// Resolve `block Child : Parent` chains into one merged body. The child
+/// starts from the parent's (already resolved) body and overrides — the same
+/// mental model as class inheritance:
+/// - same-name track: instrument replaces, same-name inserts have their
+///   params replaced, new inserts append, non-empty plays/audios replace,
+///   volume/pan override, automate/modulate stack, sends merge by target
+/// - new tracks / returns append; lets & sections override by name
+/// - header (tempo/swing/meter/key) overrides field by field
+fn resolved_body(
+    bdef: &BlockAst,
+    local: &[BlockAst],
+    registry: &[&[BlockAst]],
+    chain: &mut Vec<String>,
+    diags: &mut Vec<Diag>,
+) -> SongAst {
+    let Some((pname, ppos)) = &bdef.parent else {
+        return bdef.body.clone();
+    };
+    if chain.iter().any(|n| n == pname) || *pname == bdef.name {
+        diags.push(Diag::new(
+            "E-BLOCK-006",
+            *ppos,
+            format!("block の継承が循環しています: {} → {pname}", chain.join(" → ")),
+        ));
+        return bdef.body.clone();
+    }
+    let found = local
+        .iter()
+        .find(|b| b.name == *pname)
+        .or_else(|| registry.iter().flat_map(|sc| sc.iter()).find(|b| b.name == *pname));
+    let Some(pdef) = found else {
+        let mut names: Vec<&str> = local
+            .iter()
+            .map(|b| b.name.as_str())
+            .chain(registry.iter().flat_map(|sc| sc.iter()).map(|b| b.name.as_str()))
+            .collect();
+        names.sort();
+        names.dedup();
+        diags.push(Diag::new(
+            "E-BLOCK-005",
+            *ppos,
+            format!(
+                "継承元 block '{pname}' が定義されていません(あるもの: {})",
+                if names.is_empty() { "なし".to_string() } else { names.join(", ") }
+            ),
+        ));
+        return bdef.body.clone();
+    };
+    chain.push(bdef.name.clone());
+    let parent_body = resolved_body(pdef, local, registry, chain, diags);
+    chain.pop();
+    merge_block(&parent_body, &bdef.body)
+}
+
+fn merge_block(parent: &SongAst, child: &SongAst) -> SongAst {
+    let mut out = parent.clone();
+    out.name = child.name.clone();
+    if child.tempo.is_some() {
+        out.tempo = child.tempo;
+    }
+    if child.swing.is_some() {
+        out.swing = child.swing;
+    }
+    if child.meter.is_some() {
+        out.meter = child.meter;
+    }
+    if child.key.is_some() {
+        out.key = child.key.clone();
+    }
+    for l in &child.lets {
+        match out.lets.iter_mut().find(|x| x.name == l.name) {
+            Some(slot) => *slot = l.clone(),
+            None => out.lets.push(l.clone()),
+        }
+    }
+    for sct in &child.sections {
+        match out.sections.iter_mut().find(|x| x.name == sct.name) {
+            Some(slot) => *slot = sct.clone(),
+            None => out.sections.push(sct.clone()),
+        }
+    }
+    for t in &child.tracks {
+        match out.tracks.iter_mut().find(|x| x.name == t.name) {
+            Some(base) => merge_track(base, t),
+            None => out.tracks.push(t.clone()),
+        }
+    }
+    for r in &child.returns {
+        match out.returns.iter_mut().find(|x| x.name == r.name) {
+            Some(base) => {
+                for ins in &r.inserts {
+                    match base.inserts.iter_mut().find(|x| x.name == ins.name) {
+                        Some(slot) => *slot = ins.clone(),
+                        None => base.inserts.push(ins.clone()),
+                    }
+                }
+                if r.volume.is_some() {
+                    base.volume = r.volume;
+                }
+                if r.pan.is_some() {
+                    base.pan = r.pan;
+                }
+            }
+            None => out.returns.push(r.clone()),
+        }
+    }
+    for b in &child.blocks {
+        match out.blocks.iter_mut().find(|x| x.name == b.name) {
+            Some(slot) => *slot = b.clone(),
+            None => out.blocks.push(b.clone()),
+        }
+    }
+    out.places.extend(child.places.iter().cloned());
+    out
+}
+
+fn merge_track(base: &mut TrackAst, over: &TrackAst) {
+    if over.instrument.is_some() {
+        base.instrument = over.instrument.clone();
+    }
+    for ins in &over.inserts {
+        match base.inserts.iter_mut().find(|x| x.name == ins.name) {
+            Some(slot) => *slot = ins.clone(),
+            None => base.inserts.push(ins.clone()),
+        }
+    }
+    if !over.plays.is_empty() {
+        base.plays = over.plays.clone();
+    }
+    if !over.audios.is_empty() {
+        base.audios = over.audios.clone();
+    }
+    if over.volume.is_some() {
+        base.volume = over.volume;
+    }
+    if over.pan.is_some() {
+        base.pan = over.pan;
+    }
+    for (dest, level, pos) in &over.sends {
+        match base.sends.iter_mut().find(|(d, _, _)| d == dest) {
+            Some(slot) => *slot = (dest.clone(), *level, *pos),
+            None => base.sends.push((dest.clone(), *level, *pos)),
+        }
+    }
+    base.automations.extend(over.automations.iter().cloned());
+    base.modulations.extend(over.modulations.iter().cloned());
 }
 
 fn collect_devices<'a>(

@@ -157,6 +157,19 @@ Rules of thumb:
   is always playable on its own.
 - Reusable blocks live in `blocks/` — fork one, change its pattern, and
   every song placing it follows.
+- **Inherit instead of copying** — `block Child : Parent { … }` starts from
+  the parent and overrides like a class: swap the instrument, change one
+  insert's parameters, add an effect, or replace the pattern:
+
+```forte
+block DarkAcid : AcidLine {
+  track Acid {
+    instrument Square303(cutoff: 0.18, reso: 0.9)   // different voice
+    insert delay(time: 0.238, fdbk: 0.45, mix: 0.3)  // same insert → params replaced
+    insert reverb(size: 0.8, mix: 0.25)              // new insert → appended
+  }
+}
+```
 
 ## 1. Your first song (5 minutes)
 

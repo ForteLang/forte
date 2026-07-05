@@ -152,6 +152,71 @@ song "S" {
     assert_eq!(digest(src), digest(src));
 }
 
+// ---------------------------------------------------------------------------
+// inheritance: block Child : Parent { … } overrides like a class
+// ---------------------------------------------------------------------------
+
+const PARENT: &str = r#"block Line {
+  key A minor
+  track Lead {
+    instrument polymer(wave: "saw", cutoff: 0.5)
+    insert delay(time: 0.3, fdbk: 0.3, mix: 0.2)
+    play notes`A2:1 C3:1 E3:1 A3:1` at bars(1..1)
+  }
+}"#;
+
+#[test]
+fn inheritance_overrides_instruments_and_effect_params() {
+    // swap the instrument
+    let swapped = format!(
+        "{PARENT}\nblock Dark : Line {{ track Lead {{ instrument polymer(wave: \"square\", cutoff: 0.2) }} }}\nsong \"S\" {{ tempo 120bpm key A minor play Dark at bars(1..1) }}"
+    );
+    let base = format!("{PARENT}\nsong \"S\" {{ tempo 120bpm key A minor play Line at bars(1..1) }}");
+    assert_ne!(digest(&base), digest(&swapped), "the child's instrument must replace the parent's");
+
+    // change only an insert's params (same insert name → params replaced)
+    let wetter = format!(
+        "{PARENT}\nblock Wet : Line {{ track Lead {{ insert delay(time: 0.3, fdbk: 0.5, mix: 0.5) }} }}\nsong \"S\" {{ tempo 120bpm key A minor play Wet at bars(1..1) }}"
+    );
+    let p = compile_str(&wetter).unwrap();
+    let lead = p.tracks.iter().find(|t| t.name == "Wet.Lead").unwrap();
+    assert_eq!(lead.devices.len(), 2, "same-name insert must replace, not stack");
+    assert_ne!(digest(&base), digest(&wetter));
+
+    // add a new effect (different insert name → appended)
+    let verbed = format!(
+        "{PARENT}\nblock Verb : Line {{ track Lead {{ insert reverb(size: 0.7, mix: 0.4) }} }}\nsong \"S\" {{ tempo 120bpm key A minor play Verb at bars(1..1) }}"
+    );
+    let p = compile_str(&verbed).unwrap();
+    let lead = p.tracks.iter().find(|t| t.name == "Verb.Lead").unwrap();
+    assert_eq!(lead.devices.len(), 3, "a new insert must append after the parent's");
+}
+
+#[test]
+fn inheritance_replaces_patterns_and_chains() {
+    // a child with plays replaces the parent's pattern; chains resolve A:B:C
+    let src = format!(
+        "{PARENT}\nblock Var : Line {{ track Lead {{ play notes`E3:1 A3:1 C4:1 E4:1` at bars(1..1) }} }}\nblock Loud : Var {{ track Lead {{ volume 1.0 }} }}\nsong \"S\" {{ tempo 120bpm key A minor play Loud at bars(1..1) }}"
+    );
+    let p = compile_str(&src).unwrap();
+    let lead = p.tracks.iter().find(|t| t.name == "Loud.Lead").unwrap();
+    assert_eq!(lead.arranger[0].clip.notes[0].pitch, 52, "Var's E3 pattern must win");
+    assert_eq!(lead.volume, 1.0, "Loud's volume must win");
+    assert_eq!(digest(&src), digest(&src));
+}
+
+#[test]
+fn inheritance_errors_are_reported() {
+    let unknown = r#"block A : Nope { track T { instrument polymer() play beat`x---` at bars(1..1) } }"#;
+    let errs = compile_str(unknown).err().expect("unknown parent must fail");
+    assert!(errs.iter().any(|d| d.code == "E-BLOCK-005"), "{errs:?}");
+
+    let cycle = r#"block A : B { track T { instrument polymer() play beat`x---` at bars(1..1) } }
+block B : A { track U { instrument polymer() play beat`x---` at bars(1..1) } }"#;
+    let errs = compile_str(cycle).err().expect("inheritance cycle must fail");
+    assert!(errs.iter().any(|d| d.code == "E-BLOCK-006"), "{errs:?}");
+}
+
 #[test]
 fn block_errors_speak_the_language() {
     let unknown = r#"song "S" { tempo 120bpm track T { instrument polymer() play beat`x---` at bars(1..1) } play Nope at bars(1..1) }"#;

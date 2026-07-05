@@ -35,7 +35,7 @@ file := { import } { device | block } [ song ]
 
 ```ebnf
 file      = { import } { device | block } [ song ] ;
-block     = "block" ident body ;                                     (* the universal unit *)
+block     = "block" ident [ ":" ident ] body ;                       (* [: Parent] inherits *)
 import    = "import" "{" ident { "," ident } "}" "from" string     (* module *)
           | "import" ident "from" string ;                          (* .frec asset *)
 device    = "device" ident [ ":" "Instrument" ] "{" { devItem } "}" ;
@@ -265,6 +265,16 @@ it to other blocks. The outermost block you build is "the song".
 - **Import**: `import { Groove } from "./blocks/groove.forte"` — importing a
   block also carries the devices of its home module (first definition of a
   name wins).
+- **Inheritance**: `block Child : Parent { … }` — the child starts from the
+  parent's (recursively resolved) body and overrides, class-style:
+  - same-name track: `instrument` replaces; a same-name `insert` has its
+    params replaced, a new insert appends; non-empty `play`/`audio` lists
+    replace the parent's; `volume`/`pan` override; `automate`/`modulate`
+    stack on top; `send`s merge by destination.
+  - new tracks and returns append; `let`/`section` override by name; the
+    header (`tempo`/`swing`/`meter`/`key`) overrides field by field.
+  - chains resolve recursively (`A : B : C`); an unknown parent is
+    E-BLOCK-005, an inheritance cycle is E-BLOCK-006.
 
 ## 5. The Determinism Contract
 
