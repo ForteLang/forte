@@ -111,7 +111,14 @@ pub fn compile(
 
     let env = Env { beats_per_bar, swing, tempo: p.tempo, assets, user_devices: &user_devices };
     let mut stack: Vec<String> = vec![root.name.clone()];
-    let lowered = lower_body(root, "", eff_root_pc, &[&file.blocks], &mut stack, &env, &mut diags);
+    let lowered = lower_body(
+        root,
+        &PlaceEnv { prefix: "", eff_root: eff_root_pc, overrides: &[] },
+        &[&file.blocks],
+        &mut stack,
+        &env,
+        &mut diags,
+    );
 
     // a described, deliberately empty block is package/metadata material
     // (packages/<pkg>/package.forte); an undescribed empty root is a mistake
@@ -201,6 +208,23 @@ struct Lowered {
     len_beats: f64,
 }
 
+/// Bind a block's `param` values into a call: `cutoff: cutoff` becomes
+/// `cutoff: 0.7` when the (placement-resolved) param env defines it.
+fn bind_params(call: &Call, env: &HashMap<String, f64>) -> Call {
+    if env.is_empty() {
+        return call.clone();
+    }
+    let mut c = call.clone();
+    for (_, v) in &mut c.args {
+        if let Arg::Ident(name, pos) = v {
+            if let Some(val) = env.get(name.as_str()) {
+                *v = Arg::Num(*val, *pos);
+            }
+        }
+    }
+    c
+}
+
 /// Minimal signed pitch-class distance (semitones, -6..=6).
 fn key_delta(from: u8, to: u8) -> i32 {
     let mut d = (to as i32 - from as i32).rem_euclid(12);
@@ -210,21 +234,65 @@ fn key_delta(from: u8, to: u8) -> i32 {
     d
 }
 
-/// Lower one block body into tracks with local-beat clips. `eff_root` is the
-/// effective key root decided ABOVE this block (upper wins); the transpose
-/// applied here is the interval from this body's own key to that target.
-/// Placements recurse, then merge the child's tracks into this body's set
-/// (same block → same tracks, one more set of clips).
+/// What the placement above passes down into the block it places: the track
+/// name prefix, the effective key root decided ABOVE (upper wins), and the
+/// values for the block's declared `param`s.
+struct PlaceEnv<'a> {
+    prefix: &'a str,
+    eff_root: Option<u8>,
+    overrides: &'a [(String, f64, Pos)],
+}
+
+/// Lower one block body into tracks with local-beat clips. The transpose
+/// applied here is the interval from this body's own key to the effective
+/// root in `penv`. Placements recurse, then merge the child's tracks into
+/// this body's set (same block → same tracks, one more set of clips).
 fn lower_body(
     body: &SongAst,
-    prefix: &str,
-    eff_root: Option<u8>,
+    penv: &PlaceEnv,
     registry: &[&[BlockAst]],
     stack: &mut Vec<String>,
     env: &Env,
     diags: &mut Vec<Diag>,
 ) -> Lowered {
     let beats_per_bar = env.beats_per_bar;
+    let (prefix, eff_root, overrides) = (penv.prefix, penv.eff_root, penv.overrides);
+
+    // ---- the block's public knobs --------------------------------------------
+    // declared defaults, then the placement's values on top (range-checked)
+    let mut param_env: HashMap<String, f64> = HashMap::new();
+    for p in &body.params {
+        param_env.insert(p.name.clone(), p.default);
+    }
+    for (name, value, opos) in overrides {
+        match body.params.iter().find(|p| &p.name == name) {
+            Some(decl) => {
+                let (lo, hi) = decl.range.unwrap_or((0.0, 1.0));
+                if *value < lo || *value > hi {
+                    diags.push(Diag::new(
+                        "E-TYPE-002",
+                        *opos,
+                        format!("param {name} = {value} は範囲 {lo}..{hi} の外です"),
+                    ));
+                } else {
+                    param_env.insert(name.clone(), *value);
+                }
+            }
+            None => {
+                let mut names: Vec<&str> = body.params.iter().map(|p| p.name.as_str()).collect();
+                names.sort();
+                diags.push(Diag::new(
+                    "E-BLOCK-005",
+                    *opos,
+                    if names.is_empty() {
+                        format!("block '{}' に param はありません(param cutoff = 0.5 in 0..1 で宣言します)", body.name)
+                    } else {
+                        format!("param '{name}' は block '{}' にありません(あるもの: {})", body.name, names.join(", "))
+                    },
+                ));
+            }
+        }
+    }
     let native_root = body
         .key
         .as_ref()
@@ -287,7 +355,7 @@ fn lower_body(
         // instrument (required unless the track only places recorded audio)
         let mut beat_pitch = 36u8; // C2 default; samplers use their sample root
         match &tast.instrument {
-            Some(call) => match build_instrument(call, env.user_devices, env.assets) {
+            Some(call) => match build_instrument(&bind_params(call, &param_env), env.user_devices, env.assets) {
                 Ok((dev, root)) => {
                     beat_pitch = root;
                     track.devices[0] = dev;
@@ -308,7 +376,7 @@ fn lower_body(
         // can target `<insert>.<param>` (first match wins on duplicates)
         let mut insert_devs: Vec<(String, usize)> = Vec::new();
         for call in &tast.inserts {
-            match build_effect(call, env.user_devices, env.tempo) {
+            match build_effect(&bind_params(call, &param_env), env.user_devices, env.tempo) {
                 Ok(dev) => {
                     insert_devs.push((call.name.clone(), track.devices.len()));
                     track.devices.push(dev);
@@ -529,6 +597,7 @@ fn lower_body(
     }
 
     // ---- block placements -----------------------------------------------------
+    let mut seen_params: HashMap<String, Vec<(String, f64)>> = HashMap::new();
     for place in &body.places {
         // local nested blocks shadow outer/imported ones
         let found = body
@@ -604,8 +673,44 @@ fn lower_body(
         } else {
             &bdef.body
         };
-        let child =
-            lower_body(child_body, &child_prefix, eff_child, &child_registry, stack, env, diags);
+        // same block placed twice shares tracks, so its knobs must agree;
+        // different values per placement = a different sound = a child block
+        // normalised: explicit values equal to the default don't count
+        let mut norm: Vec<(String, f64)> = place
+            .params
+            .iter()
+            .filter(|(n, v, _)| {
+                child_body.params.iter().find(|p| &p.name == n).map(|p| p.default != *v).unwrap_or(true)
+            })
+            .map(|(n, v, _)| (n.clone(), *v))
+            .collect();
+        norm.sort_by(|x, y| x.0.cmp(&y.0));
+        match seen_params.get(&bdef.name) {
+            Some(prev) if *prev != norm => {
+                diags.push(Diag::new(
+                    "E-BLOCK-005",
+                    place.pos,
+                    format!(
+                        "block '{}' が異なる param 値で配置されています(同じ block は track を共有します。別の音が欲しいときは `block Dark{} : {}` で継承してください)",
+                        bdef.name, bdef.name, bdef.name
+                    ),
+                ));
+                stack.pop();
+                continue;
+            }
+            Some(_) => {}
+            None => {
+                seen_params.insert(bdef.name.clone(), norm);
+            }
+        }
+        let child = lower_body(
+            child_body,
+            &PlaceEnv { prefix: &child_prefix, eff_root: eff_child, overrides: &place.params },
+            &child_registry,
+            stack,
+            env,
+            diags,
+        );
         stack.pop();
 
         // window inside the child, in beats (defaults: the whole block)
@@ -975,6 +1080,12 @@ fn merge_block(parent: &SongAst, child: &SongAst) -> SongAst {
         match out.blocks.iter_mut().find(|x| x.name == b.name) {
             Some(slot) => *slot = b.clone(),
             None => out.blocks.push(b.clone()),
+        }
+    }
+    for p in &child.params {
+        match out.params.iter_mut().find(|x| x.name == p.name) {
+            Some(slot) => *slot = p.clone(),
+            None => out.params.push(p.clone()),
         }
     }
     out.places.extend(child.places.iter().cloned());

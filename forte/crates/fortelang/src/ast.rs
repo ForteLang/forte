@@ -44,6 +44,8 @@ pub struct PlaceAst {
     /// `volume: 0.6` — scales the whole instance (every track's fader)
     /// across this placement's span only.
     pub volume: Option<(f64, Pos)>,
+    /// `cutoff: 0.7` — values for the block's declared `param`s.
+    pub params: Vec<(String, f64, Pos)>,
     pub at: AtRef,
     pub pos: Pos,
 }
@@ -131,6 +133,10 @@ pub struct SongAst {
     /// Body-level `automate <配置名>.volume from A to B over 区間` — fade a
     /// placed block instance from the outside (target keeps the dot form).
     pub place_autos: Vec<AutomateAst>,
+    /// `param cutoff = 0.5 in 0..1` — the block's public knobs (device
+    /// syntax). Referenced by name inside the block's instrument/insert
+    /// args and set from a placement: `play Riff(cutoff: 0.7)`.
+    pub params: Vec<DevParam>,
     pub tempo: Option<(f64, Pos)>,
     pub swing: Option<(f64, Pos)>,
     pub meter: Option<((u32, u32), Pos)>,
