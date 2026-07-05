@@ -253,7 +253,7 @@ async function recStop() {
     recorded_at: startedAt,
     by: 'user:web',
     session,
-    sig: 'webcrypto:stub', // real device keys arrive with Hub accounts
+    sig: 'webcrypto:stub', // real device keys arrive with signed releases
     // measured round-trip latency travels with the take, so any consumer can
     // compensate placement (SRS-REC-004)
     ...(calib ? { latency_samples: calib.rtl_samples, latency_confidence: calib.confidence } : {}),
@@ -450,45 +450,6 @@ async function initVcs() {
       status(e.message);
     }
   };
-}
-
-// ---- publish: the browser closes the loop back to the hub --------------------
-const HUB_API = new URLSearchParams(location.search).get('api') || 'http://127.0.0.1:9377';
-
-async function publishToHub() {
-  const suggested = currentName.replace(/\.forte$/, '');
-  const name = prompt('hub 上の名前', suggested);
-  if (!name) return;
-  status('publishing…');
-  try {
-    await store.write(currentName, getText()); // publish what you hear
-    const files = {};
-    const assets = {};
-    for (const rel of await store.list()) files[rel] = await store.read(rel);
-    for (const rel of await store.list('.frec')) {
-      assets[rel] = toBase64(await store.readBytes(rel));
-    }
-    for (const rel of await store.list('.json')) {
-      if (rel.endsWith('.forte-lineage.json') || rel === '.forte-lineage.json') {
-        files[rel] = await store.read(rel);
-      }
-    }
-    files[currentName] = getText();
-    const res = await fetch(`${HUB_API}/api/publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, entry: currentName, author: 'browser', files, assets }),
-    });
-    const out = await res.json();
-    if (res.ok) {
-      status(out.ok);
-      document.body.dataset.published = name;
-    } else {
-      status(`publish 失敗: ${out.error}`);
-    }
-  } catch (e) {
-    status(`publish 失敗: ${e.message}(forte hub serve は起動していますか?)`);
-  }
 }
 
 // ---- performance capture: play keys/MIDI, get code back (roadmap 1.4) --------
@@ -740,7 +701,7 @@ async function boot() {
       status(`calib: ${e.message}`);
     });
   $('perform').onclick = () => performToggle().catch((e) => status(`perform: ${e.message}`));
-  $('publish').onclick = () => publishToHub().catch((e) => status(`publish: ${e.message}`));
+  $('packages').onclick = () => { location.href = 'catalog.html'; };
   $('digest').onclick = () => {
     status('building…');
     setTimeout(() => {

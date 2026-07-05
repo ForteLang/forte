@@ -4,10 +4,83 @@
 //! repository — the full `.forte/` history. Unzip anywhere and you have the
 //! song, its proof, and its past. No lock-in.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::vcs::Repo;
 use crate::zip;
+
+const LINEAGE_FILE: &str = ".forte-lineage.json";
+
+/// Entry + its import/asset closure as (relative path → bytes), plus the
+/// lineage stamp when the song was forked from elsewhere.
+pub fn collect_snapshot(entry: &str) -> Result<(String, BTreeMap<String, Vec<u8>>), String> {
+    let entry_path = Path::new(entry);
+    let base = entry_path.parent().unwrap_or(Path::new("")).to_string_lossy().into_owned();
+    let file_name = entry_path
+        .file_name()
+        .ok_or("ファイル名がありません")?
+        .to_string_lossy()
+        .into_owned();
+    let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    collect_files(&file_name, &base, &mut files, 0)?;
+    if let Ok(stamp) =
+        std::fs::read(entry_path.parent().unwrap_or(Path::new("")).join(LINEAGE_FILE))
+    {
+        files.insert(LINEAGE_FILE.into(), stamp);
+    }
+    Ok((file_name, files))
+}
+
+fn collect_files(
+    rel: &str,
+    base: &str,
+    files: &mut BTreeMap<String, Vec<u8>>,
+    depth: usize,
+) -> Result<(), String> {
+    if depth > 16 {
+        return Err("import が深すぎます(循環?)".into());
+    }
+    if files.contains_key(rel) {
+        return Ok(());
+    }
+    let full = Path::new(base).join(rel);
+    let src = std::fs::read_to_string(&full).map_err(|e| format!("{}: {e}", full.display()))?;
+    files.insert(rel.to_string(), src.clone().into_bytes());
+
+    let file = crate::parser::parse(&src)
+        .map_err(|ds| format!("{rel}: {}", ds.first().map(|d| d.to_string()).unwrap_or_default()))?;
+    let rel_dir = Path::new(rel).parent().unwrap_or(Path::new("")).to_string_lossy().into_owned();
+    for im in &file.imports {
+        let child_rel = normalize(&format!("{rel_dir}/{}", im.path));
+        collect_files(&child_rel, base, files, depth + 1)?;
+    }
+    // recorded takes ride along as bytes (a song with vocals must be
+    // publishable — the take IS the point of a performance fork)
+    for asset in &file.assets {
+        let child_rel = normalize(&format!("{rel_dir}/{}", asset.path));
+        if let std::collections::btree_map::Entry::Vacant(e) = files.entry(child_rel) {
+            let bytes = std::fs::read(Path::new(base).join(e.key()))
+                .map_err(|err| format!("{}: {err}", e.key()))?;
+            e.insert(bytes);
+        }
+    }
+    Ok(())
+}
+
+fn normalize(p: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for c in p.split('/') {
+        match c {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    parts.join("/")
+}
 
 pub struct ExportInfo {
     pub bytes: Vec<u8>,
@@ -17,7 +90,7 @@ pub struct ExportInfo {
 }
 
 pub fn export(entry: &str) -> Result<ExportInfo, String> {
-    let (entry_name, files) = crate::hub::collect_snapshot(entry)?;
+    let (entry_name, files) = collect_snapshot(entry)?;
     let base_dir = Path::new(entry)
         .parent()
         .unwrap_or(Path::new(""))

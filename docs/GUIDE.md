@@ -406,8 +406,8 @@ independent state.
 
 ## 4. Splitting into libraries and importing
 
-Move instruments into their own file and every song can use them (and later,
-they become the unit that gets forked on the Hub):
+Move instruments into their own file and every song can use them (and they
+travel inside the package you publish):
 
 ```forte
 // devices/mylib.forte — a file with no song = a device library
@@ -439,7 +439,7 @@ forte web build                      # rebuild the wasm after changing the engin
 | ⏱ Calib | Loopback calibration: plays a chirp, catches it with the mic, and measures actual round-trip latency |
 | 🎹 Perform | Performance mode: MIDI keyboard or PC keys (A–K = white keys, W/E/T/Y/U = black keys). On stop, your performance is transcribed into `notes` code |
 | Build digest | Computes the build proof in the browser. Matches the CLI's value exactly |
-| ⇪ Publish | Registers this song (with its imported libraries and recorded takes) on the hub. If it came from a fork, forked_from is recorded automatically. `?api=` points to the hub server (default 127.0.0.1:9377) |
+| 📦 Packages | Opens the package catalog (`catalog.html`): every vendored package with its desc/tags/license and browsable instruments/blocks/songs sources |
 | History panel | **The repository lives in the browser too**: Commit snapshots all local files, `diff` shows the difference between a commit and your current work in musical terms ("tempo: 96 → 132 bpm"), and Restore returns to that commit's state. Stored in OPFS in the same object format as the CLI (SHA-256) |
 | Arrangement view at the bottom | Read-only visualization (code is the single source of truth for editing) |
 
@@ -545,7 +545,7 @@ track Keys {
 ```
 
 `take voice` declares "the caller supplies a recording." The device itself
-holds no take, so **you can publish it to the Hub and anyone can fork it as an
+holds no take, so **you can ship it in a package and anyone can play it as an
 instrument**, each person plugging in their own recording. `sample()` is
 repitched to follow the played note (the take's reference pitch is C4), and
 start/end/loop/reverse work just like the sampler.
@@ -574,13 +574,6 @@ The ♪ icon in the activity bar is the **Forte Studio** sidebar:
   difference against the working tree opens alongside, in musical terms) and
   **Restore** (checkout). Merging is in the command palette:
   **Forte: Merge Branch…**
-- **Hub** — the hub's songs/libraries (with fork lineage ⑂).
-  **▶ Listen** (plays straight from the store's source — audition without
-  forking), **Fork…** (pick a folder, fork with full history, open it right
-  away), and right-click for **View lineage** / **Verify release**.
-  The **Publish** button in the toolbar registers the current file on the hub
-  (set the hub location via the `forte.hub` setting; default is
-  FORTE_HUB / ./.forte-hub)
 
 ## 7.5 Version control — give your song a history
 
@@ -625,107 +618,44 @@ $ forte diff
   other still references the old name) — Forte warns "⚠ does not compile."
   That's a safety net no text VCS can offer.
 
-## 8. Hub — publish, fork, release
+## 8. Packages — get, make, publish
+
+Everything in Forte is distributed as a **package**: instruments, effects,
+blocks, songs, albums. A package is nothing more than a project folder
+pushed to GitHub — there is no separate registry, account, or server.
 
 ```bash
-export FORTE_HUB=~/.forte-hub        # where it lives (defaults to ./.forte-hub)
-
-forte hub publish my-song.forte      # snapshots the song with its imported libraries.
-#   If the song is inside a VCS repository (forte init'd and clean), the history is pushed too
-forte hub list
-forte hub fork mylib ./work/mylib    # * the ONLY way to get things. There is no download command
-#   -> if history was published, the whole .forte repository comes down with it:
-#      a "fork mylib v1" commit lands on top of the original author's commits,
-#      and your commits from then on continue that line (lineage lives in the history itself)
-#   -> forte diff <original author's commit> HEAD reads as "what I changed from the original"
-#   -> modify it and publish --as newname, and "forked from mylib v1 @ commit" is recorded automatically
-
-forte hub release my-song            # deterministic build -> digest recorded in the ledger
-forte hub verify  my-song            # anyone can re-verify (tampering shows as MISMATCH)
-forte hub lineage my-song            # lineage: fork sources/descendants, releases, verification count
-forte hub similar my-song            # songs with the same chord progression (found even in a different key)
+forte init my-album && cd my-album   # the folder IS the future package
+forte package add github:owner/pkg   # vendor someone's package
+forte package list                   # what you have, in each package's own words
 ```
 
-Song pages have per-track **M / S buttons** so you can pull parts in and out
-while listening (mute the vocals for karaoke, solo the bass to learn it by
-ear — a way of listening that digs into lineage).
+- Everything lands **flat** in `packages/<name>_<version>/`. A vendored
+  package never contains its own `packages/` — its `requires` are fetched
+  and hoisted next to it. `package.lock` pins source + commit.
+- Metadata lives in the language: the `package.forte` root block carries
+  `desc` / `tags` / `license` / `version` / `requires`, and `forte play`
+  prints the root `desc` while the catalog and browser display the rest.
 
-**A performance fork makes a full loop in the browser**: listen on the hub
-page → Fork (into the editor with a lineage stamp) → ● Rec your vocals →
-insert → ⇪ Publish. The published fork carries `forked_from` and the recorded
-takes, and anyone can rebuild it reproducibly.
-
-Song pages list the **instruments used** (with links to their defining
-libraries), and library pages list **the songs that use each instrument** —
-lineage is traceable from instruments and songs alike. In listings, click an
-author's name to filter down to their work.
-
-The hub's front page shows the **fork family tree** — whose song spawned whose
-remix, at a glance, with release / play-count badges, each node clickable
-through to its song page.
-
-Digging through lineage in the browser:
+Publish by pushing:
 
 ```bash
-forte hub serve                      # API: http://127.0.0.1:9377
-# -> open http://localhost:8000/web/hub.html
+forte remote add github:you/my-album   # once: connect the folder to GitHub
+forte push                             # publish — source, assets, history
+forte pull                             # bring upstream changes back
 ```
 
-On a song page you can **▶ Listen** (played from source on the spot),
-**Verify in browser** (reproduce and check a release's digest in your own tab),
-and **Fork → into the editor** (the fork is recorded in the ledger and the
-files land in the editor).
+Consumers then run `forte package add github:you/my-album` and import just
+the blocks they want. Their copy excludes your `packages/` and `.forte/`;
+dependencies re-resolve from your `requires`, so nesting never happens.
 
-### Using it together, option 1: GitHub as your hub (recommended)
+In the browser, `forte browser` serves the **package catalog** at
+`catalog.html`: every vendored package with its description, tags and
+license, and every instrument/block/song source one click away.
 
-No server needed. **A hub is just a git repository**, so create one empty
-repository on GitHub and it becomes a hub for your whole group:
-
-```bash
-# 1. Create an empty repository on github.com (e.g., you/forte-hub)
-# 2. Then just pass it to --hub
-forte hub publish my-song.forte --hub github:you/forte-hub   # pushes with history
-forte hub fork handmade ./my-take --hub github:you/forte-hub # forks with history
-forte hub list --hub github:you/forte-hub
-forte hub serve --hub github:you/forte-hub  # dig through lineage in the browser
-```
-
-`github:you/forte-hub` is shorthand for `https://github.com/you/forte-hub.git`.
-Prefer SSH? Pass `git@github.com:you/forte-hub.git` as-is (GitLab, a bare repo
-on a NAS — anywhere git can talk becomes a hub).
-
-- **Authentication**: your everyday git credentials (SSH keys / gh auth) are used as-is
-- **Author name**: `git config user.name` (≈ your GitHub name)
-- **Concurrent publishes**: pushes are compare-and-swap; if someone beats you
-  to it, Forte syncs and replays automatically. Two people publishing at once
-  both get in
-- **The ledger is versioned too**: `git log` shows every publish / fork in order
-
-release / verify / lineage all take `--hub github:…` the same way.
-
-### Using it together, option 2: your own server (with authentication)
-
-For a serious public hub where "the only way to get things is fork" must be
-structurally enforced, there's also an authenticated HTTP server.
-Point `--hub` at the URL of a hub running `forte hub serve`:
-
-```bash
-# Participants: register a name and receive a token (shown only once)
-forte hub signup shusuke --hub http://host:9377
-export FORTE_HUB_TOKEN=<the token you received>
-
-forte hub publish my-song.forte --hub http://host:9377   # pushes with history
-forte hub fork handmade ./my-take --hub http://host:9377 # forks with history
-forte hub list --hub http://host:9377
-```
-
-Once anyone signs up on a hub, publishing **requires a token**, and the author
-name is derived from the token (the author field in the body is ignored — no
-impersonation). Pushed history objects have their content hashes verified
-server-side before being stored, so the store stays content-addressed no
-matter who pushes. Tokens are stored only as SHA-256 hashes on the server.
-v1 speaks plain HTTP, so put a TLS reverse proxy in front before exposing it
-to the internet (see the README).
+Because builds are deterministic, a package release needs no trust: anyone
+who builds the same source gets the same digest (see the FAQ), so "does
+this rendered audio really come from this code?" is always checkable.
 
 ## 9. Troubleshooting
 
@@ -753,5 +683,5 @@ readable, merges work, and forks are possible precisely because it's text.
 
 **Q. Same code, but doesn't the sound differ across environments?**
 A. It doesn't. That's the deterministic build, and it's the foundation of
-release verification (`hub verify`) and proof of contribution. Check it via
-the digest in `build.manifest.json`.
+package verification and proof of contribution. Check it via the digest in
+`build.manifest.json`.

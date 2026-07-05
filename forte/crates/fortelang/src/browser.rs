@@ -1,6 +1,6 @@
 //! `forte browser` — serve the browser editor (web/) from the repository and
-//! open it. No external server needed: a tiny static file server, the same
-//! zero-dependency style as hub_server.
+//! open it. No external server needed: a tiny zero-dependency static file
+//! server, plus one JSON endpoint (`/api/packages`) for the package catalog.
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -49,6 +49,12 @@ fn handle(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     let target = head.lines().next().unwrap_or("").split_whitespace().nth(1).unwrap_or("/");
     let path = target.split('?').next().unwrap_or("/");
 
+    // the catalog's data: every packages/<pkg> with its meta and resources
+    if path == "/api/packages" {
+        let body = packages_json(root);
+        return respond(&mut stream, "200 OK", "application/json; charset=utf-8", body.as_bytes());
+    }
+
     // "/" lands on the editor; directory paths land on their index.html
     let rel = match path {
         "/" => "forte/web/index.html".to_string(),
@@ -66,6 +72,46 @@ fn handle(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
         Ok(body) => respond(&mut stream, "200 OK", content_type(&file), &body),
         Err(_) => respond(&mut stream, "404 Not Found", "text/plain; charset=utf-8", b"not found"),
     }
+}
+
+/// Scan `<root>/packages/*/` into the catalog JSON: each package's meta
+/// (from its package.forte) and its instruments/blocks/songs file lists.
+fn packages_json(root: &Path) -> String {
+    let mut pkgs = Vec::new();
+    let dir = root.join("packages");
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect())
+        .unwrap_or_default();
+    entries.sort();
+    for p in entries {
+        let Ok(src) = std::fs::read_to_string(p.join("package.forte")) else { continue };
+        let Ok(ast) = crate::parser::parse(&src) else { continue };
+        let Some(meta) = ast.blocks.last() else { continue };
+        let list = |sub: &str| -> Vec<String> {
+            let mut files: Vec<String> = std::fs::read_dir(p.join(sub))
+                .map(|rd| {
+                    rd.flatten()
+                        .map(|e| e.file_name().to_string_lossy().into_owned())
+                        .filter(|n| n.ends_with(".forte"))
+                        .collect()
+                })
+                .unwrap_or_default();
+            files.sort();
+            files
+        };
+        pkgs.push(serde_json::json!({
+            "dir": p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            "name": meta.name,
+            "desc": meta.body.desc.clone().unwrap_or_default(),
+            "tags": meta.body.tags,
+            "license": meta.body.license.clone().unwrap_or_default(),
+            "version": meta.body.version.clone().unwrap_or_default(),
+            "instruments": list("instruments"),
+            "blocks": list("blocks"),
+            "songs": list("songs"),
+        }));
+    }
+    serde_json::json!({ "packages": pkgs }).to_string()
 }
 
 /// Try the platform opener; failure is fine (the URL is printed anyway).
@@ -92,7 +138,7 @@ pub fn run(port: u16, open: bool) -> Result<(), String> {
         TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
     let url = format!("http://localhost:{port}/forte/web/");
     println!("browser editor: {url}(Ctrl+C で終了)");
-    println!("hub lineage   : http://localhost:{port}/forte/web/hub.html");
+    println!("packages      : http://localhost:{port}/forte/web/catalog.html");
     if open {
         open_url(&url);
     }

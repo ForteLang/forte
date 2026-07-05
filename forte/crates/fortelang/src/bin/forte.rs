@@ -106,8 +106,6 @@ fn main() -> ExitCode {
         Some("lsp") => ExitCode::from(fortelang::lsp::run() as u8),
         #[cfg(not(target_family = "wasm"))]
         Some("repl") => ExitCode::from(fortelang::repl::run() as u8),
-        #[cfg(not(target_family = "wasm"))]
-        Some("hub") if args.len() >= 2 => hub_cmd(&args[1..]),
         // bare `forte init` keeps the classic behaviour (repo in cwd);
         // `forte init NAME` scaffolds a distributable package project (#57)
         #[cfg(not(target_family = "wasm"))]
@@ -234,22 +232,9 @@ fn main() -> ExitCode {
                     fortelang::live::run(&args[2], from.as_deref())
                 }
                 Some("edit") if args.len() >= 3 => fortelang::live::edit(&args[2]),
-                Some("add") if args.len() >= 3 => {
-                    // fork an instrument library from a hub into instruments/
-                    let hub = args
-                        .iter()
-                        .position(|a| a == "--hub")
-                        .and_then(|i| args.get(i + 1).cloned())
-                        .or_else(|| std::env::var("FORTE_HUB").ok())
-                        .unwrap_or_else(|| ".forte-hub".into());
-                    let dest = format!("instruments/{}", args[2]);
-                    let r = if fortelang::hub_git::is_git_url(&hub) {
-                        fortelang::hub_git::GitHub::open(&hub, None).and_then(|h| h.fork(&args[2], &dest))
-                    } else {
-                        fortelang::hub::Hub::open(&hub).and_then(|h| h.fork(&args[2], &dest))
-                    };
-                    r.map(|msg| println!("{msg}")).map_err(|e| e.to_string())
-                }
+                // instruments arrive as packages: add = forte package add
+                Some("add") if args.len() >= 3 => fortelang::package::add(&args[2])
+                    .map(|()| println!("楽器は forte instruments list に載りました(package として導入)")),
                 Some("list") => fortelang::live::list(args.get(2).map(String::as_str)),
                 // machine-readable name list for shell completion (hidden)
                 Some("names") => fortelang::live::names(args.get(2).map(String::as_str)),
@@ -301,7 +286,7 @@ fn main() -> ExitCode {
             eprintln!("       forte instruments list [QUERY]  (カタログ。list bass / list 808 で絞り込み)");
             eprintln!("       forte instruments play <Name[(args)]>  (キーボードが鍵盤に。1..9/-/= でノブ)");
             eprintln!("       forte instruments edit <Name>          (instruments/ にコピーして編集、自動コミットで履歴)");
-            eprintln!("       forte instruments add <Name> [--hub URL] (hub から楽器ライブラリを fork)");
+            eprintln!("       forte instruments add <github:owner/repo | PATH> (楽器 package を導入 = package add)");
             eprintln!("       forte instrument <Name[(args)]> [--from lib.forte]  (= instruments play)");
             eprintln!("       forte browser [--port 8000] [--no-open]  (ブラウザエディタを起動)");
             eprintln!("       forte web build             (ブラウザエディタの wasm を再ビルド)");
@@ -324,15 +309,6 @@ fn main() -> ExitCode {
             eprintln!("       forte checkout <branch|hash>");
             eprintln!("       forte merge <branch>        (競合しない編集は自動で合流)");
             eprintln!("       forte diff [REV [REV]]      (音楽の言葉で差分。既定 HEAD↔作業)");
-            eprintln!("       forte hub publish <file.forte> [--as NAME] [--hub DIR|URL]");
-            eprintln!("       forte hub fork <NAME> <DEST-DIR>   [--hub DIR|URL]");
-            eprintln!("         --hub github:you/hub | git@github.com:you/hub.git — GitHub が hub になる");
-            eprintln!("       forte hub signup <AUTHOR> --hub http://HOST:PORT  (自前サーバー時のみ)");
-            eprintln!("       forte hub release <NAME>           [--hub DIR]");
-            eprintln!("       forte hub verify <NAME>            [--hub DIR]");
-            eprintln!("       forte hub lineage <NAME>           [--hub DIR]");
-            eprintln!("       forte hub list                     [--hub DIR]");
-            eprintln!("       forte hub serve [--port 9377]      [--hub DIR]");
             ExitCode::from(2)
         }
     }
@@ -400,9 +376,7 @@ fn ci(quick: bool) -> ExitCode {
             if core.join("node_modules/playwright").is_dir() {
                 let mut a = std::process::Command::new("node");
                 a.arg(core.join("scripts/web_e2e.mjs")).current_dir(&core);
-                let mut b = std::process::Command::new("node");
-                b.arg(core.join("scripts/hub_e2e.mjs")).current_dir(&core);
-                run_step("4/4 web E2E", a) && run_step("4/4 hub E2E", b)
+                run_step("4/4 web E2E", a)
             } else {
                 println!("== 4/4 E2E == skip (playwright not installed)");
                 true
@@ -458,7 +432,7 @@ fn complete(shell: &str) -> ExitCode {
     local first="${COMP_WORDS[1]}"
     local second="${COMP_WORDS[2]}"
     if [ "$COMP_CWORD" -eq 1 ]; then
-        COMPREPLY=($(compgen -W "check build play export repl instrument instruments browser web ci upgrade version fmt viz lsp init status commit log branch checkout merge diff hub complete" -- "$cur"))
+        COMPREPLY=($(compgen -W "check build play export repl instrument instruments browser web ci upgrade version fmt viz lsp init status commit log branch checkout merge diff package remote push pull complete" -- "$cur"))
         return
     fi
     if [ "$first" = "instruments" ]; then
@@ -692,154 +666,6 @@ fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
     println!("digest : {:016x} (f32, fnv1a64)", info.f32_digest);
     println!("proof  : {}", mpath.display());
     ExitCode::SUCCESS
-}
-
-/// Local hub: fork-lineage registry (no server yet — SYS-HUB-002 prototype).
-#[cfg(not(target_family = "wasm"))]
-fn hub_cmd(args: &[String]) -> ExitCode {
-    let hub_dir = args
-        .iter()
-        .position(|a| a == "--hub")
-        .and_then(|i| args.get(i + 1).cloned())
-        .or_else(|| std::env::var("FORTE_HUB").ok())
-        .unwrap_or_else(|| ".forte-hub".into());
-
-    // --hub git@github.com:you/hub.git / github:you/hub / *.git — the hub is
-    // a git repository (GitHub hosts it; no server to run)
-    if fortelang::hub_git::is_git_url(&hub_dir) {
-        let open = || fortelang::hub_git::GitHub::open(&hub_dir, None);
-        let result = match args.first().map(String::as_str) {
-            Some("publish") if args.len() >= 2 => {
-                let name = args
-                    .iter()
-                    .position(|a| a == "--as")
-                    .and_then(|i| args.get(i + 1))
-                    .map(String::as_str);
-                open().and_then(|h| h.publish(&args[1], name))
-            }
-            Some("fork") if args.len() >= 3 => open().and_then(|h| h.fork(&args[1], &args[2])),
-            Some("release") if args.len() >= 2 => open().and_then(|h| h.release(&args[1])),
-            Some("verify") if args.len() >= 2 => open().and_then(|h| h.verify(&args[1])),
-            Some("lineage") if args.len() >= 2 => open().and_then(|h| h.lineage(&args[1])),
-            Some("entry") if args.len() >= 2 => open().and_then(|h| h.entry_path(&args[1])),
-            Some("list") => {
-                let json = args.iter().any(|a| a == "--json");
-                open().and_then(|h| h.list(json))
-            }
-            Some("serve") => {
-                let port = args
-                    .iter()
-                    .position(|a| a == "--port")
-                    .and_then(|i| args.get(i + 1))
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(9377);
-                open().and_then(|h| h.serve(port)).map(|_| String::new())
-            }
-            _ => Err("usage: forte hub <publish|fork|release|verify|lineage|list|entry|serve> … --hub <git-URL>".into()),
-        };
-        return match result {
-            Ok(msg) => {
-                println!("{msg}");
-                ExitCode::SUCCESS
-            }
-            Err(e) => {
-                eprintln!("hub: {e}");
-                ExitCode::FAILURE
-            }
-        };
-    }
-
-    // --hub http://host:9377 (or FORTE_HUB=http://…) targets a served hub
-    if fortelang::hub_remote::is_url(&hub_dir) {
-        let url = hub_dir;
-        let token = std::env::var("FORTE_HUB_TOKEN").ok();
-        let result = match args.first().map(String::as_str) {
-            Some("signup") if args.len() >= 2 => fortelang::hub_remote::signup(&url, &args[1]),
-            Some("publish") if args.len() >= 2 => {
-                let name = args
-                    .iter()
-                    .position(|a| a == "--as")
-                    .and_then(|i| args.get(i + 1))
-                    .map(String::as_str);
-                fortelang::hub_remote::publish(&url, token.as_deref(), &args[1], name)
-            }
-            Some("fork") if args.len() >= 3 => {
-                fortelang::hub_remote::fork(&url, token.as_deref(), &args[1], &args[2])
-            }
-            Some("list") => fortelang::hub_remote::list(&url),
-            _ => Err(
-                "リモート hub で使えるのは signup / publish / fork / list です(release/verify はサーバー側で)"
-                    .into(),
-            ),
-        };
-        return match result {
-            Ok(msg) => {
-                println!("{msg}");
-                ExitCode::SUCCESS
-            }
-            Err(e) => {
-                eprintln!("hub: {e}");
-                ExitCode::FAILURE
-            }
-        };
-    }
-
-    let hub = match fortelang::hub::Hub::open(&hub_dir) {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("hub: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    let result = match args.first().map(String::as_str) {
-        Some("publish") if args.len() >= 2 => {
-            let name = args
-                .iter()
-                .position(|a| a == "--as")
-                .and_then(|i| args.get(i + 1))
-                .map(String::as_str);
-            hub.publish(&args[1], name)
-        }
-        Some("fork") if args.len() >= 3 => hub.fork(&args[1], &args[2]),
-        Some("serve") => {
-            let port = args
-                .iter()
-                .position(|a| a == "--port")
-                .and_then(|i| args.get(i + 1))
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(9377);
-            fortelang::hub_server::serve(hub, port).map(|_| String::new())
-        }
-        Some("release") if args.len() >= 2 => hub.release(&args[1]),
-        Some("verify") if args.len() >= 2 => hub.verify(&args[1]),
-        Some("lineage") if args.len() >= 2 => hub.lineage(&args[1]),
-        Some("similar") if args.len() >= 2 => hub.similar(&args[1]).map(|v| {
-            if v.is_empty() {
-                "同じ進行を使う曲は(まだ)ありません".into()
-            } else {
-                v.into_iter()
-                    .map(|(name, sig)| format!("{name}\t(進行 {sig})"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            }
-        }),
-        Some("list") if args.iter().any(|a| a == "--json") => {
-            hub.repos_json().map(|v| v.to_string())
-        }
-        Some("list") => hub.list(),
-        Some("entry") if args.len() >= 2 => hub.entry_path(&args[1]),
-        _ => Err("usage: forte hub <publish|fork|lineage|list|entry> …".into()),
-    };
-    match result {
-        Ok(msg) => {
-            println!("{msg}");
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("hub: {e}");
-            ExitCode::FAILURE
-        }
-    }
 }
 
 /// Live playback with hot reload: the song loops while the file is watched;
