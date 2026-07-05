@@ -54,12 +54,16 @@ fi
 
 echo "== 3/3 push gh-pages =="
 URL=$(git -C .. remote get-url origin)
+# author the site commit as the repo's configured user (the temp repo has
+# no config of its own and would fall back to the machine default)
+NAME=$(git -C .. config user.name)
+EMAIL=$(git -C .. config user.email)
 (
   cd "$SITE"
   git init -q
   git checkout -q -b gh-pages
   git add -A
-  git commit -q -m "publish listening site"
+  git -c user.name="$NAME" -c user.email="$EMAIL" commit -q -m "publish listening site"
   git push -f "$URL" gh-pages
 )
 echo "OK: gh-pages を更新しました → Settings → Pages で gh-pages / (root) を選ぶと公開されます"
