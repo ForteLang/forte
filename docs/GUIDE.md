@@ -23,7 +23,7 @@ cargo install --path crates/fortelang    # installs the `forte` command
 Check that it works:
 
 ```bash
-forte check songs/first-light.forte
+forte check packages/essentials_0.6.0/songs/first-light.forte
 # OK: compiled song (6 tracks, tempo 96 bpm, 16 bars)
 ```
 
@@ -48,7 +48,7 @@ $ forte repl
 forte> beat`x--- x-x-`                  # loops from the moment you hit Enter
 forte> let theme = prog`Am | F | C | G`
 forte> arp(theme, rate: 0.25, style: "updown")
-forte> :inst polymer(wave: "saw", cutoff: 0.4)   # swap the sound while it plays
+forte> :inst prisma(wave: "saw", cutoff: 0.4)   # swap the sound while it plays
 forte> :fx delay(time: 0.3, mix: 0.25)
 forte> device Bloop : Instrument {      # you can even build instruments in the REPL (multi-line OK)
   ...>   node o = osc(shape: "square")
@@ -56,7 +56,7 @@ forte> device Bloop : Instrument {      # you can even build instruments in the 
   ...> }
 forte> :inst Bloop()
 forte> :track Bass                      # <- layer another track (loop station style)
-forte:Bass> :inst polymer(wave: "saw", sub: 0.8)
+forte:Bass> :inst prisma(wave: "saw", sub: 0.8)
 forte:Bass> bass(theme, rate: 0.5)      # layers on top of the drums already playing
 forte:Bass> :vol 0.7
 forte:Bass> :undo                       # step back one move
@@ -86,21 +86,21 @@ echo 'source <(forte complete bash)' >> ~/.bashrc   # zsh: forte complete zsh
 Every line in the listing can be dropped straight into a song:
 
 ```forte
-import { Bass303 } from "lib/std/tb303.forte"   // <- the import line the listing gives you
+import { Bass303 } from "packages/essentials_0.6.0/instruments/tb303.forte"   // <- the import line the listing gives you
 track Acid { instrument Bass303(cutoff: 0.4) … }
 ```
 
-Curious what a parameter means or how an instrument is built? Open `lib/std/*.forte` —
+Curious what a parameter means or how an instrument is built? Open `packages/essentials_0.6.0/instruments/*.forte` —
 it's all device DSL code, so you can read it, fork it, and rework it character by character.
-For a demo with 10 instruments playing at once, run `forte play songs/std-tour.forte`;
-genre-specific usage examples live in `songs/patterns/`.
+For a demo with 10 instruments playing at once, run `forte play packages/essentials_0.6.0/songs/std-tour.forte`;
+genre-specific usage examples live in `packages/essentials_0.6.0/blocks/`.
 
 **Playing**: audition any instrument that catches your ear with your keyboard:
 
 ```bash
-forte instruments play Bass303                  # resolved by name from lib/std
+forte instruments play Bass303                  # resolved by name from packages/*/instruments
 forte instruments play "JunoPad(cutoff: 0.5)"   # parameters work too
-forte instruments play polymer                  # built-ins as well
+forte instruments play prisma                  # built-ins as well
 ```
 
 Your keyboard becomes a piano:
@@ -135,7 +135,7 @@ refine a part inside a block, then let a higher block decide *when* it
 plays and *in which key*, and connect it to other blocks.
 
 ```forte
-// blocks/acid-line.forte — written once, in A minor
+// packages/essentials_0.6.0/blocks/acid-line.forte — written once, in A minor
 block AcidLine {
   key A minor
   track Acid {
@@ -148,8 +148,8 @@ block AcidLine {
 
 ```forte
 // the song only decides WHEN and in WHICH key
-import { AcidLine } from "../blocks/acid-line.forte"
-import { FourFloor } from "../blocks/four-floor.forte"
+import { AcidLine } from "../packages/essentials_0.6.0/blocks/acid-line.forte"
+import { FourFloor } from "../packages/essentials_0.6.0/blocks/four-floor.forte"
 
 song "Block Party" {
   tempo 126bpm
@@ -172,7 +172,7 @@ Rules of thumb:
 - **Blocks nest** — a block can `play` other blocks; the last top-level
   block in a file is what `forte build`/`play` renders, so a block library
   is always playable on its own.
-- Reusable blocks live in `blocks/` — fork one, change its pattern, and
+- Reusable blocks live in `packages/<pkg>/blocks/` — fork one, change its pattern, and
   every song placing it follows.
 - **Inherit instead of copying** — `block Child : Parent { … }` starts from
   the parent and overrides like a class: swap the instrument, change one
@@ -204,7 +204,7 @@ song "My First" {
   }
 
   track Keys {
-    instrument polymer(wave: "square", cutoff: 0.5)
+    instrument prisma(wave: "square", cutoff: 0.5)
     play notes`C4:1 E4:1 G4:1 [C4 E4 G4]:1` at bars(1..4)
   }
 }
@@ -269,7 +269,7 @@ song "Name" {
   return Space { insert reverb(size: 0.7, decay: 0.6, mix: 1.0) }
 
   track Bass {
-    instrument polymer(wave: "saw", cutoff: 0.3, sub: 0.7)
+    instrument prisma(wave: "saw", cutoff: 0.3, sub: 0.7)
     insert drive(drive: 0.2)              // inserts apply in the order listed
     volume 0.7
     pan -0.1
@@ -277,7 +277,7 @@ song "Name" {
   }
 
   track Keys {
-    instrument polymer(wave: "tri")
+    instrument prisma(wave: "tri")
     send Space 0.35                        // post-fader send
     play chords(theme) at verse            // block chords
     play arp(theme, rate: 0.25, style: "updown") at hook  // arpeggio
@@ -310,15 +310,15 @@ song "Name" {
   (a custom Effect's `param`s work the same way).
 - All knob-style values are **normalized to 0..1** (volume and cutoff alike).
   Only pan is -1..1.
-- Built-in instruments: `sampler(sample: "Kick"/"Snare"/"Hat")`, `polymer(…)`, `grid()`.
+- Built-in instruments: `sampler(sample: "Kick"/"Snare"/"Hat")`, `prisma(…)`, `mesh()`.
   Effects: `filter, eq, drive, delay, reverb`. Misspell a parameter name and
   Forte lists the valid ones — no memorization required.
-- **Standard instrument library (lib/std)**: 29 instruments built in the device
+- **Standard instrument library (packages/*/instruments)**: 29 instruments built in the device
   DSL ship with Forte. Import them like
-  `import { Kick909, Clap } from "../lib/std/drums.forte"` (paths are relative
+  `import { Kick909, Clap } from "../packages/essentials_0.6.0/instruments/drums.forte"` (paths are relative
   to the song file). drums 10 / bass 5 / keys 5 / pads 4 / leads 5 — all code,
   so if you don't like one, fork it and rework it character by character.
-  The full 10-track demo is `songs/std-tour.forte`.
+  The full 10-track demo is `packages/essentials_0.6.0/songs/std-tour.forte`.
 
 Formatting: `forte fmt my-song.forte` (guaranteed to never change meaning).
 
@@ -356,7 +356,7 @@ calls. Polyphony (8 voices) is handled by the engine.
 - `shaper(in: x, drive: 0.5, mode: "tanh"|"clip"|"fold")` — waveshaper.
   tanh is fat, clip is hard, fold folds harmonics back for a metallic edge.
 
-For a **complete hand-built drum kit**, see `songs/handmade-kit.forte`
+For a **complete hand-built drum kit**, see `packages/essentials_0.6.0/songs/handmade-kit.forte`
 (Kick = sine+tanh, Snare = noise+SVF+body resonance, Hat = noise+clip.
 No built-in samples — every character of the sound is code).
 
@@ -371,7 +371,7 @@ device Fuzz : Effect {
 }
 
 track Keys {
-  instrument polymer(wave: "tri")
+  instrument prisma(wave: "tri")
   insert Fuzz(amount: 0.7)             // used via insert (not valid as an instrument)
 }
 ```

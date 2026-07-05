@@ -229,6 +229,6 @@ tag push → webhook → build farm (container, network cut off, pinned forte-co
 1. Final form of the syntax (user testing of the sketch above)
 2. Initial execution mode of the DSP layer (interpreter vs. ahead-of-time codegen)
 3. wasm-git vs. a custom sync protocol
-4. Initial contents of the `@std` standard library (from dawcore: polymer-family synths, SVF, EQ,
+4. Initial contents of the `@std` standard library (from dawcore: prisma-family synths, SVF, EQ,
    delay, FDN reverb, sampler → but the sampler is restricted to recorded assets only)
 5. Design of the canonical form for progressions (`prog`) and the similarity-search index

@@ -1,6 +1,6 @@
 // Service worker: precache the whole editor so it works fully offline
 // (SYS-NFR-001 — the Hub is for sharing, never a dependency for composing).
-const CACHE = 'forte-v9';
+const CACHE = 'forte-v10';
 const ASSETS = [
   './',
   './index.html',
@@ -14,11 +14,11 @@ const ASSETS = [
   './rec-worker.js',
   './frec.js',
   './forte.wasm',
-  '../songs/first-light.forte',
-  '../songs/slow-circles.forte',
-  '../songs/night-parade.forte',
-  '../songs/handmade.forte',
-  '../songs/devices/warm.forte',
+  '../packages/essentials_0.6.0/songs/first-light.forte',
+  '../packages/essentials_0.6.0/songs/slow-circles.forte',
+  '../packages/essentials_0.6.0/songs/night-parade.forte',
+  '../packages/essentials_0.6.0/songs/handmade.forte',
+  '../packages/essentials_0.6.0/songs/devices/warm.forte',
 ];
 
 self.addEventListener('install', (e) => {

@@ -286,6 +286,7 @@ fn main() -> ExitCode {
 
 /// Walk up from the cwd to the repository root (the dir holding Cargo.toml
 /// with crates/), so repo-wide commands work from any subdirectory.
+#[cfg(not(target_family = "wasm"))]
 fn repo_root() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
@@ -298,6 +299,7 @@ fn repo_root() -> Option<PathBuf> {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn run_step(name: &str, mut cmd: std::process::Command) -> bool {
     println!("== {name} ==");
     match cmd.status() {
@@ -823,7 +825,11 @@ fn play(path: &str, for_secs: Option<f64>) -> ExitCode {
         let len_beats = dawcore::bounce::arrangement_len(p).max(1.0);
         let bars = (len_beats / bpb).ceil().max(1.0);
         let total = len_beats * 60.0 / p.tempo;
-        let mut out = Vec::with_capacity(p.tracks.len() + 3);
+        let mut out = Vec::with_capacity(p.tracks.len() + 4);
+        if !p.desc.is_empty() {
+            // the top block's own words: what this piece is
+            out.push(format!("\x1b[1m{}\x1b[0m — {}", p.name, p.desc));
+        }
         out.push(format!(
             "♪ {} bpm {}/{} — {} bars({}:{:04.1})  save = hot reload, Ctrl+C = quit",
             p.tempo,

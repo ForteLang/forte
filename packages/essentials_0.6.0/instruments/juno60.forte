@@ -1,0 +1,59 @@
+// std/juno60 — the classic DCO poly recipe: saw + pulse (PWM) + a sub square
+// one octave down, all sounding at once and rounded off with a lowpass. The real
+// hardware's sheen comes from its built-in chorus, so add
+// `insert chorus(rate: 0.3, depth: 0.5, mix: 0.5)` on the track.
+// Usage: import { JunoStrings, JunoBass } from "packages/essentials_0.6.0/instruments/juno60.forte"
+
+device JunoStrings : Instrument {
+  param bright = 0.5 in 0.0..1.0
+
+  node env = adsr(a: 0.25, d: 0.3, s: 0.85, r: 0.5)
+  node pwm = lfo(rate: 0.22, shape: "tri")
+  node saw = osc(shape: "saw")
+  node pls = osc(shape: "pulse", pw: 0.5, pwm: gain(in: pwm, level: 0.55))
+  node sub = osc(freq: gain(in: note.freq, level: 0.5), shape: "square")
+  node dco = mix(a: mix(a: saw, b: pls), b: gain(in: sub, level: 0.3))
+  node f   = svf(in: dco, cutoff: bright, reso: 0.12)
+  out gain(in: f, mod: env, level: 0.45)
+}
+
+device JunoBrass : Instrument {
+  node env  = adsr(a: 0.04, d: 0.25, s: 0.7, r: 0.2)
+  node fenv = adsr(a: 0.05, d: 0.3, s: 0.4, r: 0.15)
+  node saw  = osc(shape: "saw")
+  node pls  = osc(shape: "pulse", pw: 0.35)
+  node dco  = mix(a: saw, b: gain(in: pls, level: 0.7))
+  node f    = svf(in: dco, cutoff: 0.4, reso: 0.15, mod: gain(in: fenv, level: 0.35))
+  out gain(in: f, mod: env, level: 0.55)
+}
+
+device JunoBass : Instrument {
+  node env  = adsr(a: 0.004, d: 0.3, s: 0.5, r: 0.12)
+  node fenv = adsr(a: 0.002, d: 0.18, s: 0.15, r: 0.08)
+  node pls  = osc(shape: "pulse", pw: 0.3)
+  node sub  = osc(freq: gain(in: note.freq, level: 0.5), shape: "square")
+  node dco  = mix(a: pls, b: gain(in: sub, level: 0.55))
+  node f    = svf(in: dco, cutoff: 0.3, reso: 0.3, mod: gain(in: fenv, level: 0.3))
+  out gain(in: f, mod: env, level: 0.8)
+}
+
+device JunoPad : Instrument {
+  node env = adsr(a: 0.5, d: 0.4, s: 0.85, r: 0.9)
+  node pwm = lfo(rate: 0.13, shape: "sine")
+  node pls = osc(shape: "pulse", pw: 0.45, pwm: gain(in: pwm, level: 0.5))
+  node sub = osc(freq: gain(in: note.freq, level: 0.5), shape: "square")
+  node dco = mix(a: pls, b: gain(in: sub, level: 0.35))
+  node f   = svf(in: dco, cutoff: 0.38, reso: 0.15)
+  out gain(in: f, mod: env, level: 0.5)
+}
+
+device JunoKeys : Instrument {
+  node env  = adsr(a: 0.005, d: 0.4, s: 0.45, r: 0.25)
+  node fenv = adsr(a: 0.002, d: 0.3, s: 0.2, r: 0.15)
+  node pwm  = lfo(rate: 0.3, shape: "tri")
+  node pls  = osc(shape: "pulse", pw: 0.4, pwm: gain(in: pwm, level: 0.25))
+  node saw  = osc(shape: "saw")
+  node dco  = mix(a: pls, b: gain(in: saw, level: 0.4))
+  node f    = svf(in: dco, cutoff: 0.45, reso: 0.2, mod: gain(in: fenv, level: 0.25))
+  out gain(in: f, mod: env, level: 0.6)
+}

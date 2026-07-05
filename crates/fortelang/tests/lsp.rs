@@ -85,7 +85,7 @@ fn lsp_pushes_and_clears_diagnostics() {
 
     // open a broken document -> one diagnostic with a forte error code
     let uri = "file:///song.forte";
-    let broken = r#"song "X" { tempo 120bpm track A { instrument polymer(cutof: 0.5) play beat`x---` at bars(1..2) } }"#;
+    let broken = r#"song "X" { tempo 120bpm track A { instrument prisma(cutof: 0.5) play beat`x---` at bars(1..2) } }"#;
     lsp.notify(
         "textDocument/didOpen",
         serde_json::json!({"textDocument": {"uri": uri, "languageId": "forte", "version": 1, "text": broken}}),
@@ -120,21 +120,21 @@ fn lsp_pushes_and_clears_diagnostics() {
         .iter()
         .map(|i| i["label"].as_str().unwrap().to_string())
         .collect();
-    for expected in ["polymer", "prog", "song"] {
+    for expected in ["prisma", "prog", "song"] {
         assert!(labels.contains(&expected.to_string()), "missing {expected}: {labels:?}");
     }
 
     // hover documents known words
-    let col = fixed.find("polymer").unwrap() as u64;
+    let col = fixed.find("prisma").unwrap() as u64;
     let id = lsp.request(
         "textDocument/hover",
         serde_json::json!({"textDocument": {"uri": uri}, "position": {"line": 0, "character": col}}),
     );
     let resp = lsp.read_response(id);
-    assert!(resp["result"]["contents"]["value"].as_str().unwrap().contains("polymer"));
+    assert!(resp["result"]["contents"]["value"].as_str().unwrap().contains("prisma"));
 
     // formatting returns a whole-document edit for messy input
-    let messy = "song \"X\" {\n      tempo 120bpm\ntrack A { instrument polymer() play beat`x---` at bars(1..1) }\n}";
+    let messy = "song \"X\" {\n      tempo 120bpm\ntrack A { instrument prisma() play beat`x---` at bars(1..1) }\n}";
     lsp.notify(
         "textDocument/didChange",
         serde_json::json!({"textDocument": {"uri": uri, "version": 3},

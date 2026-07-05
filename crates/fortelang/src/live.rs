@@ -42,24 +42,41 @@ fn pitch_name(p: u8) -> String {
     format!("{}{}", NOTE_NAMES[(p % 12) as usize], p as i32 / 12 - 1)
 }
 
+
+/// Every instrument library across installed packages, sorted:
+/// packages/<pkg>/instruments/*.forte
+fn instrument_files(pkg_root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut files = Vec::new();
+    if let Ok(pkgs) = std::fs::read_dir(pkg_root) {
+        for pkg in pkgs.flatten().map(|e| e.path()) {
+            let inst = pkg.join("instruments");
+            if let Ok(entries) = std::fs::read_dir(&inst) {
+                files.extend(
+                    entries
+                        .flatten()
+                        .map(|e| e.path())
+                        .filter(|p| p.extension().is_some_and(|x| x == "forte")),
+                );
+            }
+        }
+    }
+    files.sort();
+    files
+}
+
 /// Find `device NAME` (case-insensitive) in the standard library reachable
 /// from the current directory. Returns (import path, canonical name) so
 /// `forte instruments subbass` still resolves to SubBass.
 fn find_device(name: &str) -> Option<(String, String)> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
-        let std_dir = dir.join("lib/std");
-        if std_dir.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(&std_dir) {
-                let mut files: Vec<_> =
-                    entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "forte")).collect();
-                files.sort();
-                for f in files {
-                    let Ok(src) = std::fs::read_to_string(&f) else { continue };
-                    let Ok(ast) = crate::parser::parse(&src) else { continue };
-                    if let Some(d) = ast.devices.iter().find(|d| d.name.eq_ignore_ascii_case(name)) {
-                        return Some((f.to_string_lossy().into_owned(), d.name.clone()));
-                    }
+        let pkg_root = dir.join("packages");
+        if pkg_root.is_dir() {
+            for f in instrument_files(&pkg_root) {
+                let Ok(src) = std::fs::read_to_string(&f) else { continue };
+                let Ok(ast) = crate::parser::parse(&src) else { continue };
+                if let Some(d) = ast.devices.iter().find(|d| d.name.eq_ignore_ascii_case(name)) {
+                    return Some((f.to_string_lossy().into_owned(), d.name.clone()));
                 }
             }
             return None;
@@ -75,8 +92,8 @@ fn find_device(name: &str) -> Option<(String, String)> {
 /// the library keeps growing, so completion asks the CLI instead of a list.
 pub fn names(prefix: Option<&str>) -> Result<(), String> {
     let mut dir = std::env::current_dir().map_err(|e| e.to_string())?;
-    let std_dir = loop {
-        let candidate = dir.join("lib/std");
+    let pkg_root = loop {
+        let candidate = dir.join("packages");
         if candidate.is_dir() {
             break candidate;
         }
@@ -85,16 +102,11 @@ pub fn names(prefix: Option<&str>) -> Result<(), String> {
         }
     };
     let p = prefix.map(str::to_ascii_lowercase);
-    let mut out: Vec<String> = vec!["polymer".into(), "grid".into(), "sampler".into()];
-    if let Ok(entries) = std::fs::read_dir(&std_dir) {
-        for f in entries.flatten().map(|e| e.path()) {
-            if f.extension().is_none_or(|x| x != "forte") {
-                continue;
-            }
-            let Ok(src) = std::fs::read_to_string(&f) else { continue };
-            let Ok(ast) = crate::parser::parse(&src) else { continue };
-            out.extend(ast.devices.iter().map(|d| d.name.clone()));
-        }
+    let mut out: Vec<String> = vec!["prisma".into(), "mesh".into(), "sampler".into()];
+    for f in instrument_files(&pkg_root) {
+        let Ok(src) = std::fs::read_to_string(&f) else { continue };
+        let Ok(ast) = crate::parser::parse(&src) else { continue };
+        out.extend(ast.devices.iter().map(|d| d.name.clone()));
     }
     out.sort();
     out.dedup();
@@ -112,13 +124,13 @@ pub fn names(prefix: Option<&str>) -> Result<(), String> {
 pub fn list(query: Option<&str>) -> Result<(), String> {
     // locate lib/std the same way `forte instrument` does
     let mut dir = std::env::current_dir().map_err(|e| e.to_string())?;
-    let std_dir = loop {
-        let candidate = dir.join("lib/std");
+    let pkg_root = loop {
+        let candidate = dir.join("packages");
         if candidate.is_dir() {
             break candidate;
         }
         if !dir.pop() {
-            return Err("lib/std が見つかりません(Forte リポジトリの中で実行してください)".into());
+            return Err("packages/ が見つかりません(Forte リポジトリの中で実行してください)".into());
         }
     };
     let q = query.map(str::to_ascii_lowercase);
@@ -128,13 +140,7 @@ pub fn list(query: Option<&str>) -> Result<(), String> {
         })
     };
 
-    let mut files: Vec<_> = std::fs::read_dir(&std_dir)
-        .map_err(|e| e.to_string())?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "forte"))
-        .collect();
-    files.sort();
+    let files = instrument_files(&pkg_root);
 
     let mut shown = 0usize;
     let mut total = 0usize;
@@ -150,7 +156,8 @@ pub fn list(query: Option<&str>) -> Result<(), String> {
         // the file's headline comment is its description ("// std/x — …")
         let head = src.lines().next().and_then(|l| l.strip_prefix("//")).unwrap_or("").trim();
         let desc = head.split_once('—').map(|(_, d)| d.trim()).unwrap_or(head);
-        println!("lib/std/{lib}.forte — {desc}");
+        let rel = f.strip_prefix(pkg_root.parent().unwrap_or(&pkg_root)).unwrap_or(f);
+        println!("{} — {desc}", rel.display());
         for d in &hits {
             let params: Vec<String> = d
                 .params
@@ -166,18 +173,18 @@ pub fn list(query: Option<&str>) -> Result<(), String> {
         }
         println!();
     }
-    if matches("polymer", "builtin") || matches("sampler", "builtin") || matches("grid", "builtin")
+    if matches("prisma", "builtin") || matches("sampler", "builtin") || matches("mesh", "builtin")
     {
         println!("builtin(import 不要)");
-        println!("  polymer        wave cutoff reso attack decay sustain release detune sub filtenv");
+        println!("  prisma         wave cutoff reso attack decay sustain release detune sub filtenv");
         println!("  sampler        sample:\"Kick|Snare|Hat\" または take: 録音(gain attack … pitch start end loop reverse)");
-        println!("  grid           既定パッチのモジュラー音源");
+        println!("  mesh           既定パッチのモジュラー音源");
         println!();
     }
     if shown == 0 {
         println!("'{}' に当たる楽器はありません(forte instruments で全 {total} 件)", query.unwrap_or(""));
     } else {
-        println!("試聴: forte instrument <Name>      曲で使う: import {{ <Name> }} from \"lib/std/<lib>.forte\"");
+        println!("試聴: forte instruments play <Name>   曲で使う: import {{ <Name> }} from \"packages/<pkg>/instruments/<lib>.forte\"");
     }
     Ok(())
 }
@@ -208,12 +215,12 @@ pub fn edit(name: &str) -> Result<(), String> {
         Err(_) => {
             crate::vcs::Repo::init("instruments")?;
             let r = crate::vcs::Repo::open("instruments")?;
-            r.commit(&format!("import {file_name} from lib/std"))?;
+            r.commit(&format!("import {file_name} from packages"))?;
             r
         }
     };
     if fresh {
-        let _ = repo.commit(&format!("import {file_name} from lib/std"));
+        let _ = repo.commit(&format!("import {file_name} from packages"));
     }
 
     // open the user's editor (VSCode blocks with --wait); fall back to $EDITOR
@@ -302,7 +309,7 @@ pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
     let lower = typed.to_ascii_lowercase();
     let (name, import) = match from {
         Some(f) => (typed.clone(), Some(f.to_string())),
-        None if matches!(lower.as_str(), "polymer" | "grid" | "sampler") => (lower, None),
+        None if matches!(lower.as_str(), "prisma" | "mesh" | "sampler") => (lower, None),
         None => {
             let (path, canonical) = find_device(&typed).ok_or_else(|| {
                 format!(

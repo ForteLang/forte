@@ -12,7 +12,7 @@ fn temp_dir(tag: &str) -> String {
 }
 
 fn songs_dir() -> String {
-    format!("{}/../../songs", env!("CARGO_MANIFEST_DIR"))
+    format!("{}/../../packages/essentials_0.6.0/songs", env!("CARGO_MANIFEST_DIR"))
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn fork_carries_the_full_history() {
     std::fs::create_dir_all(&origin).unwrap();
     std::fs::write(
         origin.join("song.forte"),
-        "song \"H\" {\n  tempo 100bpm\n  track A {\n    instrument polymer()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
+        "song \"H\" {\n  tempo 100bpm\n  track A {\n    instrument prisma()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
     )
     .unwrap();
 
@@ -223,7 +223,7 @@ fn publish_without_a_repo_still_works_snapshot_only() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("song.forte"),
-        "song \"N\" {\n  tempo 100bpm\n  track A {\n    instrument polymer()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
+        "song \"N\" {\n  tempo 100bpm\n  track A {\n    instrument prisma()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
     )
     .unwrap();
     let hub = Hub::open(dir.join("hub").to_str().unwrap()).unwrap();
@@ -243,7 +243,7 @@ fn entry_path_points_into_the_store() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("song.forte"),
-        "song \"E\" {\n  tempo 100bpm\n  track A {\n    instrument polymer()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
+        "song \"E\" {\n  tempo 100bpm\n  track A {\n    instrument prisma()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
     )
     .unwrap();
     let hub = Hub::open(dir.join("hub").to_str().unwrap()).unwrap();
@@ -331,7 +331,7 @@ fn lineage_forest_nests_forks_under_their_origin() {
     let dir = std::path::PathBuf::from(temp_dir("forest"));
     std::fs::create_dir_all(&dir).unwrap();
     let song = |name: &str| {
-        format!("song \"{name}\" {{\n  tempo 100bpm\n  track A {{\n    instrument polymer()\n    play beat`x---` at bars(1..2)\n  }}\n}}\n")
+        format!("song \"{name}\" {{\n  tempo 100bpm\n  track A {{\n    instrument prisma()\n    play beat`x---` at bars(1..2)\n  }}\n}}\n")
     };
     std::fs::write(dir.join("root.forte"), song("Root")).unwrap();
     let hub = Hub::open(dir.join("hub").to_str().unwrap()).unwrap();

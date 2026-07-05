@@ -1,0 +1,50 @@
+// Electro Funk (120bpm) — 808 kick + syncopation.
+// Clav cutting supplies the bounce.
+import { Kick808, SnareTight, HatClosed, Cowbell } from "../instruments/drums.forte"
+import { FMBass } from "../instruments/bass.forte"
+import { Clav } from "../instruments/keys.forte"
+
+block ElectroFunkDrums {
+  let kick  = beat`x--- --x- --x- x---`
+  let snare = beat`---- x--- ---- x--X`
+  let hat   = beat`x-x- x-xx x-x- xx-x`
+  let bell  = beat`x--- --x- -x-- --x-`
+
+  track Kick  { instrument Kick808(punch: 0.6, decay: 0.4) volume 0.9 play kick at bars(1..8) }
+  track Snare { instrument SnareTight(snap: 0.75) volume 0.7 play snare at bars(1..8) }
+  track Hat   { instrument HatClosed(bright: 0.9) volume 0.4 pan 0.2 play hat at bars(1..8) }
+  track Bell  { instrument Cowbell() volume 0.3 pan -0.3 play bell at bars(5..8) }
+}
+
+block ElectroFunkBass {
+  key E minor
+
+  track Bass {
+    instrument FMBass()
+    volume 0.8
+    play notes`E2:0.75 _:0.25 E2:0.25 G2:0.25 _:0.5 E2:0.5 D2:0.5 E2:0.75 B1:0.25` at bars(1..8)
+  }
+}
+
+block ElectroFunkKeys {
+  key E minor
+  let riff = prog`Em7 | Em7 | A7 | A7`
+
+  track Clav {
+    instrument Clav(mute: 0.7)
+    insert drive(drive: 0.2)
+    volume 0.5
+    pan 0.15
+    play arp(riff, rate: 0.25, style: "updown") at bars(3..8)
+  }
+}
+
+block ElectroFunk {
+  tempo 120bpm
+  meter 4/4
+  key E minor
+
+  play ElectroFunkDrums at bars(1..8)
+  play ElectroFunkBass at bars(1..8)
+  play ElectroFunkKeys at bars(1..8)
+}

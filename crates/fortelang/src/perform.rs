@@ -110,7 +110,7 @@ mod tests {
         ];
         let body = transcribe(&played, 0.25).unwrap();
         let src = format!(
-            "song \"t\" {{ tempo 120bpm track A {{ instrument polymer() play notes`{body}` at bars(1..2) }} }}"
+            "song \"t\" {{ tempo 120bpm track A {{ instrument prisma() play notes`{body}` at bars(1..2) }} }}"
         );
         crate::compile_str(&src).expect("transcription must compile");
     }

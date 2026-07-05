@@ -1,0 +1,95 @@
+// City Lights — 24-bar R&B, block-composed. 9ths on the e-piano in the
+// gaps between snap and 16th hats; the VoxLead hook rides on top, and in
+// the last verse the echo arp answers the hook a fourth below.
+import { Kick808, Snap, HatClosed } from "../instruments/drums.forte"
+import { DubBass } from "../instruments/bass.forte"
+import { EPiano } from "../instruments/keys.forte"
+import { VoxLead, SoftLead } from "../instruments/leads.forte"
+
+// Drum backbone: kick, snap into its own reverb glow, 16th hats. One bar.
+block Backbone {
+  let kick = beat`x--- --x- ---- x---`
+  let snap = beat`---- x--- ---- x---`
+  let hat  = beat`x-xx x-x- xx-x x-xx`
+  return Glow {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.65
+  }
+  track Kick { instrument Kick808(punch: 0.4, decay: 0.55) volume 0.85 play kick at bars(1..1) }
+  track Snap { instrument Snap() volume 0.7 send Glow 0.2 play snap at bars(1..1) }
+  track Hat  { instrument HatClosed(bright: 0.85) volume 0.35 pan 0.2 play hat at bars(1..1) }
+}
+
+// Harmonic bed: dub bass + e-piano 9ths over the four city chords.
+block NightChords {
+  key Db minor
+  let city = prog`Dbm7 | Gbm7 | Amaj7 | Ab7`
+  return Glow {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.65
+  }
+  track Bass {
+    instrument DubBass(depth: 0.7)
+    volume 0.8
+    play bass(city, rate: 0.5) at bars(1..4)
+  }
+  track Keys {
+    instrument EPiano(tine: 0.4)
+    send Glow 0.35
+    volume 0.55
+    play chords(city) at bars(1..4)
+  }
+}
+
+// The hook vocal — one 8-bar phrase.
+block HookVox {
+  key Db minor
+  return Glow {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.65
+  }
+  track Voice {
+    instrument VoxLead()
+    send Glow 0.45
+    volume 0.4
+    pan -0.1
+    play notes`_:1 E4:0.5 Gb4:0.5 Ab4:1.5 _:0.5 Gb4:0.5 E4:1.5 _:1 Db4:0.5 E4:1 Gb4:2` at bars(1..8)
+  }
+}
+
+// Delayed arp shadowing the chords — placed straight under the hook,
+// then transposed by the arrangement to answer in the last verse.
+block EchoArp {
+  key Db minor
+  let city = prog`Dbm7 | Gbm7 | Amaj7 | Ab7`
+  return Glow {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.65
+  }
+  track Echo {
+    instrument SoftLead()
+    insert delay(time: 0.43, fdbk: 0.45, mix: 0.4)
+    send Glow 0.4
+    volume 0.25
+    pan 0.25
+    play arp(city, rate: 0.5, style: "up") at bars(1..4)
+  }
+}
+
+song "City Lights" {
+  tempo 70bpm
+  meter 4/4
+  key Db minor
+
+  section versea = bars(1..8)
+  section hook   = bars(9..16)
+  section verseb = bars(17..24)
+
+  play Backbone at bars(1..24)
+  play NightChords at bars(1..24)
+
+  play HookVox at hook
+  play EchoArp at hook
+  // the echo answers below the tonic while bass and keys hold the city set
+  play EchoArp(key: "Ab minor") at verseb
+}

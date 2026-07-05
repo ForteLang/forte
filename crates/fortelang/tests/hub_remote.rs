@@ -27,7 +27,7 @@ fn spawn_hub(root: &std::path::Path) -> String {
 fn write_song(dir: &std::path::Path) {
     std::fs::write(
         dir.join("tune.forte"),
-        "song \"Tune\" {\n  tempo 100bpm\n  track A {\n    instrument polymer()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
+        "song \"Tune\" {\n  tempo 100bpm\n  track A {\n    instrument prisma()\n    play beat`x---` at bars(1..2)\n  }\n}\n",
     )
     .unwrap();
 }

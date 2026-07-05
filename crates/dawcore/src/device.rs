@@ -108,7 +108,7 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
         DeviceKind::NoteRepeat => Dsp::Note(Box::new(NoteRepeat::new())),
         DeviceKind::Arpeggiator => Dsp::Note(Box::new(Arpeggiator::new())),
         // ---- Note → Audio ----
-        DeviceKind::Polymer => Dsp::Inst(Box::new(PolySynth::new(sr))),
+        DeviceKind::Prisma => Dsp::Inst(Box::new(PolySynth::new(sr))),
         DeviceKind::Sampler => {
             let mut s = Sampler::new(sr);
             s.sample = resolve_sample(&dev.sample);
@@ -124,12 +124,12 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
             k.map.sort_by_key(|(p, _)| *p);
             Dsp::Inst(Box::new(k))
         }
-        DeviceKind::PolyGrid => {
+        DeviceKind::PolyMesh => {
             let graph = dev.grid.clone().unwrap_or_else(GridGraph::default_patch);
             Dsp::Inst(Box::new(GridSynth::compile(&graph, sr)))
         }
         // ---- Audio → Audio ----
-        DeviceKind::GridFx => {
+        DeviceKind::MeshFx => {
             let graph = dev.grid.clone().unwrap_or_else(GridGraph::default_patch);
             Dsp::Audio(Box::new(crate::dsp::grid::GridFx::compile(&graph, sr)))
         }

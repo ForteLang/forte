@@ -1,0 +1,46 @@
+// Pattern: Ambient (60bpm) — drumless. A bell melody walks slowly
+// over a drone. Space itself is the lead role.
+import { DronePad, GlassPad } from "../instruments/pads.forte"
+import { Bell } from "../instruments/keys.forte"
+
+block AmbientDriftPads {
+  key D minor
+  let float = prog`Dm7 | Bbmaj7 | Fmaj7 | Cmaj7`
+
+  return Space {
+    insert reverb(size: 0.9, decay: 0.75, mix: 1.0)
+    volume 0.85
+  }
+
+  track Drone {
+    instrument DronePad()
+    send Space 0.5
+    volume 0.55
+    play chords(float) at bars(1..8)
+  }
+
+  track Glass {
+    instrument GlassPad()
+    send Space 0.6
+    volume 0.4
+    pan 0.2
+    play arp(float, rate: 1, style: "up") at bars(3..8)
+  }
+
+  track Bell {
+    instrument Bell(decay: 0.7)
+    insert delay(time: 0.5, fdbk: 0.5, mix: 0.4)
+    send Space 0.5
+    volume 0.4
+    pan -0.15
+    play notes`_:2 D5:2 _:1 A4:2 F4:1 _:2 E5:2 D5:1 C5:3` at bars(3..8)
+  }
+}
+
+block AmbientDrift {
+  tempo 60bpm
+  meter 4/4
+  key D minor
+
+  play AmbientDriftPads at bars(1..8)
+}

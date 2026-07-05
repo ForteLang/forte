@@ -3,16 +3,16 @@
 
 #[test]
 fn messy_input_normalizes() {
-    let messy = "song \"X\" {\n\t tempo 120bpm   \n\n\n\n      track A {\ninstrument polymer()\n   play beat`x---` at bars(1..1)\n}\n}";
+    let messy = "song \"X\" {\n\t tempo 120bpm   \n\n\n\n      track A {\ninstrument prisma()\n   play beat`x---` at bars(1..1)\n}\n}";
     let out = fortelang::fmt::format(messy).unwrap();
-    let expected = "song \"X\" {\n  tempo 120bpm\n\n  track A {\n    instrument polymer()\n    play beat`x---` at bars(1..1)\n  }\n}\n";
+    let expected = "song \"X\" {\n  tempo 120bpm\n\n  track A {\n    instrument prisma()\n    play beat`x---` at bars(1..1)\n  }\n}\n";
     assert_eq!(out, expected);
 }
 
 #[test]
 fn formatting_is_idempotent_and_meaning_preserving() {
     for song in ["first-light", "slow-circles", "night-parade", "handmade", "night-drive"] {
-        let path = format!("{}/../../songs/{song}.forte", env!("CARGO_MANIFEST_DIR"));
+        let path = format!("{}/../../packages/essentials_0.6.0/songs/{song}.forte", env!("CARGO_MANIFEST_DIR"));
         let src = std::fs::read_to_string(&path).unwrap();
         let once = fortelang::fmt::format(&src).unwrap();
         let twice = fortelang::fmt::format(&once).unwrap();
@@ -24,7 +24,7 @@ fn formatting_is_idempotent_and_meaning_preserving() {
 
 #[test]
 fn comments_and_literals_survive() {
-    let src = "// コメント\nsong \"X\" { /* block */\n  tempo 120bpm\n  let k = beat`x- -x`   // 末尾コメント\n  track A { instrument polymer() play k at bars(1..1) }\n}\n";
+    let src = "// コメント\nsong \"X\" { /* block */\n  tempo 120bpm\n  let k = beat`x- -x`   // 末尾コメント\n  track A { instrument prisma() play k at bars(1..1) }\n}\n";
     let out = fortelang::fmt::format(src).unwrap();
     assert!(out.contains("// コメント"));
     assert!(out.contains("/* block */"));

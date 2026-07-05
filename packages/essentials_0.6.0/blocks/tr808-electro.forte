@@ -1,0 +1,48 @@
+// Pattern: 808 Electro (116bpm, swing 0.54) — a tour of all 13 voices of the
+// 808 kit, true to the original machine's architecture. Ghosts (.) and
+// accents (X) make a machine groove that feels alive. The fill lands in bar 4.
+import { BD808, SD808, CH808, OH808, CP808, CB808, RS808, CL808, MA808,
+         LT808, MT808, HT808, CY808 } from "../instruments/tr808.forte"
+
+// The full kit lives in one block: snare, clap and ride share the Room
+// reverb, so every sender stays with the return.
+block Tr808ElectroKit {
+  let kick  = beat`X--- --x- ---. x--- X--- --x- ---- .-x- X--- --x- ---. x--- X--- --x- x--. --x-`
+  let snare = beat`---- X--- ---- X--. ---- X--- ---- X--- ---- X--- ---- X..- ---- X--- --.- X-.X`
+  let chh   = beat`x.x. x.x. x.x. x.xX x.x. x.x. x.x. x.x. x.x. x.x. x.x. x.xX x.x. x.x. xx.x ....`
+  let ohh   = beat`--x- --x- --x- ---- --x- --x- --x- --x- --x- --x- --x- ---- --x- --x- ---- --x-`
+  let clap  = beat`---- ---- ---- ---- ---- ---- ---- x--- ---- ---- ---- ---- ---- ---- ---- x-x-`
+  let bell  = beat`x--- ---- -x-- ---- x--- ---- -x-- --x- x--- ---- -x-- ---- x--- ---- -x-- ----`
+  let rim   = beat`---- --.- x--- --.- ---- --.- x--- ---- ---- --.- x--- --.- ---- --.- x--- ----`
+  let toms  = beat`---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- x-x- ----`
+  let tomm  = beat`---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- --x- x---`
+  let tomh  = beat`---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -x-x`
+  let mrcs  = beat`x-x- x-x- x-x- x-x-`
+  let cym   = beat`x--- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----`
+
+  return Room {
+    insert reverb(size: 0.45, decay: 0.35, mix: 1.0)
+    volume 0.6
+  }
+
+  track BD   { instrument BD808(tone: 0.4, decay: 0.55) insert comp(thresh: 0.4, ratio: 0.5) volume 0.95 play kick at bars(1..8) }
+  track SD   { instrument SD808(tone: 0.5, snappy: 0.65) send Room 0.2 volume 0.8 play snare at bars(1..8) }
+  track CH   { instrument CH808() volume 0.5 pan 0.15 play chh at bars(1..8) }
+  track OH   { instrument OH808(decay: 0.3) volume 0.45 pan 0.1 play ohh at bars(1..8) }
+  track CP   { instrument CP808(room: 0.5) send Room 0.3 volume 0.6 play clap at bars(1..8) }
+  track CB   { instrument CB808() volume 0.35 pan -0.25 play bell at bars(5..8) }
+  track RS   { instrument RS808() volume 0.5 pan 0.3 play rim at bars(3..8) }
+  track LT   { instrument LT808() volume 0.7 pan -0.2 play toms at bars(1..8) }
+  track MT   { instrument MT808() volume 0.65 play tomm at bars(1..8) }
+  track HT   { instrument HT808() volume 0.6 pan 0.2 play tomh at bars(1..8) }
+  track MA   { instrument MA808() volume 0.3 pan -0.3 play mrcs at bars(5..8) }
+  track CY   { instrument CY808(decay: 0.85) send Room 0.35 volume 0.4 play cym at bars(1..8) }
+}
+
+block Tr808Electro {
+  tempo 116bpm
+  swing 0.54
+  meter 4/4
+
+  play Tr808ElectroKit at bars(1..8)
+}

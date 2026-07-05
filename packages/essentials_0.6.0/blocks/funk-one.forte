@@ -1,0 +1,56 @@
+// Funk (104bpm) — everything serves "the one".
+// Sixteenth-note clav and ghosted hats make it bounce.
+import { Kick909, SnareTight, HatClosed, Cowbell } from "../instruments/drums.forte"
+import { PickBass } from "../instruments/bass.forte"
+import { Clav } from "../instruments/keys.forte"
+import { AnalogBrass } from "../instruments/synths.forte"
+
+block FunkOneDrums {
+  let kick  = beat`X--- --x- x--- -x--`
+  let snare = beat`---- x--- ---- x--x`
+  let hat   = beat`x-xx -xx- xx-x -xxX`
+
+  track Kick  { instrument Kick909(click: 0.5) volume 0.9 play kick at bars(1..8) }
+  track Snare { instrument SnareTight(snap: 0.8) volume 0.7 play snare at bars(1..8) }
+  track Hat   { instrument HatClosed(bright: 0.9) volume 0.4 pan 0.2 play hat at bars(1..8) }
+  track Bell  { instrument Cowbell() volume 0.25 pan -0.3 play beat`x--- x--- x--- x---` at bars(5..8) }
+}
+
+block FunkOneBass {
+  key E minor
+
+  track Bass {
+    instrument PickBass()
+    volume 0.8
+    play notes`E2:0.25 _:0.25 E2:0.25 G2:0.25 A2:0.5 _:0.5 E2:0.25 D2:0.25 E2:0.5 _:0.5 B1:0.25 D2:0.25` at bars(1..8)
+  }
+}
+
+block FunkOneKeys {
+  key E minor
+  let vamp = prog`E7 | E7 | A7 | E7`
+
+  track Clav {
+    instrument Clav(mute: 0.6)
+    insert drive(drive: 0.25)
+    volume 0.5
+    pan 0.15
+    play arp(vamp, rate: 0.25, style: "updown") at bars(1..8)
+  }
+
+  track Horns {
+    instrument AnalogBrass(blow: 0.6)
+    volume 0.45
+    play chords(vamp) at bars(7..8)
+  }
+}
+
+block FunkOne {
+  tempo 104bpm
+  meter 4/4
+  key E minor
+
+  play FunkOneDrums at bars(1..8)
+  play FunkOneBass at bars(1..8)
+  play FunkOneKeys at bars(1..8)
+}

@@ -30,13 +30,13 @@ fi
 
 cargo build --release -q -p fortelang --bin forte --target wasm32-wasip1
 for song in first-light night-parade std-tour; do
-  echo "== gate 2: forte build (songs/$song.forte) =="
+  echo "== gate 2: forte build (packages/essentials_0.6.0/songs/$song.forte) =="
   cargo run --release -q -p fortelang --bin forte -- \
-    build "songs/$song.forte" -o "$SCRATCH/native.wav" > "$SCRATCH/forte-native.txt"
+    build "packages/essentials_0.6.0/songs/$song.forte" -o "$SCRATCH/native.wav" > "$SCRATCH/forte-native.txt"
   node --no-warnings scripts/run-wasi.mjs \
     target/wasm32-wasip1/release/forte.wasm \
     "{\"/proj\":\".\",\"/scratch\":\"$SCRATCH\"}" \
-    "[\"forte\",\"build\",\"/proj/songs/$song.forte\",\"-o\",\"/scratch/wasm.wav\"]" > "$SCRATCH/forte-wasm.txt"
+    "[\"forte\",\"build\",\"/proj/packages/essentials_0.6.0/songs/$song.forte\",\"-o\",\"/scratch/wasm.wav\"]" > "$SCRATCH/forte-wasm.txt"
   n=$(grep 'digest' "$SCRATCH/forte-native.txt" | awk '{print $3}')
   w=$(grep 'digest' "$SCRATCH/forte-wasm.txt" | awk '{print $3}')
   if [ "$n" = "$w" ]; then

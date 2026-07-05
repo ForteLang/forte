@@ -1,0 +1,140 @@
+// std/bass — five bass devices built in the device DSL: fork one and reshape it into your own low end.
+// Usage: import { SubBass, AcidBass } from "packages/essentials_0.6.0/instruments/bass.forte"
+
+device SubBass : Instrument {
+  param drive = 0.25 in 0.0..1.0
+
+  node env = adsr(a: 0.005, d: 0.2, s: 0.85, r: 0.18)
+  node fun = osc(shape: "sine")
+  node sub = osc(freq: gain(in: note.freq, level: 0.5), shape: "sine")  // one octave down
+  node sum = shaper(in: mix(a: fun, b: gain(in: sub, level: 0.7)), drive: drive, mode: "tanh")
+  out gain(in: sum, mod: env, level: 0.9)
+}
+
+device AcidBass : Instrument {
+  param cutoff = 0.42 in 0.0..1.0
+  param reso   = 0.75 in 0.0..1.0
+  param sweep  = 0.5 in 0.0..1.0   // filter envelope depth
+
+  node env  = adsr(a: 0.001, d: 0.25, s: 0.3, r: 0.12)
+  node fenv = adsr(a: 0.001, d: 0.16, s: 0.0, r: 0.1)
+  node o    = osc(shape: "saw")
+  node f    = svf(in: o, cutoff: cutoff, reso: reso, mod: gain(in: fenv, level: sweep))
+  out gain(in: f, mod: env, level: 0.85)
+}
+
+device ReeseBass : Instrument {
+  param cutoff = 0.45 in 0.0..1.0
+
+  node env = adsr(a: 0.01, d: 0.3, s: 0.8, r: 0.2)
+  node a1  = osc(shape: "saw")
+  node a2  = osc(freq: gain(in: note.freq, level: 0.5), shape: "square") // one octave down
+  node f   = svf(in: mix(a: a1, b: gain(in: a2, level: 0.8)), cutoff: cutoff, reso: 0.35)
+  out gain(in: f, mod: env, level: 0.85)
+}
+
+device PluckBass : Instrument {
+  param decay = 0.3 in 0.05..1.0
+
+  node env  = adsr(a: 0.001, d: decay, s: 0.0, r: 0.1)
+  node fenv = adsr(a: 0.001, d: 0.12, s: 0.0, r: 0.08)
+  node o    = osc(shape: "square")
+  node f    = svf(in: o, cutoff: 0.35, reso: 0.4, mod: gain(in: fenv, level: 0.6))
+  out gain(in: f, mod: env, level: 0.9)
+}
+
+device FMBass : Instrument {
+  param bite = 0.35 in 0.0..1.0   // attack bite (pitch modulation depth)
+
+  node env  = adsr(a: 0.001, d: 0.22, s: 0.6, r: 0.15)
+  node penv = adsr(a: 0.001, d: 0.05, s: 0.0, r: 0.03)
+  node o    = osc(shape: "sine", mod: gain(in: penv, level: bite))
+  node sh   = shaper(in: o, drive: 0.5, mode: "tanh")
+  out gain(in: sh, mod: env, level: 0.9)
+}
+
+// ---- classic bass extensions (8 devices) ----
+
+device LadderBass : Instrument {
+  param cutoff = 0.35 in 0.0..1.0
+  param drive  = 0.4 in 0.0..1.0
+
+  node env  = adsr(a: 0.003, d: 0.35, s: 0.5, r: 0.12)
+  node fenv = adsr(a: 0.001, d: 0.2, s: 0.2, r: 0.1)
+  node o    = osc(shape: "saw")
+  node o2   = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.006)), shape: "saw")
+  node f    = svf(in: mix(a: o, b: o2), cutoff: cutoff, reso: 0.45,
+                  mod: gain(in: fenv, level: 0.3))
+  node sh   = shaper(in: f, drive: drive, mode: "tanh")
+  out gain(in: sh, mod: env, level: 0.8)
+}
+
+device RubberBass : Instrument {
+  node env  = adsr(a: 0.002, d: 0.22, s: 0.3, r: 0.1)
+  node fenv = adsr(a: 0.001, d: 0.12, s: 0.1, r: 0.05)
+  node o    = osc(shape: "square")
+  node f    = svf(in: o, cutoff: 0.25, reso: 0.6, mod: gain(in: fenv, level: 0.35))
+  out gain(in: f, mod: env, level: 0.85)
+}
+
+device OctaveBass : Instrument {
+  param blend = 0.5 in 0.0..1.0   // amount of the upper octave
+
+  node env = adsr(a: 0.002, d: 0.3, s: 0.45, r: 0.12)
+  node lo  = osc(shape: "saw")
+  node hi  = osc(freq: mix(a: note.freq, b: note.freq), shape: "saw")
+  node f   = svf(in: mix(a: lo, b: gain(in: hi, level: blend)), cutoff: 0.4, reso: 0.3)
+  out gain(in: f, mod: env, level: 0.8)
+}
+
+device GrowlBass : Instrument {
+  param growl = 0.5 in 0.0..1.0
+
+  node env = adsr(a: 0.004, d: 0.4, s: 0.55, r: 0.15)
+  node wob = lfo(rate: 0.35, shape: "sine")
+  node o   = osc(shape: "saw")
+  node o2  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.012)), shape: "saw")
+  node f   = svf(in: mix(a: o, b: o2), cutoff: 0.3, reso: 0.55,
+                 mod: gain(in: wob, level: growl))
+  node sh  = shaper(in: f, drive: 0.5, mode: "fold")
+  out gain(in: sh, mod: env, level: 0.7)
+}
+
+device PickBass : Instrument {
+  node env  = adsr(a: 0.001, d: 0.3, s: 0.25, r: 0.1)
+  node clk  = adsr(a: 0.001, d: 0.015, s: 0.0, r: 0.01)
+  node o    = osc(shape: "saw")
+  node pick = gain(in: svf(in: noise(), cutoff: 0.7, reso: 0.2), mod: clk, level: 0.2)
+  node f    = svf(in: mix(a: o, b: pick), cutoff: 0.45, reso: 0.25)
+  out gain(in: f, mod: env, level: 0.8)
+}
+
+device UprightBass : Instrument {
+  node env  = adsr(a: 0.008, d: 0.5, s: 0.35, r: 0.2)
+  node thmp = adsr(a: 0.001, d: 0.04, s: 0.0, r: 0.02)
+  node o    = osc(shape: "tri")
+  node sub  = osc(freq: gain(in: note.freq, level: 0.5), shape: "sine")
+  node thm  = gain(in: svf(in: noise(), cutoff: 0.3, reso: 0.2), mod: thmp, level: 0.12)
+  node sum  = mix(a: mix(a: o, b: gain(in: sub, level: 0.4)), b: thm)
+  node f    = svf(in: sum, cutoff: 0.35, reso: 0.15)
+  out gain(in: f, mod: env, level: 0.85)
+}
+
+device HollowBass : Instrument {
+  node env = adsr(a: 0.003, d: 0.28, s: 0.4, r: 0.12)
+  node o   = osc(shape: "square")
+  node sub = osc(freq: gain(in: note.freq, level: 0.5), shape: "square")
+  node f   = svf(in: mix(a: o, b: gain(in: sub, level: 0.5)), cutoff: 0.3, reso: 0.4)
+  out gain(in: f, mod: env, level: 0.75)
+}
+
+device DubBass : Instrument {
+  param depth = 0.8 in 0.0..1.0
+
+  node env = adsr(a: 0.006, d: 0.5, s: 0.6, r: 0.25)
+  node o   = osc(shape: "sine")
+  node sub = osc(freq: gain(in: note.freq, level: 0.5), shape: "sine")
+  node sum = mix(a: o, b: gain(in: sub, level: depth))
+  node sh  = shaper(in: sum, drive: 0.25, mode: "tanh")
+  out gain(in: sh, mod: env, level: 0.9)
+}

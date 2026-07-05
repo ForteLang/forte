@@ -29,16 +29,16 @@ fn every_std_library_validates() {
     ];
     let mut total = 0;
     for (name, count) in expected {
-        let path = repo_root().join(format!("lib/std/{name}.forte"));
+        let path = repo_root().join(format!("packages/essentials_0.6.0/instruments/{name}.forte"));
         let src = std::fs::read_to_string(&path).unwrap();
         let base = path.parent().unwrap().to_str().unwrap().to_string();
         match check_with_loader(&src, &FsLoader, &base) {
             Ok(Checked::DeviceLibrary { devices }) => {
-                assert_eq!(devices, count, "lib/std/{name}.forte device count");
+                assert_eq!(devices, count, "instruments/{name}.forte device count");
                 total += devices;
             }
             other => panic!(
-                "lib/std/{name}.forte must be a device library: {:?}",
+                "instruments/{name}.forte must be a device library: {:?}",
                 other.err().map(|d| d.iter().map(|d| d.message.clone()).collect::<Vec<_>>())
             ),
         }
@@ -51,7 +51,7 @@ fn std_tour_renders_the_pinned_digest() {
     // the demo song plays ten std instruments at once; its digest is a
     // determinism gate for the whole library (same contract as the songs in
     // scripts/determinism_test.sh)
-    let path = repo_root().join("songs/std-tour.forte");
+    let path = repo_root().join("packages/essentials_0.6.0/songs/std-tour.forte");
     let src = std::fs::read_to_string(&path).unwrap();
     let p = compile_with_loader(&src, &FsLoader, path.parent().unwrap().to_str().unwrap())
         .expect("std-tour must compile");

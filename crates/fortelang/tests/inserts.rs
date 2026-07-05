@@ -10,7 +10,7 @@ fn digest(insert: &str) -> String {
   tempo 120bpm
   key C minor
   track A {{
-    instrument polymer(wave: "saw", cutoff: 0.6)
+    instrument prisma(wave: "saw", cutoff: 0.6)
     pan 0.3
     {insert}
     play notes`C3:0.5 G3:0.5 [C3 Eb3 G3]:1 C4:0.5 G2:0.5 C3:1` at bars(1..2)
@@ -50,7 +50,7 @@ fn pump_period_follows_tempo() {
   tempo {bpm}bpm
   key C minor
   track A {{
-    instrument polymer(wave: "saw")
+    instrument prisma(wave: "saw")
     insert pump(amount: 0.9)
     play notes`C3:8` at bars(1..2)
   }}

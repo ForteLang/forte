@@ -1,0 +1,135 @@
+// std/synths — 12 classic polysynth voices: a recipe book of stacked
+// detuned oscillators and filter envelopes, the time-honored formula.
+// Usage: import { AnalogBrass, StringMachine } from "packages/essentials_0.6.0/instruments/synths.forte"
+
+device AnalogBrass : Instrument {
+  param blow = 0.55 in 0.0..1.0
+
+  node env  = adsr(a: 0.05, d: 0.25, s: 0.7, r: 0.2)
+  node fenv = adsr(a: 0.08, d: 0.3, s: 0.45, r: 0.15)
+  node o1   = osc(shape: "saw")
+  node o2   = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.009)), shape: "saw")
+  node f    = svf(in: mix(a: o1, b: o2), cutoff: blow, reso: 0.2,
+                  mod: gain(in: fenv, level: 0.35))
+  out gain(in: f, mod: env, level: 0.65)
+}
+
+device StringMachine : Instrument {
+  node env = adsr(a: 0.3, d: 0.2, s: 0.9, r: 0.5)
+  node sw  = lfo(rate: 0.4, shape: "sine")                 // ensemble shimmer
+  node o1  = osc(shape: "saw", mod: gain(in: sw, level: 0.004))
+  node o2  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.008)), shape: "saw")
+  node o3  = osc(freq: mix(a: note.freq, b: note.freq), shape: "saw")
+  node sum = mix(a: mix(a: o1, b: o2), b: gain(in: o3, level: 0.3))
+  node f   = svf(in: sum, cutoff: 0.55, reso: 0.1)
+  out gain(in: f, mod: env, level: 0.5)
+}
+
+device PolySaw : Instrument {
+  param cutoff = 0.5 in 0.0..1.0
+
+  node env  = adsr(a: 0.01, d: 0.3, s: 0.6, r: 0.25)
+  node fenv = adsr(a: 0.005, d: 0.35, s: 0.3, r: 0.2)
+  node o1   = osc(shape: "saw")
+  node o2   = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.007)), shape: "saw")
+  node f    = svf(in: mix(a: o1, b: o2), cutoff: cutoff, reso: 0.3,
+                  mod: gain(in: fenv, level: 0.3))
+  out gain(in: f, mod: env, level: 0.6)
+}
+
+device ChorusPulse : Instrument {
+  node env = adsr(a: 0.02, d: 0.3, s: 0.7, r: 0.3)
+  node wob = lfo(rate: 0.3, shape: "tri")
+  node o1  = osc(shape: "square", mod: gain(in: wob, level: 0.005))
+  node o2  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.01)), shape: "square")
+  node f   = svf(in: mix(a: o1, b: o2), cutoff: 0.5, reso: 0.2,
+                 mod: gain(in: wob, level: 0.08))
+  out gain(in: f, mod: env, level: 0.55)
+}
+
+device VintagePoly : Instrument {
+  param age = 0.5 in 0.0..1.0   // pitch drift = vintage wear
+
+  node env = adsr(a: 0.03, d: 0.4, s: 0.65, r: 0.35)
+  node drf = lfo(rate: 0.09, shape: "sine")
+  node o1  = osc(shape: "saw", mod: gain(in: drf, level: 0.006))
+  node o2  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.006)), shape: "square")
+  node f   = svf(in: mix(a: o1, b: gain(in: o2, level: 0.6)), cutoff: 0.45,
+                 reso: 0.25, mod: gain(in: drf, level: 0.06))
+  node sh  = shaper(in: f, drive: age, mode: "tanh")
+  out gain(in: sh, mod: env, level: 0.55)
+}
+
+device Hoover : Instrument {
+  node env  = adsr(a: 0.01, d: 0.3, s: 0.8, r: 0.25)
+  node penv = adsr(a: 0.001, d: 0.09, s: 0.0, r: 0.05)    // pitch slide on the attack
+  node o1   = osc(shape: "saw", mod: gain(in: penv, level: 0.12))
+  node o2   = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.013)),
+                  shape: "saw", mod: gain(in: penv, level: 0.12))
+  node o3   = osc(freq: gain(in: note.freq, level: 0.5), shape: "square")
+  node sum  = mix(a: mix(a: o1, b: o2), b: gain(in: o3, level: 0.5))
+  node sh   = shaper(in: sum, drive: 0.35, mode: "fold")
+  node f    = svf(in: sh, cutoff: 0.55, reso: 0.3)
+  out gain(in: f, mod: env, level: 0.5)
+}
+
+device FifthStack : Instrument {
+  node env = adsr(a: 0.02, d: 0.3, s: 0.7, r: 0.3)
+  node o1  = osc(shape: "saw")
+  node o5  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.5)), shape: "saw")
+  node o8  = osc(freq: mix(a: note.freq, b: note.freq), shape: "saw")
+  node sum = mix(a: o1, b: mix(a: gain(in: o5, level: 0.5), b: gain(in: o8, level: 0.35)))
+  node f   = svf(in: sum, cutoff: 0.5, reso: 0.25)
+  out gain(in: f, mod: env, level: 0.5)
+}
+
+device SoftSquare : Instrument {
+  node env = adsr(a: 0.04, d: 0.35, s: 0.6, r: 0.4)
+  node o   = osc(shape: "square")
+  node f   = svf(in: o, cutoff: 0.32, reso: 0.15)
+  out gain(in: f, mod: env, level: 0.7)
+}
+
+device TranceSaw : Instrument {
+  param wide = 0.6 in 0.0..1.0   // detune spread
+
+  node env = adsr(a: 0.005, d: 0.25, s: 0.65, r: 0.2)
+  node o1  = osc(shape: "saw")
+  node o2  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.012)), shape: "saw")
+  node o3  = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.006)), shape: "saw")
+  node sum = mix(a: o1, b: mix(a: gain(in: o2, level: wide), b: gain(in: o3, level: wide)))
+  node f   = svf(in: sum, cutoff: 0.6, reso: 0.2)
+  out gain(in: f, mod: env, level: 0.5)
+}
+
+device RetroWave : Instrument {
+  node env  = adsr(a: 0.01, d: 0.3, s: 0.7, r: 0.3)
+  node fenv = adsr(a: 0.002, d: 0.25, s: 0.35, r: 0.2)
+  node o    = osc(shape: "square")
+  node sub  = osc(freq: gain(in: note.freq, level: 0.5), shape: "square")
+  node f    = svf(in: mix(a: o, b: gain(in: sub, level: 0.45)), cutoff: 0.4,
+                  reso: 0.45, mod: gain(in: fenv, level: 0.3))
+  out gain(in: f, mod: env, level: 0.6)
+}
+
+device DreamSynth : Instrument {
+  node env = adsr(a: 0.15, d: 0.4, s: 0.7, r: 0.7)
+  node wob = lfo(rate: 0.14, shape: "sine")
+  node o1  = osc(shape: "tri")
+  node o2  = osc(freq: mix(a: note.freq, b: note.freq), shape: "sine")
+  node f   = svf(in: mix(a: o1, b: gain(in: o2, level: 0.3)), cutoff: 0.45,
+                 reso: 0.2, mod: gain(in: wob, level: 0.1))
+  out gain(in: f, mod: env, level: 0.6)
+}
+
+device ElectricGrand : Instrument {
+  node env  = adsr(a: 0.002, d: 0.8, s: 0.2, r: 0.3)
+  node f2   = mix(a: note.freq, b: note.freq)
+  node f3   = mix(a: f2, b: note.freq)
+  node fun  = osc(shape: "sine")
+  node p2   = osc(freq: f2, shape: "sine")
+  node p3   = osc(freq: f3, shape: "sine")
+  node sum  = mix(a: fun, b: mix(a: gain(in: p2, level: 0.35), b: gain(in: p3, level: 0.12)))
+  node sh   = shaper(in: sum, drive: 0.18, mode: "tanh")
+  out gain(in: sh, mod: env, level: 0.75)
+}

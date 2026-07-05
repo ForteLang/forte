@@ -43,6 +43,9 @@ pub fn compile(
         }
     };
     let mut p = Project::empty();
+    p.name = root.name.clone();
+    p.desc = root.desc.clone().unwrap_or_default();
+    p.tags = root.tags.clone();
 
     // ---- user-defined devices ----------------------------------------------
     let mut user_devices: HashMap<&str, &DeviceAst> = HashMap::new();
@@ -109,7 +112,9 @@ pub fn compile(
     let mut stack: Vec<String> = vec![root.name.clone()];
     let lowered = lower_body(root, "", eff_root_pc, &[&file.blocks], &mut stack, &env, &mut diags);
 
-    if !lowered.tracks.iter().any(|t| !t.is_return) {
+    // a described, deliberately empty block is package/metadata material
+    // (packages/<pkg>/package.forte); an undescribed empty root is a mistake
+    if !lowered.tracks.iter().any(|t| !t.is_return) && root.desc.is_none() {
         diags.push(Diag::new(
             "E-SONG-003",
             Pos { line: 1, col: 1 },
@@ -807,6 +812,12 @@ fn resolved_body(
 fn merge_block(parent: &SongAst, child: &SongAst) -> SongAst {
     let mut out = parent.clone();
     out.name = child.name.clone();
+    if child.desc.is_some() {
+        out.desc = child.desc.clone();
+    }
+    if !child.tags.is_empty() {
+        out.tags = child.tags.clone();
+    }
     if child.tempo.is_some() {
         out.tempo = child.tempo;
     }
@@ -1051,7 +1062,7 @@ fn eval_lit(lit: &PatternLit, beats_per_bar: f64, beat_pitch: u8) -> Result<(Vec
 // device registry (v0: fixed builtin set; @std packages arrive with forte-pkg)
 // ---------------------------------------------------------------------------
 
-const INSTRUMENTS: &[&str] = &["sampler", "kit", "polymer", "grid"];
+const INSTRUMENTS: &[&str] = &["sampler", "kit", "prisma", "mesh"];
 const EFFECTS: &[&str] =
     &["filter", "eq", "drive", "delay", "reverb", "comp", "chorus", "pump", "width"];
 
@@ -1109,7 +1120,7 @@ fn build_instrument(
             }
         }
         let graph = grid_build::instantiate(dev_ast, call, &takes)?;
-        let mut dev = Device::new(DeviceKind::PolyGrid);
+        let mut dev = Device::new(DeviceKind::PolyMesh);
         // expose declared params (declaration order) so modulate / automate
         // can drive them at runtime — same values the graph was baked with
         dev.params = graph.param_binds.iter().map(|(_, v, _)| *v).collect();
@@ -1260,8 +1271,8 @@ fn build_instrument(
             let root = dev.kit[0].0;
             Ok((dev, root))
         }
-        "polymer" => {
-            let mut dev = Device::new(DeviceKind::Polymer);
+        "prisma" => {
+            let mut dev = Device::new(DeviceKind::Prisma);
             for (key, arg) in &call.args {
                 set_param(
                     &mut dev,
@@ -1278,7 +1289,7 @@ fn build_instrument(
             }
             Ok((dev, 36))
         }
-        "grid" => Ok((Device::poly_grid(), 36)),
+        "mesh" => Ok((Device::poly_grid(), 36)),
         other => Err(Diag::new(
             "E-DEV-001",
             call.pos,
@@ -1321,7 +1332,7 @@ fn resolve_target(
 }
 
 fn resolve_device_param(dev: &Device, name: &str) -> Result<usize, String> {
-    if matches!(dev.kind, DeviceKind::PolyGrid | DeviceKind::GridFx) {
+    if matches!(dev.kind, DeviceKind::PolyMesh | DeviceKind::MeshFx) {
         let names: Vec<&str> = dev
             .grid
             .as_ref()
@@ -1503,7 +1514,7 @@ fn build_effect(
         let takes: HashMap<String, Option<String>> =
             dev_ast.takes.iter().map(|(n, _)| (n.clone(), None)).collect();
         let graph = grid_build::instantiate(dev_ast, call, &takes)?;
-        let mut dev = Device::new(DeviceKind::GridFx);
+        let mut dev = Device::new(DeviceKind::MeshFx);
         // expose declared params (same as PolyGrid): configure() re-writes
         // these baked values, so a static render stays bit-identical
         dev.params = graph.param_binds.iter().map(|(_, v, _)| *v).collect();

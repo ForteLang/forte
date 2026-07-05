@@ -83,7 +83,7 @@ fn export_without_a_repo_still_carries_sources_and_proof() {
     let dir = scratch("norepo");
     std::fs::write(
         dir.join("tiny.forte"),
-        "song \"T\" {\n  tempo 100bpm\n  track A {\n    instrument polymer()\n    play beat`x---` at bars(1..1)\n  }\n}\n",
+        "song \"T\" {\n  tempo 100bpm\n  track A {\n    instrument prisma()\n    play beat`x---` at bars(1..1)\n  }\n}\n",
     )
     .unwrap();
     let info = export(dir.join("tiny.forte").to_str().unwrap()).unwrap();

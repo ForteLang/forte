@@ -1,0 +1,70 @@
+// std/cr78 — 8 boxy, metallic voices from an early rhythm machine.
+// Its signature: papery short decays and the narrow-band "tick" of the metalwork.
+// Usage: import { BD78, HH78 } from "packages/essentials_0.6.0/instruments/cr78.forte"
+
+device BD78 : Instrument {
+  node env  = adsr(a: 0.001, d: 0.09, s: 0.0, r: 0.05)
+  node penv = adsr(a: 0.001, d: 0.025, s: 0.0, r: 0.01)
+  node o    = osc(freq: gain(in: note.freq, level: 0.9), shape: "sine",
+                  mod: gain(in: penv, level: 0.2))
+  out gain(in: o, mod: env, level: 0.9)
+}
+
+device SD78 : Instrument {
+  node env  = adsr(a: 0.001, d: 0.055, s: 0.0, r: 0.03)
+  node nz   = svf(in: noise(), cutoff: 0.62, reso: 0.5)
+  node body = gain(in: osc(freq: mix(a: note.freq, b: note.freq), shape: "sine"), level: 0.3)
+  out gain(in: mix(a: nz, b: body), mod: env, level: 0.75)
+}
+
+device HH78 : Instrument {
+  node env = adsr(a: 0.001, d: 0.03, s: 0.0, r: 0.02)
+  node f6  = mix(a: mix(a: mix(a: note.freq, b: note.freq), b: mix(a: note.freq, b: note.freq)),
+                 b: mix(a: note.freq, b: note.freq))
+  node o   = osc(freq: f6, shape: "square")
+  node nz  = gain(in: svf(in: noise(), cutoff: 0.93, reso: 0.4), level: 0.7)
+  node hp  = svf(in: mix(a: gain(in: o, level: 0.4), b: nz), cutoff: 0.95, reso: 0.3)
+  out gain(in: hp, mod: env, level: 0.4)
+}
+
+device CY78 : Instrument {
+  node env = adsr(a: 0.001, d: 0.5, s: 0.0, r: 0.6)
+  node f5  = mix(a: mix(a: mix(a: note.freq, b: note.freq), b: mix(a: note.freq, b: note.freq)),
+                 b: gain(in: note.freq, level: 0.37))
+  node o   = osc(freq: f5, shape: "square")
+  node nz  = gain(in: svf(in: noise(), cutoff: 0.9, reso: 0.25), level: 0.8)
+  node hp  = svf(in: mix(a: gain(in: o, level: 0.3), b: nz), cutoff: 0.88, reso: 0.3)
+  out gain(in: hp, mod: env, level: 0.35)
+}
+
+device Tamb78 : Instrument {
+  node env = adsr(a: 0.001, d: 0.07, s: 0.0, r: 0.05)
+  node nz  = svf(in: noise(), cutoff: 0.85, reso: 0.6)
+  node fz  = shaper(in: nz, drive: 0.3, mode: "fold")
+  out gain(in: fz, mod: env, level: 0.45)
+}
+
+device Bongo78 : Instrument {
+  node env  = adsr(a: 0.001, d: 0.08, s: 0.0, r: 0.04)
+  node penv = adsr(a: 0.001, d: 0.012, s: 0.0, r: 0.01)
+  node o    = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.7)),
+                  shape: "sine", mod: gain(in: penv, level: 0.15))
+  out gain(in: o, mod: env, level: 0.8)
+}
+
+device Claves78 : Instrument {
+  node env = adsr(a: 0.001, d: 0.04, s: 0.0, r: 0.02)
+  node f4  = mix(a: mix(a: note.freq, b: note.freq), b: mix(a: note.freq, b: note.freq))
+  node o   = osc(freq: mix(a: f4, b: gain(in: note.freq, level: 0.6)), shape: "sine")
+  out gain(in: o, mod: env, level: 0.85)
+}
+
+device Cowbell78 : Instrument {
+  node env = adsr(a: 0.001, d: 0.16, s: 0.0, r: 0.08)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node f8  = mix(a: mix(a: f2, b: f2), b: mix(a: f2, b: f2))
+  node o1  = osc(freq: f8, shape: "square")
+  node o2  = osc(freq: mix(a: f8, b: mix(a: f2, b: f2)), shape: "square")
+  node bp  = svf(in: mix(a: o1, b: gain(in: o2, level: 0.7)), cutoff: 0.62, reso: 0.55)
+  out gain(in: bp, mod: env, level: 0.5)
+}

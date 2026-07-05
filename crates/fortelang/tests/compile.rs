@@ -1,8 +1,8 @@
 //! End-to-end tests: reference song compiles, renders real audio, and renders
 //! reproducibly. Error paths report the documented diagnostic codes.
 
-const REFERENCE: &str = include_str!("../../../songs/first-light.forte");
-const REFERENCE2: &str = include_str!("../../../songs/slow-circles.forte");
+const REFERENCE: &str = include_str!("../../../packages/essentials_0.6.0/songs/first-light.forte");
+const REFERENCE2: &str = include_str!("../../../packages/essentials_0.6.0/songs/slow-circles.forte");
 
 #[test]
 fn reference_song_compiles() {
@@ -38,7 +38,7 @@ fn second_reference_song_compiles_in_six_eight() {
     assert!(info.rms > 0.005, "6/8 render must contain signal (rms {})", info.rms);
 }
 
-const REFERENCE3: &str = include_str!("../../../songs/night-parade.forte");
+const REFERENCE3: &str = include_str!("../../../packages/essentials_0.6.0/songs/night-parade.forte");
 
 #[test]
 fn third_reference_song_uses_prog_sections_and_sends() {
@@ -69,7 +69,7 @@ fn third_reference_song_uses_prog_sections_and_sends() {
 }
 
 fn compile_song_file(rel: &str) -> Result<dawcore::model::Project, Vec<fortelang::diag::Diag>> {
-    let path = format!("{}/../../songs/{rel}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!("{}/../../packages/essentials_0.6.0/songs/{rel}", env!("CARGO_MANIFEST_DIR"));
     let src = std::fs::read_to_string(&path).expect("read song");
     let base = std::path::Path::new(&path).parent().unwrap().to_string_lossy().into_owned();
     fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base)
@@ -80,7 +80,7 @@ fn user_defined_devices_compile_to_grid_graphs() {
     let p = compile_song_file("handmade.forte").expect("handmade must compile");
     let lead = p.tracks.iter().find(|t| t.name == "Lead").unwrap();
     let dev = &lead.devices[0];
-    assert_eq!(dev.kind, dawcore::model::DeviceKind::PolyGrid);
+    assert_eq!(dev.kind, dawcore::model::DeviceKind::PolyMesh);
     let graph = dev.grid.as_ref().unwrap();
     // NoteIn + osc + adsr + lfo + svf + gain + Out = 7 modules
     assert_eq!(graph.modules.len(), 7);
@@ -101,16 +101,16 @@ fn user_defined_devices_compile_to_grid_graphs() {
 #[test]
 fn import_resolution_and_errors() {
     // a missing name in an existing library
-    let path = format!("{}/../../songs", env!("CARGO_MANIFEST_DIR"));
+    let path = format!("{}/../../packages/essentials_0.6.0/songs", env!("CARGO_MANIFEST_DIR"));
     let src = r#"import { Nope } from "./devices/warm.forte"
-song "S" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..1) } }"#;
+song "S" { tempo 120bpm track A { instrument prisma() play beat`x---` at bars(1..1) } }"#;
     let err = fortelang::compile_with_loader(src, &fortelang::FsLoader, &path).err().expect("expected errors");
     assert!(err.iter().any(|d| d.code == "E-MOD-006"), "{err:?}");
     assert!(err[0].message.contains("WarmLead"), "should list available devices: {}", err[0].message);
 
     // unreadable path
     let src2 = r#"import { X } from "./nowhere.forte"
-song "S" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..1) } }"#;
+song "S" { tempo 120bpm track A { instrument prisma() play beat`x---` at bars(1..1) } }"#;
     let err2 = fortelang::compile_with_loader(src2, &fortelang::FsLoader, &path).err().expect("expected errors");
     assert!(err2.iter().any(|d| d.code == "E-MOD-005"), "{err2:?}");
 
@@ -141,13 +141,13 @@ fn device_errors_are_reported() {
     let src4 = r#"device X : Instrument { param c = 0.5 in 0.0..1.0 out gain(in: osc(), level: c) } song "S" { tempo 120bpm track A { instrument X(c: 2.0) play beat`x---` at bars(1..1) } }"#;
     assert!(err_codes(src4).contains(&"E-TYPE-002"));
     // builtin shadowing
-    let src5 = r#"device polymer : Instrument { out osc() } song "S" { tempo 120bpm track A { instrument grid() play beat`x---` at bars(1..1) } }"#;
+    let src5 = r#"device prisma : Instrument { out osc() } song "S" { tempo 120bpm track A { instrument mesh() play beat`x---` at bars(1..1) } }"#;
     assert!(err_codes(src5).contains(&"E-DEV-008"));
 }
 
 #[test]
 fn unknown_section_and_return_are_reported() {
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() send Nowhere 0.3 play beat`x---` at nowhere } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument prisma() send Nowhere 0.3 play beat`x---` at nowhere } }"#;
     let codes = err_codes(src);
     assert!(codes.contains(&"E-MOD-003"), "unknown section: {codes:?}");
     assert!(codes.contains(&"E-MOD-004"), "unknown return: {codes:?}");
@@ -155,15 +155,15 @@ fn unknown_section_and_return_are_reported() {
 
 #[test]
 fn bad_chord_and_bad_style_are_reported() {
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play prog`Hm7` at bars(1..1) } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument prisma() play prog`Hm7` at bars(1..1) } }"#;
     assert!(err_codes(src).contains(&"E-PROG-002"));
-    let src2 = r#"song "X" { tempo 120bpm track A { instrument polymer() play arp(prog`Em`, style: "spiral") at bars(1..1) } }"#;
+    let src2 = r#"song "X" { tempo 120bpm track A { instrument prisma() play arp(prog`Em`, style: "spiral") at bars(1..1) } }"#;
     assert!(err_codes(src2).contains(&"E-PAT-002"));
 }
 
 #[test]
 fn pattern_fn_requires_prog() {
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play chords(beat`x---`) at bars(1..1) } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument prisma() play chords(beat`x---`) at bars(1..1) } }"#;
     assert!(err_codes(src).contains(&"E-PAT-001"));
 }
 
@@ -176,7 +176,7 @@ fn err_codes(src: &str) -> Vec<&'static str> {
 
 #[test]
 fn unknown_param_is_reported() {
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer(cutof: 0.5) play beat`x---` at bars(1..2) } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument prisma(cutof: 0.5) play beat`x---` at bars(1..2) } }"#;
     assert!(err_codes(src).contains(&"E-DEV-002"));
 }
 
@@ -188,19 +188,19 @@ fn missing_instrument_is_reported() {
 
 #[test]
 fn out_of_range_knob_is_reported() {
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer(cutoff: 1.5) play beat`x---` at bars(1..2) } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument prisma(cutoff: 1.5) play beat`x---` at bars(1..2) } }"#;
     assert!(err_codes(src).contains(&"E-TYPE-002"));
 }
 
 #[test]
 fn undefined_pattern_is_reported() {
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play nothere at bars(1..2) } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument prisma() play nothere at bars(1..2) } }"#;
     assert!(err_codes(src).contains(&"E-MOD-001"));
 }
 
 #[test]
 fn missing_tempo_is_reported() {
-    let src = r#"song "X" { track A { instrument polymer() play beat`x---` at bars(1..2) } }"#;
+    let src = r#"song "X" { track A { instrument prisma() play beat`x---` at bars(1..2) } }"#;
     assert!(err_codes(src).contains(&"E-SONG-001"));
 }
 
@@ -212,7 +212,7 @@ fn external_audio_is_rejected_by_design() {
 
 #[test]
 fn chords_and_fraction_durations_parse() {
-    let src = r#"song "X" { tempo 100bpm track A { instrument polymer() play notes`[C4 E4 G4]:1/2 _:1/2 D4:1` at bars(1..1) } }"#;
+    let src = r#"song "X" { tempo 100bpm track A { instrument prisma() play notes`[C4 E4 G4]:1/2 _:1/2 D4:1` at bars(1..1) } }"#;
     let p = fortelang::compile_str(src).unwrap();
     let clip = &p.tracks[0].arranger[0].clip;
     assert_eq!(clip.notes.len(), 4); // 3 chord tones + 1 melody note (rest is silent)
@@ -257,7 +257,7 @@ fn automate_volume_ramps_audibly() {
         tempo 120bpm
         section all = bars(1..8)
         track A {
-            instrument polymer(wave: "saw")
+            instrument prisma(wave: "saw")
             play notes`C3:4` at all
             automate volume from 0.05 to 0.9 over all
         }
@@ -279,7 +279,7 @@ fn modulate_routes_an_lfo_at_the_instrument() {
     let with = r#"song "X" {
         tempo 120bpm
         track A {
-            instrument polymer(wave: "saw", cutoff: 0.4)
+            instrument prisma(wave: "saw", cutoff: 0.4)
             play notes`C3:4` at bars(1..4)
             modulate cutoff with lfo(rate: 0.4, amount: 0.5, shape: "tri")
         }
@@ -306,19 +306,19 @@ fn modulate_routes_an_lfo_at_the_instrument() {
 #[test]
 fn automate_and_modulate_errors_are_reported() {
     // an unknown automate target lists what exists
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) automate pan from 0.0 to 1.0 over bars(1..2) } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument prisma() play beat`x---` at bars(1..2) automate pan from 0.0 to 1.0 over bars(1..2) } }"#;
     assert!(err_codes(src).contains(&"E-AUTO-001"));
     // unknown modulate parameter lists what exists
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutof with lfo(rate: 0.3, amount: 0.4) } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument prisma() play beat`x---` at bars(1..2) modulate cutof with lfo(rate: 0.3, amount: 0.4) } }"#;
     assert!(err_codes(src).contains(&"E-LFO-001"));
     // raw grid instruments expose no named params
-    let src = r#"song "X" { tempo 120bpm track A { instrument grid() play beat`x---` at bars(1..2) modulate cutoff with lfo(rate: 0.3, amount: 0.4) } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument mesh() play beat`x---` at bars(1..2) modulate cutoff with lfo(rate: 0.3, amount: 0.4) } }"#;
     assert!(err_codes(src).contains(&"E-LFO-001"));
     // amount is required
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutoff with lfo(rate: 0.3) } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument prisma() play beat`x---` at bars(1..2) modulate cutoff with lfo(rate: 0.3) } }"#;
     assert!(err_codes(src).contains(&"E-LFO-003"));
     // modulator kinds are lfo / steps / random — anything else is a parse error
-    let src = r#"song "X" { tempo 120bpm track A { instrument polymer() play beat`x---` at bars(1..2) modulate cutoff with wobble(amount: 0.4) } }"#;
+    let src = r#"song "X" { tempo 120bpm track A { instrument prisma() play beat`x---` at bars(1..2) modulate cutoff with wobble(amount: 0.4) } }"#;
     assert!(err_codes(src).contains(&"E-PARSE-021"));
 }
 
@@ -409,7 +409,7 @@ device Tremolo : Effect {
 song "FX" {
   tempo 110bpm
   track Keys {
-    instrument polymer(wave: "tri")
+    instrument prisma(wave: "tri")
     insert Fuzz(amount: 0.7)
     insert Tremolo(speed: 0.5)
     play notes`C3:1 E3:1 G3:1 _:1` at bars(1..2)
@@ -421,7 +421,7 @@ fn user_defined_effects_process_audio() {
     let p = fortelang::compile_str(FX_SONG).expect("effect devices must compile");
     let devices = &p.tracks[0].devices;
     assert_eq!(devices.len(), 3); // polymer + Fuzz + Tremolo
-    assert_eq!(devices[1].kind, dawcore::model::DeviceKind::GridFx);
+    assert_eq!(devices[1].kind, dawcore::model::DeviceKind::MeshFx);
     assert!(devices[1].grid.is_some());
 
     let wet = fortelang::render_digest(&p, 2.0);
@@ -444,27 +444,27 @@ fn effect_device_errors_are_reported() {
         }
     };
     // an Effect cannot be an instrument, an Instrument cannot be an insert
-    let src = FX_SONG.replace("instrument polymer(wave: \"tri\")", "instrument Fuzz()");
+    let src = FX_SONG.replace("instrument prisma(wave: \"tri\")", "instrument Fuzz()");
     assert!(codes(&src).contains(&"E-DEV-009"), "{src}");
     let src = r#"device L : Instrument { node o = osc() out gain(in: o) }
-song "X" { tempo 100bpm track A { instrument polymer() insert L() play beat`x---` at bars(1..1) } }"#;
+song "X" { tempo 100bpm track A { instrument prisma() insert L() play beat`x---` at bars(1..1) } }"#;
     assert!(codes(src).contains(&"E-DEV-009"));
     // note.* has no meaning inside an Effect; audio.in none inside an Instrument
     let src = r#"device E : Effect { node g = gain(in: note.freq) out g }
-song "X" { tempo 100bpm track A { instrument polymer() insert E() play beat`x---` at bars(1..1) } }"#;
+song "X" { tempo 100bpm track A { instrument prisma() insert E() play beat`x---` at bars(1..1) } }"#;
     assert!(codes(src).contains(&"E-GRID-003"));
     let src = r#"device I : Instrument { node g = gain(in: audio.in) out g }
 song "X" { tempo 100bpm track A { instrument I() play beat`x---` at bars(1..1) } }"#;
     assert!(codes(src).contains(&"E-GRID-003"));
     // adsr inside an Effect must state its gate explicitly
     let src = r#"device E : Effect { node env = adsr() out gain(in: audio.in, mod: env) }
-song "X" { tempo 100bpm track A { instrument polymer() insert E() play beat`x---` at bars(1..1) } }"#;
+song "X" { tempo 100bpm track A { instrument prisma() insert E() play beat`x---` at bars(1..1) } }"#;
     assert!(codes(src).contains(&"E-GRID-001"));
 }
 
 #[test]
 fn stems_are_isolated_deterministic_and_keep_sends() {
-    let p = fortelang::compile_str(include_str!("../../../songs/night-parade.forte")).unwrap();
+    let p = fortelang::compile_str(include_str!("../../../packages/essentials_0.6.0/songs/night-parade.forte")).unwrap();
     let mix = fortelang::render_digest(&p, 2.0);
     let mut seen = std::collections::HashSet::new();
     for t in p.tracks.iter().filter(|t| t.kind != dawcore::model::TrackKind::Effect) {

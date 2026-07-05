@@ -1,0 +1,63 @@
+// Jazz Ballad (66bpm) — brushes, walking-style bass, ii-V-I.
+// A vibraphone floats on top.
+import { SnareBrush, Ride, HatPedal } from "../instruments/drums.forte"
+import { UprightBass } from "../instruments/bass.forte"
+import { Vibraphone, EPiano } from "../instruments/keys.forte"
+
+block JazzBalladDrums {
+  let ride  = beat`x--x --x- x--x --x-`
+  let pedal = beat`---- x--- ---- x---`
+
+  track Ride  { instrument Ride(wash: 0.35) volume 0.35 pan 0.25 play ride at bars(1..8) }
+  track Pedal { instrument HatPedal() volume 0.3 pan -0.2 play pedal at bars(1..8) }
+}
+
+block JazzBalladBass {
+  key F minor
+  let turn = prog`Gm7 | C7 | Fmaj7 | Dm7`
+
+  track Bass {
+    instrument UprightBass()
+    volume 0.75
+    play bass(turn, rate: 1) at bars(1..8)
+  }
+}
+
+// Brush, piano and vibes share the Club reverb return, so they live together.
+block JazzBalladSpace {
+  key F minor
+  let brush = beat`x--- x--- x--- x---`
+  let turn  = prog`Gm7 | C7 | Fmaj7 | Dm7`
+
+  return Club {
+    insert reverb(size: 0.55, decay: 0.45, mix: 1.0)
+    volume 0.6
+  }
+
+  track Brush { instrument SnareBrush(soft: 0.3) volume 0.45 send Club 0.2 play brush at bars(1..8) }
+
+  track Piano {
+    instrument EPiano(tine: 0.2)
+    send Club 0.3
+    volume 0.5
+    play chords(turn) at bars(1..8)
+  }
+
+  track Vibes {
+    instrument Vibraphone(motor: 0.45)
+    send Club 0.4
+    volume 0.45
+    pan 0.2
+    play notes`_:2 F4:1 G4:0.5 A4:1.5 _:1 E4:0.5 F4:0.5 G4:1 C5:2 _:1 A4:1 F4:1.5 G4:1.5` at bars(3..8)
+  }
+}
+
+block JazzBallad {
+  tempo 66bpm
+  meter 4/4
+  key F minor
+
+  play JazzBalladDrums at bars(1..8)
+  play JazzBalladBass at bars(1..8)
+  play JazzBalladSpace at bars(1..8)
+}

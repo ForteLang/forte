@@ -22,11 +22,11 @@ pub enum DeviceKind {
     NoteTranspose,
     NoteRepeat,
     // Note -> Audio
-    Polymer,
+    Prisma,
     Sampler,
     /// Pitch → sample map (drum kit built from recorded takes).
     Kit,
-    PolyGrid,
+    PolyMesh,
     // Audio -> Audio
     Filter,
     Delay,
@@ -40,7 +40,7 @@ pub enum DeviceKind {
     /// Mid/side stereo width.
     Width,
     /// A user-defined effect: a Grid graph fed by AudioIn (`device X : Effect`).
-    GridFx,
+    MeshFx,
 }
 
 /// The three signal-transformation stages every device belongs to.
@@ -68,10 +68,10 @@ impl DeviceKind {
         DeviceKind::Arpeggiator,
         DeviceKind::NoteTranspose,
         DeviceKind::NoteRepeat,
-        DeviceKind::Polymer,
+        DeviceKind::Prisma,
         DeviceKind::Sampler,
         DeviceKind::Kit,
-        DeviceKind::PolyGrid,
+        DeviceKind::PolyMesh,
         DeviceKind::Filter,
         DeviceKind::Eq,
         DeviceKind::Drive,
@@ -88,20 +88,20 @@ impl DeviceKind {
             DeviceKind::Arpeggiator => "Arpeggiator",
             DeviceKind::NoteTranspose => "Transposer",
             DeviceKind::NoteRepeat => "Note Repeat",
-            DeviceKind::Polymer => "Polymer",
+            DeviceKind::Prisma => "Prisma",
             DeviceKind::Sampler => "Sampler",
             DeviceKind::Kit => "Kit",
-            DeviceKind::PolyGrid => "Poly Grid",
-            DeviceKind::Filter => "Filter+",
-            DeviceKind::Delay => "Delay-4",
+            DeviceKind::PolyMesh => "Poly Mesh",
+            DeviceKind::Filter => "Filter",
+            DeviceKind::Delay => "Delay",
             DeviceKind::Reverb => "Reverb",
-            DeviceKind::Eq => "EQ-5",
+            DeviceKind::Eq => "EQ",
             DeviceKind::Drive => "Distortion",
             DeviceKind::Comp => "Compressor",
             DeviceKind::Chorus => "Chorus",
             DeviceKind::Pump => "Pump",
             DeviceKind::Width => "Width",
-            DeviceKind::GridFx => "Grid FX",
+            DeviceKind::MeshFx => "Mesh FX",
         }
     }
 
@@ -110,7 +110,7 @@ impl DeviceKind {
             DeviceKind::Arpeggiator | DeviceKind::NoteTranspose | DeviceKind::NoteRepeat => {
                 DeviceStage::NoteFx
             }
-            DeviceKind::Polymer | DeviceKind::Sampler | DeviceKind::Kit | DeviceKind::PolyGrid => {
+            DeviceKind::Prisma | DeviceKind::Sampler | DeviceKind::Kit | DeviceKind::PolyMesh => {
                 DeviceStage::Instrument
             }
             _ => DeviceStage::AudioFx,
@@ -124,7 +124,7 @@ impl DeviceKind {
     /// Parameter labels in engine order. The GUI renders a knob per entry.
     pub fn params(self) -> &'static [&'static str] {
         match self {
-            DeviceKind::Polymer => &[
+            DeviceKind::Prisma => &[
                 "Wave", "Cutoff", "Reso", "Attack", "Decay", "Sustain", "Release",
                 "Detune", "Sub", "FiltEnv",
             ],
@@ -133,7 +133,7 @@ impl DeviceKind {
                 "Loop", "Reverse",
             ],
             DeviceKind::Kit => &["Gain", "Attack", "Decay", "Sustain", "Release"],
-            DeviceKind::PolyGrid => &[],
+            DeviceKind::PolyMesh => &[],
             DeviceKind::Arpeggiator => &["Rate", "Octaves", "Mode"],
             DeviceKind::NoteTranspose => &["Semi"],
             DeviceKind::NoteRepeat => &["Rate", "Gate"],
@@ -146,21 +146,21 @@ impl DeviceKind {
             DeviceKind::Chorus => &["Rate", "Depth", "Mix"],
             DeviceKind::Pump => &["Amount", "Period"],
             DeviceKind::Width => &["Amount"],
-            DeviceKind::GridFx => &[],
+            DeviceKind::MeshFx => &[],
         }
     }
 
     /// Default parameter values, parallel to [`params`].
     pub fn defaults(self) -> Vec<f32> {
         match self {
-            DeviceKind::Polymer => {
+            DeviceKind::Prisma => {
                 vec![1.0, 0.65, 0.15, 0.01, 0.3, 0.6, 0.25, 0.12, 0.3, 0.4]
             }
             // Pitch 0.5 == centre (no transpose); ±24 semitones across the range.
             // Start/End trim the play region; Loop/Reverse are 0/1 switches.
             DeviceKind::Sampler => vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5, 0.0, 1.0, 0.0, 0.0],
             DeviceKind::Kit => vec![0.8, 0.01, 0.3, 1.0, 0.25],
-            DeviceKind::PolyGrid => Vec::new(),
+            DeviceKind::PolyMesh => Vec::new(),
             DeviceKind::Arpeggiator => vec![0.55, 0.0, 0.0], // 1/8, 1 octave, up
             DeviceKind::NoteTranspose => vec![0.5],          // centre = 0 semitones
             DeviceKind::NoteRepeat => vec![0.7, 0.5],        // 1/16, 50% gate
@@ -174,14 +174,14 @@ impl DeviceKind {
             // Period is seconds per duck; the compiler overwrites it from tempo
             DeviceKind::Pump => vec![0.6, 0.5],
             DeviceKind::Width => vec![0.75],
-            DeviceKind::GridFx => Vec::new(),
+            DeviceKind::MeshFx => Vec::new(),
         }
     }
 
     /// Which parameters are discrete dropdowns rather than knobs.
     pub fn options(self, param: usize) -> Option<&'static [&'static str]> {
         match (self, param) {
-            (DeviceKind::Polymer, 0) => Some(&["Sine", "Saw", "Square", "Tri"]),
+            (DeviceKind::Prisma, 0) => Some(&["Sine", "Saw", "Square", "Tri"]),
             (DeviceKind::Filter, 0) => Some(&["LP", "HP", "BP", "Notch"]),
             (DeviceKind::Arpeggiator, 2) => Some(&["Up", "Down", "UpDn"]),
             _ => None,
@@ -422,7 +422,7 @@ impl Device {
     }
 
     pub fn poly_grid() -> Self {
-        let mut d = Device::new(DeviceKind::PolyGrid);
+        let mut d = Device::new(DeviceKind::PolyMesh);
         d.grid = Some(GridGraph::default_patch());
         d
     }
@@ -588,7 +588,7 @@ impl Track {
     pub fn new(id: usize, name: impl Into<String>, kind: TrackKind, color: [u8; 3]) -> Self {
         let mut devices = Vec::new();
         if kind == TrackKind::Instrument {
-            devices.push(Device::new(DeviceKind::Polymer));
+            devices.push(Device::new(DeviceKind::Prisma));
         }
         Self {
             id,
@@ -688,6 +688,14 @@ pub struct CueMarker {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Project {
+    /// Root block name plus its `desc`/`tags` metadata — shown by forte play
+    /// and package catalogs (not part of the audio; digests are unaffected).
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub desc: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
     pub tracks: Vec<Track>,
     pub scenes: Vec<Scene>,
     pub tempo: f64,
@@ -708,6 +716,9 @@ impl Project {
     /// programmatic construction, e.g. by the Forte compiler.
     pub fn empty() -> Self {
         Project {
+            name: String::new(),
+            desc: String::new(),
+            tags: Vec::new(),
             tracks: Vec::new(),
             scenes: (0..SCENE_COUNT)
                 .map(|i| Scene { name: format!("Scene {}", i + 1) })
@@ -766,6 +777,9 @@ impl Project {
             .collect();
 
         let mut p = Project {
+            name: String::new(),
+            desc: String::new(),
+            tags: Vec::new(),
             tracks: Vec::new(),
             scenes,
             tempo: 120.0,

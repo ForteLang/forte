@@ -1,0 +1,58 @@
+// Pattern: 808 Hip Hop (88bpm, swing 0.56) — boom-bap leaning 808.
+// Swing and ghosts make it "programmed, yet it sways".
+import { BD808, SD808, CH808, OH808, CP808 } from "../instruments/tr808.forte"
+import { DubBass } from "../instruments/bass.forte"
+import { Wurli } from "../instruments/keys.forte"
+
+block Tr808HipHopDrums {
+  let kick = beat`x--- --x- -x-- ---- x--- ---x --x- ----`
+  let chh  = beat`x.x. x.xx x.x. x.x. x.x. x.xx x.x. xx.X`
+  let ohh  = beat`---- ---- --x- ---- ---- ---- --x- ----`
+
+  track BD { instrument BD808(tone: 0.35, decay: 0.7) insert comp(thresh: 0.45, ratio: 0.5) volume 0.95 play kick at bars(1..8) }
+  track CH { instrument CH808() volume 0.45 pan 0.15 play chh at bars(1..8) }
+  track OH { instrument OH808(decay: 0.35) volume 0.35 pan -0.1 play ohh at bars(1..8) }
+}
+
+block Tr808HipHopBass {
+  key Eb minor
+  track Bass {
+    instrument DubBass(depth: 0.8)
+    volume 0.85
+    play notes`Eb1:0.75 _:0.25 Eb1:0.5 Gb1:0.5 _:1 Ab1:0.5 B1~:0.5 Ab1:0.75 _:0.25 Gb1:0.5 Eb1:0.5 _:2` at bars(1..8)
+  }
+}
+
+// Snare, clap and keys share the Alley reverb — they stay with the return.
+block Tr808HipHopAlley {
+  key Eb minor
+  let snare = beat`---- X--- ---- X--- ---- X--- ---- X..-`
+  let clap  = beat`---- ---- ---- ---- ---- x--- ---- x---`
+  let dusty = prog`Ebm7 | Abm7 | Bmaj7 | Db7`
+
+  return Alley {
+    insert reverb(size: 0.5, decay: 0.4, mix: 1.0)
+    volume 0.55
+  }
+
+  track SD { instrument SD808(snappy: 0.7) send Alley 0.25 volume 0.8 play snare at bars(1..8) }
+  track CP { instrument CP808(room: 0.6) send Alley 0.3 volume 0.5 play clap at bars(5..8) }
+
+  track Keys {
+    instrument Wurli(bark: 0.3)
+    send Alley 0.35
+    volume 0.5
+    play chords(dusty) at bars(1..8)
+  }
+}
+
+block Tr808HipHop {
+  tempo 88bpm
+  swing 0.56
+  meter 4/4
+  key Eb minor
+
+  play Tr808HipHopDrums at bars(1..8)
+  play Tr808HipHopBass at bars(1..8)
+  play Tr808HipHopAlley at bars(1..8)
+}

@@ -1,0 +1,61 @@
+// Pattern: Motorik (120bpm) — straight-ahead eighth-note hats, an unchanging kick.
+// Only tiny differences inside the repetition (ghost placement) move time forward.
+import { Kick606, SnareTight, HatClosed } from "../instruments/drums.forte"
+import { PickBass } from "../instruments/bass.forte"
+import { ChorusPulse } from "../instruments/synths.forte"
+import { GlideLead } from "../instruments/leads.forte"
+
+block MotorikDrums {
+  let kick  = beat`x--- x--- x--- x---`
+  let snare = beat`---- x--- ---- x---`
+  let hat1  = beat`x-x- x-x- x-x- x-x-`
+  let hat2  = beat`x-x. x-x- x.x- x-x-`
+
+  track Kick  { instrument Kick606(decay: 0.3) volume 0.85 play kick at bars(1..8) }
+  track Snare { instrument SnareTight(snap: 0.55) volume 0.55 play snare at bars(1..8) }
+  track Hat   { instrument HatClosed(bright: 0.85) volume 0.4 pan 0.1 play hat1 at bars(1..4) play hat2 at bars(5..8) }
+}
+
+block MotorikBass {
+  key D minor
+  track Bass {
+    instrument PickBass()
+    volume 0.75
+    play notes`D2:0.5 D2:0.5 D2:0.5 D2:0.5 D2:0.5 D2:0.5 C2:0.5 D2:0.5` at bars(1..8)
+  }
+}
+
+block MotorikPulse {
+  key D minor
+  let road = prog`Dm | Dm | C | Dm`
+
+  track Pulse {
+    instrument ChorusPulse()
+    insert chorus(rate: 0.3, depth: 0.5, mix: 0.5)
+    volume 0.4
+    pan -0.15
+    play chords(road) at bars(1..8)
+  }
+}
+
+block MotorikLead {
+  key D minor
+  track Lead {
+    instrument GlideLead()
+    insert delay(time: 0.375, fdbk: 0.4, mix: 0.35)
+    volume 0.35
+    pan 0.2
+    play notes`_:4 D4:1 E4:1 F4:1.5 E4~:0.5 D4:2 A3~:2 _:2 F4:1 G4:1 A4~:2 F4:1 E4~:1` at bars(3..8)
+  }
+}
+
+block Motorik {
+  tempo 120bpm
+  meter 4/4
+  key D minor
+
+  play MotorikDrums at bars(1..8)
+  play MotorikBass at bars(1..8)
+  play MotorikPulse at bars(1..8)
+  play MotorikLead at bars(1..8)
+}

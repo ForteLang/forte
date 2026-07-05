@@ -1,0 +1,54 @@
+// Pattern: Reggae One Drop (74bpm) — kick and rim land on beat 3,
+// the skank (offbeat organ), and a deep dub bass.
+import { Kick808, Rim, HatClosed, HatOpen } from "../instruments/drums.forte"
+import { DubBass } from "../instruments/bass.forte"
+import { Organ } from "../instruments/keys.forte"
+
+block ReggaeOneDropDrums {
+  let drop = beat`---- ---- x--- ----`
+  let hat  = beat`x-x- x-x- x-x- x-xx`
+
+  track Drop { instrument Kick808(punch: 0.4, decay: 0.6) volume 0.9 play drop at bars(1..8) }
+  track Hat  { instrument HatClosed(bright: 0.8) volume 0.35 pan 0.2 play hat at bars(1..8) }
+}
+
+block ReggaeOneDropBass {
+  key G minor
+  track Bass {
+    instrument DubBass(depth: 0.85)
+    volume 0.9
+    play notes`G1:0.75 _:0.25 _:0.5 Bb1:0.5 _:1 G1:0.5 D2:0.5` at bars(1..8)
+  }
+}
+
+// Rim and skank both feed the dub Echo, so they live with the return.
+block ReggaeOneDropEcho {
+  key G minor
+  let drop  = beat`---- ---- x--- ----`
+  let skank = beat`--x- --x- --x- --x-`
+  let roots = prog`Gm | Gm | Cm | D7`
+
+  return Echo {
+    insert delay(time: 0.375, fdbk: 0.45, mix: 1.0)
+    volume 0.5
+  }
+
+  track Rim { instrument Rim() volume 0.6 send Echo 0.2 play drop at bars(1..8) }
+
+  track Skank {
+    instrument Organ(drawbar: 0.4)
+    send Echo 0.3
+    volume 0.45
+    play chords(roots) at bars(1..8)
+  }
+}
+
+block ReggaeOneDrop {
+  tempo 74bpm
+  meter 4/4
+  key G minor
+
+  play ReggaeOneDropDrums at bars(1..8)
+  play ReggaeOneDropBass at bars(1..8)
+  play ReggaeOneDropEcho at bars(1..8)
+}

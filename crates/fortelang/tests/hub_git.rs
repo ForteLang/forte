@@ -36,7 +36,7 @@ fn write_song(dir: &std::path::Path, tempo: u32) {
     std::fs::write(
         dir.join("tune.forte"),
         format!(
-            "song \"Tune\" {{\n  tempo {tempo}bpm\n  track A {{\n    instrument polymer()\n    play beat`x---` at bars(1..2)\n  }}\n}}\n"
+            "song \"Tune\" {{\n  tempo {tempo}bpm\n  track A {{\n    instrument prisma()\n    play beat`x---` at bars(1..2)\n  }}\n}}\n"
         ),
     )
     .unwrap();

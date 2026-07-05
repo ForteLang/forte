@@ -10,8 +10,8 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 
-const NATIVE_DIGEST = '1f1e8e0e873a42fc'; // forte build songs/first-light.forte
-const NATIVE_DIGEST_HANDMADE = 'd66a3103bcf1cad1'; // forte build songs/handmade.forte
+const NATIVE_DIGEST = '1f1e8e0e873a42fc'; // forte build packages/essentials_0.6.0/songs/first-light.forte
+const NATIVE_DIGEST_HANDMADE = 'd66a3103bcf1cad1'; // forte build packages/essentials_0.6.0/songs/handmade.forte
 const PORT = 8329;
 const ROOT = new URL('..', import.meta.url).pathname;
 
@@ -269,7 +269,7 @@ try {
   await page.waitForFunction(() => document.body.dataset.performCode, null, { timeout: 15000 });
   const performCode = await page.evaluate(() => document.body.dataset.performCode);
   const perfCompiles = await page.evaluate(async (code) => {
-    const src = `song "P" { tempo 120bpm track A { instrument polymer() play ${code} at bars(1..2) } }`;
+    const src = `song "P" { tempo 120bpm track A { instrument prisma() play ${code} at bars(1..2) } }`;
     return window.__forteCompileCheck ? window.__forteCompileCheck(src) : null;
   }, performCode);
   check(

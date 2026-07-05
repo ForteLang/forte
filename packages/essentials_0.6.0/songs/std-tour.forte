@@ -1,0 +1,91 @@
+// Std Tour — reference song 6: a tour of the standard instrument library (packages/essentials_0.6.0/instruments).
+// Drums, bass, keys, pads — all of it is device DSL code.
+// Don't like a sound? Open the file it's imported from and reshape it character by character.
+// Play: forte play songs/std-tour.forte
+
+import { Kick909, Snare908, HatClosed, HatOpen, Clap } from "../instruments/drums.forte"
+import { AcidBass } from "../instruments/bass.forte"
+import { EPiano, Bell } from "../instruments/keys.forte"
+import { StringPad } from "../instruments/pads.forte"
+import { Pluck } from "../instruments/leads.forte"
+
+song "Std Tour" {
+  tempo 118bpm
+  meter 4/4
+  key A minor
+
+  let kick  = beat`x--- --x- x--- ----`
+  let snare = beat`---- x--- ---- x---`
+  let hats  = beat`x-x- x-x- x-x- x-x-`
+  let open  = beat`---- ---- ---- --x-`
+  let clap  = beat`---- x--- ---- x--x`
+
+  track Kick {
+    instrument Kick909(click: 0.5)
+    volume 0.9
+    play kick at bars(1..16)
+  }
+
+  track Snare {
+    instrument Snare908(tone: 0.7, snap: 0.65)
+    volume 0.7
+    play snare at bars(5..16)
+  }
+
+  track Hats {
+    instrument HatClosed(bright: 0.95)
+    volume 0.5
+    pan 0.2
+    play hats at bars(1..16)
+  }
+
+  track Open {
+    instrument HatOpen(decay: 0.3)
+    volume 0.45
+    pan -0.15
+    play open at bars(9..16)
+  }
+
+  track Clap {
+    instrument Clap(tone: 0.65)
+    volume 0.5
+    play clap at bars(13..16)
+  }
+
+  track Bass {
+    instrument AcidBass(cutoff: 0.4, reso: 0.7, sweep: 0.55)
+    volume 0.7
+    play notes`A1:1/2 A1:1/2 A1:1/2 C2:1/2 A1:1/2 A1:1/2 G1:1/2 E2:1/2` at bars(1..16)
+  }
+
+  track Keys {
+    instrument EPiano(tine: 0.35)
+    insert reverb(size: 0.5, decay: 0.45, mix: 0.25)
+    volume 0.55
+    pan -0.2
+    play notes`[A3 C4 E4]:4 [F3 A3 C4]:4 [C4 E4 G4]:4 [G3 B3 D4]:4` at bars(5..16)
+  }
+
+  track Pad {
+    instrument StringPad(bright: 0.55)
+    insert reverb(size: 0.65, decay: 0.6, mix: 0.35)
+    volume 0.4
+    play notes`[A2 E3 A3]:8 [F2 C3 F3]:8` at bars(9..16)
+  }
+
+  track Bell {
+    instrument Bell(decay: 0.6)
+    insert delay(time: 0.35, fdbk: 0.35, mix: 0.3)
+    volume 0.4
+    pan 0.3
+    play notes`A5:1 E5:1 C5:1 D5:1` at bars(13..16)
+  }
+
+  track Lead {
+    instrument Pluck(decay: 0.3)
+    insert delay(time: 0.3, fdbk: 0.4, mix: 0.25)
+    volume 0.5
+    pan 0.1
+    play notes`A4:1/2 C5:1/2 E5:1/2 D5:1/2 C5:1/2 A4:1/2 G4:1/2 A4:1` at bars(9..16)
+  }
+}
