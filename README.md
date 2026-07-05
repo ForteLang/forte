@@ -115,7 +115,7 @@ Three commands take you from "what's in the box" to notes in a song:
 ```bash
 forte instruments            # the catalog: 148 devices, params, import lines
 forte instruments 808        # filter by name or library (tr808, juno, acid, ...)
-forte instrument BD808       # audition it: the keyboard becomes a piano
+forte instruments BD808      # an exact name goes straight into play mode
 ```
 
 `forte instrument <Name>` resolves any standard instrument by name, takes

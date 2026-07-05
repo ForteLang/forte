@@ -201,8 +201,17 @@ fn main() -> ExitCode {
                     };
                     r.map(|msg| println!("{msg}")).map_err(|e| e.to_string())
                 }
-                // no subcommand (or a query): the catalog
-                _ => fortelang::live::list(sub),
+                // no subcommand: an exact instrument name plays, anything
+                // else filters the catalog (forte instruments SubBass = play)
+                Some(arg) => {
+                    let from = args
+                        .iter()
+                        .position(|a| a == "--from")
+                        .and_then(|i| args.get(i + 1))
+                        .cloned();
+                    fortelang::live::play_or_list(arg, from.as_deref())
+                }
+                None => fortelang::live::list(None),
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
@@ -242,7 +251,7 @@ fn main() -> ExitCode {
             eprintln!("       forte export <song.forte> [-o out.zip]  (曲+履歴+証明の自己完結 zip)");
             eprintln!("       forte play  <song.forte> [--for SECS]   (トラックタイムラインを表示しながら再生)");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
-            eprintln!("       forte instruments [QUERY]   (楽器カタログ: 名前・パラメータ・import 行)");
+            eprintln!("       forte instruments [QUERY|Name]  (名前に一致すればそのまま演奏、他はカタログ検索)");
             eprintln!("       forte instruments play <Name[(args)]>  (キーボードが鍵盤に。1..9/-/= でノブ)");
             eprintln!("       forte instruments edit <Name>          (instruments/ にコピーして編集、自動コミットで履歴)");
             eprintln!("       forte instruments add <Name> [--hub URL] (hub から楽器ライブラリを fork)");
