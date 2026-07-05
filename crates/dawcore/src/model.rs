@@ -696,6 +696,8 @@ pub struct Project {
     pub desc: String,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub license: String,
     pub tracks: Vec<Track>,
     pub scenes: Vec<Scene>,
     pub tempo: f64,
@@ -719,6 +721,7 @@ impl Project {
             name: String::new(),
             desc: String::new(),
             tags: Vec::new(),
+            license: String::new(),
             tracks: Vec::new(),
             scenes: (0..SCENE_COUNT)
                 .map(|i| Scene { name: format!("Scene {}", i + 1) })
@@ -780,6 +783,7 @@ impl Project {
             name: String::new(),
             desc: String::new(),
             tags: Vec::new(),
+            license: String::new(),
             tracks: Vec::new(),
             scenes,
             tempo: 120.0,

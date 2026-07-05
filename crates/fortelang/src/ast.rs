@@ -114,6 +114,9 @@ pub struct SongAst {
     pub desc: Option<String>,
     /// `tags "acid, bass, 303"` — search keywords for packages/browsing.
     pub tags: Vec<String>,
+    /// `license "CC-BY-NC-SA-4.0"` — the content license this body is
+    /// published under (packages declare it; players display it).
+    pub license: Option<String>,
     pub tempo: Option<(f64, Pos)>,
     pub swing: Option<(f64, Pos)>,
     pub meter: Option<((u32, u32), Pos)>,

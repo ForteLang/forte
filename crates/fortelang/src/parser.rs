@@ -171,6 +171,7 @@ impl Parser {
             name,
             desc: None,
             tags: Vec::new(),
+            license: None,
             tempo: None,
             swing: None,
             meter: None,
@@ -214,6 +215,15 @@ impl Parser {
                                 .collect();
                         } else {
                             self.err("E-PARSE-023", "tags には文字列が必要です(例: tags \"acid, bass, 303\")");
+                        }
+                    }
+                    "license" => {
+                        self.bump();
+                        if let Tok::Str(l) = self.peek().clone() {
+                            self.bump();
+                            song.license = Some(l);
+                        } else {
+                            self.err("E-PARSE-023", "license には文字列が必要です(例: license \"CC-BY-NC-SA-4.0\")");
                         }
                     }
                     "tempo" => {
