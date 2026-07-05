@@ -95,10 +95,16 @@ async function load() {
   let data;
   try {
     const res = await fetch('/api/packages');
+    if (!res.ok) throw new Error(String(res.status));
     data = await res.json();
   } catch (e) {
-    $('list').innerHTML = `<div class="hint">カタログ API に届きません(<code>forte browser</code> で開いていますか?)</div>`;
-    return;
+    // static hosting (GitHub Pages): the catalog ships as packages.json
+    try {
+      data = await (await fetch('packages.json')).json();
+    } catch (e2) {
+      $('list').innerHTML = `<div class="hint">カタログ API に届きません(<code>forte browser</code> で開いていますか?)</div>`;
+      return;
+    }
   }
   if (!data.packages.length) {
     $('list').innerHTML = `<div class="hint">packages/ が空です。<code>forte package add github:owner/repo</code> で取り込めます。</div>`;
