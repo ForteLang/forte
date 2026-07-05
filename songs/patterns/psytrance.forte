@@ -1,0 +1,38 @@
+// Pattern: Psytrance (142bpm) — キックとローリングベースの一体感。
+// ベースは 16 分の 3 連続(キックの直後だけ休む)が文法。
+import { BD909, CH909, OH909 } from "../../lib/std/tr909.forte"
+import { SH101Bass } from "../../lib/std/sh101.forte"
+import { TranceSaw } from "../../lib/std/synths.forte"
+import { Zap } from "../../lib/std/fx.forte"
+
+song "Pattern: Psytrance" {
+  tempo 142bpm
+  meter 4/4
+  key F minor
+
+  let four = beat`X--- x--- x--- x---`
+  let roll = beat`-xxx -xxx -xxx -xxx`
+  let chh  = beat`x-x- x-x- x-x- x-x-`
+  let ohh  = beat`--x- --x- --x- --x-`
+  let zap  = beat`---- --x- ---- ---x`
+
+  track BD { instrument BD909(attack: 0.65, decay: 0.4) insert comp(thresh: 0.4, ratio: 0.6) volume 0.95 play four at bars(1..8) }
+  track CH { instrument CH909() volume 0.3 pan 0.2 play chh at bars(3..8) }
+  track OH { instrument OH909(decay: 0.25) volume 0.4 play ohh at bars(1..8) }
+  track Zap { instrument Zap() insert delay(time: 0.21, fdbk: 0.4, mix: 0.4) volume 0.35 pan -0.3 play zap at bars(5..8) }
+
+  track Bass {
+    instrument SH101Bass(cutoff: 0.42)
+    insert drive(drive: 0.2)
+    volume 0.85
+    play roll at bars(1..8)
+  }
+
+  track Lead {
+    instrument TranceSaw(wide: 0.6)
+    insert delay(time: 0.317, fdbk: 0.35, mix: 0.3)
+    volume 0.4
+    pan 0.15
+    play notes`_:8 F4:0.25 _:0.25 Ab4:0.25 _:0.25 F4:0.25 C5~:0.5 Bb4~:0.75 Ab4:0.5 G4:0.5 F4:1.5 _:2.75` at bars(3..8)
+  }
+}
