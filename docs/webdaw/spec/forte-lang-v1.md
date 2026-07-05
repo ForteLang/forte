@@ -59,6 +59,7 @@ bodyItem  = "desc" string | "tags" string | "license" string
 place     = "play" ident [ "(" placeArg { "," placeArg } ")" ] atRef ;
 placeArg  = "key" ":" string | "from" ":" num | "to" ":" num
           | "volume" ":" num                                         (* scale the instance, this span only *)
+          | "swing" ":" num | "stretch" ":" num
           | ident ":" num ;                                          (* a declared block param *)
 placeAuto = "automate" ident "." "volume" "from" num "to" num "over" overRef ;
 track     = "track" ident "{" { trackItem } "}" ;
@@ -302,6 +303,13 @@ it to other blocks. The outermost block you build is "the song".
     from the outside (0 = silent, 1 = the block's own mix). Targets must
     be `<placement>.volume` in v1; unknown placements are E-AUTO-002 with
     the placed names listed.
+  - `play Riff(swing: 0.66)` gives the instance's subtree its own groove
+    (grid 16ths, 0.5..0.8 — E-TYPE-002 outside); the root's swing still
+    governs everything not overridden. `play Riff(stretch: 2)` scales the
+    block's time — 2 = half-time (every beat doubles), 0.5 = double-time,
+    range 0.25..4. Stretch applies BEFORE windows and loops, so `from`/
+    `to` and the placement span speak stretched bars; recorded audio
+    moves but plays at its own speed (audio cannot timestretch).
   - **Public knobs**: a block declares `param cutoff = 0.5 in 0..1`
     (device syntax) and references the name in its instrument/insert args
     (`instrument Bass303(cutoff: cutoff)`). A placement sets it with

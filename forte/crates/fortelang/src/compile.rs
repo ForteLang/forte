@@ -113,7 +113,7 @@ pub fn compile(
     let mut stack: Vec<String> = vec![root.name.clone()];
     let lowered = lower_body(
         root,
-        &PlaceEnv { prefix: "", eff_root: eff_root_pc, overrides: &[] },
+        &PlaceEnv { prefix: "", eff_root: eff_root_pc, overrides: &[], swing: None },
         &[&file.blocks],
         &mut stack,
         &env,
@@ -241,6 +241,9 @@ struct PlaceEnv<'a> {
     prefix: &'a str,
     eff_root: Option<u8>,
     overrides: &'a [(String, f64, Pos)],
+    /// Local swing for this subtree (`play Riff(swing: 0.66)`); None = the
+    /// root's swing (upper wins, as ever).
+    swing: Option<f64>,
 }
 
 /// Lower one block body into tracks with local-beat clips. The transpose
@@ -257,6 +260,7 @@ fn lower_body(
 ) -> Lowered {
     let beats_per_bar = env.beats_per_bar;
     let (prefix, eff_root, overrides) = (penv.prefix, penv.eff_root, penv.overrides);
+    let eff_swing = penv.swing.unwrap_or(env.swing);
 
     // ---- the block's public knobs --------------------------------------------
     // declared defaults, then the placement's values on top (range-checked)
@@ -492,10 +496,10 @@ fn lower_body(
             }
             let mut clip = Clip::new(clip_name, TRACK_COLORS[0]);
             clip.length = len_beats;
-            if env.swing > 0.5 {
+            if eff_swing > 0.5 {
                 // delay every off-beat 16th that sits exactly on the grid;
                 // freely-timed notes are left alone
-                let shift = (env.swing - 0.5) * 0.5;
+                let shift = (eff_swing - 0.5) * 0.5;
                 for n in &mut notes {
                     let idx = (n.start / 0.25).round();
                     if (n.start - idx * 0.25).abs() < 1e-9 && (idx as i64) % 2 == 1 {
@@ -703,15 +707,75 @@ fn lower_body(
                 seen_params.insert(bdef.name.clone(), norm);
             }
         }
-        let child = lower_body(
+        let child_swing = match place.swing {
+            Some((v, spos)) => {
+                if !(0.5..=0.8).contains(&v) {
+                    diags.push(Diag::new(
+                        "E-TYPE-002",
+                        spos,
+                        format!("swing {v} は 0.5..0.8 の範囲外です(0.5 = ストレート、0.66 ≒ シャッフル)"),
+                    ));
+                    Some(eff_swing)
+                } else {
+                    Some(v)
+                }
+            }
+            None => Some(eff_swing),
+        };
+        let mut child = lower_body(
             child_body,
-            &PlaceEnv { prefix: &child_prefix, eff_root: eff_child, overrides: &place.params },
+            &PlaceEnv {
+                prefix: &child_prefix,
+                eff_root: eff_child,
+                overrides: &place.params,
+                swing: child_swing,
+            },
             &child_registry,
             stack,
             env,
             diags,
         );
         stack.pop();
+
+        // stretch: 2 = half-time (every beat doubles), 0.5 = double-time.
+        // Time inside the instance scales BEFORE windows/loops, so from/to
+        // and the placement span speak stretched bars.
+        if let Some((s_factor, spos)) = place.stretch {
+            if !(0.25..=4.0).contains(&s_factor) {
+                diags.push(Diag::new(
+                    "E-TYPE-002",
+                    spos,
+                    format!("stretch {s_factor} は 0.25..4 の範囲外です(2 = ハーフタイム、0.5 = ダブルタイム)"),
+                ));
+            } else if (s_factor - 1.0).abs() > 1e-9 {
+                for lt in &mut child.tracks {
+                    for ac in &mut lt.track.arranger {
+                        ac.start *= s_factor;
+                        ac.duration *= s_factor;
+                        ac.clip.length *= s_factor;
+                        for n in &mut ac.clip.notes {
+                            n.start *= s_factor;
+                            n.length *= s_factor;
+                        }
+                    }
+                    for au in &mut lt.track.audio_clips {
+                        // recorded audio cannot timestretch: it moves, but
+                        // plays at its own speed
+                        au.start *= s_factor;
+                    }
+                    for pt in &mut lt.track.volume_automation {
+                        pt.beat *= s_factor;
+                    }
+                    for lane in &mut lt.track.param_automation {
+                        for pt in &mut lane.points {
+                            pt.beat *= s_factor;
+                        }
+                    }
+                }
+                child.len_beats =
+                    ((child.len_beats * s_factor) / beats_per_bar).ceil().max(1.0) * beats_per_bar;
+            }
+        }
 
         // window inside the child, in beats (defaults: the whole block)
         let offset = (a - 1) as f64 * beats_per_bar;

@@ -46,6 +46,11 @@ pub struct PlaceAst {
     pub volume: Option<(f64, Pos)>,
     /// `cutoff: 0.7` — values for the block's declared `param`s.
     pub params: Vec<(String, f64, Pos)>,
+    /// `swing: 0.66` — local swing for this instance's subtree (grid 16ths).
+    pub swing: Option<(f64, Pos)>,
+    /// `stretch: 2` — scale the block's time: 2 = half-time (beats double),
+    /// 0.5 = double-time. Windows/loops apply AFTER the stretch.
+    pub stretch: Option<(f64, Pos)>,
     pub at: AtRef,
     pub pos: Pos,
 }

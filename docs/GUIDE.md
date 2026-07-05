@@ -197,6 +197,8 @@ Rules of thumb:
 
 ```forte
 play Riff(volume: 0.5) at bars(9..16)          // half volume, this span only
+play Riff(swing: 0.66) at bars(17..24)         // this instance shuffles
+play Riff(stretch: 2)  at bars(25..32)         // half-time: beats double
 automate Riff.volume from 0 to 1 over intro    // fade the instance in
 ```
 
