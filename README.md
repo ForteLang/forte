@@ -9,7 +9,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ForteLang/forte/actions/workflows/ci.yml"><img src="https://github.com/ForteLang/forte/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
 </p>
 
@@ -53,10 +52,13 @@ cargo install --path crates/fortelang   # installs the `forte` command
 
 forte repl                              # type a line, hear it immediately
 forte check songs/first-light.forte     # validate (errors in musical terms + line numbers)
-forte play  songs/first-light.forte     # live playback; every save hot-reloads
+forte play  songs/first-light.forte     # live playback + console timeline; saves hot-reload
+forte instrument Bass303                # your keyboard becomes a piano (a w s e d ...)
+forte browser                           # launch the browser editor
 forte build songs/first-light.forte     # WAV + build proof (digest included)
 forte build songs/handmade-kit.forte --stems  # per-track WAVs + per-stem digests
 forte export songs/first-light.forte    # self-contained zip (song + takes + proof + history)
+forte upgrade                           # update the forte command itself
 ```
 
 The REPL is a loop station:
@@ -81,14 +83,28 @@ forte> :save jam.forte                     ← the jam becomes a song file
 | `:tempo 140` / `:inst polymer(…)` / `:fx reverb(…)` / `:fx clear` | Change everything without stopping |
 | `:show` / `:save jam.forte` / `:stop` / `:quit` / `:help` | Show source / save as a song / stop / quit |
 
+### Play instruments live
+
+`forte instrument <Name>` turns the computer keyboard into a piano — `a w s e
+d f t g y h u j k ...` is a chromatic run from C, `z`/`x` shift the octave,
+`c`/`v` the velocity. It resolves any of the 148 standard instruments by name
+(`forte instrument Bass303`), takes parameters
+(`forte instrument "Juno60Pad(cutoff: 0.5)"`), and when you quit, the jam is
+printed as a quantized `notes` literal — the performance is source code you
+can paste straight into a song.
+
+`forte play` shows the song as a console timeline — every track's lane, where
+it enters and leaves, plus a live playhead with progress, elapsed/total time,
+loop count and which tracks are sounding.
+
 ### Browser editor
 
 Diagnostics as you type, AudioWorklet playback, OPFS autosave, fully offline PWA:
 
 ```bash
-scripts/build_web.sh
-python3 -m http.server 8000   # from the repo root
-# → http://localhost:8000/web/
+forte browser                 # serves web/ and opens the editor
+forte browser --port 9000 --no-open
+scripts/build_web.sh          # rebuild the wasm after engine changes
 ```
 
 ### Version control for music
@@ -122,7 +138,7 @@ with glide. They are plain code: fork one and rewrite it character by
 character (demo: `forte play songs/std-tour.forte`). For full arrangements to
 learn from, `songs/patterns/` holds genre grooves (house, DnB, bossa nova,
 afrobeat, trap, …) and `songs/examples/` holds complete songs with sections —
-every one of them compiles and renders under CI.
+every one of them compiles and renders under the merge gate (scripts/ci_local.sh).
 
 Recorded takes become instruments too: slice, stretch, and reverse one recording
 into many instruments with `sampler(take: voice, start: 0.25, end: 0.6,
@@ -202,6 +218,7 @@ scripts/          determinism gate, browser E2E
 ## Testing
 
 ```bash
+scripts/ci_local.sh                    # the full merge gate (all of the below)
 cargo test -p dawcore -p fortelang     # engine + language + hub + REPL
 scripts/determinism_test.sh            # native/wasm bit-identity gate
 node scripts/web_e2e.mjs               # browser E2E (needs playwright)

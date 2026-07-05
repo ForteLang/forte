@@ -54,6 +54,28 @@ forte:Bass> :quit
 
 `:help` で全コマンド。`:save` した曲は `forte play jam.forte` でそのまま続きを作れます。
 
+## 0.7 キーボードで弾く(forte instrument)
+
+```bash
+forte instrument Bass303                  # lib/std から名前で解決
+forte instrument "Juno60Pad(cutoff: 0.5)" # パラメータ付きも OK
+forte instrument polymer                  # ビルトインも
+```
+
+キーボードが鍵盤になります:
+
+```
+a w s e d f t g y h u j k o l p ;   =  C C# D D# E F F# G G# A A# B C…
+z / x  オクターブ ↑/↓      c / v  ベロシティ ↑/↓      q  終了
+```
+
+終了すると演奏が 1/16 でクオンタイズされた `notes` リテラルとして表示されます
+— そのまま曲に貼れる「演奏はコード」の入り口です。
+
+`forte play my-song.forte` はコンソールにタイムラインを表示します:
+各トラックのレーン(どの小節で入り、どこで抜けるか)、再生ヘッドの進行、
+経過/全体時間、ループ回数、いま鳴っているトラック。
+
 ## 1. 最初の曲(5 分)
 
 `my-song.forte` を作ります:
@@ -264,9 +286,8 @@ import { MyLead, MyBass } from "./devices/mylib.forte"
 インストール不要で同じ言語・同じ音(ビット同一)が動きます:
 
 ```bash
-scripts/build_web.sh                 # wasm をビルド(要 wasm32-unknown-unknown ターゲット)
-python3 -m http.server 8000          # リポジトリルートで
-# → http://localhost:8000/web/
+forte browser                        # サーブしてブラウザを開く(--port 9000 --no-open も可)
+scripts/build_web.sh                 # エンジンを変えたら wasm を作り直す
 ```
 
 | UI | 何をするか |
