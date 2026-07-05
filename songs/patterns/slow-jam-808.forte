@@ -1,0 +1,50 @@
+// Pattern: 808 Slow Jam (66bpm, swing 0.55) — R&B バラードの 808 使い。
+// CB808 のカウベルが刻む逆説的な甘さ。エレピは 9th 気分のボイシング。
+import { BD808, SD808, CH808, CB808 } from "../../lib/std/tr808.forte"
+import { DubBass } from "../../lib/std/bass.forte"
+import { EPiano } from "../../lib/std/keys.forte"
+import { VoxLead } from "../../lib/std/leads.forte"
+
+song "Pattern: 808 Slow Jam" {
+  tempo 66bpm
+  swing 0.55
+  meter 4/4
+  key Db minor
+
+  let kick = beat`x--- --x- ---- x---`
+  let snr  = beat`---- x--- ---- x---`
+  let chh  = beat`x.x. x.x. x.xx x.x.`
+  let bell = beat`x--- x--- x--- x-x-`
+
+  return Velvet {
+    insert reverb(size: 0.7, decay: 0.55, mix: 1.0)
+    volume 0.65
+  }
+
+  track BD { instrument BD808(tone: 0.3, decay: 0.75) volume 0.9 play kick at bars(1..8) }
+  track SD { instrument SD808(tone: 0.45, snappy: 0.5) send Velvet 0.3 volume 0.65 play snr at bars(1..8) }
+  track CH { instrument CH808() volume 0.35 pan 0.2 play chh at bars(1..8) }
+  track CB { instrument CB808() volume 0.25 pan -0.3 play bell at bars(3..8) }
+
+  track Bass {
+    instrument DubBass(depth: 0.8)
+    volume 0.85
+    play notes`Db1:1.5 _:0.5 Ab1:0.75 _:0.25 Gb1:1 B0:1.5 _:0.5 Db1:1 Ab1~:1` at bars(1..8)
+  }
+
+  track Keys {
+    instrument EPiano(tine: 0.4)
+    insert chorus(rate: 0.25, depth: 0.45, mix: 0.4)
+    send Velvet 0.35
+    volume 0.55
+    play notes`[Db3 Ab3 E4 Gb4]:4 [B2 Gb3 Eb4 F4]:4 [Gb2 Db3 Bb3 Db4]:4 [Ab2 Eb3 C4 Eb4]:4` at bars(1..8)
+  }
+
+  track Voice {
+    instrument VoxLead()
+    send Velvet 0.45
+    volume 0.3
+    pan 0.1
+    play notes`_:2 E4:0.5 Gb4:0.75 Ab4~:1.75 _:1.5 Gb4:0.5 E4:0.75 Db4~:1.25 _:2 B3:0.5 Db4:1.5 _:4` at bars(3..8)
+  }
+}
