@@ -121,11 +121,17 @@ pub fn packages_json(root: &Path) -> String {
                     })
                     .unwrap_or_default();
                 tracks.sort();
+                let cover = ["cover.svg", "cover.png", "cover.jpg"]
+                    .iter()
+                    .find(|c| d.join(c).is_file())
+                    .map(|c| c.to_string())
+                    .unwrap_or_default();
                 albums.push(serde_json::json!({
                     "dir": d.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
                     "title": m.name,
                     "artist": m.artist.clone().unwrap_or_default(),
                     "desc": m.desc.clone().unwrap_or_default(),
+                    "cover": cover,
                     "tracks": tracks,
                 }));
             }

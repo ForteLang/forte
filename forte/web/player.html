@@ -19,6 +19,10 @@
   #logo { width: 26px; height: 26px; margin-right: -6px; }
   a.back { color: #e8b34c; font-size: 12px; margin-left: auto; text-decoration: none; }
   main { max-width: 720px; margin: 0 auto; padding: 22px 16px; }
+  #now { display: flex; gap: 18px; align-items: flex-start; }
+  #now .txt { min-width: 0; }
+  #cover { width: 132px; height: 132px; border-radius: 12px; border: 1px solid #2b2f38;
+    display: none; flex: none; }
   #now h2 { margin: 0 0 2px; font-size: 20px; }
   #now .artist { color: #e8b34c; font-size: 13px; }
   #now .desc { color: #8a919e; font-size: 13px; margin-top: 6px; }
@@ -53,11 +57,14 @@
 </header>
 <main>
   <div id="now" hidden>
-    <h2 id="t-name"></h2>
-    <div class="artist" id="t-artist"></div>
-    <div class="desc" id="t-desc"></div>
-    <div class="proof" id="t-proof"></div>
-    <div class="proof" id="t-credits"></div>
+    <img id="cover" alt="">
+    <div class="txt">
+      <h2 id="t-name"></h2>
+      <div class="artist" id="t-artist"></div>
+      <div class="desc" id="t-desc"></div>
+      <div class="proof" id="t-proof"></div>
+      <div class="proof" id="t-credits"></div>
+    </div>
   </div>
   <div id="transport" hidden>
     <button id="prev" title="前の曲">⏮</button>
@@ -278,7 +285,13 @@ drop.ondrop = async (e) => {
 };
 
 (async () => {
-  const srcs = new URLSearchParams(location.search).getAll('src');
+  const params = new URLSearchParams(location.search);
+  const cover = params.get('cover');
+  if (cover) {
+    $('cover').src = cover;
+    $('cover').style.display = 'block';
+  }
+  const srcs = params.getAll('src');
   for (const s of srcs) {
     try { await addFromUrl(s); } catch (err) { status(String(err.message || err)); }
   }

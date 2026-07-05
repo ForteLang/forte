@@ -46,6 +46,13 @@ echo 'source <(forte complete bash)' >> ~/.bashrc   # tab-completion (zsh: forte
 
 ## Listen
 
+**Right now, in your browser** — nothing to install:
+**[fortelang.github.io/forte/catalog.html](https://fortelang.github.io/forte/catalog.html)** —
+open the First Light album and press play. Your browser compiles the code
+and renders the exact same bits as everyone else's.
+
+Or with the CLI:
+
 ```bash
 forte play packages/essentials_0.6.0/songs/smiley-acid.forte
 ```
