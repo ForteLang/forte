@@ -433,6 +433,12 @@ impl Parser {
                                 }
                             }
                         }
+                        // `as Alias` — share one lane across variant placements
+                        let alias = if self.keyword("as") {
+                            self.ident("配置インスタンス名(as の後)")
+                        } else {
+                            None
+                        };
                         if !self.keyword("at") {
                             self.err("E-PARSE-022", "block の配置には `at bars(a..b)` か `at セクション名` が必要です");
                         }
@@ -456,6 +462,7 @@ impl Parser {
                             volume,
                             swing,
                             stretch,
+                            alias,
                             params,
                             at,
                             pos,

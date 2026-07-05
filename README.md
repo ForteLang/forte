@@ -15,10 +15,10 @@
 </p>
 
 <p align="center">
-  <b>🎧 Demo album:</b>
-  <a href="https://fortelang.github.io/forte/player.html?src=packages/essentials_0.6.0/albums/first-light/01-boot-sequence.fortesong&src=packages/essentials_0.6.0/albums/first-light/02-hello-world.fortesong&src=packages/essentials_0.6.0/albums/first-light/03-segfault-boogie.fortesong&src=packages/essentials_0.6.0/albums/first-light/04-tokyo-terminal.fortesong&src=packages/essentials_0.6.0/albums/first-light/05-night-compiler.fortesong&src=packages/essentials_0.6.0/albums/first-light/06-race-condition.fortesong&src=packages/essentials_0.6.0/albums/first-light/07-zero-one.fortesong&cover=packages/essentials_0.6.0/albums/first-light/cover.jpg"><b>First Light — seven techno tracks, playing in your browser</b></a><br>
-  <sub>No install. Your browser compiles the source and renders the exact same bits as everyone else's —
-  and every block shows its code while it plays.</sub>
+  <b>🎧 Listen now:</b>
+  <a href="https://fortelang.github.io/forte/"><b>the Forte package catalog — every published album, playing in your browser</b></a><br>
+  <sub>No install. Pick an album (start with <i>First Light</i>), press play: your browser compiles the
+  source and renders the exact same bits as everyone else's — and every track shows its code while it plays.</sub>
 </p>
 
 ---
@@ -54,9 +54,10 @@ echo 'source <(forte complete bash)' >> ~/.bashrc   # tab-completion (zsh: forte
 ## Listen
 
 **Right now, in your browser** — nothing to install:
-**[fortelang.github.io/forte/catalog.html](https://fortelang.github.io/forte/catalog.html)** —
-open the First Light album and press play. Your browser compiles the code
-and renders the exact same bits as everyone else's.
+**[fortelang.github.io/forte](https://fortelang.github.io/forte/)** —
+the package catalog lists every published album. Open First Light and
+press play. Your browser compiles the code and renders the exact same
+bits as everyone else's.
 
 Or with the CLI:
 

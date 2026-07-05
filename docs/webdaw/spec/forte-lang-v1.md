@@ -56,7 +56,7 @@ bodyItem  = "desc" string | "tags" string | "license" string
           | "let" ident "=" musicLit
           | "section" ident "=" "bars" "(" num ".." num ")"
           | track | return | block | place | placeAuto ;
-place     = "play" ident [ "(" placeArg { "," placeArg } ")" ] atRef ;
+place     = "play" ident [ "(" placeArg { "," placeArg } ")" ] [ "as" ident ] atRef ;
 placeArg  = "key" ":" string | "from" ":" num | "to" ":" num
           | "volume" ":" num                                         (* scale the instance, this span only *)
           | "swing" ":" num | "stretch" ":" num
@@ -336,6 +336,16 @@ it to other blocks. The outermost block you build is "the song".
   local and shadow imported names. Cycles are E-BLOCK-002; an unknown block
   lists what exists (E-BLOCK-001); flattening past the engine's 64-track
   limit is E-BLOCK-003; an empty from/to window is E-BLOCK-004.
+- **Aliases (`as`)**: `play AcidPeak as Acid at drop` names the *instance*.
+  Placements sharing an alias share ONE set of tracks (`Alias.Track`), so a
+  family of inherited variants reads as a single evolving lane — the same
+  track plays the intro pattern, then the peak pattern with different
+  insert settings, one section after another. Structure comes from the
+  first placement; later placements must keep the same instrument/insert
+  shape (patterns, param values, `volume`/`pan`, automation and modulation
+  may differ) — a mismatch is E-BLOCK-007. Public-knob agreement
+  (E-BLOCK-005) and `automate <name>.volume` placement automation are keyed
+  by the alias when present.
 - **Import**: `import { Groove } from "./blocks/groove.forte"` — importing a
   block also carries the devices of its home module (first definition of a
   name wins).

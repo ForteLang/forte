@@ -51,6 +51,10 @@ pub struct PlaceAst {
     /// `stretch: 2` — scale the block's time: 2 = half-time (beats double),
     /// 0.5 = double-time. Windows/loops apply AFTER the stretch.
     pub stretch: Option<(f64, Pos)>,
+    /// `play AcidPeak as Acid at …` — the instance name. Placements sharing
+    /// an alias share ONE set of tracks (one lane per part), so a family of
+    /// inherited variants reads as one evolving track, not stacked lanes.
+    pub alias: Option<String>,
     pub at: AtRef,
     pub pos: Pos,
 }

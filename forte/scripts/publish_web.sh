@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Assemble the static listening site — editor + zero-install player +
-# package catalog + the essentials package (albums included) — and publish
-# it to the gh-pages branch. One-time setup on GitHub afterwards:
+# Assemble the static listening site — package catalog (landing page) +
+# zero-install player + the essentials package (albums included) — and
+# publish it to the gh-pages branch. The editor is a local development
+# tool (`forte browser`) and is NOT published. One-time setup on GitHub:
 #   Settings → Pages → Deploy from a branch → gh-pages / (root)
 #
 #   scripts/publish_web.sh              # build + push gh-pages
@@ -21,6 +22,21 @@ scripts/build_web.sh
 echo "== 2/3 site =="
 SITE="${SITE_OUT:-$(mktemp -d)}"
 cp -r web/. "$SITE"/
+# strip the editor and its dev-only assets from the public site — the
+# catalog IS the landing page (published songs are listened to, not edited)
+rm -f "$SITE"/main.js "$SITE"/storage.js "$SITE"/vcs.js "$SITE"/recorder.js \
+      "$SITE"/rec-worker.js "$SITE"/frec.js
+cp "$SITE"/catalog.html "$SITE"/index.html
+# kill-switch service worker: anyone who opened the previously published
+# editor carries its offline cache — clear it and unregister
+cat > "$SITE"/sw.js <<'EOF'
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  for (const k of await caches.keys()) await caches.delete(k);
+  await self.registration.unregister();
+  for (const c of await self.clients.matchAll({ type: 'window' })) c.navigate(c.url);
+})()));
+EOF
 mkdir -p "$SITE/packages"
 cp -r ../packages/essentials_0.6.0 "$SITE/packages/"
 cargo run -q -p fortelang --bin forte -- web index > "$SITE/packages.json"
