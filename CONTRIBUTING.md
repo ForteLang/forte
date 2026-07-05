@@ -17,7 +17,7 @@ sudo apt install libasound2-dev
 
 rustup target add wasm32-wasip1 wasm32-unknown-unknown
 
-cargo build --release -p fortelang   # the `forte` CLI → target/release/forte
+cd forte && cargo build --release -p fortelang   # the CLI → forte/target/release/forte
 echo 'source <(forte complete bash)' >> ~/.bashrc   # tab-completion (zsh: forte complete zsh)
 forte web build                      # browser editor (web/forte.wasm)
 
@@ -38,10 +38,10 @@ forte ci quick               # tests + clippy + determinism only
 
 # or piece by piece:
 cargo test -p dawcore -p fortelang     # engine + language + hub + REPL
-scripts/determinism_test.sh            # native/wasm bit-identity gate
-node scripts/web_e2e.mjs               # browser E2E (playwright + chromium)
-node scripts/hub_e2e.mjs               # hub E2E
-scripts/check_corpus.sh                # every instrument & song renders
+forte/scripts/determinism_test.sh            # native/wasm bit-identity gate
+node forte/scripts/web_e2e.mjs               # browser E2E (playwright + chromium)
+node forte/scripts/hub_e2e.mjs               # hub E2E
+forte/scripts/check_corpus.sh                # every instrument & song renders
 ```
 
 ## The determinism gate — the most important rule here
@@ -51,11 +51,11 @@ native, wasm, and in the browser. To keep that promise:
 
 - For **changes that shouldn't affect the sound** (refactors, UI, docs), the
   build digests of the reference songs must not move by a single bit.
-  `forte ci quick` (scripts/determinism_test.sh) is the gate.
+  `forte ci quick` (forte/scripts/determinism_test.sh) is the gate.
 - For **changes that intentionally affect the sound** (DSP fixes, new nodes,
   engine changes), explain **why the digests change** in the PR description,
   and update the expected digests embedded in the E2E scripts
-  (`NATIVE_DIGEST` etc. in `scripts/web_e2e.mjs`) in the same PR.
+  (`NATIVE_DIGEST` etc. in `forte/scripts/web_e2e.mjs`) in the same PR.
 - Be careful with floating point: use `libm` for math functions (platform libc
   differences shift bits), never depend on HashMap iteration order, and don't
   introduce `fast-math`-style optimizations.

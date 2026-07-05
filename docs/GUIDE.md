@@ -17,7 +17,7 @@ What you need: the **Rust toolchain** (rustup). On Linux, audio output requires
 ```bash
 git clone <this repository>
 cd <repository>
-cargo install --path crates/fortelang    # installs the `forte` command
+cargo install --path forte/crates/fortelang    # installs the `forte` command
 ```
 
 Check that it works:
