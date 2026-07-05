@@ -81,6 +81,66 @@ class HistoryProvider implements vscode.TreeDataProvider<CommitItem> {
 
 
 
+// ---- Blocks view: the workspace's blocks, playable and traceable ----------
+class BlockItem extends vscode.TreeItem {
+  constructor(
+    public readonly file: vscode.Uri | null,
+    public readonly block: string | null,
+    label: string,
+    collapsible: vscode.TreeItemCollapsibleState
+  ) {
+    super(label, collapsible);
+    if (block && file) {
+      this.contextValue = 'forteBlock';
+      this.iconPath = new vscode.ThemeIcon('symbol-namespace');
+      this.command = {
+        command: 'vscode.open',
+        title: 'open',
+        arguments: [file],
+      };
+    } else {
+      this.iconPath = new vscode.ThemeIcon('file-code');
+    }
+  }
+}
+
+class BlocksProvider implements vscode.TreeDataProvider<BlockItem> {
+  private ev = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this.ev.event;
+  refresh() {
+    this.ev.fire();
+  }
+  getTreeItem(e: BlockItem) {
+    return e;
+  }
+  async getChildren(parent?: BlockItem): Promise<BlockItem[]> {
+    if (parent) {
+      if (!parent.file || parent.block) return [];
+      const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(parent.file));
+      return [...text.matchAll(/^\s*block\s+([A-Za-z_@][\w@#]*)/gm)].map(
+        (m) => new BlockItem(parent.file, m[1], m[1], vscode.TreeItemCollapsibleState.None)
+      );
+    }
+    const files = await vscode.workspace.findFiles('**/*.forte', '**/target/**');
+    const out: BlockItem[] = [];
+    for (const f of files.sort((a, b) => a.fsPath.localeCompare(b.fsPath))) {
+      const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(f));
+      if (/^\s*block\s+[A-Za-z_@]/m.test(text)) {
+        out.push(
+          new BlockItem(
+            f,
+            null,
+            vscode.workspace.asRelativePath(f),
+            vscode.TreeItemCollapsibleState.Collapsed
+          )
+        );
+      }
+    }
+    return out;
+  }
+}
+
+
 export async function activate(context: vscode.ExtensionContext) {
   // --- language server ------------------------------------------------------
   const serverOptions: ServerOptions = {
@@ -157,12 +217,45 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // --- Forte Studio: History (VCS) sidebar ----------------------------------
+  // --- Forte Studio: History (VCS) + Blocks sidebars -------------------------
   const history = new HistoryProvider();
+  const blocks = new BlocksProvider();
   const err = (e: unknown) => vscode.window.showErrorMessage(`Forte: ${(e as Error).message}`);
 
   context.subscriptions.push(
     vscode.window.createTreeView('forteHistory', { treeDataProvider: history }),
+    vscode.window.createTreeView('forteBlocks', { treeDataProvider: blocks }),
+    vscode.commands.registerCommand('forte.refreshBlocks', () => blocks.refresh()),
+    vscode.commands.registerCommand('forte.blockListen', (item: BlockItem) => {
+      if (!item?.file || !item.block) return;
+      playTerminal?.dispose();
+      playTerminal = vscode.window.createTerminal(`Forte: ${item.block}`);
+      playTerminal.show(true);
+      playTerminal.sendText(`${fortePath()} play "${item.file.fsPath}" --block ${item.block}`);
+    }),
+    vscode.commands.registerCommand('forte.blockRefs', async (item: BlockItem) => {
+      if (!item?.block) return;
+      const files = await vscode.workspace.findFiles('**/*.forte', '**/target/**');
+      const refs: vscode.Uri[] = [];
+      const needle = new RegExp(`(play\\s+${item.block}\\b|import\\s*\\{[^}]*\\b${item.block}\\b)`);
+      for (const f of files) {
+        if (item.file && f.fsPath === item.file.fsPath) continue;
+        const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(f));
+        if (needle.test(text)) refs.push(f);
+      }
+      if (!refs.length) {
+        vscode.window.showInformationMessage(`${item.block} を使う曲は(まだ)ありません`);
+        return;
+      }
+      const pick = await vscode.window.showQuickPick(
+        refs.map((f) => vscode.workspace.asRelativePath(f)),
+        { title: `${item.block} を使っている場所(${refs.length})` }
+      );
+      if (pick) {
+        const target = refs.find((f) => vscode.workspace.asRelativePath(f) === pick);
+        if (target) vscode.window.showTextDocument(target);
+      }
+    }),
     vscode.window.onDidChangeActiveTextEditor(() => history.refresh()),
 
     vscode.commands.registerCommand('forte.refreshHistory', () => history.refresh()),
