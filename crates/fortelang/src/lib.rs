@@ -105,6 +105,7 @@ fn resolve_imports(
 ) {
     let imports = std::mem::take(&mut file.imports);
     let mut imported: Vec<ast::DeviceAst> = Vec::new();
+    let mut imported_blocks: Vec<ast::BlockAst> = Vec::new();
     for im in imports {
         let full = join_path(base_dir, &im.path);
         if visited.iter().any(|v| v == &full) {
@@ -142,28 +143,54 @@ fn resolve_imports(
         visited.pop();
 
         for name in &im.names {
-            match module.devices.iter().find(|d| d.name == *name) {
-                Some(d) => imported.push(d.clone()),
-                None => {
-                    let avail: Vec<&str> = module.devices.iter().map(|d| d.name.as_str()).collect();
-                    diags.push(Diag::new(
-                        "E-MOD-006",
-                        im.pos,
-                        format!("'{name}' は {} にありません(あるもの: {})", im.path, avail.join(", ")),
-                    ));
+            if let Some(d) = module.devices.iter().find(|d| d.name == *name) {
+                if !imported.iter().any(|x: &ast::DeviceAst| x.name == *name) {
+                    imported.push(d.clone());
                 }
+                continue;
             }
+            if let Some(b) = module.blocks.iter().find(|b| b.name == *name) {
+                if !imported_blocks.iter().any(|x: &ast::BlockAst| x.name == *name) {
+                    imported_blocks.push(b.clone());
+                }
+                // an imported block needs the devices of its home module —
+                // carry them along (first definition of a name wins)
+                for d in &module.devices {
+                    if !imported.iter().any(|x| x.name == d.name)
+                        && !file.devices.iter().any(|x| x.name == d.name)
+                    {
+                        imported.push(d.clone());
+                    }
+                }
+                continue;
+            }
+            let avail: Vec<&str> = module
+                .devices
+                .iter()
+                .map(|d| d.name.as_str())
+                .chain(module.blocks.iter().map(|b| b.name.as_str()))
+                .collect();
+            diags.push(Diag::new(
+                "E-MOD-006",
+                im.pos,
+                format!("'{name}' は {} にありません(あるもの: {})", im.path, avail.join(", ")),
+            ));
         }
     }
-    // imported devices come first; local definitions may not shadow them
+    // imported definitions come first; local definitions may not shadow them
     imported.append(&mut file.devices);
     file.devices = imported;
+    imported_blocks.append(&mut file.blocks);
+    file.blocks = imported_blocks;
 }
 
 /// What a `.forte` file turned out to be.
 pub enum Checked {
     Song(Project),
     DeviceLibrary { devices: usize },
+    /// A file of blocks (and possibly devices): its LAST top-level block was
+    /// compiled as the build root — a block library is always playable.
+    BlockLibrary { blocks: usize, devices: usize, root: Box<Project> },
 }
 
 /// Parse, resolve imports, and compile or validate. `base_dir` is the
@@ -234,6 +261,17 @@ pub fn check_with_loader(
     }
     if file.song.is_some() {
         compile::compile(&file, &assets).map(Checked::Song)
+    } else if !file.blocks.is_empty() {
+        // block library: validate devices AND compile the last block as root
+        let diags = compile::validate_devices(&file);
+        if !diags.is_empty() {
+            return Err(diags);
+        }
+        compile::compile(&file, &assets).map(|p| Checked::BlockLibrary {
+            blocks: file.blocks.len(),
+            devices: file.devices.len(),
+            root: Box::new(p),
+        })
     } else {
         let diags = compile::validate_devices(&file);
         if diags.is_empty() {
@@ -252,10 +290,11 @@ pub fn compile_with_loader(
 ) -> Result<Project, Vec<Diag>> {
     match check_with_loader(src, loader, base_dir)? {
         Checked::Song(p) => Ok(p),
+        Checked::BlockLibrary { root, .. } => Ok(*root),
         Checked::DeviceLibrary { .. } => Err(vec![Diag::new(
             "E-SONG-004",
             diag::Pos { line: 1, col: 1 },
-            "song がありません(このファイルはデバイスライブラリです)",
+            "song も block もありません(このファイルはデバイスライブラリです)",
         )]),
     }
 }

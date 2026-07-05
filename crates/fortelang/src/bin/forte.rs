@@ -173,7 +173,38 @@ fn main() -> ExitCode {
         }
         #[cfg(not(target_family = "wasm"))]
         Some("instruments") => {
-            match fortelang::live::list(args.get(1).map(String::as_str)) {
+            // the instruments workspace: browse / play / edit / add
+            let sub = args.get(1).map(String::as_str);
+            let result = match sub {
+                Some("play") if args.len() >= 3 => {
+                    let from = args
+                        .iter()
+                        .position(|a| a == "--from")
+                        .and_then(|i| args.get(i + 1))
+                        .cloned();
+                    fortelang::live::run(&args[2], from.as_deref())
+                }
+                Some("edit") if args.len() >= 3 => fortelang::live::edit(&args[2]),
+                Some("add") if args.len() >= 3 => {
+                    // fork an instrument library from a hub into instruments/
+                    let hub = args
+                        .iter()
+                        .position(|a| a == "--hub")
+                        .and_then(|i| args.get(i + 1).cloned())
+                        .or_else(|| std::env::var("FORTE_HUB").ok())
+                        .unwrap_or_else(|| ".forte-hub".into());
+                    let dest = format!("instruments/{}", args[2]);
+                    let r = if fortelang::hub_git::is_git_url(&hub) {
+                        fortelang::hub_git::GitHub::open(&hub, None).and_then(|h| h.fork(&args[2], &dest))
+                    } else {
+                        fortelang::hub::Hub::open(&hub).and_then(|h| h.fork(&args[2], &dest))
+                    };
+                    r.map(|msg| println!("{msg}")).map_err(|e| e.to_string())
+                }
+                // no subcommand (or a query): the catalog
+                _ => fortelang::live::list(sub),
+            };
+            match result {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
                     eprintln!("instruments: {e}");
@@ -212,8 +243,10 @@ fn main() -> ExitCode {
             eprintln!("       forte play  <song.forte> [--for SECS]   (トラックタイムラインを表示しながら再生)");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
             eprintln!("       forte instruments [QUERY]   (楽器カタログ: 名前・パラメータ・import 行)");
-            eprintln!("       forte instrument <Name[(args)]> [--from lib.forte]");
-            eprintln!("                                   (キーボードが鍵盤に: a w s e d …、z/x oct、c/v velo)");
+            eprintln!("       forte instruments play <Name[(args)]>  (キーボードが鍵盤に。1..9/-/= でノブ)");
+            eprintln!("       forte instruments edit <Name>          (instruments/ にコピーして編集、自動コミットで履歴)");
+            eprintln!("       forte instruments add <Name> [--hub URL] (hub から楽器ライブラリを fork)");
+            eprintln!("       forte instrument <Name[(args)]> [--from lib.forte]  (= instruments play)");
             eprintln!("       forte browser [--port 8000] [--no-open]  (ブラウザエディタを起動)");
             eprintln!("       forte web build             (ブラウザエディタの wasm を再ビルド)");
             eprintln!("       forte ci [quick]            (マージゲート: test+clippy/決定論/corpus/E2E)");
@@ -438,6 +471,17 @@ fn check(path: &str) -> ExitCode {
         }
         Ok(fortelang::Checked::DeviceLibrary { devices }) => {
             println!("OK: デバイスライブラリを検証しました({devices} devices)");
+            ExitCode::SUCCESS
+        }
+        Ok(fortelang::Checked::BlockLibrary { blocks, devices, root }) => {
+            println!(
+                "OK: block ライブラリを検証しました({blocks} blocks{} — 末尾の block をルートとして {} tracks, {} 小節)",
+                if devices > 0 { format!(", {devices} devices") } else { String::new() },
+                root.tracks.len(),
+                (dawcore::bounce::arrangement_len(&root)
+                    / (root.time_sig.0 as f64 * 4.0 / root.time_sig.1 as f64))
+                    .ceil()
+            );
             ExitCode::SUCCESS
         }
         Err(diags) => {

@@ -17,12 +17,20 @@ pub fn compile(
     file: &FileAst,
     assets: &HashMap<String, crate::AssetInfo>,
 ) -> Result<Project, Vec<Diag>> {
-    let Some(song) = &file.song else {
-        return Err(vec![Diag::new(
-            "E-SONG-004",
-            Pos { line: 1, col: 1 },
-            "song がありません(このファイルはデバイスライブラリです — 検証は forte check)",
-        )]);
+    // the build root: the song, or the LAST top-level block in the file.
+    // A song is just the outermost block — structurally there is no
+    // difference; the root's tempo/key/meter/swing govern the whole render
+    // (the settings of the block above always win).
+    let root: &SongAst = match (&file.song, file.blocks.last()) {
+        (Some(song), _) => song,
+        (None, Some(b)) => &b.body,
+        (None, None) => {
+            return Err(vec![Diag::new(
+                "E-SONG-004",
+                Pos { line: 1, col: 1 },
+                "song も block もありません(このファイルはデバイスライブラリです — 検証は forte check)",
+            )])
+        }
     };
     let mut diags: Vec<Diag> = Vec::new();
     let mut p = Project::empty();
@@ -31,76 +39,48 @@ pub fn compile(
     let mut user_devices: HashMap<&str, &DeviceAst> = HashMap::new();
     collect_devices(file, &mut user_devices, &mut diags);
 
-    // ---- song header ------------------------------------------------------
-    match song.tempo {
+    // ---- root header (upper block wins — nested tempo/key are ignored) ----
+    match root.tempo {
         Some((t, pos)) => {
             if !(20.0..=400.0).contains(&t) {
                 diags.push(Diag::new("E-TIME-003", pos, format!("tempo {t} は 20..400 bpm の範囲外です")));
             }
             p.tempo = t;
         }
-        None => diags.push(Diag::new(
+        None if file.song.is_some() => diags.push(Diag::new(
             "E-SONG-001",
             Pos { line: 1, col: 1 },
-            format!("song \"{}\" に tempo がありません(例: tempo 96bpm)", song.name),
+            format!("song \"{}\" に tempo がありません(例: tempo 96bpm)", root.name),
         )),
+        // a block built as root without a tempo gets the house default
+        None => p.tempo = 120.0,
     }
-    if let Some(((num, den), pos)) = song.meter {
+    if let Some(((num, den), pos)) = root.meter {
         if num == 0 || !(den == 2 || den == 4 || den == 8 || den == 16) {
             diags.push(Diag::new("E-TIME-004", pos, format!("拍子 {num}/{den} は解釈できません")));
         } else {
             p.time_sig = (num, den);
         }
     }
-    if let Some(((root, scale), pos)) = &song.key {
-        match parse_key(root, scale) {
-            Some(k) => p.key = k,
+    let mut eff_root_pc: Option<u8> = None;
+    if let Some(((kroot, scale), pos)) = &root.key {
+        match parse_key(kroot, scale) {
+            Some(k) => {
+                eff_root_pc = Some(k.root);
+                p.key = k;
+            }
             None => diags.push(Diag::new(
                 "E-SONG-002",
                 *pos,
-                format!("キー '{root} {scale}' が解釈できません(例: D minor)"),
+                format!("キー '{kroot} {scale}' が解釈できません(例: D minor)"),
             )),
         }
     }
     // beats are engine quarter-notes: 4/4 -> 4, 6/8 -> 3
     let beats_per_bar = p.time_sig.0 as f64 * 4.0 / p.time_sig.1 as f64;
 
-    // ---- lets (evaluated lazily at the play site: beat literals need the
-    //      instrument's root pitch) ----------------------------------------
-    let mut lets: HashMap<&str, &PatternLit> = HashMap::new();
-    for l in &song.lets {
-        if lets.insert(l.name.as_str(), &l.value).is_some() {
-            diags.push(Diag::new("E-MOD-002", l.pos, format!("let '{}' が重複しています", l.name)));
-        }
-    }
-
-    // ---- sections ----------------------------------------------------------
-    let mut sections: HashMap<&str, (u32, u32)> = HashMap::new();
-    for s in &song.sections {
-        let (a, b) = s.bars;
-        if a == 0 || b < a {
-            diags.push(Diag::new(
-                "E-TIME-001",
-                s.pos,
-                format!("section {} = bars({a}..{b}) が不正です(小節は 1 始まり、開始 ≤ 終了)", s.name),
-            ));
-        }
-        if sections.insert(s.name.as_str(), s.bars).is_some() {
-            diags.push(Diag::new("E-MOD-002", s.pos, format!("section '{}' が重複しています", s.name)));
-        }
-    }
-
-    // ---- tracks -----------------------------------------------------------
-    if song.tracks.is_empty() {
-        diags.push(Diag::new(
-            "E-SONG-003",
-            Pos { line: 1, col: 1 },
-            "track がひとつもありません",
-        ));
-    }
-
-    // song-level swing (MPC 表記: 0.5 = ストレート、2/3 = 完全シャッフル)
-    let swing = match song.swing {
+    // root-level swing (MPC 表記: 0.5 = ストレート、2/3 = 完全シャッフル)
+    let swing = match root.swing {
         Some((v, pos)) => {
             if !(0.5..=0.8).contains(&v) {
                 diags.push(Diag::new(
@@ -116,15 +96,183 @@ pub fn compile(
         None => 0.5,
     };
 
-    for (ti, tast) in song.tracks.iter().enumerate() {
+    let env = Env { beats_per_bar, swing, tempo: p.tempo, assets, user_devices: &user_devices };
+    let mut stack: Vec<String> = vec![root.name.clone()];
+    let lowered = lower_body(root, "", eff_root_pc, &[&file.blocks], &mut stack, &env, &mut diags);
+
+    if !lowered.tracks.iter().any(|t| !t.is_return) {
+        diags.push(Diag::new(
+            "E-SONG-003",
+            Pos { line: 1, col: 1 },
+            "track がひとつもありません",
+        ));
+    }
+    if lowered.tracks.len() > dawcore::model::MAX_TRACKS {
+        diags.push(Diag::new(
+            "E-BLOCK-003",
+            Pos { line: 1, col: 1 },
+            format!(
+                "block を展開するとトラックが {} 本になります(上限 {})",
+                lowered.tracks.len(),
+                dawcore::model::MAX_TRACKS
+            ),
+        ));
+    }
+
+    // ---- finalize: ids, colors, sends (instrument tracks first) ------------
+    let (fx, inst): (Vec<LTrack>, Vec<LTrack>) =
+        lowered.tracks.into_iter().partition(|t| t.is_return);
+    let mut return_ids: HashMap<String, usize> = HashMap::new();
+    let mut pending_sends: Vec<(usize, String, f32, Pos)> = Vec::new();
+    for lt in inst.into_iter().chain(fx) {
         let id = p.alloc_id();
-        let color = TRACK_COLORS[ti % TRACK_COLORS.len()];
-        let mut track = Track::new(id, tast.name.clone(), TrackKind::Instrument, color);
+        let idx = p.tracks.len();
+        let mut track = lt.track;
+        track.id = id;
+        track.color = TRACK_COLORS[idx % TRACK_COLORS.len()];
+        for c in &mut track.arranger {
+            c.clip.color = track.color;
+        }
+        if lt.is_return {
+            return_ids.insert(track.name.clone(), id);
+        }
+        for (dest, level, pos) in lt.sends {
+            pending_sends.push((idx, dest, level, pos));
+        }
+        p.tracks.push(track);
+    }
+    for (ti, dest, level, pos) in pending_sends {
+        let Some(&dest_id) = return_ids.get(&dest) else {
+            let mut names: Vec<&str> = return_ids.keys().map(String::as_str).collect();
+            names.sort();
+            diags.push(Diag::new(
+                "E-MOD-004",
+                pos,
+                format!("return '{dest}' が定義されていません(定義済み: {})", names.join(", ")),
+            ));
+            continue;
+        };
+        p.tracks[ti].sends.push((dest_id, level));
+    }
+
+    if diags.is_empty() {
+        Ok(p)
+    } else {
+        Err(diags)
+    }
+}
+
+/// Compile-time context shared by every block lowering (root-owned: the
+/// settings of the block above always win).
+struct Env<'a> {
+    beats_per_bar: f64,
+    swing: f64,
+    tempo: f64,
+    assets: &'a HashMap<String, crate::AssetInfo>,
+    user_devices: &'a HashMap<&'a str, &'a DeviceAst>,
+}
+
+/// A lowered track whose engine id / color / send targets are still symbolic.
+struct LTrack {
+    track: Track,
+    is_return: bool,
+    /// (prefixed return name, level, position) — resolved at the root.
+    sends: Vec<(String, f32, Pos)>,
+}
+
+struct Lowered {
+    tracks: Vec<LTrack>,
+    /// Content length in beats, rounded up to whole bars.
+    len_beats: f64,
+}
+
+/// Minimal signed pitch-class distance (semitones, -6..=6).
+fn key_delta(from: u8, to: u8) -> i32 {
+    let mut d = (to as i32 - from as i32).rem_euclid(12);
+    if d > 6 {
+        d -= 12;
+    }
+    d
+}
+
+/// Lower one block body into tracks with local-beat clips. `eff_root` is the
+/// effective key root decided ABOVE this block (upper wins); the transpose
+/// applied here is the interval from this body's own key to that target.
+/// Placements recurse, then merge the child's tracks into this body's set
+/// (same block → same tracks, one more set of clips).
+fn lower_body(
+    body: &SongAst,
+    prefix: &str,
+    eff_root: Option<u8>,
+    registry: &[&[BlockAst]],
+    stack: &mut Vec<String>,
+    env: &Env,
+    diags: &mut Vec<Diag>,
+) -> Lowered {
+    let beats_per_bar = env.beats_per_bar;
+    let native_root = body
+        .key
+        .as_ref()
+        .and_then(|((r, s), _)| parse_key(r, s))
+        .map(|k| k.root);
+    let transpose = match (native_root, eff_root) {
+        (Some(n), Some(e)) => key_delta(n, e),
+        _ => 0,
+    };
+
+    // ---- lets ---------------------------------------------------------------
+    let mut lets: HashMap<&str, &PatternLit> = HashMap::new();
+    for l in &body.lets {
+        if lets.insert(l.name.as_str(), &l.value).is_some() {
+            diags.push(Diag::new("E-MOD-002", l.pos, format!("let '{}' が重複しています", l.name)));
+        }
+    }
+
+    // ---- sections -----------------------------------------------------------
+    let mut sections: HashMap<&str, (u32, u32)> = HashMap::new();
+    for sct in &body.sections {
+        let (a, b) = sct.bars;
+        if a == 0 || b < a {
+            diags.push(Diag::new(
+                "E-TIME-001",
+                sct.pos,
+                format!("section {} = bars({a}..{b}) が不正です(小節は 1 始まり、開始 ≤ 終了)", sct.name),
+            ));
+        }
+        if sections.insert(sct.name.as_str(), sct.bars).is_some() {
+            diags.push(Diag::new("E-MOD-002", sct.pos, format!("section '{}' が重複しています", sct.name)));
+        }
+    }
+    let resolve_at = |at: &AtRef, sections: &HashMap<&str, (u32, u32)>, diags: &mut Vec<Diag>| -> Option<(u32, u32)> {
+        match at {
+            AtRef::Bars(a, b) => Some((*a, *b)),
+            AtRef::Section(name, pos) => match sections.get(name.as_str()) {
+                Some(r) => Some(*r),
+                None => {
+                    let mut names: Vec<&str> = sections.keys().copied().collect();
+                    names.sort();
+                    diags.push(Diag::new(
+                        "E-MOD-003",
+                        *pos,
+                        format!("section '{name}' が定義されていません(定義済み: {})", names.join(", ")),
+                    ));
+                    None
+                }
+            },
+        }
+    };
+
+    let mut out: Vec<LTrack> = Vec::new();
+
+    // ---- this body's own tracks ---------------------------------------------
+    for tast in &body.tracks {
+        let mut track =
+            Track::new(0, format!("{prefix}{}", tast.name), TrackKind::Instrument, TRACK_COLORS[0]);
 
         // instrument (required unless the track only places recorded audio)
         let mut beat_pitch = 36u8; // C2 default; samplers use their sample root
         match &tast.instrument {
-            Some(call) => match build_instrument(call, &user_devices, assets) {
+            Some(call) => match build_instrument(call, env.user_devices, env.assets) {
                 Ok((dev, root)) => {
                     beat_pitch = root;
                     track.devices[0] = dev;
@@ -145,7 +293,7 @@ pub fn compile(
         // can target `<insert>.<param>` (first match wins on duplicates)
         let mut insert_devs: Vec<(String, usize)> = Vec::new();
         for call in &tast.inserts {
-            match build_effect(call, &user_devices, p.tempo) {
+            match build_effect(call, env.user_devices, env.tempo) {
                 Ok(dev) => {
                     insert_devs.push((call.name.clone(), track.devices.len()));
                     track.devices.push(dev);
@@ -191,16 +339,7 @@ pub fn compile(
                 ));
                 continue;
             }
-            let (a, b) = match &auto.at {
-                AtRef::Bars(a, b) => (*a, *b),
-                AtRef::Section(name, pos) => match sections.get(name.as_str()) {
-                    Some(r) => *r,
-                    None => {
-                        diags.push(Diag::new("E-MOD-003", *pos, format!("section '{name}' が定義されていません")));
-                        continue;
-                    }
-                },
-            };
+            let Some((a, b)) = resolve_at(&auto.at, &sections, diags) else { continue };
             if a == 0 || b < a {
                 diags.push(Diag::new(
                     "E-TIME-001",
@@ -243,7 +382,7 @@ pub fn compile(
         // modulators plug into instrument or insert params; each lives on the
         // device it modulates (its routes get that device's index)
         for m in &tast.modulations {
-            match build_lfo(m, &track, &insert_devs, p.tempo) {
+            match build_lfo(m, &track, &insert_devs, env.tempo) {
                 Ok((di, lfo)) => track.devices[di].modulators.push(lfo),
                 Err(d) => diags.push(d),
             }
@@ -251,7 +390,7 @@ pub fn compile(
 
         // plays → arranger clips
         for play in &tast.plays {
-            let (mut notes, len_beats, clip_name) =
+            let (mut notes, len_beats, clip_name, transposable) =
                 match eval_pattern(&play.pattern, &lets, beats_per_bar, beat_pitch) {
                     Ok(v) => v,
                     Err(d) => {
@@ -259,22 +398,7 @@ pub fn compile(
                         continue;
                     }
                 };
-            let (a, b) = match &play.at {
-                AtRef::Bars(a, b) => (*a, *b),
-                AtRef::Section(name, pos) => match sections.get(name.as_str()) {
-                    Some(r) => *r,
-                    None => {
-                        let mut names: Vec<&str> = sections.keys().copied().collect();
-                        names.sort();
-                        diags.push(Diag::new(
-                            "E-MOD-003",
-                            *pos,
-                            format!("section '{name}' が定義されていません(定義済み: {})", names.join(", ")),
-                        ));
-                        continue;
-                    }
-                },
-            };
+            let Some((a, b)) = resolve_at(&play.at, &sections, diags) else { continue };
             if a == 0 || b < a {
                 diags.push(Diag::new(
                     "E-TIME-001",
@@ -283,18 +407,25 @@ pub fn compile(
                 ));
                 continue;
             }
-            let mut clip = Clip::new(clip_name, color);
+            let mut clip = Clip::new(clip_name, TRACK_COLORS[0]);
             clip.length = len_beats;
-            if swing > 0.5 {
+            if env.swing > 0.5 {
                 // delay every off-beat 16th that sits exactly on the grid;
                 // freely-timed notes are left alone
-                let shift = (swing - 0.5) * 0.5;
+                let shift = (env.swing - 0.5) * 0.5;
                 for n in &mut notes {
                     let idx = (n.start / 0.25).round();
                     if (n.start - idx * 0.25).abs() < 1e-9 && (idx as i64) % 2 == 1 {
                         n.start += shift;
                         n.length = (n.length - shift).max(0.05);
                     }
+                }
+            }
+            // block placement transposition: melodic content follows the key
+            // decided above; beat literals (fixed pads/pitches) stay put
+            if transposable && transpose != 0 {
+                for n in &mut notes {
+                    n.pitch = (n.pitch as i32 + transpose).clamp(0, 127) as u8;
                 }
             }
             clip.notes = notes;
@@ -307,8 +438,8 @@ pub fn compile(
 
         // recorded audio placements
         for ap in &tast.audios {
-            let Some(info) = assets.get(&ap.name) else {
-                let mut names: Vec<&str> = assets.keys().map(String::as_str).collect();
+            let Some(info) = env.assets.get(&ap.name) else {
+                let mut names: Vec<&str> = env.assets.keys().map(String::as_str).collect();
                 names.sort();
                 diags.push(Diag::new(
                     "E-PROV-003",
@@ -317,23 +448,14 @@ pub fn compile(
                 ));
                 continue;
             };
-            let (a, b) = match &ap.at {
-                AtRef::Bars(a, b) => (*a, *b),
-                AtRef::Section(name, pos) => match sections.get(name.as_str()) {
-                    Some(r) => *r,
-                    None => {
-                        diags.push(Diag::new("E-MOD-003", *pos, format!("section '{name}' が定義されていません")));
-                        continue;
-                    }
-                },
-            };
+            let Some((a, b)) = resolve_at(&ap.at, &sections, diags) else { continue };
             if a == 0 || b < a {
                 diags.push(Diag::new("E-TIME-001", ap.pos, format!("bars({a}..{b}) が不正です")));
                 continue;
             }
             track.audio_clips.push(AudioClip {
                 name: ap.name.clone(),
-                color,
+                color: TRACK_COLORS[0],
                 source: SampleSource::Asset(info.key.clone()),
                 start: (a - 1) as f64 * beats_per_bar,
                 duration: (b - a + 1) as f64 * beats_per_bar,
@@ -341,17 +463,31 @@ pub fn compile(
             });
         }
 
-        p.tracks.push(track);
+        let sends = tast
+            .sends
+            .iter()
+            .filter_map(|(dest, level, pos)| {
+                if !(0.0..=1.0).contains(level) {
+                    diags.push(Diag::new(
+                        "E-TYPE-002",
+                        *pos,
+                        format!("send レベル {level} は 0..1 の範囲外です"),
+                    ));
+                    return None;
+                }
+                Some((format!("{prefix}{dest}"), *level as f32, *pos))
+            })
+            .collect();
+        out.push(LTrack { track, is_return: false, sends });
     }
 
-    // ---- return (effect) tracks -------------------------------------------
-    let mut return_ids: HashMap<&str, usize> = HashMap::new();
-    for (ri, rast) in song.returns.iter().enumerate() {
-        let id = p.alloc_id();
-        let color = TRACK_COLORS[(song.tracks.len() + ri) % TRACK_COLORS.len()];
-        let mut track = Track::new(id, rast.name.clone(), TrackKind::Effect, color);
+    // ---- return (effect) tracks ---------------------------------------------
+    let mut seen_returns: Vec<&str> = Vec::new();
+    for rast in &body.returns {
+        let mut track =
+            Track::new(0, format!("{prefix}{}", rast.name), TrackKind::Effect, TRACK_COLORS[0]);
         for call in &rast.inserts {
-            match build_effect(call, &user_devices, p.tempo) {
+            match build_effect(call, env.user_devices, env.tempo) {
                 Ok(dev) => track.devices.push(dev),
                 Err(d) => diags.push(d),
             }
@@ -370,38 +506,230 @@ pub fn compile(
                 track.pan = v as f32;
             }
         }
-        if return_ids.insert(rast.name.as_str(), id).is_some() {
+        if seen_returns.contains(&rast.name.as_str()) {
             diags.push(Diag::new("E-MOD-002", rast.pos, format!("return '{}' が重複しています", rast.name)));
         }
-        p.tracks.push(track);
+        seen_returns.push(rast.name.as_str());
+        out.push(LTrack { track, is_return: true, sends: Vec::new() });
     }
 
-    // ---- resolve sends (returns may be declared anywhere in the song) -----
-    for (ti, tast) in song.tracks.iter().enumerate() {
-        for (dest, level, pos) in &tast.sends {
-            let Some(&dest_id) = return_ids.get(dest.as_str()) else {
-                let mut names: Vec<&str> = return_ids.keys().copied().collect();
-                names.sort();
-                diags.push(Diag::new(
-                    "E-MOD-004",
-                    *pos,
-                    format!("return '{dest}' が定義されていません(定義済み: {})", names.join(", ")),
-                ));
-                continue;
+    // ---- block placements -----------------------------------------------------
+    for place in &body.places {
+        // local nested blocks shadow outer/imported ones
+        let found = body
+            .blocks
+            .iter()
+            .find(|b| b.name == place.block)
+            .or_else(|| registry.iter().flat_map(|s| s.iter()).find(|b| b.name == place.block));
+        let Some(bdef) = found else {
+            let mut names: Vec<&str> = body
+                .blocks
+                .iter()
+                .map(|b| b.name.as_str())
+                .chain(registry.iter().flat_map(|s| s.iter()).map(|b| b.name.as_str()))
+                .collect();
+            names.sort();
+            names.dedup();
+            diags.push(Diag::new(
+                "E-BLOCK-001",
+                place.pos,
+                format!(
+                    "block '{}' が定義されていません(あるもの: {})",
+                    place.block,
+                    if names.is_empty() { "なし".to_string() } else { names.join(", ") }
+                ),
+            ));
+            continue;
+        };
+        if stack.iter().any(|n| n == &bdef.name) {
+            diags.push(Diag::new(
+                "E-BLOCK-002",
+                place.pos,
+                format!("block の配置が循環しています: {} → {}", stack.join(" → "), bdef.name),
+            ));
+            continue;
+        }
+        let Some((a, b)) = resolve_at(&place.at, &sections, diags) else { continue };
+        if a == 0 || b < a {
+            diags.push(Diag::new(
+                "E-TIME-001",
+                place.pos,
+                format!("bars({a}..{b}) が不正です(小節は 1 始まり、開始 ≤ 終了)"),
+            ));
+            continue;
+        }
+
+        // the key decided here (override or inherited) wins inside the child
+        let eff_child = match &place.key {
+            Some(((r, sc), kpos)) => match parse_key(r, sc) {
+                Some(k) => Some(k.root),
+                None => {
+                    diags.push(Diag::new(
+                        "E-SONG-002",
+                        *kpos,
+                        format!("キー '{r} {sc}' が解釈できません(例: E minor)"),
+                    ));
+                    eff_root
+                }
+            },
+            None => eff_root,
+        };
+
+        stack.push(bdef.name.clone());
+        let child_prefix = format!("{prefix}{}.", bdef.name);
+        let mut child_registry: Vec<&[BlockAst]> = Vec::with_capacity(registry.len() + 1);
+        child_registry.push(body.blocks.as_slice());
+        child_registry.extend_from_slice(registry);
+        let child =
+            lower_body(&bdef.body, &child_prefix, eff_child, &child_registry, stack, env, diags);
+        stack.pop();
+
+        // window inside the child, in beats (defaults: the whole block)
+        let offset = (a - 1) as f64 * beats_per_bar;
+        let span = (b - a + 1) as f64 * beats_per_bar;
+        let win_start = (place.from.unwrap_or(1).max(1) - 1) as f64 * beats_per_bar;
+        let win_end = match place.to {
+            Some(t) => (t as f64 * beats_per_bar).min(child.len_beats),
+            None => child.len_beats,
+        };
+        if win_end <= win_start {
+            diags.push(Diag::new(
+                "E-BLOCK-004",
+                place.pos,
+                format!(
+                    "from/to の窓が空です(block '{}' は {} 小節)",
+                    bdef.name,
+                    (child.len_beats / beats_per_bar).ceil()
+                ),
+            ));
+            continue;
+        }
+        // one repetition = the window, rounded up to whole bars
+        let win_len = ((win_end - win_start) / beats_per_bar).ceil().max(1.0) * beats_per_bar;
+
+        for lt in child.tracks {
+            let dst = match out.iter_mut().find(|t| t.track.name == lt.track.name) {
+                Some(d) => d,
+                None => {
+                    // first instance: adopt structure (devices, mixer,
+                    // modulators, sends), collect clips/lanes fresh below
+                    let mut fresh = lt.track.clone();
+                    fresh.arranger.clear();
+                    fresh.audio_clips.clear();
+                    fresh.volume_automation.clear();
+                    for lane in &mut fresh.param_automation {
+                        lane.points.clear();
+                    }
+                    out.push(LTrack { track: fresh, is_return: lt.is_return, sends: lt.sends.clone() });
+                    out.last_mut().unwrap()
+                }
             };
-            if !(0.0..=1.0).contains(level) {
-                diags.push(Diag::new("E-TYPE-002", *pos, format!("send レベル {level} は 0..1 の範囲外です")));
-                continue;
+            let mut k = 0.0f64;
+            while k * win_len < span - 1e-9 {
+                let shift = offset + k * win_len - win_start;
+                let span_end = offset + span;
+                for ac in &lt.track.arranger {
+                    // any overlap with the window counts; a clip cut at the
+                    // head is rotated so its loop phase stays musically right
+                    let cs = ac.start.max(win_start);
+                    let ce = (ac.start + ac.duration).min(win_end);
+                    if ce - cs < 1e-9 {
+                        continue;
+                    }
+                    let ns = cs + shift;
+                    if ns >= span_end - 1e-9 {
+                        continue;
+                    }
+                    let content = ac.clip.length.max(0.0625);
+                    let phase = (cs - ac.start) % content;
+                    let clip = if phase < 1e-9 {
+                        ac.clip.clone()
+                    } else {
+                        let mut c = ac.clip.clone();
+                        for n in &mut c.notes {
+                            let mut rel = n.start - phase;
+                            if rel < -1e-9 {
+                                rel += content;
+                            }
+                            n.start = rel.max(0.0);
+                        }
+                        c.notes.sort_by(|x, y| x.start.total_cmp(&y.start));
+                        c
+                    };
+                    let dur = (ce - cs).min(span_end - ns);
+                    dst.track.arranger.push(ArrangerClip { clip, start: ns, duration: dur });
+                }
+                for au in &lt.track.audio_clips {
+                    if au.start < win_start - 1e-9 || au.start >= win_end - 1e-9 {
+                        continue;
+                    }
+                    let ns = au.start + shift;
+                    if ns >= span_end - 1e-9 {
+                        continue;
+                    }
+                    let mut copy = au.clone();
+                    copy.start = ns;
+                    copy.duration = copy.duration.min(span_end - ns).min(win_end - au.start);
+                    dst.track.audio_clips.push(copy);
+                }
+                for pt in &lt.track.volume_automation {
+                    if pt.beat < win_start - 1e-9 || pt.beat > win_end + 1e-9 {
+                        continue;
+                    }
+                    let mut copy = *pt;
+                    copy.beat += shift;
+                    dst.track.volume_automation.push(copy);
+                }
+                for lane in &lt.track.param_automation {
+                    let pts: Vec<AutomationPoint> = lane
+                        .points
+                        .iter()
+                        .filter(|pt| pt.beat >= win_start - 1e-9 && pt.beat <= win_end + 1e-9)
+                        .map(|pt| {
+                            let mut copy = *pt;
+                            copy.beat += shift;
+                            copy
+                        })
+                        .collect();
+                    if pts.is_empty() {
+                        continue;
+                    }
+                    match dst
+                        .track
+                        .param_automation
+                        .iter_mut()
+                        .find(|l| l.device == lane.device && l.param == lane.param)
+                    {
+                        Some(l) => l.points.extend(pts),
+                        None => dst.track.param_automation.push(ParamAutomation {
+                            device: lane.device,
+                            param: lane.param,
+                            points: pts,
+                        }),
+                    }
+                }
+                k += 1.0;
             }
-            p.tracks[ti].sends.push((dest_id, *level as f32));
+            dst.track.volume_automation.sort_by(|x, y| x.beat.total_cmp(&y.beat));
+            for lane in &mut dst.track.param_automation {
+                lane.points.sort_by(|x, y| x.beat.total_cmp(&y.beat));
+            }
         }
     }
 
-    if diags.is_empty() {
-        Ok(p)
-    } else {
-        Err(diags)
+    // content length, rounded up to whole bars (used for placement looping)
+    let mut end = 0.0f64;
+    for lt in &out {
+        for c in &lt.track.arranger {
+            end = end.max(c.start + c.duration);
+        }
+        for c in &lt.track.audio_clips {
+            end = end.max(c.start + c.duration);
+        }
     }
+    let len_beats = (end / beats_per_bar).ceil().max(1.0) * beats_per_bar;
+
+    Lowered { tracks: out, len_beats }
 }
 
 fn collect_devices<'a>(
@@ -445,17 +773,21 @@ pub fn validate_devices(file: &FileAst) -> Vec<Diag> {
 
 /// Evaluate a pattern expression to notes. Returns (notes, length in beats,
 /// clip display name).
+/// Returns (notes, length, clip name, transposable): beat literals trigger a
+/// fixed pad/pitch, so block-placement transposition must leave them alone.
 fn eval_pattern(
     pref: &PatternRef,
     lets: &HashMap<&str, &PatternLit>,
     beats_per_bar: f64,
     beat_pitch: u8,
-) -> Result<(Vec<Note>, f64, String), Diag> {
+) -> Result<(Vec<Note>, f64, String, bool), Diag> {
     match pref {
-        PatternRef::Lit(lit) => eval_lit(lit, beats_per_bar, beat_pitch).map(|(n, l)| (n, l, "clip".into())),
+        PatternRef::Lit(lit) => eval_lit(lit, beats_per_bar, beat_pitch)
+            .map(|(n, l)| (n, l, "clip".into(), lit.kind != "beat")),
         PatternRef::Name(name, pos) => {
             let lit = resolve_let(name, *pos, lets)?;
-            eval_lit(lit, beats_per_bar, beat_pitch).map(|(n, l)| (n, l, name.clone()))
+            eval_lit(lit, beats_per_bar, beat_pitch)
+                .map(|(n, l)| (n, l, name.clone(), lit.kind != "beat"))
         }
         PatternRef::Fn { name, inner, args, pos } => {
             // inner must be a prog literal (directly or via a let)
@@ -511,7 +843,7 @@ fn eval_pattern(
                     ))
                 }
             };
-            Ok((notes, len, name.to_string()))
+            Ok((notes, len, name.to_string(), true))
         }
     }
 }

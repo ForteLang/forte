@@ -24,6 +24,7 @@ pub fn parse(src: &str) -> Result<FileAst, Vec<Diag>> {
     let mut imports = Vec::new();
     let mut assets = Vec::new();
     let mut devices = Vec::new();
+    let mut blocks = Vec::new();
     loop {
         match p.peek().clone() {
             Tok::Ident(s) if s == "import" => match p.import() {
@@ -38,13 +39,20 @@ pub fn parse(src: &str) -> Result<FileAst, Vec<Diag>> {
                     break;
                 }
             }
+            Tok::Ident(s) if s == "block" => {
+                if let Some(b) = p.block_def() {
+                    blocks.push(b);
+                } else {
+                    break;
+                }
+            }
             _ => break,
         }
     }
-    // a file may be a pure device library (no song)
+    // a file may be a pure device/block library (no song)
     let song = if *p.peek() == Tok::Eof { None } else { p.song() };
     if p.diags.is_empty() {
-        Ok(FileAst { imports, assets, devices, song })
+        Ok(FileAst { imports, assets, devices, blocks, song })
     } else {
         Err(p.diags)
     }
@@ -123,7 +131,7 @@ impl Parser {
 
     fn song(&mut self) -> Option<SongAst> {
         if !self.keyword("song") {
-            self.err("E-PARSE-004", "ファイルは `song \"名前\" { … }` で始めてください");
+            self.err("E-PARSE-004", "ファイルは `song \"名前\" { … }` か `block 名前 { … }` で始めてください");
             return None;
         }
         let name = if let Tok::Str(s) = self.peek().clone() {
@@ -133,6 +141,22 @@ impl Parser {
             self.err("E-PARSE-005", "song の名前(文字列)が必要です");
             return None;
         };
+        self.body(name)
+    }
+
+    /// `block Name { … }` — same body as a song; the name is an identifier
+    /// so blocks can be imported and placed by name.
+    fn block_def(&mut self) -> Option<BlockAst> {
+        let pos = self.pos();
+        self.bump(); // "block"
+        let name = self.ident("block の名前")?;
+        let body = self.body(name.clone())?;
+        Some(BlockAst { name, body, pos })
+    }
+
+    /// The shared body of `song`/`block`: header, lets, sections, tracks,
+    /// returns, nested blocks, and block placements.
+    fn body(&mut self, name: String) -> Option<SongAst> {
         self.expect(Tok::LBrace, "`{`");
 
         let mut song = SongAst {
@@ -145,6 +169,8 @@ impl Parser {
             sections: Vec::new(),
             tracks: Vec::new(),
             returns: Vec::new(),
+            blocks: Vec::new(),
+            places: Vec::new(),
         };
 
         loop {
@@ -225,10 +251,86 @@ impl Parser {
                         let r = self.return_block()?;
                         song.returns.push(r);
                     }
+                    "block" => {
+                        let b = self.block_def()?;
+                        song.blocks.push(b);
+                    }
+                    // body-level play = a block placement:
+                    //   play Groove(key: "E minor", from: 2) at bars(9..16)
+                    "play" => {
+                        self.bump();
+                        let pos = self.pos();
+                        let block = self.ident("配置する block の名前")?;
+                        let mut key = None;
+                        let mut from = None;
+                        let mut to = None;
+                        if *self.peek() == Tok::LParen {
+                            self.bump();
+                            loop {
+                                if *self.peek() == Tok::RParen {
+                                    self.bump();
+                                    break;
+                                }
+                                let apos = self.pos();
+                                let arg = self.ident("配置引数(key / from / to)")?;
+                                self.expect(Tok::Colon, "`:`");
+                                match arg.as_str() {
+                                    "key" => {
+                                        if let Tok::Str(s) = self.peek().clone() {
+                                            self.bump();
+                                            let mut it = s.split_whitespace();
+                                            match (it.next(), it.next(), it.next()) {
+                                                (Some(r), Some(sc), None) => {
+                                                    key = Some(((r.to_string(), sc.to_string()), apos));
+                                                }
+                                                _ => self.err(
+                                                    "E-PARSE-022",
+                                                    format!("key は \"ルート スケール\" で書きます(例: \"E minor\"。見つかったのは \"{s}\")"),
+                                                ),
+                                            }
+                                        } else {
+                                            self.err("E-PARSE-022", "key: には文字列が必要です(例: key: \"E minor\")");
+                                        }
+                                    }
+                                    "from" => {
+                                        let n = self.number("from(小節)")?;
+                                        from = Some(n.0 as u32);
+                                    }
+                                    "to" => {
+                                        let n = self.number("to(小節)")?;
+                                        to = Some(n.0 as u32);
+                                    }
+                                    other => self.err(
+                                        "E-PARSE-022",
+                                        format!("配置引数 '{other}' は不明です(key / from / to)"),
+                                    ),
+                                }
+                                if *self.peek() == Tok::Comma {
+                                    self.bump();
+                                }
+                            }
+                        }
+                        if !self.keyword("at") {
+                            self.err("E-PARSE-022", "block の配置には `at bars(a..b)` か `at セクション名` が必要です");
+                        }
+                        let at = if self.keyword("bars") {
+                            self.expect(Tok::LParen, "`(`");
+                            let a = self.number("開始小節")?;
+                            self.expect(Tok::DotDot, "`..`");
+                            let b = self.number("終了小節")?;
+                            self.expect(Tok::RParen, "`)`");
+                            AtRef::Bars(a.0 as u32, b.0 as u32)
+                        } else {
+                            let spos = self.pos();
+                            let name = self.ident("区間(bars(a..b) かセクション名)")?;
+                            AtRef::Section(name, spos)
+                        };
+                        song.places.push(PlaceAst { block, key, from, to, at, pos });
+                    }
                     other => {
                         self.err(
                             "E-PARSE-007",
-                            format!("song 内で使えない要素です: {other}(tempo/meter/key/let/section/track/return)"),
+                            format!("song/block 内で使えない要素です: {other}(tempo/meter/key/let/section/track/return/block/play)"),
                         );
                         self.bump();
                     }
