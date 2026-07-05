@@ -7,9 +7,11 @@
 #   scripts/publish_web.sh              # build + push gh-pages
 #   DRY_RUN=1 scripts/publish_web.sh    # build only; prints the site dir
 #
-# Site layout = repo layout collapsed to the root: the web pages fetch
-# ../../packages/… which the browser clamps to /packages/… at the root,
-# so the SAME files work in-repo and on Pages.
+# The site collapses the repo layout to its root, and the copies are
+# REWRITTEN for it: in-repo the pages sit at /forte/web/ and fetch
+# ../../packages/…, but a GitHub *project* page serves under /<repo>/ —
+# climbing two levels would escape the site. At assembly time every
+# ../../packages/ reference in the copies becomes packages/ (same dir).
 set -euo pipefail
 cd "$(dirname "$0")/.."    # forte/ (the core)
 
@@ -22,6 +24,10 @@ cp -r web/. "$SITE"/
 mkdir -p "$SITE/packages"
 cp -r ../packages/essentials_0.6.0 "$SITE/packages/"
 cargo run -q -p fortelang --bin forte -- web index > "$SITE/packages.json"
+# rewrite the repo-relative package paths for the collapsed layout
+sed -i.bak -e 's|\.\./\.\./packages/|packages/|g' -e 's|`\.\./\.\./${rel}`|`${rel}`|g' \
+  "$SITE"/*.html "$SITE"/*.js
+rm -f "$SITE"/*.bak
 touch "$SITE/.nojekyll"
 echo "   site: $SITE"
 
