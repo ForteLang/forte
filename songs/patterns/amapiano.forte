@@ -1,0 +1,46 @@
+// Pattern: Amapiano (112bpm, swing 0.55) — ログドラムの跳ね(低域の
+// 打楽器化したベース)、シェイカーの絨毯、余白の多いピアノ。
+import { Kick606, Shaker, HatClosed, Rim } from "../../lib/std/drums.forte"
+import { DubBass } from "../../lib/std/bass.forte"
+import { EPiano } from "../../lib/std/keys.forte"
+import { Conga } from "../../lib/std/percussion.forte"
+
+song "Pattern: Amapiano" {
+  tempo 112bpm
+  swing 0.55
+  meter 4/4
+  key Ab minor
+
+  let kick = beat`x--- ---- x--- ----`
+  let shk  = beat`xxxX xxxx xxxX xxxx`
+  let hat  = beat`--x- --x- --x- --x.`
+  let rim  = beat`---- x--- --x- ----`
+  let cga  = beat`--x- ---x -x-- --x-`
+  let log  = beat`---- --x- x--x ---- ---x -x-- --x- x---`
+  let soul = prog`Abm7 | Gbmaj7 | Ebm7 | Db7`
+
+  return Sun {
+    insert reverb(size: 0.6, decay: 0.45, mix: 1.0)
+    volume 0.6
+  }
+
+  track Kick { instrument Kick606(decay: 0.35) volume 0.8 play kick at bars(1..8) }
+  track Shk  { instrument Shaker() volume 0.4 pan 0.15 play shk at bars(1..8) }
+  track Hat  { instrument HatClosed(bright: 0.8) volume 0.3 pan -0.2 play hat at bars(1..8) }
+  track Rim  { instrument Rim() send Sun 0.25 volume 0.4 play rim at bars(3..8) }
+  track Cga  { instrument Conga(open: 0.5) volume 0.5 pan 0.25 play cga at bars(1..8) }
+
+  track Log {
+    instrument DubBass(depth: 0.6)
+    insert drive(drive: 0.15)
+    volume 0.85
+    play log at bars(1..8)
+  }
+
+  track Keys {
+    instrument EPiano(tine: 0.35)
+    send Sun 0.35
+    volume 0.5
+    play chords(soul) at bars(1..8)
+  }
+}
