@@ -99,6 +99,35 @@ fn packages_json(root: &Path) -> String {
             files.sort();
             files
         };
+        // albums: album.forte meta + .fortesong tracks in filename order
+        let mut albums = Vec::new();
+        if let Ok(rd) = std::fs::read_dir(p.join("albums")) {
+            let mut dirs: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|d| d.is_dir()).collect();
+            dirs.sort();
+            for d in dirs {
+                let meta = std::fs::read_to_string(d.join("album.forte"))
+                    .ok()
+                    .and_then(|s| crate::parser::parse(&s).ok())
+                    .and_then(|a| a.blocks.last().map(|b| b.body.clone()));
+                let Some(m) = meta else { continue };
+                let mut tracks: Vec<String> = std::fs::read_dir(&d)
+                    .map(|rd| {
+                        rd.flatten()
+                            .map(|e| e.file_name().to_string_lossy().into_owned())
+                            .filter(|n| n.ends_with(".fortesong"))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                tracks.sort();
+                albums.push(serde_json::json!({
+                    "dir": d.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+                    "title": m.name,
+                    "artist": m.artist.clone().unwrap_or_default(),
+                    "desc": m.desc.clone().unwrap_or_default(),
+                    "tracks": tracks,
+                }));
+            }
+        }
         pkgs.push(serde_json::json!({
             "dir": p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             "name": meta.name,
@@ -109,6 +138,7 @@ fn packages_json(root: &Path) -> String {
             "instruments": list("instruments"),
             "blocks": list("blocks"),
             "songs": list("songs"),
+            "albums": albums,
         }));
     }
     serde_json::json!({ "packages": pkgs }).to_string()

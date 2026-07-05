@@ -41,14 +41,15 @@
   .hint code { color: #b6bcc6; }
   button { background: #2b2f38; color: #d7dae0; border: 1px solid #3a3f4b;
     border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
-  a.back { color: #e8b34c; font-size: 12px; margin-left: auto; }
+  a.back { color: #e8b34c; font-size: 12px; margin-left: auto; text-decoration: none; }
 </style>
 </head>
 <body>
 <header>
   <img id="logo" src="logo.svg" alt=""><h1>FORTE PACKAGES</h1>
   <span>すべてのコンテンツは package。取り込みは forte package add、配信は forte push。</span>
-  <a class="back" href="index.html">← エディタ</a>
+  <a class="back" href="player.html" style="margin-left:auto">▶ プレイヤー</a>
+  <a class="back" href="index.html" style="margin-left:0">← エディタ</a>
 </header>
 <main>
   <div id="list">読み込み中…</div>
@@ -67,6 +68,18 @@ async function showSrc(rel) {
   $('src').textContent = res.ok ? await res.text() : `読み込めません: ${res.status}`;
   $('src-wrap').style.display = 'block';
   $('src-wrap').scrollIntoView({ behavior: 'smooth' });
+}
+
+function albumList(pkgDir, albums) {
+  if (!albums.length) return '';
+  const items = albums.map((a) => {
+    const q = a.tracks
+      .map((t) => `src=${encodeURIComponent(`../../packages/${pkgDir}/albums/${a.dir}/${t}`)}`)
+      .join('&');
+    return `<a href="player.html?${q}" title="${esc(a.desc)}">▶ ${esc(a.title)}${
+      a.artist ? ` — ${esc(a.artist)}` : ''} (${a.tracks.length} tracks)</a>`;
+  }).join('\n');
+  return `<div class="section-h">albums</div><div class="files">${items}</div>`;
 }
 
 function fileList(pkgDir, sub, files) {
@@ -99,6 +112,7 @@ async function load() {
         ${p.license ? `<span class="badge">${esc(p.license)}</span>` : ''}</h2>
       <div class="meta">${esc(p.desc)}</div>
       <div>${tags}</div>
+      ${albumList(p.dir, p.albums || [])}
       ${fileList(p.dir, 'instruments', p.instruments)}
       ${fileList(p.dir, 'blocks', p.blocks)}
       ${fileList(p.dir, 'songs', p.songs)}
