@@ -49,7 +49,7 @@ nodeArg   = string | num | nodeExpr ;
 song      = "song" string body ;                                    (* legacy alias: a named root block *)
 body      = "{" { bodyItem } "}" ;
 bodyItem  = "desc" string | "tags" string | "license" string
-          | "version" string | "requires" string
+          | "version" string | "requires" string | "artist" string
           | "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
           | "let" ident "=" musicLit
           | "section" ident "=" "bars" "(" num ".." num ")"
@@ -265,8 +265,10 @@ block AcidLine {
   dependency. `forte package add` resolves requires recursively and hoists
   every dependency into the consumer's ONE flat `packages/` directory —
   vendored packages never contain a nested `packages/` of their own.
-- Inheritance: a child's `desc`/`tags`/`license`/`version`/`requires`
-  override the parent's when present.
+- `artist "…"` names who made the piece. Albums declare it in their
+  `album.forte` meta block; songs may carry their own; players display it.
+- Inheritance: a child's `desc`/`tags`/`license`/`version`/`requires`/
+  `artist` override the parent's when present.
 - A root block with a `desc` and no tracks/placements is a valid,
   deliberately silent file — the shape of `packages/<pkg>/package.forte`
   metadata blocks (an EMPTY root without a desc is still E-SONG-003).

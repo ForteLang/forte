@@ -660,6 +660,47 @@ Because builds are deterministic, a package release needs no trust: anyone
 who builds the same source gets the same digest (see the FAQ), so "does
 this rendered audio really come from this code?" is always checkable.
 
+### .fortesong and albums — the listener side
+
+A song ships as a **`.fortesong`**: not a WAV, but a self-contained,
+playable build — the sources (entry + imports + recorded assets) packed
+with the build proof. Anyone with forte installed hears the exact
+deterministic render, and the code is right there to open and fork.
+
+```bash
+forte build songs/tune.forte -o tune.fortesong   # the extension picks the format
+forte play tune.fortesong                        # digest-checked, then plays
+forte play tune.fortesong --verify               # re-render and prove the digest first
+```
+
+Loading always verifies the source digest (a tampered file refuses to
+play); `--verify` additionally re-renders and compares the audio digest —
+"is this sound really this code?" answered on your own machine.
+
+An **album** is a package directory: `album.forte` (a meta block with
+`desc` / `tags` / `artist`) next to `NN-title.fortesong` tracks, ordered
+by filename:
+
+```
+packages/essentials_0.6.0/albums/first-light/
+  album.forte
+  01-first-light.fortesong
+  02-sunrise-house.fortesong
+  …
+```
+
+`forte play <album-dir>` becomes an audio player: track list with the
+playing track highlighted, a progress bar, and `space` pause / `n` next /
+`p` previous / `q` quit, auto-advancing at each track's end. Try the
+bundled reference album:
+
+```bash
+forte play packages/essentials_0.6.0/albums/first-light
+```
+
+Developers compose packages; listeners `forte package add` and
+`forte play`. Same GitHub, same content, both directions.
+
 ## 9. Troubleshooting
 
 | Symptom | Fix |

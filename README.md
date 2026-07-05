@@ -53,6 +53,14 @@ forte play packages/essentials_0.6.0/songs/smiley-acid.forte
 `forte play` is a console player: every track's lane, a moving playhead,
 and the song's own description. Save the file while it plays — it hot-reloads.
 
+Or play a whole album — tracks ship as **`.fortesong`** (self-contained,
+digest-verified builds; the code rides inside), and `forte play` becomes an
+audio player with `space` pause, `n`/`p` track skip, and auto-advance:
+
+```bash
+forte play packages/essentials_0.6.0/albums/first-light
+```
+
 ## Play instruments
 
 ```bash

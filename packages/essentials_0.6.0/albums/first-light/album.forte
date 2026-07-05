@@ -1,0 +1,10 @@
+// First Light — the Essentials reference album. Seven songs, dawn to
+// night, every sound reproducible from the code packed inside each track.
+// Listen: forte play packages/essentials_0.6.0/albums/first-light
+block FirstLight {
+  desc "Seven songs from dawn to night — the Essentials reference album, every sound rebuilt from code on your machine."
+  tags "album, showcase, essentials, reference"
+  artist "Forte Essentials"
+  license "CC-BY-NC-SA-4.0"
+  version "0.6.0"
+}

@@ -11,6 +11,8 @@ use crate::engine::{EngineAutoPoint, EngineClip, EngineDevice, EngineTrack};
 pub enum Command {
     // ---- transport ----
     Play,
+    /// Stop advancing but keep the playhead (players resume with Play).
+    Pause,
     Stop,
     SetTempo(f64),
     SetLoop { enabled: bool, start: f64, end: f64 },
