@@ -1168,6 +1168,13 @@ impl EngineTrack {
     }
 }
 
+impl Engine {
+    /// Debug (forteweb): number of live tracks in the engine.
+    pub fn debug_track_count(&self) -> usize {
+        self.tracks.iter().flatten().count()
+    }
+}
+
 impl EngineDevice {
     fn configure(&mut self) {
         let p = &self.eff_params;

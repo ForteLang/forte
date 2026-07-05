@@ -27,6 +27,18 @@ forte check songs/first-light.forte
 # OK: compiled song (6 tracks, tempo 96 bpm, 16 bars)
 ```
 
+### Tab completion (recommended)
+
+Instrument names complete dynamically (the completion script asks
+`forte instruments names` at keypress time, so a growing library never needs
+a regenerated completion file):
+
+```bash
+echo 'source <(forte complete bash)' >> ~/.bashrc   # bash
+echo 'source <(forte complete zsh)'  >> ~/.zshrc    # zsh
+# then: forte instruments play S<Tab>  →  SD808 SD909 Snare… SubBass …
+```
+
 ## 0.5 Make sound right away (REPL)
 
 Before creating any files, you can start making noise:

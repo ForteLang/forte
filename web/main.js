@@ -148,6 +148,16 @@ async function tryMonaco(initial) {
 }
 
 // ---- audio ------------------------------------------------------------------
+// The worklet scope has no TextEncoder, so all text crosses the port as bytes.
+function encodeSrc() {
+  const enc = new TextEncoder();
+  return {
+    cmd: 'src',
+    text: enc.encode(getText()),
+    modules: enc.encode(modulesJson),
+    assets: enc.encode(assetsJson),
+  };
+}
 let ac, node;
 async function ensureAudio() {
   if (ac) return;
@@ -166,12 +176,20 @@ async function ensureAudio() {
   });
   node.port.onmessage = (e) => {
     const m = e.data;
+    if (m.kind === 'err') {
+      status(`worklet error: ${m.message}`);
+      return;
+    }
+    if (m.kind === 'compiled' && m.diagCount > 0) {
+      status(`worklet compile failed: ${m.diagCount} diagnostics`);
+      return;
+    }
     if (m.kind === 'pos') {
       status(`bar ${Math.floor(m.beats / 4) + 1}.${Math.floor(m.beats % 4) + 1} | peak ${m.peak.toFixed(2)}`);
       viz.setPlayhead(m.beats);
     }
   };
-  node.port.postMessage({ cmd: 'src', text: getText(), modules: modulesJson, assets: assetsJson });
+  node.port.postMessage(encodeSrc());
 }
 
 // ---- recording (mic → provenance-stamped .frec in OPFS) ----------------------
@@ -641,7 +659,7 @@ function recompile(delay = 300) {
     const { ok, diags } = mainCompile(getText());
     showDiags(diags);
     document.body.dataset.compiled = ok ? 'ok' : 'error';
-    if (ok && node) node.port.postMessage({ cmd: 'src', text: getText(), modules: modulesJson, assets: assetsJson }); // hot reload
+    if (ok && node) node.port.postMessage(encodeSrc()); // hot reload
   }, delay);
 }
 
