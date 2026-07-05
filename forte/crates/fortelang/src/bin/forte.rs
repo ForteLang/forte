@@ -265,7 +265,27 @@ fn main() -> ExitCode {
                         .cloned();
                     fortelang::live::run(&args[2], from.as_deref())
                 }
+                Some("edit") if args.len() >= 3 && args.iter().any(|a| a == "--watch") => {
+                    fortelang::live::watch(&args[2])
+                }
                 Some("edit") if args.len() >= 3 => fortelang::live::edit(&args[2]),
+                Some("new") if args.len() >= 3 => fortelang::live::new_instrument(&args[2]),
+                Some("fix") if args.len() >= 4 => {
+                    let mut assigns = Vec::new();
+                    let mut bad = None;
+                    for a in &args[3..] {
+                        match a.split_once('=').and_then(|(k, v)| {
+                            v.parse::<f64>().ok().map(|v| (k.trim().to_string(), v))
+                        }) {
+                            Some(kv) => assigns.push(kv),
+                            None => bad = Some(a.clone()),
+                        }
+                    }
+                    match bad {
+                        Some(a) => Err(format!("'{a}' が読めません(cutoff=0.6 の形で)")),
+                        None => fortelang::live::fix(&args[2], &assigns),
+                    }
+                }
                 // instruments arrive as packages: add = forte package add
                 Some("add") if args.len() >= 3 => fortelang::package::add(&args[2])
                     .map(|()| println!("楽器は forte instruments list に載りました(package として導入)")),
@@ -274,7 +294,7 @@ fn main() -> ExitCode {
                 Some("names") => fortelang::live::names(args.get(2).map(String::as_str)),
                 None => fortelang::live::list(None),
                 Some(other) => Err(format!(
-                    "instruments のサブコマンドは list / play / edit / add です。\n\
+                    "instruments のサブコマンドは list / play / edit / new / fix / add です。\n\
                      一覧: forte instruments list {other}   演奏: forte instruments play {other}"
                 )),
             };
@@ -320,7 +340,9 @@ fn main() -> ExitCode {
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
             eprintln!("       forte instruments list [QUERY]  (カタログ。list bass / list 808 で絞り込み)");
             eprintln!("       forte instruments play <Name[(args)]>  (キーボードが鍵盤に。1..9/-/= でノブ)");
-            eprintln!("       forte instruments edit <Name>          (instruments/ にコピーして編集、自動コミットで履歴)");
+            eprintln!("       forte instruments edit <Name> [--watch] (instruments/ で編集。--watch は保存ごとに自動コミット)");
+            eprintln!("       forte instruments new <Name>            (テンプレートから自作楽器を開始)");
+            eprintln!("       forte instruments fix <Name> k=v …      (パラメータ固定の派生を instruments/ に書き出し)");
             eprintln!("       forte instruments add <github:owner/repo | PATH> (楽器 package を導入 = package add)");
             eprintln!("       forte instrument <Name[(args)]> [--from lib.forte]  (= instruments play)");
             eprintln!("       forte browser [--port 8000] [--no-open]  (ブラウザエディタを起動)");

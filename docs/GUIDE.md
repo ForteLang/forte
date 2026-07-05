@@ -122,6 +122,22 @@ When you quit, your performance is printed as a `notes` literal quantized to
 16th notes — paste it straight into a song. This is your entry point to
 "performance is code."
 
+**Making your own**: the workshop lives in `instruments/` (a forte VCS
+repository — every change is history):
+
+```bash
+forte instruments new MySynth            # template: osc → svf → adsr-shaped gain
+forte instruments edit MySynth --watch   # every save validates + auto-commits
+forte instruments play MySynth           # in another terminal — saves hot-reload
+forte instruments fix Bass303 cutoff=0.6 # derive a fixed-parameter variant
+```
+
+`fix` copies the library into `instruments/` and rewrites that device's
+param defaults there; your workspace shadows the packaged original, so
+`play Bass303` immediately speaks with the fixed values (delete the copy
+to go back). Workspace instruments appear in `forte instruments list`
+and in tab completion alongside the packages.
+
 `forte play my-song.forte` shows a timeline in the console:
 each track's lane (which bar it enters and exits), the moving playhead,
 elapsed/total time, loop count, and which tracks are currently sounding.
