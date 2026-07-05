@@ -150,14 +150,22 @@ song "名前" {
 
     // ---- 音を時間で動かす ----
     automate volume from 0.2 to 0.8 over verse   // フェードイン(over bars(1..8) も可)
+    automate cutoff from 0.2 to 0.9 over hook    // 弾きながらフィルタを開く
     modulate cutoff with lfo(rate: 0.4, amount: 0.5, shape: "tri")  // ワブル
+    modulate cutoff with steps(seq: "0.2 0.7 0.4 0.9", every: "1/16", amount: 0.5) // 16分のステップシーケンス
+    modulate reso   with random(rate: 0.3, amount: 0.2, smooth: 0.6) // S&H 乱数(決定論)
   }
 }
 ```
 
 - 小節は **1 始まり・両端含む**。パターンが区間より短ければループします。
-- `automate volume` は区間の頭から末尾への線形ランプ。`modulate` は
-  polymer / sampler の名前付きパラメータに LFO を掛けます(amount は -1..1)。
+- `automate` は区間の頭から末尾への線形ランプ。対象は volume でも
+  instrument のパラメータでもよく、自作 device なら宣言した `param` が
+  そのまま名前になります(303 のカットオフスイープはこれ)。
+- `modulate` はパラメータにモジュレータを差し込みます: `lfo`(周期波)、
+  `steps`(`every: "1/16"` でテンポ同期のステップシーケンス)、`random`
+  (サンプル&ホールド。決定論)。amount は -1..1 で、`automate` の
+  ランプの上に重ねられます。複数スタックも可。
 - ノブ系の数値はぜんぶ **0..1 に正規化**(volume も cutoff も)。pan だけ -1..1。
 - ビルトイン音源: `sampler(sample: "Kick"/"Snare"/"Hat")`, `polymer(…)`, `grid()`。
   エフェクト: `filter, eq, drive, delay, reverb`。パラメータ名を間違えると

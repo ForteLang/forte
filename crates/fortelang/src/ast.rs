@@ -152,6 +152,8 @@ pub struct AutomateAst {
 #[derive(Clone, Debug)]
 pub struct ModulateAst {
     pub param: String,
+    /// modulator kind: "lfo" | "steps" | "random"
+    pub kind: String,
     pub args: Vec<(String, Arg)>,
     pub pos: Pos,
 }

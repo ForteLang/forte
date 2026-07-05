@@ -1,5 +1,6 @@
-// Smiley Acid — アシッドハウス 32 小節。303 のラインが 8 小節ごとに
-// フィルタの開きを変えながら変奏し、pump がフロアの呼吸を作る。
+// Smiley Acid — アシッドハウス 32 小節。303 のカットオフを automate で
+// セクションごとに開いていき(warmup 閉→ open 半開 → peak 全開)、
+// その上に遅い LFO の揺れを重ねる。pump がフロアの呼吸を作る。
 import { Bass303 } from "../../lib/std/tb303.forte"
 import { Kick909, HatClosed, HatOpen, Clap, Crash } from "../../lib/std/drums.forte"
 import { Stab } from "../../lib/std/fx.forte"
@@ -42,6 +43,12 @@ song "Smiley Acid" {
     play notes`A1!:0.25 A1:0.25 A2:0.25 A1:0.25 C2~:0.25 D2!:0.25 A1:0.25 G2~:0.25 A2:0.25 A1:0.25 E2!:0.25 A1:0.25 D2~:0.25 C2:0.25 A1!:0.25 G1~:0.25` at open
     play notes`A1!:0.25 E2~:0.25 A2!:0.25 G2~:0.25 E2:0.25 D2~:0.25 C2!:0.25 A1:0.25 A1:0.25 C2~:0.25 D2:0.25 E2!:0.25 G2~:0.25 A2:0.25 G2~:0.25 E2~:0.25` at peak
     automate volume from 0.4 to 0.75 over warmup
+    // フィルタの旅: 閉じた warmup → open で半開 → peak で全開
+    automate cutoff from 0.1 to 0.32 over warmup
+    automate cutoff from 0.32 to 0.6 over open
+    automate cutoff from 0.5 to 0.95 over peak
+    // ランプの上に遅い揺れが乗る(automate と modulate はスタックできる)
+    modulate cutoff with lfo(rate: 0.18, amount: 0.08, shape: "sine")
   }
 
   track Pad {

@@ -1,5 +1,6 @@
 // Pattern: Acid Lines (126bpm) — 303 の文法: 16 分の反復に
-// スライド(~)とアクセント(!)を混ぜると、同じ 4 音でも別の生き物になる。
+// スライド(~)とアクセント(!)を混ぜ、鳴らしながら automate で
+// カットオフを開いていく。フィルタの旅こそがアシッド。
 import { Bass303 } from "../../lib/std/tb303.forte"
 import { Kick909, HatClosed, HatOpen, Clap } from "../../lib/std/drums.forte"
 
@@ -26,5 +27,7 @@ song "Pattern: Acid Lines" {
     volume 0.75
     // 定番の文法: オクターブ跳躍、スライドで駆け上がり、アクセントで開く
     play notes`A1!:0.25 A1:0.25 A2:0.25 A1:0.25 C2~:0.25 D2!:0.25 A1:0.25 G2~:0.25 A2:0.25 A1:0.25 E2!:0.25 A1:0.25 D2~:0.25 C2:0.25 A1!:0.25 G1~:0.25` at bars(1..8)
+    // 8 小節かけてフィルタを閉じた状態から全開へ
+    automate cutoff from 0.12 to 0.75 over bars(1..8)
   }
 }

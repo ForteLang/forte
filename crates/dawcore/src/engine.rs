@@ -162,6 +162,8 @@ pub struct EngineTrack {
     sends: Vec<(usize, f32)>,
     /// Volume automation, sorted by beat. Overrides `gain` while playing.
     automation: Vec<EngineAutoPoint>,
+    /// per-device param automation lanes: (device, param, points)
+    param_autos: Vec<(usize, usize, Vec<EngineAutoPoint>)>,
     active_scene: i32,
     /// Quantized launch request awaiting the next quant boundary.
     pending_scene: Option<i32>,
@@ -300,6 +302,7 @@ pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
         is_effect: track.kind == crate::model::TrackKind::Effect,
         sends: track.sends.clone(),
         automation: build_automation(track),
+        param_autos: build_param_autos(track),
         active_scene: -1,
         pending_scene: None,
         clips,
@@ -311,6 +314,22 @@ pub fn build_track(track: &Track, sr: f32) -> Box<EngineTrack> {
         live_events: Vec::with_capacity(128),
     };
     Box::new(et)
+}
+
+pub fn build_param_autos(track: &Track) -> Vec<(usize, usize, Vec<EngineAutoPoint>)> {
+    track
+        .param_automation
+        .iter()
+        .map(|pa| {
+            let mut pts: Vec<EngineAutoPoint> = pa
+                .points
+                .iter()
+                .map(|p| EngineAutoPoint { beat: p.beat, value: p.value, hold: p.hold })
+                .collect();
+            pts.sort_by(|a, b| a.beat.partial_cmp(&b.beat).unwrap_or(std::cmp::Ordering::Equal));
+            (pa.device, pa.param, pts)
+        })
+        .collect()
 }
 
 pub fn build_automation(track: &Track) -> Vec<EngineAutoPoint> {
@@ -699,7 +718,7 @@ impl Engine {
             }
 
             // advance modulators (block rate) and bake effective params
-            track.update_modulators(block_seconds);
+            track.update_modulators(block_seconds, block_start);
 
             // schedule note events for this block, then run the Note-FX chain
             track.schedule(self.playing, block_start, sched_end, spb, frames);
@@ -783,7 +802,7 @@ impl Engine {
             }
             let Some(track) = self.tracks[slot].as_deref_mut() else { continue };
 
-            track.update_modulators(block_seconds);
+            track.update_modulators(block_seconds, block_start);
             track.render(
                 Some((&self.send_l[slot], &self.send_r[slot])),
                 &mut self.scratch_l,
@@ -906,10 +925,21 @@ impl EngineTrack {
         }
     }
 
-    fn update_modulators(&mut self, block_seconds: f32) {
+    fn update_modulators(&mut self, block_seconds: f32, beat: f64) {
         // copy base params into the effective scratch
         for d in &mut self.devices {
             d.eff_params.copy_from_slice(&d.base_params);
+        }
+        // param automation lanes rewrite the effective value; modulators
+        // (LFO/steps/random) then ride on top of the automated position
+        for (di, pi, pts) in &self.param_autos {
+            if let Some(v) = eval_auto(pts, beat) {
+                if let Some(d) = self.devices.get_mut(*di) {
+                    if let Some(p) = d.eff_params.get_mut(*pi) {
+                        *p = v;
+                    }
+                }
+            }
         }
         // evaluate each modulator and apply to its routes, then advance state
         for m in &mut self.mods {

@@ -9,7 +9,7 @@ use crate::diag::{Diag, Pos};
 use crate::grid_build;
 use crate::music;
 use dawcore::model::{
-    ArrangerClip, AudioClip, AutomationPoint, Clip, Device, DeviceKind, KeySignature, ModKind,
+    ArrangerClip, AudioClip, AutomationPoint, Clip, Device, DeviceKind, KeySignature, ModKind, ParamAutomation,
     ModRoute, Modulator, Note, Project, SampleSource, Scale, Track, TrackKind, TRACK_COLORS,
 };
 
@@ -165,16 +165,19 @@ pub fn compile(
             }
         }
 
-        // automation lanes (v1: volume)
+        // automation lanes: volume, or any runtime param of the instrument
         for auto in &tast.automations {
-            if auto.target != "volume" {
-                diags.push(Diag::new(
-                    "E-AUTO-001",
-                    auto.pos,
-                    format!("automate できる対象は volume です(見つかったのは {})", auto.target),
-                ));
-                continue;
-            }
+            let param_target = if auto.target == "volume" {
+                None
+            } else {
+                match resolve_param(&track, &auto.target) {
+                    Ok(idx) => Some(idx),
+                    Err(msg) => {
+                        diags.push(Diag::new("E-AUTO-001", auto.pos, msg));
+                        continue;
+                    }
+                }
+            };
             if !(0.0..=1.0).contains(&auto.from) || !(0.0..=1.0).contains(&auto.to) {
                 diags.push(Diag::new(
                     "E-TYPE-002",
@@ -202,22 +205,39 @@ pub fn compile(
                 continue;
             }
             // ramp across the range; the last point holds so the value stays put
-            track.volume_automation.push(AutomationPoint {
-                beat: (a - 1) as f64 * beats_per_bar,
-                value: auto.from as f32,
-                hold: false,
-            });
-            track.volume_automation.push(AutomationPoint {
-                beat: b as f64 * beats_per_bar,
-                value: auto.to as f32,
-                hold: true,
-            });
+            let points = vec![
+                AutomationPoint {
+                    beat: (a - 1) as f64 * beats_per_bar,
+                    value: auto.from as f32,
+                    hold: false,
+                },
+                AutomationPoint { beat: b as f64 * beats_per_bar, value: auto.to as f32, hold: true },
+            ];
+            match param_target {
+                None => track.volume_automation.extend(points),
+                // ramps targeting the same param merge into ONE lane in beat
+                // order — separate lanes would each cover the whole timeline
+                // (eval holds the edge values) and the last one would win
+                Some(idx) => match track
+                    .param_automation
+                    .iter_mut()
+                    .find(|pa| pa.device == 0 && pa.param == idx)
+                {
+                    Some(lane) => {
+                        lane.points.extend(points);
+                        lane.points.sort_by(|x, y| x.beat.total_cmp(&y.beat));
+                    }
+                    None => track
+                        .param_automation
+                        .push(ParamAutomation { device: 0, param: idx, points }),
+                },
+            }
         }
         track.volume_automation.sort_by(|x, y| x.beat.total_cmp(&y.beat));
 
         // LFO modulation of instrument parameters
         for m in &tast.modulations {
-            match build_lfo(m, &track) {
+            match build_lfo(m, &track, p.tempo) {
                 Ok(lfo) => track.devices[0].modulators.push(lfo),
                 Err(d) => diags.push(d),
             }
@@ -586,6 +606,9 @@ fn build_instrument(
         }
         let graph = grid_build::instantiate(dev_ast, call, &takes)?;
         let mut dev = Device::new(DeviceKind::PolyGrid);
+        // expose declared params (declaration order) so modulate / automate
+        // can drive them at runtime — same values the graph was baked with
+        dev.params = graph.param_binds.iter().map(|(_, v, _)| *v).collect();
         dev.grid = Some(graph);
         return Ok((dev, 36));
     }
@@ -763,33 +786,56 @@ fn build_instrument(
     }
 }
 
-/// Lower `modulate cutoff with lfo(rate: 0.3, amount: 0.4)` to an engine
-/// [`Modulator`] routed at the track's instrument (device 0).
-fn build_lfo(m: &ModulateAst, track: &Track) -> Result<Modulator, Diag> {
+/// Resolve a runtime-controllable param name on the track's instrument
+/// (device 0): builtin kinds use their fixed param table, grid instruments
+/// use the device-declared params exposed via `param_binds`.
+fn resolve_param(track: &Track, name: &str) -> Result<usize, String> {
     let Some(dev) = track.devices.first() else {
-        return Err(Diag::new("E-LFO-002", m.pos, "modulate には instrument が必要です"));
+        return Err("instrument がありません".into());
     };
+    if dev.kind == DeviceKind::PolyGrid {
+        let names: Vec<&str> = dev
+            .grid
+            .as_ref()
+            .map(|g| g.param_binds.iter().map(|(n, _, _)| n.as_str()).collect())
+            .unwrap_or_default();
+        return names.iter().position(|n| n.eq_ignore_ascii_case(name)).ok_or_else(|| {
+            format!(
+                "パラメータ '{name}' はありません(このデバイスの param: {})",
+                if names.is_empty() { "なし".to_string() } else { names.join(", ") }
+            )
+        });
+    }
     let params = dev.kind.params();
     if params.is_empty() {
-        return Err(Diag::new(
-            "E-LFO-002",
-            m.pos,
-            "この instrument は modulate に対応していません(名前付きパラメータを持つのは polymer / sampler です)",
-        ));
+        return Err(
+            "この instrument は実行時パラメータを持ちません(automate volume は使えます)".into()
+        );
     }
-    let Some(idx) = params.iter().position(|p| p.eq_ignore_ascii_case(&m.param)) else {
-        return Err(Diag::new(
-            "E-LFO-001",
-            m.pos,
-            format!(
-                "パラメータ '{}' はありません(使えるもの: {})",
-                m.param,
-                params.join(", ").to_ascii_lowercase()
-            ),
-        ));
+    params.iter().position(|p| p.eq_ignore_ascii_case(name)).ok_or_else(|| {
+        format!(
+            "パラメータ '{name}' はありません(使えるもの: {})",
+            params.join(", ").to_ascii_lowercase()
+        )
+    })
+}
+
+/// Lower `modulate cutoff with lfo(...) / steps(...) / random(...)` to an
+/// engine [`Modulator`] routed at the track's instrument (device 0). Grid
+/// instruments expose their declared `param`s; builtins use their tables.
+fn build_lfo(m: &ModulateAst, track: &Track, bpm: f64) -> Result<Modulator, Diag> {
+    if track.devices.is_empty() {
+        return Err(Diag::new("E-LFO-002", m.pos, "modulate には instrument が必要です"));
+    }
+    let idx = resolve_param(track, &m.param).map_err(|msg| Diag::new("E-LFO-001", m.pos, msg))?;
+    let kind = match m.kind.as_str() {
+        "steps" => ModKind::Steps,
+        "random" => ModKind::Random,
+        _ => ModKind::Lfo,
     };
-    let mut lfo = Modulator::new(ModKind::Lfo);
+    let mut lfo = Modulator::new(kind);
     let mut amount: Option<f32> = None;
+    let mut every_beats: Option<f64> = None;
     for (key, arg) in &m.args {
         match (key.as_str(), arg) {
             ("rate", Arg::Num(n, pos)) => {
@@ -803,6 +849,49 @@ fn build_lfo(m: &ModulateAst, track: &Track) -> Result<Modulator, Diag> {
                     return Err(Diag::new("E-TYPE-003", *pos, format!("lfo.amount = {n} は -1..1 の範囲外です")));
                 }
                 amount = Some(*n as f32);
+            }
+            ("seq", Arg::Str(sq, pos)) => {
+                let mut vals = Vec::new();
+                for tok in sq.split_whitespace() {
+                    match tok.parse::<f32>() {
+                        Ok(v) if (0.0..=1.0).contains(&v) => vals.push(v),
+                        _ => {
+                            return Err(Diag::new(
+                                "E-TYPE-002",
+                                *pos,
+                                format!("steps.seq は空白区切りの 0..1 の数値です(見つかったのは '{tok}')"),
+                            ))
+                        }
+                    }
+                }
+                if vals.is_empty() {
+                    return Err(Diag::new("E-TYPE-002", *pos, "steps.seq が空です"));
+                }
+                lfo.steps = vals;
+            }
+            ("every", Arg::Str(ev, pos)) => {
+                // one step per this note value, tempo-synced: "1/4" "1/8" "1/16"
+                let step_beats = match ev.as_str() {
+                    "1/4" => 1.0,
+                    "1/8" => 0.5,
+                    "1/16" => 0.25,
+                    "1/2" => 2.0,
+                    other => {
+                        return Err(Diag::new(
+                            "E-TYPE-005",
+                            *pos,
+                            format!("every に '{other}' は使えません(1/2, 1/4, 1/8, 1/16)"),
+                        ))
+                    }
+                };
+                // the whole sequence is one modulator cycle
+                every_beats = Some(step_beats);
+            }
+            ("smooth", Arg::Num(n, pos)) => {
+                if !(0.0..=1.0).contains(n) {
+                    return Err(Diag::new("E-TYPE-002", *pos, format!("random.smooth = {n} は 0..1 の範囲外です")));
+                }
+                lfo.value = 1.0 - *n as f32; // engine: value = 1-smoothing
             }
             ("shape", Arg::Str(s, pos)) => {
                 lfo.shape = match s.to_ascii_lowercase().as_str() {
@@ -824,14 +913,22 @@ fn build_lfo(m: &ModulateAst, track: &Track) -> Result<Modulator, Diag> {
                 return Err(Diag::new(
                     "E-LFO-003",
                     pos,
-                    format!("lfo に '{other}' という引数はありません(rate, amount, shape)"),
+                    format!("modulate の引数 '{other}' は不明です(rate, amount, shape, seq, every, smooth)"),
                 ));
             }
         }
     }
     let Some(amount) = amount else {
-        return Err(Diag::new("E-LFO-003", m.pos, "lfo には amount(-1..1)が必要です"));
+        return Err(Diag::new("E-LFO-003", m.pos, "modulate には amount(-1..1)が必要です"));
     };
+    if let Some(step_beats) = every_beats {
+        // tempo-sync: the sequence (or one random cycle) advances one step per
+        // `every`; the engine knob maps rate → 0.05..8.05 Hz over a full cycle
+        let steps_per_cycle = if lfo.steps.is_empty() { 1.0 } else { lfo.steps.len() as f64 };
+        let cycle_seconds = steps_per_cycle * step_beats * 60.0 / bpm;
+        let hz = (1.0 / cycle_seconds).clamp(0.05, 8.05);
+        lfo.rate = (((hz - 0.05) / 8.0) as f32).clamp(0.0, 1.0);
+    }
     lfo.routes.push(ModRoute { param: idx, amount });
     Ok(lfo)
 }
