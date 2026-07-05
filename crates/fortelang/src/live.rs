@@ -71,6 +71,82 @@ fn find_device(name: &str) -> Option<String> {
     }
 }
 
+/// `forte instruments [QUERY]` — the catalog: every device in lib/std with
+/// its params, the import line to copy, and how to audition it. QUERY
+/// filters case-insensitively on device name or library name.
+pub fn list(query: Option<&str>) -> Result<(), String> {
+    // locate lib/std the same way `forte instrument` does
+    let mut dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let std_dir = loop {
+        let candidate = dir.join("lib/std");
+        if candidate.is_dir() {
+            break candidate;
+        }
+        if !dir.pop() {
+            return Err("lib/std が見つかりません(Forte リポジトリの中で実行してください)".into());
+        }
+    };
+    let q = query.map(str::to_ascii_lowercase);
+    let matches = |name: &str, lib: &str| {
+        q.as_deref().is_none_or(|q| {
+            name.to_ascii_lowercase().contains(q) || lib.to_ascii_lowercase().contains(q)
+        })
+    };
+
+    let mut files: Vec<_> = std::fs::read_dir(&std_dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "forte"))
+        .collect();
+    files.sort();
+
+    let mut shown = 0usize;
+    let mut total = 0usize;
+    for f in &files {
+        let Ok(src) = std::fs::read_to_string(f) else { continue };
+        let Ok(ast) = crate::parser::parse(&src) else { continue };
+        let lib = f.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        total += ast.devices.len();
+        let hits: Vec<_> = ast.devices.iter().filter(|d| matches(&d.name, &lib)).collect();
+        if hits.is_empty() {
+            continue;
+        }
+        // the file's headline comment is its description ("// std/x — …")
+        let head = src.lines().next().and_then(|l| l.strip_prefix("//")).unwrap_or("").trim();
+        let desc = head.split_once('—').map(|(_, d)| d.trim()).unwrap_or(head);
+        println!("lib/std/{lib}.forte — {desc}");
+        for d in &hits {
+            let params: Vec<String> = d
+                .params
+                .iter()
+                .map(|p| format!("{} {}", p.name, p.default))
+                .collect();
+            println!(
+                "  {:<14} {}",
+                d.name,
+                if params.is_empty() { "(パラメータなし)".to_string() } else { params.join("  ") }
+            );
+            shown += 1;
+        }
+        println!();
+    }
+    if matches("polymer", "builtin") || matches("sampler", "builtin") || matches("grid", "builtin")
+    {
+        println!("builtin(import 不要)");
+        println!("  polymer        wave cutoff reso attack decay sustain release detune sub filtenv");
+        println!("  sampler        sample:\"Kick|Snare|Hat\" または take: 録音(gain attack … pitch start end loop reverse)");
+        println!("  grid           既定パッチのモジュラー音源");
+        println!();
+    }
+    if shown == 0 {
+        println!("'{}' に当たる楽器はありません(forte instruments で全 {total} 件)", query.unwrap_or(""));
+    } else {
+        println!("試聴: forte instrument <Name>      曲で使う: import {{ <Name> }} from \"lib/std/<lib>.forte\"");
+    }
+    Ok(())
+}
+
 /// Compose the one-track live song for an instrument call.
 pub fn live_source(call: &str, import: Option<&str>) -> String {
     let name = call.split('(').next().unwrap_or(call).trim();
@@ -118,6 +194,7 @@ pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
         None => Some(find_device(&name).ok_or_else(|| {
             format!(
                 "instrument '{name}' が見つかりません(lib/std を探しました)。\n\
+                 一覧: forte instruments   絞り込み: forte instruments 808\n\
                  ファイル指定: forte instrument {name} --from path/to/lib.forte"
             )
         })?),

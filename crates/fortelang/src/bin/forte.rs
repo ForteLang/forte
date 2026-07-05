@@ -172,6 +172,16 @@ fn main() -> ExitCode {
             }
         }
         #[cfg(not(target_family = "wasm"))]
+        Some("instruments") => {
+            match fortelang::live::list(args.get(1).map(String::as_str)) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("instruments: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        #[cfg(not(target_family = "wasm"))]
         Some("instrument") if args.len() >= 2 => {
             let from = args
                 .iter()
@@ -197,6 +207,7 @@ fn main() -> ExitCode {
             eprintln!("       forte export <song.forte> [-o out.zip]  (曲+履歴+証明の自己完結 zip)");
             eprintln!("       forte play  <song.forte> [--for SECS]   (トラックタイムラインを表示しながら再生)");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
+            eprintln!("       forte instruments [QUERY]   (楽器カタログ: 名前・パラメータ・import 行)");
             eprintln!("       forte instrument <Name[(args)]> [--from lib.forte]");
             eprintln!("                                   (キーボードが鍵盤に: a w s e d …、z/x oct、c/v velo)");
             eprintln!("       forte browser [--port 8000] [--no-open]  (ブラウザエディタを起動)");

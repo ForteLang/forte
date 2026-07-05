@@ -83,15 +83,27 @@ forte> :save jam.forte                     ← the jam becomes a song file
 | `:tempo 140` / `:inst polymer(…)` / `:fx reverb(…)` / `:fx clear` | Change everything without stopping |
 | `:show` / `:save jam.forte` / `:stop` / `:quit` / `:help` | Show source / save as a song / stop / quit |
 
-### Play instruments live
+### Find, audition, and use instruments
 
-`forte instrument <Name>` turns the computer keyboard into a piano — `a w s e
-d f t g y h u j k ...` is a chromatic run from C, `z`/`x` shift the octave,
-`c`/`v` the velocity. It resolves any of the 148 standard instruments by name
-(`forte instrument Bass303`), takes parameters
-(`forte instrument "Juno60Pad(cutoff: 0.5)"`), and when you quit, the jam is
-printed as a quantized `notes` literal — the performance is source code you
-can paste straight into a song.
+Three commands take you from "what's in the box" to notes in a song:
+
+```bash
+forte instruments            # the catalog: 148 devices, params, import lines
+forte instruments 808        # filter by name or library (tr808, juno, acid, ...)
+forte instrument BD808       # audition it: the keyboard becomes a piano
+```
+
+`forte instrument <Name>` resolves any standard instrument by name, takes
+parameters (`forte instrument "Bass303(cutoff: 0.5)"`), and maps the keys —
+`a w s e d f t g y h u j k ...` is a chromatic run from C, `z`/`x` shift the
+octave, `c`/`v` the velocity. When you quit, the jam is printed as a
+quantized `notes` literal — the performance is source code you can paste
+straight into a song. Then wire it in:
+
+```forte
+import { BD808, SD808, CH808 } from "lib/std/tr808.forte"
+track Drums { instrument BD808(decay: 0.7) play beat`x--- x---` at bars(1..8) }
+```
 
 `forte play` shows the song as a console timeline — every track's lane, where
 it enters and leaves, plus a live playhead with progress, elapsed/total time,
