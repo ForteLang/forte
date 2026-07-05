@@ -1,0 +1,24 @@
+// Block Party — composition the block way: two reusable blocks (an acid
+// line written in A minor, a key-agnostic drum block) arranged by a song
+// that only decides WHEN they play and in WHICH key. The acid line answers
+// itself a fourth up in the second half; the drums never care.
+import { AcidLine } from "../../blocks/acid-line.forte"
+import { FourFloor } from "../../blocks/four-floor.forte"
+
+song "Block Party" {
+  tempo 126bpm
+  swing 0.53
+  key A minor
+
+  section intro  = bars(1..4)
+  section main   = bars(5..12)
+  section answer = bars(13..20)
+  section outro  = bars(21..24)
+
+  play AcidLine at intro
+  play FourFloor at main
+  play AcidLine at main
+  play FourFloor at answer
+  play AcidLine(key: "D minor") at answer
+  play AcidLine(key: "A minor", from: 3, to: 4) at outro
+}

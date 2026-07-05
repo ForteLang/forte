@@ -147,6 +147,79 @@ pub fn list(query: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
+/// `forte instruments edit NAME` — your instruments workspace: the library
+/// holding NAME is copied into ./instruments/ (a forte VCS repository), an
+/// editor opens, and the change is committed automatically on exit — every
+/// edit leaves history you can `forte log` / `forte diff` / fork from.
+pub fn edit(name: &str) -> Result<(), String> {
+    let src_path = find_device(name).ok_or_else(|| {
+        format!("instrument '{name}' が見つかりません(一覧: forte instruments)")
+    })?;
+    std::fs::create_dir_all("instruments").map_err(|e| e.to_string())?;
+    let file_name = std::path::Path::new(&src_path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("edited.forte")
+        .to_string();
+    let work = std::path::Path::new("instruments").join(&file_name);
+    let fresh = !work.exists();
+    if fresh {
+        std::fs::copy(&src_path, &work).map_err(|e| e.to_string())?;
+    }
+    // the workspace is a forte VCS repository — history is automatic
+    let repo = match crate::vcs::Repo::open("instruments") {
+        Ok(r) => r,
+        Err(_) => {
+            crate::vcs::Repo::init("instruments")?;
+            let r = crate::vcs::Repo::open("instruments")?;
+            r.commit(&format!("import {file_name} from lib/std"))?;
+            r
+        }
+    };
+    if fresh {
+        let _ = repo.commit(&format!("import {file_name} from lib/std"));
+    }
+
+    // open the user's editor (VSCode blocks with --wait); fall back to $EDITOR
+    let editor = std::env::var("VISUAL").or_else(|_| std::env::var("EDITOR")).ok();
+    let status = match editor {
+        Some(ed) => std::process::Command::new(ed).arg(&work).status(),
+        None => std::process::Command::new("code").arg("--wait").arg(&work).status(),
+    };
+    match status {
+        Ok(s) if s.success() => {}
+        Ok(_) | Err(_) => {
+            return Err(format!(
+                "エディタを開けませんでした。$EDITOR を設定するか、直接編集してください: {}\n\
+                 編集後: cd instruments && forte commit -m \"...\"",
+                work.display()
+            ))
+        }
+    }
+
+    // validate, then auto-commit — the edit becomes history
+    let src = std::fs::read_to_string(&work).map_err(|e| e.to_string())?;
+    match crate::check_with_loader(&src, &crate::FsLoader, "instruments") {
+        Ok(_) => {}
+        Err(ds) => {
+            println!("警告: 検証エラーがあります(コミットはします):");
+            for d in ds {
+                println!("  {d}");
+            }
+        }
+    }
+    match repo.commit(&format!("edit {name}")) {
+        Ok(msg) => println!("{msg}"),
+        Err(e) if e.contains("変更") => println!("変更なし(コミットしません)"),
+        Err(e) => return Err(e),
+    }
+    println!(
+        "instruments/{file_name} を編集しました。履歴: cd instruments && forte log\n\
+         曲で使う: import {{ {name} }} from \"instruments/{file_name}\""
+    );
+    Ok(())
+}
+
 /// Compose the one-track live song for an instrument call.
 pub fn live_source(call: &str, import: Option<&str>) -> String {
     let name = call.split('(').next().unwrap_or(call).trim();

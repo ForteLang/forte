@@ -109,6 +109,55 @@ When you quit, your performance is printed as a `notes` literal quantized to
 each track's lane (which bar it enters and exits), the moving playhead,
 elapsed/total time, loop count, and which tracks are currently sounding.
 
+## 0.8 Blocks — music as reusable parts
+
+The universal composition unit is the **block**: a self-contained piece of
+music (multi-track, a few bars) that other blocks place, transpose, window
+and loop. A song is just the outermost block. Composition in Forte is:
+refine a part inside a block, then let a higher block decide *when* it
+plays and *in which key*, and connect it to other blocks.
+
+```forte
+// blocks/acid-line.forte — written once, in A minor
+block AcidLine {
+  key A minor
+  track Acid {
+    instrument Bass303(cutoff: 0.24, reso: 0.82)
+    play notes`A1!:0.25 A1:0.25 A2:0.25 …` at bars(1..4)
+    automate cutoff from 0.15 to 0.7 over bars(1..4)
+  }
+}
+```
+
+```forte
+// the song only decides WHEN and in WHICH key
+import { AcidLine } from "../blocks/acid-line.forte"
+import { FourFloor } from "../blocks/four-floor.forte"
+
+song "Block Party" {
+  tempo 126bpm
+  key A minor
+  play FourFloor at bars(5..12)
+  play AcidLine  at bars(5..12)                    // loops the 4-bar block
+  play AcidLine(key: "D minor") at bars(13..20)    // the answer, a fourth up
+  play AcidLine(from: 3, to: 4) at bars(21..24)    // just its second half
+}
+```
+
+Rules of thumb:
+
+- **The block above always wins** — the root's tempo/key/swing govern the
+  render. A block's own `key` is the reference its transposition is
+  computed from; its own `tempo` matters only when the block itself is the
+  build root.
+- **Melody transposes, drums don't** — `notes`/`prog` content follows the
+  placement key; `beat` literals never move.
+- **Blocks nest** — a block can `play` other blocks; the last top-level
+  block in a file is what `forte build`/`play` renders, so a block library
+  is always playable on its own.
+- Reusable blocks live in `blocks/` — fork one, change its pattern, and
+  every song placing it follows.
+
 ## 1. Your first song (5 minutes)
 
 Create `my-song.forte`:

@@ -9,11 +9,16 @@ Corresponding implementation: `crates/fortelang` (parser/checker/compiler); veri
 ## 1. File Structure
 
 ```
-file := { import } { device } [ song ]
+file := { import } { device | block } [ song ]
 ```
 
-- A file with a `song` = a **song**. A file without one = a **device library**
-  (importable; `forte check` instantiates every device with default values and verifies it).
+- A file with a `song` = a **song** (legacy alias: a named root block —
+  structurally a song IS a block).
+- A file with top-level `block`s (and no song) = a **block library**:
+  importable, and directly buildable — `forte build`/`play` use the LAST
+  top-level block as the root.
+- A file with neither = a **device library** (importable; `forte check`
+  instantiates every device with default values and verifies it).
 - Evaluation is entirely compile-time. Runtime I/O, clocks, and unseeded randomness do not exist in the language.
 
 ## 2. Lexical Structure
@@ -29,7 +34,8 @@ file := { import } { device } [ song ]
 ## 3. Grammar (EBNF, implementation-conformant)
 
 ```ebnf
-file      = { import } { device } [ song ] ;
+file      = { import } { device | block } [ song ] ;
+block     = "block" ident body ;                                     (* the universal unit *)
 import    = "import" "{" ident { "," ident } "}" "from" string     (* module *)
           | "import" ident "from" string ;                          (* .frec asset *)
 device    = "device" ident [ ":" "Instrument" ] "{" { devItem } "}" ;
@@ -40,11 +46,14 @@ nodeExpr  = ident "(" [ ident ":" nodeArg { "," ident ":" nodeArg } ] ")"
           | "note" "." ident                                        (* freq | gate | vel *)
           | ident ;                                                 (* node name / param name *)
 nodeArg   = string | num | nodeExpr ;
-song      = "song" string "{" { songItem } "}" ;
-songItem  = "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
+song      = "song" string body ;                                    (* legacy alias: a named root block *)
+body      = "{" { bodyItem } "}" ;
+bodyItem  = "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
           | "let" ident "=" musicLit
           | "section" ident "=" "bars" "(" num ".." num ")"
-          | track | return ;
+          | track | return | block | place ;
+place     = "play" ident [ "(" placeArg { "," placeArg } ")" ] atRef ;
+placeArg  = "key" ":" string | "from" ":" num | "to" ":" num ;
 track     = "track" ident "{" { trackItem } "}" ;
 trackItem = "instrument" call | "insert" call
           | "play" patternExpr atRef
@@ -224,6 +233,38 @@ Unknown names produce E-AUTO-001 / E-LFO-001 with a list of "what is available".
   saturating to 0..1. `automate` and `modulate` **can be layered** on a single parameter
   (modulation rides on top of the ramp), and multiple `modulate`s can be
   stacked as well.
+
+### 4.10 Blocks (the universal composition unit)
+
+A `block Name { … }` is a self-contained piece of music with the same body
+as a song: tracks, lets, sections, returns, automation — and placements of
+other blocks. Composition in Forte IS nesting blocks: refine a part inside a
+block, then a higher block decides WHEN it plays, in WHICH key, and connects
+it to other blocks. The outermost block you build is "the song".
+
+- **Placement**: `play Groove(key: "E minor", from: 2, to: 5) at bars(9..16)`
+  (also `at <section>`). Content loops when the placement span is longer
+  than the block (window length rounded up to whole bars).
+- **The block above always wins**: the root's `tempo` / `swing` / `meter` /
+  `key` govern the entire render. A placed block's own `tempo` is ignored;
+  its own `key` is the *reference* its transposition is computed from.
+- **Transposition**: the effective key at a placement is the placement's
+  `key:` override, or the effective key inherited from above. Melodic
+  content (`notes` / `prog` / pattern functions) transposes by the minimal
+  signed interval from the block's native key root to the effective root;
+  **`beat` literals never transpose** (pads and drums stay put).
+- **Windows**: `from`/`to` select bars inside the block (1-based, inclusive).
+  A clip cut at the head keeps its loop phase (content is rotated).
+- **Flattening**: placements compile away — each placed block's tracks merge
+  into the parent as `Block.Track` named tracks; the same block placed twice
+  shares tracks (one more set of clips), so mixer/inserts exist once. Sends
+  resolve within the block. Nested definitions (`block` inside a body) are
+  local and shadow imported names. Cycles are E-BLOCK-002; an unknown block
+  lists what exists (E-BLOCK-001); flattening past the engine's 64-track
+  limit is E-BLOCK-003; an empty from/to window is E-BLOCK-004.
+- **Import**: `import { Groove } from "./blocks/groove.forte"` — importing a
+  block also carries the devices of its home module (first definition of a
+  name wins).
 
 ## 5. The Determinism Contract
 

@@ -83,6 +83,31 @@ forte> :save jam.forte                     ← the jam becomes a song file
 | `:tempo 140` / `:inst polymer(…)` / `:fx reverb(…)` / `:fx clear` | Change everything without stopping |
 | `:show` / `:save jam.forte` / `:stop` / `:quit` / `:help` | Show source / save as a song / stop / quit |
 
+### Blocks — compose with reusable parts
+
+The universal unit of composition is the **block**: a self-contained,
+multi-track piece of music. Songs are just the outermost block — they decide
+*when* each block plays and *in which key*; melody transposes, drums stay
+put, content loops to fill the placement, and blocks nest arbitrarily deep:
+
+```forte
+import { AcidLine } from "../blocks/acid-line.forte"
+import { FourFloor } from "../blocks/four-floor.forte"
+
+song "Block Party" {
+  tempo 126bpm
+  key A minor
+  play FourFloor at bars(5..12)
+  play AcidLine  at bars(5..12)                  // a 4-bar block, looped
+  play AcidLine(key: "D minor") at bars(13..20)  // same line, a fourth up
+  play AcidLine(from: 3, to: 4) at bars(21..24)  // just its second half
+}
+```
+
+Reusable blocks live in `blocks/`; a block library is directly playable
+(`forte play blocks/acid-line.forte` renders its last block), so parts are
+auditioned exactly like songs.
+
 ### Find, audition, and use instruments
 
 Three commands take you from "what's in the box" to notes in a song:

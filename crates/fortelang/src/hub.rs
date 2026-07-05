@@ -254,6 +254,7 @@ impl Hub {
             .map_err(|ds| ds.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n"))?;
         let kind = match &checked {
             crate::Checked::Song(_) => "song",
+            crate::Checked::BlockLibrary { .. } => "block",
             crate::Checked::DeviceLibrary { .. } => "library",
         };
         let file = crate::parser::parse(&src).map_err(|_| "parse".to_string())?;

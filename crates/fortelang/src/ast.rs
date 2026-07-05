@@ -9,7 +9,36 @@ pub struct FileAst {
     pub imports: Vec<ImportAst>,
     pub assets: Vec<AssetImportAst>,
     pub devices: Vec<DeviceAst>,
+    /// Top-level `block Name { … }` definitions. A file of blocks is a block
+    /// library; `forte build` on such a file builds the LAST block as root.
+    pub blocks: Vec<BlockAst>,
     pub song: Option<SongAst>,
+}
+
+/// `block Groove { … }` — a self-contained piece of music, the universal
+/// composition unit. A song is just the outermost block; blocks nest via
+/// placements, and the settings of the block ABOVE always win (the root's
+/// tempo/key govern the render; a block's own key is the reference its
+/// transposition is computed from).
+#[derive(Clone, Debug)]
+pub struct BlockAst {
+    pub name: String,
+    pub body: SongAst,
+    pub pos: Pos,
+}
+
+/// `play BlockName(key: "E minor", from: 2, to: 5) at bars(9..16)` — place a
+/// block on this body's timeline. `key` transposes (relative to the placed
+/// block's own key), `from`/`to` pick a bar window inside the block, and the
+/// content loops when the placement span is longer than the block.
+#[derive(Clone, Debug)]
+pub struct PlaceAst {
+    pub block: String,
+    pub key: Option<((String, String), Pos)>,
+    pub from: Option<u32>,
+    pub to: Option<u32>,
+    pub at: AtRef,
+    pub pos: Pos,
 }
 
 /// `import { WarmLead, SubBass } from "./devices/warm.forte"`
@@ -85,6 +114,10 @@ pub struct SongAst {
     pub sections: Vec<SectionAst>,
     pub tracks: Vec<TrackAst>,
     pub returns: Vec<ReturnAst>,
+    /// Nested block definitions, local to this body.
+    pub blocks: Vec<BlockAst>,
+    /// Block placements on this body's timeline.
+    pub places: Vec<PlaceAst>,
 }
 
 /// `section verse = bars(1..8)` — a named, reusable bar range.
