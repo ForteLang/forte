@@ -287,4 +287,9 @@ Roadmap-derived tasks live in the
 
 ## License
 
-[MIT](LICENSE) © 2026 Shusuke Inoue (fcuro)
+- **Software** (crates/, web/, editor/, scripts/, docs/): [MIT](LICENSE) © 2026 Shusuke Inoue (fcuro)
+- **Package content** (packages/ — songs, albums, blocks, instruments, recorded
+  assets): [CC BY-NC-SA 4.0](packages/LICENSE). Fork it, remix it, learn from
+  it — but rendering it to audio (WAV/streams) and monetizing that audio
+  requires the rights holder's permission. Authors keep full rights to
+  license their own work commercially.

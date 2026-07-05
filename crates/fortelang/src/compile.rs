@@ -46,6 +46,7 @@ pub fn compile(
     p.name = root.name.clone();
     p.desc = root.desc.clone().unwrap_or_default();
     p.tags = root.tags.clone();
+    p.license = root.license.clone().unwrap_or_default();
 
     // ---- user-defined devices ----------------------------------------------
     let mut user_devices: HashMap<&str, &DeviceAst> = HashMap::new();
@@ -817,6 +818,9 @@ fn merge_block(parent: &SongAst, child: &SongAst) -> SongAst {
     }
     if !child.tags.is_empty() {
         out.tags = child.tags.clone();
+    }
+    if child.license.is_some() {
+        out.license = child.license.clone();
     }
     if child.tempo.is_some() {
         out.tempo = child.tempo;

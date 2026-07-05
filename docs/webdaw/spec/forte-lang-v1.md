@@ -48,7 +48,7 @@ nodeExpr  = ident "(" [ ident ":" nodeArg { "," ident ":" nodeArg } ] ")"
 nodeArg   = string | num | nodeExpr ;
 song      = "song" string body ;                                    (* legacy alias: a named root block *)
 body      = "{" { bodyItem } "}" ;
-bodyItem  = "desc" string | "tags" string
+bodyItem  = "desc" string | "tags" string | "license" string
           | "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
           | "let" ident "=" musicLit
           | "section" ident "=" "bars" "(" num ".." num ")"
@@ -251,6 +251,12 @@ block AcidLine {
   desc above the timeline; catalogs, packages and the browser use it when
   browsing and importing.
 - `tags` is a comma-separated keyword list for search.
+- `license "CC-BY-NC-SA-4.0"` declares the content license the body is
+  published under (packages declare it; catalogs and players display it).
+  The repository's package content defaults to CC BY-NC-SA 4.0 — see
+  `packages/LICENSE`: forking and remixing the source is free and
+  non-commercial; commercially exploiting rendered audio requires the
+  rights holder's permission.
 - Inheritance: a child's `desc`/`tags` override the parent's when present.
 - A root block with a `desc` and no tracks/placements is a valid,
   deliberately silent file — the shape of `packages/<pkg>/package.forte`

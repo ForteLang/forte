@@ -1,0 +1,33 @@
+# Forte Package Content License
+
+The content in this directory tree (`packages/`) — songs, albums, blocks,
+instruments, effects and recorded assets, in source form and as built
+artifacts (.fortesong) — is licensed under:
+
+  Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+  (CC BY-NC-SA 4.0)  https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+In plain language, for this ecosystem:
+
+- **You may**: listen, learn, fork, remix, and redistribute the SOURCE and
+  your derivative works — with attribution, under this same license, for
+  non-commercial purposes. This is the point of Forte: transparent,
+  forkable music.
+- **You may not**: render this content (or derivatives of it) to audio
+  files — WAV, MP3, streams, or any other bounced form — and commercially
+  exploit that audio (sales, streaming monetization, sync licensing, paid
+  performances of the recordings, NFT or dataset sales) without the
+  explicit permission of the rights holder(s) recorded in the content's
+  lineage.
+- **Rights holders keep everything**: the original authors may license
+  their own work commercially on any terms, independently of this license.
+- Recorded assets (.frec) additionally carry provenance metadata; the
+  performer's rights recorded there are not waived by this license.
+
+The Forte SOFTWARE (crates/, web/, editor/, scripts/, docs/) is separately
+licensed under the MIT License — see /LICENSE. This file governs only the
+content under packages/.
+
+This summary is not a substitute for the license text. If you need
+commercial rights, contact the package author (see the package's meta and
+lineage for attribution).

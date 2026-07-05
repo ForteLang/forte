@@ -80,6 +80,14 @@ native, wasm, and in the browser. To keep that promise:
 - Tasks from the roadmap (`docs/webdaw/06-roadmap.md`) are usually already
   filed — search existing issues first.
 
+## Licensing of contributions
+
+- Code contributions are MIT (see /LICENSE).
+- Content contributions under `packages/` are CC BY-NC-SA 4.0 (see
+  packages/LICENSE): the source stays open and forkable, but rendered audio
+  cannot be commercially exploited by third parties without the rights
+  holder's permission. You keep full rights to your own work.
+
 ## Code of conduct
 
 See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
