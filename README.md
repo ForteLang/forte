@@ -14,6 +14,13 @@
   <a href="packages/LICENSE"><img src="https://img.shields.io/badge/content-CC%20BY--NC--SA%204.0-orange.svg" alt="CC BY-NC-SA 4.0"></a>
 </p>
 
+<p align="center">
+  <b>🎧 Demo album:</b>
+  <a href="https://fortelang.github.io/forte/player.html?src=packages/essentials_0.6.0/albums/first-light/01-boot-sequence.fortesong&src=packages/essentials_0.6.0/albums/first-light/02-hello-world.fortesong&src=packages/essentials_0.6.0/albums/first-light/03-segfault-boogie.fortesong&src=packages/essentials_0.6.0/albums/first-light/04-tokyo-terminal.fortesong&src=packages/essentials_0.6.0/albums/first-light/05-night-compiler.fortesong&src=packages/essentials_0.6.0/albums/first-light/06-race-condition.fortesong&src=packages/essentials_0.6.0/albums/first-light/07-zero-one.fortesong&cover=packages/essentials_0.6.0/albums/first-light/cover.jpg"><b>First Light — seven techno tracks, playing in your browser</b></a><br>
+  <sub>No install. Your browser compiles the source and renders the exact same bits as everyone else's —
+  and every block shows its code while it plays.</sub>
+</p>
+
 ---
 
 Forte is a language, an engine, and a package ecosystem for open music.
