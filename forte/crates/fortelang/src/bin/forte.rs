@@ -146,7 +146,8 @@ fn main() -> ExitCode {
             let result = match args.get(1).map(String::as_str) {
                 Some("add") if args.len() >= 3 => fortelang::package::add(&args[2]),
                 Some("list") | None => fortelang::package::list(),
-                _ => Err("usage: forte package add <github:owner/repo[@ref] | URL | PATH> / forte package list".into()),
+                Some("verify") => fortelang::package::verify(),
+                _ => Err("usage: forte package <add SRC | list | verify>".into()),
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
@@ -299,6 +300,7 @@ fn main() -> ExitCode {
             eprintln!("       forte init [NAME]           (NAME 付きで package プロジェクトを作成 / なしで cwd をリポジトリに)");
             eprintln!("       forte package add <github:owner/repo[@ref] | URL | PATH>  (packages/ にフラット導入)");
             eprintln!("       forte package list          (導入済み package の一覧と説明)");
+            eprintln!("       forte package verify        (packages/ が lock どおりかを digest で検証)");
             eprintln!("       forte remote add <github:owner/repo | git-URL>  (プロジェクトを GitHub と接続)");
             eprintln!("       forte push [-m \"メッセージ\"]   (プロジェクト全体を origin へ。これが配信)");
             eprintln!("       forte pull                  (origin から取り込み)");

@@ -95,5 +95,21 @@ fn init_and_flat_package_add() {
     assert!(out.contains("coolsynths 1.0.0"), "list: {out}");
     assert!(out.contains("Lead synth blocks."), "list: {out}");
 
+    // `forte package verify`: clean tree matches the lock digests
+    let (ok, out, err) = forte(&proj, &["package", "verify"]);
+    assert!(ok, "verify: {err}");
+    assert!(out.contains("OK      : packages/coolsynths_1.0.0"), "verify: {out}");
+
+    // tampering with a vendored file is caught
+    std::fs::write(vendored.join("blocks").join("lead.forte"), "// tampered\n").unwrap();
+    let (ok, out, err) = forte(&proj, &["package", "verify"]);
+    assert!(!ok, "tampered verify must fail");
+    assert!(out.contains("MISMATCH: packages/coolsynths_1.0.0"), "verify: {out} / {err}");
+
+    // a vendored dir the lock doesn't know about is reported
+    std::fs::create_dir_all(proj.join("packages").join("rogue_9.9.9")).unwrap();
+    let (_, out, _) = forte(&proj, &["package", "verify"]);
+    assert!(out.contains("unlocked"), "verify: {out}");
+
     let _ = std::fs::remove_dir_all(&base);
 }
