@@ -235,6 +235,12 @@ pub unsafe extern "C" fn fw_stop(ptr: *mut Ctx) {
     ctx(ptr).handle.send(Command::Stop);
 }
 
+/// Jump the playhead to an absolute beat position (the seek bar).
+#[no_mangle]
+pub unsafe extern "C" fn fw_seek(ptr: *mut Ctx, beats: f64) {
+    ctx(ptr).handle.send(Command::Seek(beats));
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn fw_position(ptr: *mut Ctx) -> f64 {
     ctx(ptr).handle.shared.position_beats()

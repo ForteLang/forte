@@ -229,6 +229,26 @@ block DarkAcid : AcidLine {
 }
 ```
 
+- **One lane, evolving variants (`as`)** — placements that share an alias
+  share ONE set of tracks. Place a family of inherited variants under one
+  name and the same track changes its pattern, insert settings and
+  automation section by section — the arrangement shows a single lane
+  doing the whole journey instead of a stack of near-identical ones:
+
+```forte
+block AcidWarm : AcidLine { track Acid { automate cutoff from 0.1 to 0.4 over bars(1..16) } }
+block AcidPeak : AcidLine { track Acid { insert delay(time: 0.238, fdbk: 0.55, mix: 0.4) } }
+
+play AcidWarm as Acid at warmup    // lane "Acid.Acid" is born
+play AcidLine as Acid at groove    // same lane, plain pattern
+play AcidPeak as Acid at drop      // same lane, hotter delay
+```
+
+  Variants under one alias must keep the instrument/insert *shape* of the
+  first placement (patterns, parameter values, volume/pan and automation
+  may differ — adding or removing devices may not: E-BLOCK-007). Both the
+  public-knob agreement and `automate <name>.volume` target the alias.
+
 ### Projects are packages
 
 Work inside a project scaffolded by `forte init <name>` — the folder is

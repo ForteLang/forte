@@ -51,6 +51,9 @@ class ForteProcessor extends AudioWorkletProcessor {
       case 'stop':
         if (this.ready) this.e.fw_stop(this.ctx);
         break;
+      case 'seek':
+        if (this.ready) this.e.fw_seek(this.ctx, msg.beats);
+        break;
       // open-stems: listener-side stem controls
       case 'mute':
         if (this.ready) this.e.fw_set_mute(this.ctx, msg.track, msg.on ? 1 : 0);

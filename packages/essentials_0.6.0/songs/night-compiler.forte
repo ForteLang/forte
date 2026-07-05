@@ -1,6 +1,11 @@
 // Night Compiler — deep dub techno for the long build. A chord stab
 // swimming in feedback delay, a sub that only moves when it must, hats
 // like keystrokes at 2am. Nothing shouts; everything accumulates. 128bpm.
+//
+// The floor, the keystrokes and the echo chord are FAMILIES of inherited
+// variants on ONE lane each (`as`): the same stab lane gets wetter and
+// wider the deeper the night goes, and the drum lane grows a ride and
+// ghost 16ths without ever adding a second track.
 import { Kick909, KickSub, HatClosed, HatOpen, Ride, Rim, Shaker } from "../instruments/drums.forte"
 import { DubBass } from "../instruments/bass.forte"
 import { DarkPad, HollowPad } from "../instruments/pads.forte"
@@ -8,43 +13,77 @@ import { PolySaw, VintagePoly } from "../instruments/synths.forte"
 import { GlideLead } from "../instruments/leads.forte"
 import { Downlifter, Impact } from "../instruments/fx.forte"
 
-// The floor at 2am: a 909 with a sub kick underneath, sidechain source
-// for everything above it.
+// ---- the floor at 2am: ONE lane, lands → leans in ------------------------------
 block Floor {
   track Kick {
     instrument Kick909(click: 0.45)
-    insert comp(thresh: 0.36, ratio: 0.65, makeup: 0.25)
+    insert eq(low: 0.6, mid: 0.45, high: 0.48)
+    insert comp(thresh: 0.36, ratio: 0.65, attack: 0.02, release: 0.18, makeup: 0.25)
     volume 0.92
     play beat`X--- x--- x--- x---` at bars(1..4)
   }
   track Sub {
     instrument KickSub(weight: 0.75)
+    insert comp(thresh: 0.4, ratio: 0.6, attack: 0.03, release: 0.2, makeup: 0.15)
     volume 0.5
     play beat`x--- x--- x--- x---` at bars(1..4)
   }
 }
+// deeper: a ghost before the one — the night starts nodding
+block FloorLean : Floor {
+  track Kick {
+    insert comp(thresh: 0.33, ratio: 0.68, attack: 0.018, release: 0.16, makeup: 0.28)
+    play beat`X--- x--- x--- x--. X--- x--- x--. x---` at bars(1..2)
+  }
+  track Sub { volume 0.54 }
+}
 
-// Keystrokes: shaker 16ths, a rim that lands like the enter key.
+// ---- keystrokes: ONE lane — typing, flowing ------------------------------------
 block Keys2am {
   track Shk {
     instrument Shaker(soft: 0.4)
+    insert eq(low: 0.1, mid: 0.5, high: 0.6)
     volume 0.3
     pan -0.2
     play beat`x.x. x.x. x.x. x.x.` at bars(1..4)
   }
   track Hat {
     instrument HatClosed(bright: 0.8)
-    insert eq(high: 0.65, low: 0.1)
+    insert eq(low: 0.1, mid: 0.45, high: 0.65)
+    insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
     volume 0.26
     pan 0.15
     play beat`--x- --x- --x- --xX` at bars(1..4)
   }
   track Rim {
     instrument Rim()
+    insert eq(low: 0.2, mid: 0.58, high: 0.55)
     insert delay(time: 0.352, fdbk: 0.5, mix: 0.4)
     volume 0.32
     pan 0.35
     play beat`---- ---- --x- ---- ---- -x-- ---- ----` at bars(1..2)
+  }
+}
+// flow: ghost 16ths crowd the shaker, the rim chatters down its delay
+block KeysFlow : Keys2am {
+  track Shk { volume 0.33 play beat`x.x. xxx. x.x. x.xx x.x. x.xX x.x. xxx.` at bars(1..2) }
+  track Hat { volume 0.3 play beat`--x- --x- -.x- --xX --x- --x. --x- x-xX` at bars(1..2) }
+  track Rim {
+    insert delay(time: 0.352, fdbk: 0.58, mix: 0.48)
+    volume 0.34
+    play beat`---- ---- --x- ---x ---- -x-- ---- --x-` at bars(1..2)
+  }
+}
+
+// Ride for the deep hours — barely there, pumped against the kick.
+block Rides {
+  track Ride {
+    instrument Ride(wash: 0.35)
+    insert eq(low: 0.1, mid: 0.45, high: 0.58)
+    insert pump(amount: 0.3, beats: 1)
+    volume 0.22
+    pan 0.28
+    play beat`x-x- x-x- x-x- x-x-` at bars(1..4)
   }
 }
 
@@ -54,25 +93,52 @@ block Deep {
   track Bass {
     instrument DubBass(depth: 0.85)
     insert filter(type: "lp", cutoff: 0.3)
+    insert eq(low: 0.6, mid: 0.45, high: 0.42)
+    insert comp(thresh: 0.4, ratio: 0.6, attack: 0.03, release: 0.22, makeup: 0.2)
     insert pump(amount: 0.4, beats: 1)
     volume 0.78
     play notes`F1:3 _:1 F1:2 G#1~:2 F1:3 _:1 C1:2 C#1~:2` at bars(1..4)
   }
 }
+// flow: the filter finally lets the harmonics through
+block DeepOpen : Deep {
+  track Bass {
+    insert filter(type: "lp", cutoff: 0.38)
+    automate filter.cutoff from 0.3 to 0.45 over bars(1..24)
+  }
+}
 
-// THE chord — one minor 9 stab thrown into a feedback delay that answers
-// across the bar. This is the dub in dub techno.
+// ---- THE chord: ONE lane that gets wetter all night -----------------------------
+// One minor 9 stab thrown into a feedback delay that answers across the
+// bar. This is the dub in dub techno.
 block Echo {
   key F minor
   track Stab {
     instrument VintagePoly(age: 0.6)
     insert filter(type: "bp", cutoff: 0.45, reso: 0.4)
+    insert eq(low: 0.3, mid: 0.52, high: 0.56)
     insert delay(time: 0.703, fdbk: 0.62, mix: 0.45)
     insert width(amount: 0.75)
     insert pump(amount: 0.35, beats: 1)
     volume 0.5
     play notes`_:0.5 [F3 G#3 C4 D#4 G4]:0.5 _:7 _:0.5 [F3 G#3 C4 D#4 G4]:0.25 _:0.25 [F3 G#3 C4 D#4 G4]:0.5 _:6.5` at bars(1..4)
     modulate filter.cutoff with lfo(rate: 0.08, amount: 0.2, shape: "sine")
+  }
+}
+// deeper: feedback up, the answers start answering each other
+block EchoDub : Echo {
+  track Stab {
+    insert delay(time: 0.703, fdbk: 0.7, mix: 0.52)
+    automate delay.mix from 0.45 to 0.58 over bars(1..24)
+  }
+}
+// pause: the stab almost disappears into its own tail
+block EchoTail : Echo {
+  track Stab {
+    insert delay(time: 0.703, fdbk: 0.74, mix: 0.6)
+    insert width(amount: 0.9)
+    volume 0.46
+    automate filter.cutoff from 0.45 to 0.3 over bars(1..8)
   }
 }
 
@@ -83,6 +149,7 @@ block Loop {
   let walk = prog`Fm | Fm | G#maj7 | C#maj7`
   track Arp {
     instrument PolySaw(cutoff: 0.35)
+    insert eq(low: 0.25, mid: 0.5, high: 0.58)
     insert drive(drive: 0.15)
     insert delay(time: 0.234, fdbk: 0.4, mix: 0.25)
     insert pump(amount: 0.45, beats: 1)
@@ -98,10 +165,12 @@ block Room {
   key F minor
   track Pad {
     instrument HollowPad()
+    insert eq(low: 0.35, mid: 0.5, high: 0.52)
     insert width(amount: 0.9)
     insert reverb(size: 0.9, decay: 0.8, mix: 0.4)
     insert pump(amount: 0.3, beats: 1)
     volume 0.42
+    pan -0.05
     play notes`[F2 C3 G#3 D#4]:16 [C#2 G#2 F3 C4]:16` at bars(1..8)
   }
 }
@@ -111,6 +180,7 @@ block Hum {
   key F minor
   track Lead {
     instrument GlideLead()
+    insert eq(low: 0.25, mid: 0.52, high: 0.58)
     insert delay(time: 0.469, fdbk: 0.45, mix: 0.35)
     insert reverb(size: 0.7, decay: 0.6, mix: 0.25)
     volume 0.45
@@ -119,11 +189,11 @@ block Hum {
   }
 }
 
-block Drop { track D { instrument Downlifter() volume 0.45 play beat`x--- ---- ---- ----` at bars(1..1) } }
+block Drop { track D { instrument Downlifter() volume 0.45 pan -0.1 play beat`x--- ---- ---- ----` at bars(1..1) } }
 block Boom { track I { instrument Impact() insert reverb(size: 0.9, decay: 0.7, mix: 0.4) volume 0.55 play beat`x--- ---- ---- ----` at bars(1..1) } }
 
 song "Night Compiler" {
-  desc "Deep dub techno for the long build: one minor-9 stab swimming in feedback delay, a sub that moves three notes an hour, hats like keystrokes at 2am. 128bpm."
+  desc "Deep dub techno for the long build: one minor-9 stab swimming in feedback delay on a single evolving lane, a sub that moves three notes an hour, hats like keystrokes at 2am. 128bpm."
   artist "Forte Essentials"
   tempo 128bpm
   meter 4/4
@@ -149,35 +219,37 @@ song "Night Compiler" {
   play Echo at work
   play Loop at bars(17..32)
 
-  // deeper: ride joins, the loop keeps opening, hum passes through
-  play Floor at deeper
+  // deeper: the night nods — leaning floor, dubbier echo, ride joins
+  play FloorLean as Floor at deeper
   play Keys2am at deeper
   play Deep at deeper
-  play Echo at deeper
+  play EchoDub as Echo at deeper
   play Loop at deeper
+  play Rides at bars(41..56)
   play Room(volume: 0.7) at deeper
   play Hum at bars(41..48)
 
-  // pause: the floor drops out — echoes and the room breathe alone
+  // pause: the floor drops out — the stab dissolves into its tail
   play Drop at bars(57..57)
-  play Echo at pause
+  play EchoTail as Echo at pause
   play Room at pause
   play Loop(volume: 0.6) at pause
   play Hum at bars(61..64)
 
-  // flow: everything returns, arp wide open, hum answering the stab
+  // flow: everything returns, arp wide open, ghost 16ths in the hats
   play Boom at bars(65..65)
-  play Floor at flow
-  play Keys2am at flow
-  play Deep at flow
-  play Echo at flow
+  play FloorLean as Floor at flow
+  play KeysFlow as Keys2am at flow
+  play DeepOpen as Deep at flow
+  play EchoDub as Echo at flow
   play Loop at flow
+  play Rides at flow
   play Room(volume: 0.6) at flow
   play Hum at bars(73..80)
   play Hum at bars(81..88)
 
   // commit: the floor stops; the delay tail is the exit
-  play Echo at commit
+  play EchoTail as Echo at commit
   play Room at commit
   automate Echo.volume from 1 to 0 over bars(93..96)
   automate Room.volume from 1 to 0 over bars(93..96)

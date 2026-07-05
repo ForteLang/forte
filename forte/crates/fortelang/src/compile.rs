@@ -664,7 +664,8 @@ fn lower_body(
         };
 
         stack.push(bdef.name.clone());
-        let child_prefix = format!("{prefix}{}.", bdef.name);
+        let inst_name = place.alias.as_deref().unwrap_or(&bdef.name);
+        let child_prefix = format!("{prefix}{inst_name}.");
         let mut child_registry: Vec<&[BlockAst]> = Vec::with_capacity(registry.len() + 1);
         child_registry.push(body.blocks.as_slice());
         child_registry.extend_from_slice(registry);
@@ -689,7 +690,7 @@ fn lower_body(
             .map(|(n, v, _)| (n.clone(), *v))
             .collect();
         norm.sort_by(|x, y| x.0.cmp(&y.0));
-        match seen_params.get(&bdef.name) {
+        match seen_params.get(inst_name) {
             Some(prev) if *prev != norm => {
                 diags.push(Diag::new(
                     "E-BLOCK-005",
@@ -704,7 +705,7 @@ fn lower_body(
             }
             Some(_) => {}
             None => {
-                seen_params.insert(bdef.name.clone(), norm);
+                seen_params.insert(inst_name.to_string(), norm);
             }
         }
         let child_swing = match place.swing {
@@ -802,7 +803,22 @@ fn lower_body(
 
         for lt in child.tracks {
             let dst = match out.iter_mut().find(|t| t.track.name == lt.track.name) {
-                Some(d) => d,
+                Some(d) => {
+                    let same_shape = d.track.devices.len() == lt.track.devices.len()
+                        && d.track.devices.iter().zip(&lt.track.devices).all(|(a, b)| a.kind == b.kind);
+                    if !same_shape {
+                        diags.push(Diag::new(
+                            "E-BLOCK-007",
+                            place.pos,
+                            format!(
+                                "'{}' は既存トラック {} と構造(instrument/insert 構成)が違います。as で同じレーンを共有できるのはパターン/オートメーション違いのバリアントだけです",
+                                bdef.name, lt.track.name
+                            ),
+                        ));
+                        continue;
+                    }
+                    d
+                }
                 None => {
                     // first instance: adopt structure (devices, mixer,
                     // modulators, sends), collect clips/lanes fresh below
@@ -958,8 +974,13 @@ fn lower_body(
             ));
             continue;
         }
-        if !body.places.iter().any(|p| p.block == inst) {
-            let mut names: Vec<&str> = body.places.iter().map(|p| p.block.as_str()).collect();
+        if !body
+            .places
+            .iter()
+            .any(|p| p.alias.as_deref().unwrap_or(&p.block) == inst)
+        {
+            let mut names: Vec<&str> =
+                body.places.iter().map(|p| p.alias.as_deref().unwrap_or(&p.block)).collect();
             names.sort();
             names.dedup();
             diags.push(Diag::new(

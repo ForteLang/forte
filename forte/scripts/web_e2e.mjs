@@ -346,24 +346,25 @@ try {
   });
   check('player playback is audible', audible > 0.02, `peak ${audible.toFixed(3)}`);
 
-  // 12) the composer view: while a track plays, the player shows its
-  //     arrangement, its blocks with instruments, live highlighting, and
-  //     each block's source + import line one click away
-  await page.waitForSelector('.blk', { timeout: 20000 });
-  const blkInfo = await page.evaluate(() => {
-    const blocks = [...document.querySelectorAll('.blk')];
-    return {
-      count: blocks.length,
-      live: blocks.filter((b) => b.classList.contains('live')).length,
-      hasInstrument: /—\s+\S/.test(blocks[0]?.textContent ?? ''),
-      arrShown: getComputedStyle(document.getElementById('arr-wrap')).display !== 'none',
-    };
+  // 12) the composer view: the arrangement canvas IS the block browser —
+  //     click a track lane and the player reveals that block's source and
+  //     the import line to steal it with
+  await page.waitForFunction(
+    () =>
+      getComputedStyle(document.getElementById('arr-wrap')).display !== 'none' &&
+      typeof vizData === 'object' &&
+      vizData?.tracks?.length > 0,
+    null,
+    { timeout: 20000 }
+  );
+  const arrBox = await page.evaluate(() => {
+    document.getElementById('arr').scrollIntoView({ block: 'center' });
+    const r = document.getElementById('arr').getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height, lanes: vizData.tracks.length };
   });
-  check('composer view lists the blocks', blkInfo.count >= 3, `${blkInfo.count} blocks`);
-  check('instruments shown per track', blkInfo.hasInstrument);
-  check('live blocks highlighted while playing', blkInfo.live >= 1, `${blkInfo.live} live`);
-  check('arrangement canvas rendered', blkInfo.arrShown);
-  await page.click('.blk:nth-child(2)');
+  check('arrangement canvas rendered with lanes', arrBox.lanes >= 3, `${arrBox.lanes} lanes`);
+  const laneH = (arrBox.h - 16) / arrBox.lanes;
+  await page.mouse.click(arrBox.x + arrBox.w / 2, arrBox.y + 16 + laneH * 1.5);
   await page.waitForFunction(
     () => document.getElementById('blk-src-wrap').style.display === 'block',
     null,
@@ -371,10 +372,36 @@ try {
   );
   const importLine = await page.textContent('#blk-import');
   check(
-    'block source + import line one click away',
-    importLine.startsWith('import {') || importLine.startsWith('block'),
+    'lane click reveals the block import line',
+    importLine.startsWith('import {') || importLine.startsWith('block') || importLine.startsWith('root'),
     importLine.slice(0, 60)
   );
+  const blkTitle = await page.textContent('#blk-title');
+  check('lane click shows track + instrument + inserts', /—\s+\S/.test(blkTitle), blkTitle.slice(0, 80));
+
+  // 13) transport: the progress bar seeks, and a (re)started track ALWAYS
+  //     begins at 0:00 — no position bleed between songs
+  const barBox = await page.evaluate(() => {
+    document.getElementById('bar-wrap').scrollIntoView({ block: 'center' });
+    const r = document.getElementById('bar-wrap').getBoundingClientRect();
+    return { x: r.left, y: r.top + r.height / 2, w: r.width };
+  });
+  await page.mouse.click(barBox.x + barBox.w * 0.8, barBox.y);
+  await page.waitForTimeout(800);
+  const secsOf = (s) => {
+    const [m, ss] = s.trim().split(':').map(Number);
+    return m * 60 + ss;
+  };
+  const afterSeek = (await page.textContent('#time')).split(' / ').map(secsOf);
+  check(
+    'progress bar seeks to the clicked position',
+    Math.abs(afterSeek[0] - afterSeek[1] * 0.8) < 10,
+    `${afterSeek[0]}s of ${afterSeek[1]}s`
+  );
+  await page.click('#next');
+  await page.waitForTimeout(1500);
+  const afterNext = secsOf((await page.textContent('#time')).split(' / ')[0]);
+  check('a newly started track begins at 0:00', afterNext < 8, `${afterNext}s`);
 } finally {
   await browser.close();
   server.kill();

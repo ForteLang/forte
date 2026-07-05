@@ -493,6 +493,18 @@ impl Engine {
                     t.all_instruments_off();
                 }
             }
+            Command::Seek(beats) => {
+                self.position_beats = beats.max(0.0);
+                self.last_click_beat = -1;
+                // release everything sounding so no note hangs across the jump
+                for t in self.tracks.iter_mut().flatten() {
+                    t.pending_offs.clear();
+                    t.all_instruments_off();
+                }
+                self.shared
+                    .position_beats
+                    .store(self.position_beats.to_bits(), Ordering::Relaxed);
+            }
             Command::SetTempo(bpm) => self.tempo = bpm.clamp(20.0, 300.0),
             Command::SetLoop { enabled, start, end } => {
                 self.loop_enabled = enabled;

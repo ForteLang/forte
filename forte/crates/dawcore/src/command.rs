@@ -14,6 +14,8 @@ pub enum Command {
     /// Stop advancing but keep the playhead (players resume with Play).
     Pause,
     Stop,
+    /// Jump the playhead to an absolute beat position (playing or paused).
+    Seek(f64),
     SetTempo(f64),
     SetLoop { enabled: bool, start: f64, end: f64 },
     SetLaunchQuant(f64),

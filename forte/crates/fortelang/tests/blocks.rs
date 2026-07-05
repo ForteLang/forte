@@ -474,3 +474,52 @@ fn placement_swing_and_stretch_shape_one_instance() {
     };
     assert!(errs.iter().any(|d| d.code == "E-TYPE-002"), "{errs:?}");
 }
+
+#[test]
+fn as_alias_shares_one_lane_across_variants() {
+    const FAM: &str = r#"block Groove {
+  track Drums { instrument sampler(sample: "Kick") play beat`x---` at bars(1..1) }
+}
+block GrooveBusy : Groove {
+  track Drums { play beat`x-x- x-xx` at bars(1..1) }
+}"#;
+    // variants share ONE lane via the alias — a single Drums track with
+    // clips from both placements
+    let src = format!(
+        "{FAM}\nsong \"S\" {{\n  tempo 120bpm\n  play Groove as Drums at bars(1..4)\n  play GrooveBusy as Drums at bars(5..8)\n}}"
+    );
+    let p = compile_str(&src).unwrap();
+    let lanes: Vec<&str> =
+        p.tracks.iter().map(|t| t.name.as_str()).filter(|n| n.contains("Drums")).collect();
+    assert_eq!(lanes, ["Drums.Drums"], "one shared lane: {lanes:?}");
+    let t = p.tracks.iter().find(|t| t.name == "Drums.Drums").unwrap();
+    let has_early = t.arranger.iter().any(|c| c.start < 8.0);
+    let has_late = t.arranger.iter().any(|c| c.start >= 16.0);
+    assert!(has_early && has_late, "clips from both variants share the lane");
+
+    // without the alias the variants stack as separate lanes
+    let plain = format!(
+        "{FAM}\nsong \"S\" {{\n  tempo 120bpm\n  play Groove at bars(1..4)\n  play GrooveBusy at bars(5..8)\n}}"
+    );
+    let p = compile_str(&plain).unwrap();
+    assert!(p.tracks.iter().any(|t| t.name == "Groove.Drums"));
+    assert!(p.tracks.iter().any(|t| t.name == "GrooveBusy.Drums"));
+
+    // structure mismatch under one alias is refused with guidance
+    let clash = format!(
+        "{FAM}\nblock GrooveFx : Groove {{ track Drums {{ insert drive(drive: 0.4) }} }}\nsong \"S\" {{\n  tempo 120bpm\n  play Groove as Drums at bars(1..4)\n  play GrooveFx as Drums at bars(5..8)\n}}"
+    );
+    let errs = match fortelang::compile_str(&clash) {
+        Err(e) => e,
+        Ok(_) => panic!("structure mismatch must be rejected"),
+    };
+    assert!(errs.iter().any(|d| d.code == "E-BLOCK-007"), "{errs:?}");
+
+    // placement automation talks to the ALIAS
+    let fade = format!(
+        "{FAM}\nsong \"S\" {{\n  tempo 120bpm\n  play Groove as Drums at bars(1..4)\n  automate Drums.volume from 0 to 1 over bars(1..2)\n}}"
+    );
+    let p = compile_str(&fade).unwrap();
+    let t = p.tracks.iter().find(|t| t.name == "Drums.Drums").unwrap();
+    assert!(!t.volume_automation.is_empty(), "alias-targeted fade lands on the lane");
+}
