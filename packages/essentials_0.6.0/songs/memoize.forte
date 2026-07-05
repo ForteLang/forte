@@ -1,0 +1,302 @@
+// Memoize — compute the melody once, return it forever. A music box
+// states the theme; every later "call" is a cache hit played back by a
+// different instrument (inheritance swaps the voice, the stored notes
+// never change). By the end the whole band is serving the same phrase
+// from memory, two bars apart, in canon. 112bpm.
+//
+// STRUCTURE: `Cache` is a nested block that PLACES the motif against its
+// copies at offsets — a canon written as block placements. The groove is
+// a nested kit + hands machine with `as`-aliased density variants.
+import { Kick808, SnareTight, HatClosed, HatPedal, Shaker, Rim } from "../instruments/drums.forte"
+import { PickBass } from "../instruments/bass.forte"
+import { MusicBox, EPiano, Vibraphone } from "../instruments/keys.forte"
+import { JunoKeys } from "../instruments/juno60.forte"
+import { StringPad } from "../instruments/pads.forte"
+import { SoftLead } from "../instruments/leads.forte"
+import { Bongo, Cabasa } from "../instruments/percussion.forte"
+import { Impact } from "../instruments/fx.forte"
+
+// ---- the motif and its cache hits -------------------------------------------------
+// the first computation: a music box works out the phrase
+block Motif {
+  key G major
+  track M {
+    instrument MusicBox()
+    insert eq(low: 0.15, mid: 0.5, high: 0.58)
+    insert delay(time: 0.536, fdbk: 0.42, mix: 0.34)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.26)
+    volume 0.42
+    pan -0.15
+    play notes`D5:0.75 B4:0.25 G4:1 A4:0.75 B4:0.25 D5:1 E5:0.75 D5:0.25 B4:1 A4:0.5 G4:1 _:0.5 E4:0.5 G4:0.75 A4:0.25 B4:1.5 A4:1 G4:1.5 _:2.5` at bars(1..4)
+  }
+}
+// cache hits: the same stored notes, retrieved by other voices
+block HitVibe : Motif {
+  track M {
+    instrument Vibraphone(motor: 0.4)
+    insert delay(time: 0.536, fdbk: 0.45, mix: 0.3)
+    volume 0.38
+    pan 0.25
+  }
+}
+block HitKeys : Motif {
+  track M {
+    instrument EPiano(tine: 0.5)
+    insert delay(time: 0.536, fdbk: 0.4, mix: 0.26)
+    volume 0.44
+    pan 0.05
+  }
+}
+block HitVoice : Motif {
+  track M {
+    instrument SoftLead()
+    insert delay(time: 0.536, fdbk: 0.48, mix: 0.36)
+    volume 0.4
+    pan -0.05
+  }
+}
+
+// the cache: motif against its own copies, two bars apart — a canon of hits
+block Cache {
+  key G major
+  play HitKeys at bars(1..8)
+  play HitVibe(from: 1, to: 4) at bars(3..8)
+  play Motif(from: 1, to: 4, volume: 0.8) at bars(5..8)
+}
+
+// ---- the groove: nested kit + hands, aliased densities ----------------------------
+block Groove {
+  block Kit {
+    track Kick {
+      instrument Kick808(punch: 0.5, decay: 0.4)
+      insert eq(low: 0.58, mid: 0.45, high: 0.46)
+      insert comp(thresh: 0.42, ratio: 0.58, attack: 0.02, release: 0.16, makeup: 0.18)
+      volume 0.84
+      play beat`X--- --x- ---- x--- X--- ---- --x- ----` at bars(1..2)
+    }
+    track Snare {
+      instrument SnareTight(snap: 0.55)
+      insert eq(low: 0.25, mid: 0.55, high: 0.56)
+      insert comp(thresh: 0.44, ratio: 0.52, attack: 0.006, release: 0.1, makeup: 0.16)
+      insert reverb(size: 0.45, decay: 0.35, mix: 0.14)
+      volume 0.52
+      pan 0.05
+      play beat`---- x--- ---- x--.` at bars(1..1)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.18
+      pan -0.12
+      play beat`--x- --x- --x- --x-` at bars(1..4)
+    }
+  }
+  block HandsPerc {
+    track Hat {
+      instrument HatClosed(bright: 0.78)
+      insert eq(low: 0.12, mid: 0.45, high: 0.64)
+      insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+      volume 0.24
+      pan 0.18
+      play beat`x.x. x.xX x.x. x.x.` at bars(1..2)
+    }
+    track Bongo {
+      instrument Bongo()
+      insert eq(low: 0.3, mid: 0.55, high: 0.52)
+      insert delay(time: 0.268, fdbk: 0.3, mix: 0.22)
+      volume 0.26
+      pan -0.3
+      play beat`---- --x- ---- -x-- ---x --x- ---- ----` at bars(1..2)
+    }
+    track Cab {
+      instrument Cabasa()
+      insert eq(low: 0.1, mid: 0.5, high: 0.6)
+      volume 0.18
+      pan 0.3
+      play beat`.x.x .x.x .x.x .x.x` at bars(1..2)
+    }
+  }
+  play Kit at bars(1..4)
+  play HandsPerc at bars(1..4)
+}
+// first call: kit only, hands still empty
+block GrooveCold : Groove {
+  block HandsPerc {
+    track Hat {
+      instrument HatClosed(bright: 0.72)
+      insert eq(low: 0.12, mid: 0.45, high: 0.6)
+      insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+      volume 0.16
+      pan 0.18
+      play beat`..x. ..x. ..x. ..x.` at bars(1..2)
+    }
+    track Bongo {
+      instrument Bongo()
+      insert eq(low: 0.3, mid: 0.55, high: 0.52)
+      insert delay(time: 0.268, fdbk: 0.3, mix: 0.22)
+      volume 0.18
+      pan -0.3
+      play beat`---- ---- ---- -x--` at bars(1..2)
+    }
+    track Cab {
+      instrument Cabasa()
+      insert eq(low: 0.1, mid: 0.5, high: 0.6)
+      volume 0.1
+      pan 0.3
+      play beat`.x.. .x.. .x.. .x..` at bars(1..2)
+    }
+  }
+}
+// hot path: everything answering everything
+block GrooveHot : Groove {
+  block Kit {
+    track Kick {
+      instrument Kick808(punch: 0.55, decay: 0.4)
+      insert eq(low: 0.58, mid: 0.45, high: 0.46)
+      insert comp(thresh: 0.4, ratio: 0.6, attack: 0.018, release: 0.15, makeup: 0.2)
+      volume 0.86
+      play beat`X--- --x- --.- x--- X--- --x- --x- -.x-` at bars(1..2)
+    }
+    track Snare {
+      instrument SnareTight(snap: 0.6)
+      insert eq(low: 0.25, mid: 0.55, high: 0.58)
+      insert comp(thresh: 0.42, ratio: 0.55, attack: 0.006, release: 0.1, makeup: 0.18)
+      insert reverb(size: 0.45, decay: 0.35, mix: 0.14)
+      volume 0.55
+      pan 0.05
+      play beat`---- x--- --.- x--. ---- x--- .--- x.x.` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.22
+      pan -0.12
+      play beat`--x- --x- --x- --xx` at bars(1..4)
+    }
+  }
+  block HandsPerc {
+    track Hat {
+      instrument HatClosed(bright: 0.82)
+      insert eq(low: 0.12, mid: 0.45, high: 0.66)
+      insert comp(thresh: 0.48, ratio: 0.46, attack: 0.005, release: 0.08, makeup: 0.12)
+      volume 0.28
+      pan 0.18
+      play beat`x.xX x.x. xxx. x.xX x.x. x.xx x.xX x.x.` at bars(1..2)
+    }
+    track Bongo {
+      instrument Bongo()
+      insert eq(low: 0.3, mid: 0.55, high: 0.52)
+      insert delay(time: 0.268, fdbk: 0.36, mix: 0.28)
+      volume 0.3
+      pan -0.3
+      play beat`--x- --x- -x-- -x-x ---x --x- x--- --x-` at bars(1..2)
+    }
+    track Cab {
+      instrument Cabasa()
+      insert eq(low: 0.1, mid: 0.5, high: 0.6)
+      volume 0.22
+      pan 0.3
+      play beat`.x.x .xxx .x.x .x.x` at bars(1..2)
+    }
+  }
+}
+
+// The bass: a pick bass that walks the lookup table.
+block Lookup {
+  key G major
+  track Bass {
+    instrument PickBass()
+    insert eq(low: 0.56, mid: 0.5, high: 0.46)
+    insert comp(thresh: 0.42, ratio: 0.55, attack: 0.012, release: 0.14, makeup: 0.2)
+    insert pump(amount: 0.22, beats: 1)
+    volume 0.7
+    play notes`G1:0.75 _:0.25 G1:0.5 D2:0.5 G1:0.5 _:0.5 B1:0.5 D2:0.5 E2:0.75 _:0.25 E2:0.5 B1:0.5 E2:0.5 _:0.5 D2:0.5 B1:0.5 C2:0.75 _:0.25 C2:0.5 G1:0.5 C2:0.5 _:0.5 E2:0.5 G2:0.5 D2:0.75 _:0.25 D2:0.5 A1:0.5 D2:0.5 C2:0.5 B1:0.5 A1:0.5` at bars(1..4)
+  }
+}
+
+// The chords: juno keys answering the cache on the offbeats.
+block Chords {
+  key G major
+  track Keys {
+    instrument JunoKeys()
+    insert eq(low: 0.28, mid: 0.52, high: 0.55)
+    insert chorus(rate: 0.22, depth: 0.55, mix: 0.5)
+    insert width(amount: 0.65)
+    volume 0.48
+    pan -0.08
+    play notes`_:0.5 [G2 D3 F#3 B3]:1 _:1.5 [G2 D3 F#3 B3]:0.5 _:0.5 _:0.5 [E2 B2 D3 G3]:1 _:2.5 _:0.5 [C3 G3 B3 E4]:1 _:1.5 [C3 G3 B3 E4]:0.5 _:0.5 _:0.5 [D3 A3 C4 F#4]:1.5 _:2` at bars(1..4)
+  }
+}
+
+// The strings: the memory itself, swelling when the cache warms.
+block Memory {
+  key G major
+  track Str {
+    instrument StringPad()
+    insert eq(low: 0.3, mid: 0.5, high: 0.53)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.85, decay: 0.72, mix: 0.35)
+    volume 0.4
+    pan 0.05
+    play notes`[G3 B3 D4 F#4]:8 [E3 G3 B3 D4]:8 [C3 E3 G3 B3]:8 [D3 F#3 A3 C4]:8` at bars(1..8)
+  }
+}
+
+block Hit { track I { instrument Impact() insert reverb(size: 0.8, decay: 0.6, mix: 0.3) insert filter(type: "lp", cutoff: 0.45) volume 0.5 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+song "Memoize" {
+  desc "Compute the melody once, return it forever: a music box states the theme and every later call is a cache hit by a different instrument — the whole band serving one phrase from memory, in canon. 112bpm."
+  artist "Forte Essentials"
+  tempo 112bpm
+  swing 0.54
+  meter 4/4
+  key G major
+
+  section compute = bars(1..8)
+  section call1   = bars(9..24)
+  section call2   = bars(25..40)
+  section evict   = bars(41..48)
+  section hotpath = bars(49..64)
+  section retain  = bars(65..76)
+
+  // compute: the music box works the phrase out over warm strings
+  play Hit at bars(1..1)
+  play Motif at compute
+  play Memory at compute
+  play Chords at bars(5..8)
+
+  // first call: the groove arrives cold, EPiano returns the cached phrase
+  play GrooveCold as Groove at call1
+  play Lookup at call1
+  play Chords at call1
+  play HitKeys at bars(13..20)
+  play Memory(volume: 0.7) at call1
+
+  // second call: full groove, vibes and box hit the cache in canon
+  play Groove at call2
+  play Lookup at call2
+  play Chords at call2
+  play Cache at bars(27..34)
+  play Memory(volume: 0.7) at call2
+
+  // evict: drums flushed, strings hold what the cache remembers
+  play Memory at evict
+  play Chords(volume: 0.7) at evict
+  play HitVoice at bars(43..48)
+
+  // hot path: every voice serves the phrase, groove at full density
+  play Hit at bars(49..49)
+  play GrooveHot as Groove at hotpath
+  play Lookup at hotpath
+  play Chords at hotpath
+  play Cache at bars(51..58)
+  play HitVoice at bars(57..64)
+  play Memory(volume: 0.75) at hotpath
+
+  // retain: the box alone again — the value was never recomputed
+  play GrooveCold as Groove at bars(65..70)
+  play Motif at bars(65..72)
+  play Memory at retain
+  automate Memory.volume from 1 to 0 over bars(71..76)
+  automate Groove.volume from 1 to 0 over bars(67..70)
+}

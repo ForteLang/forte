@@ -1,0 +1,264 @@
+// Sleep Sort — the album falls asleep, correctly. Every note waits for a
+// time proportional to its pitch and then plays: the low notes arrive
+// first, the high ones drift in later, and the melody comes out sorted.
+// A heartbeat sub, a music box, and pads like a duvet. 84bpm.
+//
+// STRUCTURE: `Sort` nests `LowWord` / `MidWord` / `HighWord` — three
+// registers placed at staggered offsets so the ensemble literally sleeps
+// its values into order. Variants re-run the sort with more elements.
+import { KickSub, HatPedal, Shaker, SnareBrush } from "../instruments/drums.forte"
+import { SubBass } from "../instruments/bass.forte"
+import { MusicBox, Bell, Kalimba, Glass } from "../instruments/keys.forte"
+import { WarmPad, ShimmerPad } from "../instruments/pads.forte"
+import { SoftLead } from "../instruments/leads.forte"
+import { Triangle } from "../instruments/percussion.forte"
+import { Downlifter } from "../instruments/fx.forte"
+
+// ---- the sort: three registers arriving in pitch order ---------------------------
+block Sort {
+  key E major
+  // the low values: awake first
+  block LowWord {
+    track Kalimba {
+      instrument Kalimba()
+      insert eq(low: 0.25, mid: 0.55, high: 0.54)
+      insert delay(time: 0.357, fdbk: 0.38, mix: 0.3)
+      volume 0.4
+      pan -0.18
+      play notes`E3:0.5 _:1.5 G#3:0.5 _:1.5 B3:0.5 _:1.5 A3:0.5 _:1.5 E3:0.5 _:1.5 F#3:0.5 _:1.5 G#3:0.5 _:1.5 E3:0.5 _:1.5` at bars(1..4)
+    }
+  }
+  // the middle values: a music box, one sleep later
+  block MidWord {
+    track Box {
+      instrument MusicBox()
+      insert eq(low: 0.15, mid: 0.5, high: 0.58)
+      insert delay(time: 0.536, fdbk: 0.42, mix: 0.34)
+      insert reverb(size: 0.7, decay: 0.6, mix: 0.26)
+      volume 0.38
+      pan 0.12
+      play notes`_:1 B4:0.5 _:1.5 G#4:0.5 _:1.5 E4:0.5 _:1.5 F#4:0.5 _:2 A4:0.5 _:1.5 G#4:0.5 _:1.5 B4:0.5 _:1.5 E4:0.5 _:0.5` at bars(1..4)
+    }
+  }
+  // the high values: glass, last out of bed
+  block HighWord {
+    track Glass {
+      instrument Glass(shimmer: 0.5)
+      insert eq(low: 0.12, mid: 0.5, high: 0.58)
+      insert delay(time: 0.714, fdbk: 0.46, mix: 0.38)
+      insert reverb(size: 0.8, decay: 0.7, mix: 0.3)
+      volume 0.3
+      pan 0.3
+      play notes`_:2.5 E5:0.5 _:3.5 G#5:0.5 _:3.5 B5:0.5 _:3 F#5:0.5 _:1.5` at bars(1..4)
+    }
+  }
+  play LowWord at bars(1..4)
+  play MidWord at bars(1..4)
+  play HighWord at bars(2..4)
+}
+// the first run: only the low register is awake
+block SortFirst : Sort {
+  block MidWord {
+    track Box {
+      instrument MusicBox()
+      insert eq(low: 0.15, mid: 0.5, high: 0.58)
+      insert delay(time: 0.536, fdbk: 0.42, mix: 0.36)
+      insert reverb(size: 0.7, decay: 0.6, mix: 0.3)
+      volume 0.28
+      pan 0.12
+      play notes`_:3 B4:0.5 _:4.5 E4:0.5 _:4 G#4:0.5 _:3` at bars(1..4)
+    }
+  }
+  block HighWord {
+    track Glass {
+      instrument Glass(shimmer: 0.45)
+      insert eq(low: 0.12, mid: 0.5, high: 0.58)
+      insert delay(time: 0.714, fdbk: 0.46, mix: 0.38)
+      insert reverb(size: 0.8, decay: 0.7, mix: 0.32)
+      volume 0.2
+      pan 0.3
+      play notes`_:7 E5:0.5 _:8.5` at bars(1..4)
+    }
+  }
+}
+// the full array: every register answering, values interleaved
+block SortAll : Sort {
+  block LowWord {
+    track Kalimba {
+      instrument Kalimba()
+      insert eq(low: 0.25, mid: 0.55, high: 0.54)
+      insert delay(time: 0.357, fdbk: 0.42, mix: 0.34)
+      volume 0.42
+      pan -0.18
+      play notes`E3:0.5 _:0.5 G#3:0.5 _:0.5 B3:0.5 _:0.5 A3:0.5 _:0.5 E3:0.5 _:0.5 F#3:0.5 _:0.5 G#3:0.5 _:0.5 B3:0.5 _:0.5 A3:0.5 _:0.5 G#3:0.5 _:0.5 F#3:0.5 _:0.5 E3:0.5 _:0.5 D#3:0.5 _:0.5 E3:0.5 _:1.5` at bars(1..4)
+      automate delay.mix from 0.3 to 0.42 over bars(1..8)
+    }
+  }
+  block MidWord {
+    track Box {
+      instrument MusicBox()
+      insert eq(low: 0.15, mid: 0.5, high: 0.58)
+      insert delay(time: 0.536, fdbk: 0.45, mix: 0.36)
+      insert reverb(size: 0.7, decay: 0.6, mix: 0.26)
+      volume 0.4
+      pan 0.12
+      play notes`_:0.5 B4:0.5 _:1 G#4:0.5 _:1 E4:0.5 _:1 F#4:0.5 _:1 A4:0.5 _:1.5 G#4:0.5 _:1 B4:0.5 _:1 C#5:0.5 _:1 B4:0.5 _:1 G#4:0.5 _:0.5` at bars(1..4)
+    }
+  }
+}
+
+// The heartbeat: a sub kick slowing its breathing, brushed air around it.
+block Heart {
+  track Kick {
+    instrument KickSub(weight: 0.75)
+    insert eq(low: 0.56, mid: 0.44, high: 0.4)
+    insert comp(thresh: 0.46, ratio: 0.5, attack: 0.028, release: 0.2, makeup: 0.14)
+    volume 0.8
+    play beat`X--- ---- x--- ---- X--- ---- x--- -.--` at bars(1..2)
+  }
+  track Brush {
+    instrument SnareBrush()
+    insert eq(low: 0.2, mid: 0.55, high: 0.55)
+    insert reverb(size: 0.6, decay: 0.5, mix: 0.22)
+    volume 0.24
+    pan 0.1
+    play beat`---- ---- x--- ---- ---- ---- ---- x-..` at bars(1..2)
+  }
+  track Ped {
+    instrument HatPedal()
+    insert eq(low: 0.1, mid: 0.5, high: 0.54)
+    volume 0.12
+    pan -0.15
+    play beat`--x- ---- --x- ----` at bars(1..2)
+  }
+  track Shk {
+    instrument Shaker(soft: 0.65)
+    insert eq(low: 0.1, mid: 0.5, high: 0.56)
+    volume 0.12
+    pan 0.22
+    play beat`.x.. .x.. .x.. .x..` at bars(1..2)
+  }
+}
+
+// The ground: a sub bass turning over in its sleep.
+block Duvet {
+  key E major
+  track Bass {
+    instrument SubBass(drive: 0.15)
+    insert filter(type: "lp", cutoff: 0.24)
+    insert eq(low: 0.58, mid: 0.44, high: 0.38)
+    insert comp(thresh: 0.44, ratio: 0.55, attack: 0.03, release: 0.22, makeup: 0.16)
+    insert pump(amount: 0.22, beats: 1)
+    volume 0.68
+    play notes`E1:4 B0~:4 C#1:4 A0~:3 B0:1` at bars(1..4)
+  }
+}
+
+// The pads: two layers of covers pulled up to the chin.
+block Covers {
+  key E major
+  track Warm {
+    instrument WarmPad(cutoff: 0.34)
+    insert eq(low: 0.32, mid: 0.5, high: 0.5)
+    insert width(amount: 0.9)
+    insert reverb(size: 0.92, decay: 0.8, mix: 0.4)
+    volume 0.42
+    pan -0.05
+    play notes`[E3 B3 G#4 D#5]:8 [C#3 G#3 E4 B4]:8` at bars(1..4)
+    automate cutoff from 0.28 to 0.4 over bars(1..16)
+  }
+  track Shimmer {
+    instrument ShimmerPad()
+    insert eq(low: 0.28, mid: 0.5, high: 0.54)
+    insert width(amount: 0.85)
+    insert pump(amount: 0.18, beats: 1)
+    insert reverb(size: 0.9, decay: 0.8, mix: 0.4)
+    volume 0.3
+    pan 0.15
+    play notes`[G#3 D#4 B4]:8 [A3 E4 C#5]:8` at bars(1..4)
+  }
+}
+
+// One last hum before sleep — the album's goodnight.
+block Goodnight {
+  key E major
+  track Voice {
+    instrument SoftLead()
+    insert eq(low: 0.22, mid: 0.52, high: 0.55)
+    insert delay(time: 0.714, fdbk: 0.45, mix: 0.34)
+    insert reverb(size: 0.85, decay: 0.75, mix: 0.32)
+    volume 0.44
+    pan 0.05
+    play notes`_:2 G#4~:1.5 B4~:1.5 G#4~:1.5 E4~:2 _:1.5 F#4~:1 G#4~:1.5 F#4~:1.5 E4~:1.5 C#4~:2 _:1.5 B3~:1 C#4~:1.5 E4~:2.5 D#4~:1.5 E4~:3 _:3` at bars(1..8)
+  }
+}
+
+// The triangle: one ping per eight bars, the last process still running.
+block Night {
+  track Tri {
+    instrument Triangle()
+    insert eq(low: 0.1, mid: 0.45, high: 0.6)
+    insert reverb(size: 0.9, decay: 0.8, mix: 0.45)
+    volume 0.2
+    pan -0.28
+    play beat`x--- ---- ---- ----` at bars(1..8)
+  }
+}
+
+block Sigh { track D { instrument Downlifter() volume 0.32 pan -0.08 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+song "Sleep Sort" {
+  desc "The album falls asleep, correctly: every note waits proportional to its pitch, so the melody arrives sorted — low registers first, glass last, over a heartbeat sub and duvet pads. 84bpm."
+  artist "Forte Essentials"
+  tempo 84bpm
+  meter 4/4
+  key E major
+
+  section spawn  = bars(1..8)
+  section sleep1 = bars(9..20)
+  section sleep2 = bars(21..32)
+  section wake   = bars(33..38)
+  section sorted = bars(39..50)
+  section done   = bars(51..60)
+
+  // spawn: the covers and the first values, low register only
+  play Covers at spawn
+  play SortFirst as Sort at spawn
+  play Night at spawn
+
+  // sleep 1: the heartbeat settles in, values start arriving in order
+  play Heart at sleep1
+  play Duvet at sleep1
+  play Sort at sleep1
+  play Covers(volume: 0.8) at sleep1
+  play Night at sleep1
+
+  // sleep 2: the goodnight hum over the sorting ensemble
+  play Heart at sleep2
+  play Duvet at sleep2
+  play Sort at sleep2
+  play Covers(volume: 0.75) at sleep2
+  play Goodnight at sleep2
+  play Night at sleep2
+
+  // wake (briefly): the heart pauses, the array holds its breath
+  play Sigh at bars(33..33)
+  play Covers at wake
+  play SortFirst as Sort at wake
+  play Night at wake
+
+  // sorted: every register interleaved — the output, in order
+  play Heart at sorted
+  play Duvet at sorted
+  play SortAll as Sort at sorted
+  play Covers(volume: 0.75) at sorted
+  play Goodnight at bars(41..48)
+  play Night at sorted
+
+  // done: the last values, the covers, the ping — exit 0
+  play SortFirst as Sort at bars(51..56)
+  play Covers at done
+  play Night at done
+  automate Covers.volume from 1 to 0 over bars(55..60)
+  automate Sort.volume from 0.9 to 0 over bars(53..56)
+}

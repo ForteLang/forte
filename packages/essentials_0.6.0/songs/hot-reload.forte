@@ -1,0 +1,328 @@
+// Hot Reload — warm electronica. Detuned electric-piano chords that
+// wobble like heat haze, a rhythm machine built from nested blocks, and
+// a hummed theme that keeps coming back slightly changed. 104bpm.
+//
+// STRUCTURE SHOWCASE: the drum machine is a block OF blocks — `Groove`
+// nests `Feet` / `Hands` / `Fingers` and places them on its own internal
+// timeline. Variants (GrooveIn/GrooveFull) override the INNER blocks by
+// name, and every variant shares one lane set via `as Groove`. The band
+// (keys + bass) is the same shape: a nested ensemble with swappable parts.
+import { Kick808, HatClosed, HatPedal, Rim, Shaker, Snap, SnareBrush } from "../instruments/drums.forte"
+import { RubberBass } from "../instruments/bass.forte"
+import { EPiano, MusicBox } from "../instruments/keys.forte"
+import { JunoPad } from "../instruments/juno60.forte"
+import { WarmPad } from "../instruments/pads.forte"
+import { VoxLead } from "../instruments/leads.forte"
+import { Impact } from "../instruments/fx.forte"
+
+// ---- the rhythm machine: a block of blocks --------------------------------------
+block Groove {
+  // feet: an 808 that steps around the one instead of hammering it
+  block Feet {
+    track Kick {
+      instrument Kick808(punch: 0.55, decay: 0.38)
+      insert eq(low: 0.6, mid: 0.45, high: 0.48)
+      insert comp(thresh: 0.42, ratio: 0.6, attack: 0.02, release: 0.16, makeup: 0.2)
+      volume 0.88
+      play beat`X--- --x- ---- x--- X--- --x- --.- x-.-` at bars(1..2)
+    }
+  }
+  // hands: pedal hats breathing, a shaker leaning on the offbeat
+  block Hands {
+    track Hat {
+      instrument HatClosed(bright: 0.75)
+      insert eq(low: 0.12, mid: 0.45, high: 0.65)
+      insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+      volume 0.26
+      pan 0.18
+      play beat`x.x. x.xX x.x. x.x.` at bars(1..4)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.58)
+      volume 0.2
+      pan -0.12
+      play beat`--x- --x- --x- --x-` at bars(1..4)
+    }
+    track Shk {
+      instrument Shaker(soft: 0.55)
+      insert eq(low: 0.1, mid: 0.5, high: 0.6)
+      volume 0.22
+      pan -0.25
+      play beat`.x.x .x.x .x.x .x.x` at bars(1..4)
+    }
+  }
+  // fingers: rim ghosts and a snap that lands like a page saving
+  block Fingers {
+    track Rim {
+      instrument Rim()
+      insert eq(low: 0.2, mid: 0.58, high: 0.55)
+      insert delay(time: 0.288, fdbk: 0.35, mix: 0.28)
+      volume 0.28
+      pan 0.35
+      play beat`---- --x- ---. ---- ---- -x-- ---- --.-` at bars(1..2)
+    }
+    track Snap {
+      instrument Snap()
+      insert eq(low: 0.15, mid: 0.55, high: 0.6)
+      insert comp(thresh: 0.45, ratio: 0.5, attack: 0.004, release: 0.1, makeup: 0.15)
+      insert reverb(size: 0.45, decay: 0.35, mix: 0.14)
+      volume 0.5
+      pan -0.05
+      play beat`---- x--- ---- x---` at bars(1..1)
+    }
+  }
+  play Feet at bars(1..4)
+  play Hands at bars(1..4)
+  play Fingers at bars(1..4)
+}
+// warm-up: the same machine, inner parts swapped for sparser ones
+block GrooveIn : Groove {
+  block Feet {
+    track Kick {
+      instrument Kick808(punch: 0.45, decay: 0.36)
+      insert eq(low: 0.6, mid: 0.45, high: 0.48)
+      insert comp(thresh: 0.44, ratio: 0.55, attack: 0.02, release: 0.16, makeup: 0.18)
+      volume 0.8
+      play beat`X--- ---- --x- ----` at bars(1..2)
+    }
+  }
+  block Hands {
+    track Hat {
+      instrument HatClosed(bright: 0.7)
+      insert eq(low: 0.12, mid: 0.45, high: 0.62)
+      insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+      volume 0.18
+      pan 0.18
+      play beat`..x. ..x. ..x. ..x.` at bars(1..4)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.58)
+      volume 0.14
+      pan -0.12
+      play beat`---- --x- ---- --x-` at bars(1..4)
+    }
+    track Shk {
+      instrument Shaker(soft: 0.6)
+      insert eq(low: 0.1, mid: 0.5, high: 0.6)
+      volume 0.15
+      pan -0.25
+      play beat`.x.. .x.. .x.. .x..` at bars(1..4)
+    }
+  }
+}
+// full flow: ghost 16ths everywhere, the snap answers itself
+block GrooveFull : Groove {
+  block Hands {
+    track Hat {
+      instrument HatClosed(bright: 0.8)
+      insert eq(low: 0.12, mid: 0.45, high: 0.68)
+      insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+      volume 0.3
+      pan 0.18
+      play beat`x.xX x.x. xxx. x.xX x.x. x.xx x.xX xxx.` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.58)
+      volume 0.22
+      pan -0.12
+      play beat`--x- --x- --x- --xx` at bars(1..4)
+    }
+    track Shk {
+      instrument Shaker(soft: 0.5)
+      insert eq(low: 0.1, mid: 0.5, high: 0.6)
+      volume 0.26
+      pan -0.25
+      play beat`.x.x .xxx .x.x .x.x` at bars(1..2)
+    }
+  }
+  block Fingers {
+    track Rim {
+      instrument Rim()
+      insert eq(low: 0.2, mid: 0.58, high: 0.55)
+      insert delay(time: 0.288, fdbk: 0.42, mix: 0.34)
+      volume 0.3
+      pan 0.35
+      play beat`---- --x- -.-x ---- -x-- --x- ---- x-.-` at bars(1..2)
+    }
+    track Snap {
+      instrument Snap()
+      insert eq(low: 0.15, mid: 0.55, high: 0.6)
+      insert comp(thresh: 0.45, ratio: 0.5, attack: 0.004, release: 0.1, makeup: 0.15)
+      insert reverb(size: 0.45, decay: 0.35, mix: 0.14)
+      volume 0.54
+      pan -0.05
+      play beat`---- x--- --.- x--. ---- x--- .--- x-x-` at bars(1..2)
+    }
+  }
+}
+
+// ---- the band: keys and bass as one nested ensemble ------------------------------
+block Band {
+  key F major
+  // the chords: Fmaj7 → Am7 → Dm7 → Bbmaj7, comped just behind the beat
+  block Keys {
+    track EP {
+      instrument EPiano(tine: 0.45)
+      insert eq(low: 0.3, mid: 0.52, high: 0.56)
+      insert chorus(rate: 0.22, depth: 0.55, mix: 0.5)
+      insert width(amount: 0.6)
+      volume 0.56
+      pan -0.08
+      play notes`_:0.5 [F2 C3 E3 A3]:1.25 _:0.75 [F2 C3 E3 A3]:0.5 _:1 _:0.5 [A2 E3 G3 C4]:1.25 _:2.25 _:0.5 [D2 A2 C3 F3]:1.25 _:0.75 [D2 A2 C3 F3]:0.5 _:1 _:0.5 [A#1 F2 A2 D3]:1.5 _:2` at bars(1..4)
+    }
+  }
+  // the ground: a rubber bass that walks the changes with 16th pickups
+  block LowEnd {
+    track Bass {
+      instrument RubberBass()
+      insert eq(low: 0.58, mid: 0.5, high: 0.48)
+      insert comp(thresh: 0.42, ratio: 0.55, attack: 0.012, release: 0.14, makeup: 0.2)
+      insert pump(amount: 0.25, beats: 1)
+      volume 0.72
+      play notes`F1:0.75 _:0.25 F1:0.5 C2:0.5 F1:0.5 _:0.25 E2:0.25 F2:0.5 D2:0.5 A1:0.75 _:0.25 A1:0.5 E2:0.5 A1:0.75 G1:0.25 A1:0.5 C2:0.5 D2:0.75 _:0.25 D2:0.5 A1:0.5 D2:0.5 _:0.25 C2:0.25 D2:0.5 F2:0.5 A#1:0.75 _:0.25 A#1:0.5 F1:0.5 A#1:0.5 _:0.25 A1:0.25 A#1:0.5 C2:0.5` at bars(1..4)
+    }
+  }
+  play Keys at bars(1..4)
+  play LowEnd at bars(1..4)
+}
+// the reload: same band, keys voiced an octave up and let ring
+block BandOpen : Band {
+  block Keys {
+    track EP {
+      instrument EPiano(tine: 0.55)
+      insert eq(low: 0.28, mid: 0.52, high: 0.6)
+      insert chorus(rate: 0.22, depth: 0.6, mix: 0.55)
+      insert width(amount: 0.7)
+      volume 0.58
+      pan -0.08
+      play notes`[F3 A3 C4 E4]:3.5 _:0.5 [A3 C4 E4 G4]:3.5 _:0.5 [D3 F3 A3 C4]:3.5 _:0.5 [A#2 D3 F3 A3]:2 [C3 E3 G3 A#3]:2` at bars(1..4)
+      automate chorus.mix from 0.5 to 0.62 over bars(1..16)
+    }
+  }
+}
+
+// The pad under everything — warm, slow, barely moving.
+block Haze {
+  key F major
+  track Pad {
+    instrument WarmPad(cutoff: 0.4)
+    insert eq(low: 0.32, mid: 0.5, high: 0.52)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.85, decay: 0.7, mix: 0.35)
+    volume 0.42
+    pan 0.05
+    play notes`[F3 A3 C4 E4]:8 [D3 F3 A3 C4]:8` at bars(1..4)
+    automate cutoff from 0.32 to 0.5 over bars(1..16)
+  }
+  track Juno {
+    instrument JunoPad()
+    insert eq(low: 0.3, mid: 0.5, high: 0.55)
+    insert chorus(rate: 0.25, depth: 0.5, mix: 0.5)
+    insert pump(amount: 0.2, beats: 1)
+    volume 0.3
+    pan -0.15
+    play notes`[C4 E4 G4]:8 [A3 C4 F4]:8` at bars(1..4)
+  }
+}
+
+// ---- the theme: hummed, then remembered by a music box ---------------------------
+block Hum {
+  key F major
+  track Voice {
+    instrument VoxLead()
+    insert eq(low: 0.25, mid: 0.55, high: 0.56)
+    insert delay(time: 0.433, fdbk: 0.4, mix: 0.3)
+    insert reverb(size: 0.65, decay: 0.55, mix: 0.22)
+    volume 0.52
+    pan 0.08
+    play notes`_:1 A4~:1 C5~:1.5 A4~:0.5 G4~:1.5 F4~:1.5 _:1 F4~:0.5 G4~:1 A4~:1.5 G4~:1 F4~:1.5 D4~:1.5 _:1.5 C4~:0.5 D4~:1 F4~:2 G4~:1.5 A4~:2.5 _:2` at bars(1..8)
+  }
+}
+// the reload of the theme: delay singing, a third higher inside the key
+block HumHigh : Hum {
+  track Voice {
+    insert delay(time: 0.433, fdbk: 0.5, mix: 0.38)
+    volume 0.55
+    play notes`_:1 C5~:1 E5~:1.5 C5~:0.5 A4~:1.5 G4~:1.5 _:1 G4~:0.5 A4~:1 C5~:1.5 A4~:1 G4~:1.5 F4~:1.5 _:1.5 F4~:0.5 G4~:1 A4~:2 G4~:1.5 F4~:2.5 _:2` at bars(1..8)
+    automate delay.mix from 0.3 to 0.45 over bars(1..8)
+  }
+}
+
+// The music box remembers the theme four bars later, in miniature.
+block Recall {
+  key F major
+  track Box {
+    instrument MusicBox()
+    insert eq(low: 0.15, mid: 0.5, high: 0.6)
+    insert delay(time: 0.577, fdbk: 0.45, mix: 0.4)
+    insert reverb(size: 0.75, decay: 0.65, mix: 0.3)
+    volume 0.34
+    pan 0.3
+    play notes`_:4 A5:0.5 C6:0.75 A5:0.75 G5:1 F5:1 _:2 F5:0.5 G5:0.75 A5:0.75 G5:1 F5:1 D5:1.5 _:2.5` at bars(1..8)
+  }
+}
+
+block Warm { track I { instrument Impact() insert reverb(size: 0.8, decay: 0.6, mix: 0.3) insert filter(type: "lp", cutoff: 0.4) volume 0.5 play beat`x--- ---- ---- ----` at bars(1..1) } }
+
+song "Hot Reload" {
+  desc "Warm electronica: detuned electric-piano chords that wobble like heat haze over a rhythm machine built from nested blocks — the same groove lane swaps its inner parts as the song reloads. 104bpm."
+  artist "Forte Essentials"
+  tempo 104bpm
+  swing 0.54
+  meter 4/4
+  key F major
+
+  section state   = bars(1..8)
+  section run     = bars(9..24)
+  section theme   = bars(25..40)
+  section reload  = bars(41..48)
+  section flow    = bars(49..64)
+  section rest    = bars(65..72)
+  section exhale  = bars(73..80)
+
+  // state: the full chords land on beat one — warmth first, no fade-in
+  play Warm at bars(1..1)
+  play Band at state
+  play Haze at state
+  play GrooveIn as Groove at bars(5..8)
+
+  // run: the machine assembles around the changes
+  play Groove at run
+  play Band at run
+  play Haze(volume: 0.8) at run
+  play Recall at bars(17..24)
+
+  // theme: the voice hums over everything
+  play Groove at theme
+  play Band at theme
+  play Haze(volume: 0.7) at theme
+  play Hum at theme
+  play Recall at bars(33..40)
+
+  // reload: drums drop to warm-up parts, keys ring out an octave up
+  play Warm at bars(41..41)
+  play GrooveIn as Groove at reload
+  play BandOpen as Band at reload
+  play Haze at reload
+
+  // flow: the full machine, the theme a third higher, box answering
+  play GrooveFull as Groove at flow
+  play Band at flow
+  play Haze(volume: 0.7) at flow
+  play HumHigh as Hum at flow
+  play Recall at bars(57..64)
+
+  // rest: band alone, the box remembering
+  play Band at rest
+  play Haze at rest
+  play Recall at rest
+
+  // exhale: the chords ring, everything else already left
+  play BandOpen as Band at exhale
+  play Haze at exhale
+  automate Haze.volume from 1 to 0 over bars(77..80)
+  automate Band.volume from 1 to 0.4 over bars(77..80)
+}
