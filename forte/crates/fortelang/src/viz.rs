@@ -15,21 +15,25 @@ pub fn viz_json(p: &Project) -> serde_json::Value {
                 .arranger
                 .iter()
                 .map(|a| {
-                    let notes: Vec<[f64; 3]> = a
+                    let notes: Vec<[f64; 4]> = a
                         .clip
                         .notes
                         .iter()
-                        .map(|n| [n.pitch as f64, n.start, n.length])
+                        .map(|n| [n.pitch as f64, n.start, n.length, n.velocity as f64 / 127.0])
                         .collect();
                     serde_json::json!({
                         "start": a.start, "duration": a.duration,
                         "length": a.clip.length, "notes": notes,
+                        // 1-based source line of the play (or, for imported
+                        // blocks, the import statement) — the code-jump target
+                        "line": a.src_line,
                     })
                 })
                 .collect();
             serde_json::json!({
                 "name": t.name,
                 "color": t.color,
+                "line": t.src_line,
                 "fx": t.kind == dawcore::model::TrackKind::Effect,
                 // what plays and what shapes it — the composer view reads these
                 "instrument": t.devices.first().map(|d| d.kind.label()).unwrap_or(""),

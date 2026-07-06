@@ -580,7 +580,16 @@ fn file_model_hashes(path: &Path) -> Result<Vec<(String, String)>, String> {
     let parsed = crate::parser::parse(&src)
         .map_err(|ds| format!("{}: {}", path.display(), ds.first().map(|d| d.to_string()).unwrap_or_default()))?;
     let hash_project = |p: &dawcore::model::Project| -> String {
-        format!("{:016x}", crate::fnv1a64(serde_json::to_string(p).unwrap_or_default().as_bytes()))
+        // strip source positions before hashing: they exist for code-jumps
+        // and must never make a comment-only edit look like a sound change
+        let mut p = p.clone();
+        for t in &mut p.tracks {
+            t.src_line = 0;
+            for a in &mut t.arranger {
+                a.src_line = 0;
+            }
+        }
+        format!("{:016x}", crate::fnv1a64(serde_json::to_string(&p).unwrap_or_default().as_bytes()))
     };
     let mut out = Vec::new();
     if parsed.song.is_some() {

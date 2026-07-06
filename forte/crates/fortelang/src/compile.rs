@@ -113,7 +113,7 @@ pub fn compile(
     let mut stack: Vec<String> = vec![root.name.clone()];
     let lowered = lower_body(
         root,
-        &PlaceEnv { prefix: "", eff_root: eff_root_pc, overrides: &[], swing: None },
+        &PlaceEnv { prefix: "", eff_root: eff_root_pc, overrides: &[], swing: None, import_line: None },
         &[&file.blocks],
         &mut stack,
         &env,
@@ -244,6 +244,9 @@ struct PlaceEnv<'a> {
     /// Local swing for this subtree (`play Riff(swing: 0.66)`); None = the
     /// root's swing (upper wins, as ever).
     swing: Option<f64>,
+    /// When this subtree came through an `import`, the import statement's
+    /// line in the entry file — code-jumps for everything inside land there.
+    import_line: Option<u32>,
 }
 
 /// Lower one block body into tracks with local-beat clips. The transpose
@@ -355,6 +358,7 @@ fn lower_body(
     for tast in &body.tracks {
         let mut track =
             Track::new(0, format!("{prefix}{}", tast.name), TrackKind::Instrument, TRACK_COLORS[0]);
+        track.src_line = penv.import_line.unwrap_or(tast.pos.line);
 
         // instrument (required unless the track only places recorded audio)
         let mut beat_pitch = 36u8; // C2 default; samplers use their sample root
@@ -650,6 +654,7 @@ fn lower_body(
                 clip,
                 start: (a - 1) as f64 * beats_per_bar,
                 duration: (b - a + 1) as f64 * beats_per_bar,
+                src_line: penv.import_line.unwrap_or(play.pos.line),
             });
         }
 
@@ -860,6 +865,7 @@ fn lower_body(
                 eff_root: eff_child,
                 overrides: &place.params,
                 swing: child_swing,
+                import_line: penv.import_line.or(bdef.import_line),
             },
             &child_registry,
             stack,
@@ -996,7 +1002,12 @@ fn lower_body(
                         c
                     };
                     let dur = (ce - cs).min(span_end - ns);
-                    dst.track.arranger.push(ArrangerClip { clip, start: ns, duration: dur });
+                    dst.track.arranger.push(ArrangerClip {
+                        clip,
+                        start: ns,
+                        duration: dur,
+                        src_line: ac.src_line,
+                    });
                 }
                 for au in &lt.track.audio_clips {
                     if au.start < win_start - 1e-9 || au.start >= win_end - 1e-9 {

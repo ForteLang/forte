@@ -262,6 +262,16 @@ pub unsafe extern "C" fn fw_master_peak(ptr: *mut Ctx) -> f32 {
     ctx(ptr).handle.shared.master_peak()
 }
 
+/// Per-track peak of the last block (meters). Slots follow the compiled
+/// project's track order — the same order the viz JSON lists.
+#[no_mangle]
+pub unsafe extern "C" fn fw_track_peak(ptr: *mut Ctx, slot: usize) -> f32 {
+    if slot >= dawcore::model::MAX_TRACKS {
+        return 0.0;
+    }
+    ctx(ptr).handle.shared.track_peak(slot)
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn fw_out_l(ptr: *mut Ctx) -> *const f32 {
     ctx(ptr).out_l.as_ptr()

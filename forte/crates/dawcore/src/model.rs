@@ -539,6 +539,11 @@ pub struct ArrangerClip {
     pub clip: Clip,
     pub start: f64,    // beats on the timeline
     pub duration: f64, // placed length in beats
+    /// 1-based source line of the `play` that placed this clip (0 = unknown).
+    /// Imported blocks carry the entry file's import-statement line, so a
+    /// click in the arrangement always lands somewhere meaningful.
+    #[serde(default)]
+    pub src_line: u32,
 }
 
 /// An audio clip on the Arranger Timeline: a sample played from its start, at
@@ -596,6 +601,9 @@ pub struct Track {
     /// Modulator-field automation lanes (depth / rate / macro value).
     #[serde(default)]
     pub mod_automation: Vec<ModAutomation>,
+    /// 1-based source line of this track's `track` statement (0 = unknown).
+    #[serde(default)]
+    pub src_line: u32,
     /// Post-fader sends: (destination effect-track id, level 0..1).
     #[serde(default)]
     pub sends: Vec<(usize, f32)>,
@@ -624,6 +632,7 @@ impl Track {
             volume_automation: Vec::new(),
             param_automation: Vec::new(),
             mod_automation: Vec::new(),
+            src_line: 0,
             sends: Vec::new(),
         }
     }
@@ -917,22 +926,22 @@ impl Project {
 
         // Lay the launcher clips out on the Arranger Timeline as a simple song.
         if let Some(c) = drums.clips[0].clone() {
-            drums.arranger.push(ArrangerClip { clip: c, start: 0.0, duration: 32.0 });
+            drums.arranger.push(ArrangerClip { clip: c, start: 0.0, duration: 32.0 , src_line: 0 });
         }
         if let Some(c) = bass.clips[0].clone() {
-            bass.arranger.push(ArrangerClip { clip: c.clone(), start: 8.0, duration: 24.0 });
+            bass.arranger.push(ArrangerClip { clip: c.clone(), start: 8.0, duration: 24.0 , src_line: 0 });
         }
         if let Some(c) = keys.clips[0].clone() {
-            keys.arranger.push(ArrangerClip { clip: c, start: 0.0, duration: 16.0 });
+            keys.arranger.push(ArrangerClip { clip: c, start: 0.0, duration: 16.0 , src_line: 0 });
         }
         if let Some(c) = lead.clips[1].clone() {
-            lead.arranger.push(ArrangerClip { clip: c, start: 16.0, duration: 16.0 });
+            lead.arranger.push(ArrangerClip { clip: c, start: 16.0, duration: 16.0 , src_line: 0 });
         }
         if let Some(c) = hats.clips[0].clone() {
-            hats.arranger.push(ArrangerClip { clip: c, start: 0.0, duration: 32.0 });
+            hats.arranger.push(ArrangerClip { clip: c, start: 0.0, duration: 32.0 , src_line: 0 });
         }
         if let Some(c) = snare.clips[0].clone() {
-            snare.arranger.push(ArrangerClip { clip: c, start: 8.0, duration: 24.0 });
+            snare.arranger.push(ArrangerClip { clip: c, start: 8.0, duration: 24.0 , src_line: 0 });
         }
 
         p.tracks = vec![drums, hats, snare, bass, keys, lead, perc, fx];

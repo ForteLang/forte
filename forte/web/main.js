@@ -10,6 +10,17 @@ import { Vcs } from './vcs.js';
 const $ = (id) => document.getElementById(id);
 const status = (t) => ($('status').textContent = t);
 const viz = new Viz($('viz'));
+window.__forteViz = viz;
+$('viz').addEventListener('click', (ev) => {
+  const rect = $('viz').getBoundingClientRect();
+  const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
+  if (!hit) return;
+  if (hit.kind === 'header' || hit.kind === 'roll') {
+    viz.togglePianoRoll(hit.track); // lane name → that track's piano roll
+  } else if (hit.line > 0) {
+    jumpToLine(hit.line); // clip / lane → the play/track (or import) line
+  }
+});
 const BUILTINS = [
   'first-light.forte',
   'slow-circles.forte',
@@ -81,6 +92,18 @@ const fallback = $('fallback');
 let getText = () => fallback.value;
 let setText = (t) => (fallback.value = t);
 let onChange = () => {};
+// code-jump: the visualization hands us 1-based source lines
+let jumpToLine = (line) => {
+  const text = fallback.value;
+  let idx = 0;
+  for (let i = 1; i < line; i++) {
+    const nl = text.indexOf('\n', idx);
+    if (nl < 0) break;
+    idx = nl + 1;
+  }
+  fallback.focus();
+  fallback.setSelectionRange(idx, idx);
+};
 fallback.addEventListener('input', () => onChange());
 window.__forteGetText = () => getText();
 window.__forteCompileCheck = (src) => {
@@ -128,6 +151,11 @@ async function tryMonaco(initial) {
     });
     getText = () => ed.getValue();
     setText = (t) => ed.setValue(t);
+    jumpToLine = (line) => {
+      ed.revealLineInCenter(line);
+      ed.setPosition({ lineNumber: line, column: 1 });
+      ed.focus();
+    };
     ed.onDidChangeModelContent(() => onChange());
     window.__forteSetMarkers = (diags) => {
       monaco.editor.setModelMarkers(
@@ -186,6 +214,7 @@ async function ensureAudio() {
     }
     if (m.kind === 'pos') {
       status(`bar ${Math.floor(m.beats / 4) + 1}.${Math.floor(m.beats % 4) + 1} | peak ${m.peak.toFixed(2)}`);
+      if (m.peaks) viz.setPeaks(m.peaks);
       viz.setPlayhead(m.beats);
     }
   };
