@@ -38,7 +38,8 @@ self.addEventListener('activate', (e) => e.waitUntil((async () => {
 })()));
 EOF
 mkdir -p "$SITE/packages"
-cp -r ../packages/essentials_0.6.0 "$SITE/packages/"
+# every package ships — the catalog lists them all
+for pkg in ../packages/*/; do cp -r "$pkg" "$SITE/packages/"; done
 cargo run -q -p fortelang --bin forte -- web index > "$SITE/packages.json"
 # rewrite the repo-relative package paths for the collapsed layout
 sed -i.bak -e 's|\.\./\.\./packages/|packages/|g' -e 's|`\.\./\.\./${rel}`|`${rel}`|g' \
