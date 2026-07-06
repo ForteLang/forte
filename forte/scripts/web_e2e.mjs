@@ -455,6 +455,20 @@ try {
   await page.waitForTimeout(1500);
   const afterNext = secsOf((await page.textContent('#time')).split(' / ')[0]);
   check('a newly started track begins at 0:00', afterNext < 8, `${afterNext}s`);
+
+  // 10. volume boost: the knob drives the live gain node and persists via
+  //     localStorage (playback-only; the render digest is upstream of it)
+  const boosted = await page.evaluate(() => {
+    const el = document.getElementById('boost');
+    el.value = '2.5';
+    el.dispatchEvent(new Event('input'));
+    return { stored: localStorage.getItem('forte-boost'), label: document.getElementById('boost-val').textContent };
+  });
+  check(
+    'boost control sets gain and persists',
+    boosted.stored === '2.5' && boosted.label.startsWith('+8.0'),
+    `stored=${boosted.stored} label=${boosted.label}`
+  );
 } finally {
   await browser.close();
   server.kill();

@@ -27,15 +27,18 @@
   #now .artist { color: #e8b34c; font-size: 13px; }
   #now .desc { color: #8a919e; font-size: 13px; margin-top: 6px; }
   #now .proof { color: #566070; font-size: 11px; font-family: ui-monospace, monospace; margin-top: 6px; }
-  #transport { display: flex; align-items: center; gap: 10px; margin: 18px 0 6px; }
+  #transport { display: flex; align-items: center; gap: 10px; margin: 18px 0 6px; flex-wrap: wrap; }
   button { background: #2b2f38; color: #d7dae0; border: 1px solid #3a3f4b;
     border-radius: 8px; padding: 8px 18px; font-size: 15px; cursor: pointer; }
   button.primary { background: #e8b34c; color: #16181d; border-color: #e8b34c; font-weight: 700; }
   button:disabled { opacity: 0.4; cursor: default; }
-  #bar-wrap { flex: 1; height: 14px; background: #23262e; border-radius: 99px; overflow: hidden;
+  #bar-wrap { flex: 1; min-width: 150px; height: 14px; background: #23262e; border-radius: 99px; overflow: hidden;
     cursor: pointer; touch-action: none; }
   #bar { height: 100%; width: 0%; background: #e8b34c; pointer-events: none; }
   #time { font: 12px/1 ui-monospace, monospace; color: #8a919e; min-width: 86px; text-align: right; }
+  #boost-wrap { display: flex; align-items: center; gap: 5px; color: #8a919e; font-size: 13px; }
+  #boost { width: 88px; accent-color: #e8b34c; }
+  #boost-val { font: 11px/1 ui-monospace, monospace; min-width: 52px; color: #8a919e; }
   #tracks { margin-top: 18px; }
   .trk { display: flex; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
     font-size: 14px; color: #b6bcc6; align-items: baseline; }
@@ -88,6 +91,9 @@
     <button id="next" title="Next track">⏭</button>
     <div id="bar-wrap"><div id="bar"></div></div>
     <div id="time"></div>
+    <div id="boost-wrap" title="Volume boost — playback only, saved on this device. A limiter catches the overs.">🔊
+      <input type="range" id="boost" min="0.5" max="4" step="0.05">
+      <span id="boost-val"></span></div>
   </div>
   <div id="tracks"></div>
   <div id="arr-wrap">
@@ -299,16 +305,31 @@ $('full-src-btn').onclick = () => {
 };
 
 // ---- audio: the editor's worklet, unchanged ---------------------------------
-let ac, node, wasmBytes;
+// Playback boost: monitoring-only gain AFTER the deterministic render (the
+// digest never sees it), followed by a limiter so cranking it stays clean.
+// Loudness at the ear varies wildly by device — phones especially — so the
+// listener owns this knob and the choice sticks per device.
+const BOOST_KEY = 'forte-boost';
+let boost = parseFloat(localStorage.getItem(BOOST_KEY) ?? '') || 1.5;
+let ac, node, wasmBytes, boostGain;
 async function ensureAudio() {
   if (ac) return;
+  // iOS treats Web Audio as an "ambient" session unless told otherwise and
+  // plays it noticeably quieter (and duckable) than media playback
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* hint only */ }
   wasmBytes = await (await fetch('forte.wasm')).arrayBuffer();
   ac = new AudioContext({ sampleRate: 48000, latencyHint: 'playback' });
   const src = await (await fetch('worklet.js')).text();
   const blobUrl = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
   await ac.audioWorklet.addModule(blobUrl);
   node = new AudioWorkletNode(ac, 'forte', { outputChannelCount: [2] });
-  node.connect(ac.destination);
+  boostGain = new GainNode(ac, { gain: boost });
+  const limiter = new DynamicsCompressorNode(ac, {
+    threshold: -3, knee: 3, ratio: 20, attack: 0.001, release: 0.12,
+  });
+  node.connect(boostGain);
+  boostGain.connect(limiter);
+  limiter.connect(ac.destination);
   await new Promise((res) => {
     node.port.onmessage = (e) => e.data.kind === 'ready' && res();
     node.port.postMessage({ cmd: 'init', wasm: wasmBytes.slice(0) });
@@ -419,6 +440,18 @@ $('bar-wrap').onpointercancel = () => { scrubbing = false; };
 
 $('next').onclick = next;
 $('prev').onclick = prev;
+const drawBoost = () => {
+  $('boost').value = boost;
+  const db = 20 * Math.log10(boost);
+  $('boost-val').textContent = `${db >= 0 ? '+' : ''}${db.toFixed(1)} dB`;
+};
+$('boost').oninput = () => {
+  boost = parseFloat($('boost').value) || 1;
+  if (boostGain) boostGain.gain.value = boost;
+  localStorage.setItem(BOOST_KEY, String(boost));
+  drawBoost();
+};
+drawBoost();
 $('toggle').onclick = async () => {
   if (cur < 0) { play(0); return; }
   if (playing) { await ac.suspend(); playing = false; $('toggle').textContent = '▶'; }
