@@ -1,0 +1,30 @@
+import { Click, Tick, Blip } from "../instruments/clicks.forte"
+import { ThumpKick, DeepSub, PressureBass } from "../instruments/lowend.forte"
+import { Hiss, Dust, ColdTone } from "../instruments/textures.forte"
+
+song "Palette Demo" {
+  tempo 124bpm
+  master 1.6
+  track Kick { instrument ThumpKick(decay: 0.45)
+    play beat`x--- x--- x--- x---` at bars(1..4) }
+  track Sub { instrument DeepSub
+    play notes`A1:2 _:2` at bars(1..4) }
+  track Bass { instrument PressureBass(cutoff: 0.35)
+    insert crush(bits: 0.35, rate: 0.2, mix: 0.5)
+    play notes`A1:0.5 _:0.5 A1:0.25 _:0.75 C2:0.5 _:1.5` at bars(1..4) }
+  track Clicks { instrument Click(snap: 0.8)
+    play beat`euclid(5, 16)` at bars(1..4) }
+  track Ticks { instrument Tick
+    play cycle(beat`x-.`, span: 0.75) at bars(1..4) }
+  track Blips { instrument Blip(decay: 0.08)
+    insert stutter(beats: 0.25, mix: 0.0)
+    automate stutter.mix from 0.0 to 0.9 over bars(4..4)
+    play notes`E5:0.25 _:0.75 B4:0.25 _:1.25 _:1.5` at bars(1..4) }
+  track Hiss { instrument Hiss(body: 0.5)
+    insert gate(depth: 0.85, beats: 0.25, duty: 0.45)
+    play notes`A3:16` at bars(1..4) }
+  track Tone { instrument ColdTone
+    play notes`A4:4 _:4 E5:4 _:4` at bars(1..4) }
+  track Dust { instrument Dust(color: 0.7)
+    play beat`- x*3 - - - - x*2 -` at bars(2..4) }
+}
