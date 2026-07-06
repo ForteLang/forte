@@ -1,0 +1,27 @@
+// glitchworks/clicks — microscopic percussion: the dry, woody, electric
+// tick vocabulary of clicks & cuts. Almost all envelope, almost no pitch.
+// Usage: import { Click, Tick, Blip } from "packages/glitchworks_0.1.0/instruments/clicks.forte"
+
+// A capacitor discharge: a 4 ms highpassed noise burst.
+device Click : Instrument {
+  param snap = 0.6 in 0.0..1.0
+  node env = adsr(a: 0.0005, d: 0.004, s: 0.0, r: 0.004)
+  node hp  = svf(in: noise(), cutoff: 0.85, reso: 0.2)
+  out gain(in: hp, mod: env, level: snap)
+}
+
+// A dusty vinyl tick — lower, rounder, a hint of tone.
+device Tick : Instrument {
+  param tone = 0.35 in 0.0..1.0
+  node env = adsr(a: 0.0005, d: 0.012, s: 0.0, r: 0.01)
+  node bp  = svf(in: noise(), cutoff: tone, reso: 0.7)
+  out gain(in: bp, mod: env, level: 0.8)
+}
+
+// A pure sine blip that tracks pitch — the melodic voice of glitch.
+device Blip : Instrument {
+  param decay = 0.06 in 0.01..0.5
+  node env = adsr(a: 0.001, d: decay, s: 0.0, r: 0.02)
+  node o   = osc(freq: note.freq, shape: "sine")
+  out gain(in: o, mod: env, level: 0.85)
+}

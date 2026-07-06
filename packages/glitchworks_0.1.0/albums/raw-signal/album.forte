@@ -1,0 +1,12 @@
+// Raw Signal — the glitchworks debut. Glitch minimal techno in the
+// Raster-Noton discipline: almost-pure sine kicks, euclid click grids,
+// cycles that drift against the meter, and a stutter always one bar away.
+// Density comes from arithmetic, never from chords.
+// Listen: forte play packages/glitchworks_0.1.0/albums/raw-signal
+block RawSignal {
+  desc "Glitch minimal techno: sine kicks, euclid click grids, polymeter drift and stutter cuts — density from arithmetic, not chords. Test signals with a pulse."
+  tags "album, glitch, minimal-techno, idm, clicks-and-cuts, raster"
+  artist "Forte Essentials"
+  license "CC-BY-NC-SA-4.0"
+  version "0.1.0"
+}

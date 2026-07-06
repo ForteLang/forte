@@ -1,0 +1,32 @@
+// glitchworks/lowend — the minimal techno foundation: a sine thump kick
+// and two subs. Raster-Noton kicks are almost pure fundamental — the
+// crunch comes from crush/drive on top, not from the source.
+// Usage: import { ThumpKick, DeepSub, PressureBass } from "packages/glitchworks_0.1.0/instruments/lowend.forte"
+
+// Almost-pure sine kick: short pitch drop, no click — dry and round.
+device ThumpKick : Instrument {
+  param decay = 0.5 in 0.1..1.0
+  param drop  = 0.4 in 0.0..1.0
+  node env  = adsr(a: 0.0008, d: decay, s: 0.0, r: 0.12)
+  node penv = adsr(a: 0.0005, d: 0.05, s: 0.0, r: 0.02)
+  node body = osc(freq: gain(in: note.freq, level: 0.7), shape: "sine",
+                  mod: gain(in: penv, level: drop))
+  out gain(in: body, mod: env, level: 1.0)
+}
+
+// A sub that sits still: sine an octave down, slow envelope.
+device DeepSub : Instrument {
+  param decay = 0.7 in 0.1..1.0
+  node env = adsr(a: 0.004, d: decay, s: 0.35, r: 0.15)
+  node o   = osc(freq: gain(in: note.freq, level: 0.5), shape: "sine")
+  out gain(in: o, mod: env, level: 0.9)
+}
+
+// Filtered pulse bass with a closed, pressured tone — the minimal groove voice.
+device PressureBass : Instrument {
+  param cutoff = 0.3 in 0.05..1.0
+  node env = adsr(a: 0.002, d: 0.18, s: 0.2, r: 0.06)
+  node o   = osc(freq: note.freq, shape: "square")
+  node f   = svf(in: o, cutoff: cutoff, reso: 0.5)
+  out gain(in: f, mod: env, level: 0.75)
+}
