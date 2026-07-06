@@ -45,6 +45,46 @@ sed -i.bak -e 's|\.\./\.\./packages/|packages/|g' -e 's|`\.\./\.\./${rel}`|`${re
   "$SITE"/*.html "$SITE"/*.js
 rm -f "$SITE"/*.bak
 touch "$SITE/.nojekyll"
+
+# share pages: one static page per album with OGP tags (crawlers read the
+# meta and the cover; humans are redirected straight into the player).
+# These URLs are what you paste into Slack/social — the album unfurls.
+# owner/repo = the remote URL's last two path segments (robust to proxies
+# and scp-style remotes); override with PAGES_ORIGIN if hosting elsewhere
+OWNER_REPO=$(git -C .. remote get-url origin | sed -E 's#\.git$##; s#:#/#g' | awk -F/ '{print $(NF-1)"/"$NF}' | tr 'A-Z' 'a-z')
+ORIGIN="${PAGES_ORIGIN:-https://${OWNER_REPO%%/*}.github.io/${OWNER_REPO##*/}}"
+python3 - "$SITE" "$ORIGIN" <<'PY'
+import json, html, sys, os, urllib.parse
+site, origin = sys.argv[1], sys.argv[2].rstrip('/')
+data = json.load(open(os.path.join(site, 'packages.json')))
+os.makedirs(os.path.join(site, 'share'), exist_ok=True)
+for pkg in data['packages']:
+    for a in pkg.get('albums', []):
+        base = f"packages/{pkg['dir']}/albums/{a['dir']}"
+        q = '&'.join('src=' + urllib.parse.quote(f'{base}/{t}', safe='') for t in a['tracks'])
+        if a.get('cover'):
+            q += '&cover=' + urllib.parse.quote(f"{base}/{a['cover']}", safe='')
+        player = f'../player.html?{q}'
+        title = html.escape(f"{a['title']} — {a.get('artist') or pkg['name']}")
+        desc = html.escape(a.get('desc', ''))
+        cover = f"{origin}/{base}/{a['cover']}" if a.get('cover') else ''
+        page = f"""<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8">
+<title>{title}</title>
+<meta property="og:type" content="music.album">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:url" content="{origin}/share/{a['dir']}.html">
+{f'<meta property="og:image" content="{cover}">' if cover else ''}
+<meta name="twitter:card" content="summary_large_image">
+<meta http-equiv="refresh" content="0; url={player}">
+<script>location.replace({json.dumps(player)});</script>
+</head><body>
+<p><a href="{player}">▶ {title} をブラウザで再生</a>(音源ではなくソースコードが届き、あなたのブラウザが決定論レンダーで演奏します)</p>
+</body></html>"""
+        open(os.path.join(site, 'share', f"{a['dir']}.html"), 'w').write(page)
+        print(f"   share: share/{a['dir']}.html")
+PY
 echo "   site: $SITE"
 
 if [ "${DRY_RUN:-0}" = "1" ]; then
