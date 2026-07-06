@@ -1443,6 +1443,114 @@ fn eval_pattern(
                     return Err(Diag::new("E-PAT-003", *pos, format!("{name}() の入れ子はできません")))
                 }
             };
+            // groove wrappers work on any literal, not just progressions
+            match name.as_str() {
+                // cycle(beat`x--`, span: 1.5) — the pattern's own period in
+                // beats, decoupled from the bar: it tiles at `span` and
+                // phases against the meter (polymeter)
+                "cycle" => {
+                    let mut span: Option<f64> = None;
+                    for (key, arg) in args {
+                        match (key.as_str(), arg) {
+                            ("span", Arg::Num(n, apos)) => {
+                                if *n <= 0.0 || *n > 128.0 {
+                                    return Err(Diag::new(
+                                        "E-PAT-004",
+                                        *apos,
+                                        format!("span {n} は 0 より大きく 128 拍以下にしてください"),
+                                    ));
+                                }
+                                span = Some(*n);
+                            }
+                            (other, arg) => {
+                                return Err(Diag::new(
+                                    "E-PAT-002",
+                                    arg.pos(),
+                                    format!("cycle() に '{other}' という引数はありません(span)"),
+                                ))
+                            }
+                        }
+                    }
+                    let Some(span) = span else {
+                        return Err(Diag::new(
+                            "E-PAT-004",
+                            *pos,
+                            "cycle() には span: 拍数 が必要です(例: cycle(beat`x--`, span: 1.5))".to_string(),
+                        ));
+                    };
+                    let (notes, _) = match lit.kind.as_str() {
+                        // the steps spread over the span instead of the bar
+                        "beat" => music::parse_beat(&lit.raw, span, beat_pitch, lit.pos)?,
+                        // sequential events keep their timing; span sets the period
+                        "notes" => music::parse_notes(&lit.raw, lit.pos)?,
+                        other => {
+                            return Err(Diag::new(
+                                "E-PAT-001",
+                                *pos,
+                                format!("cycle() には beat / notes リテラルを渡します(見つかったのは {other})"),
+                            ))
+                        }
+                    };
+                    return Ok((notes, span, "cycle".into(), lit.kind != "beat"));
+                }
+                // humanize(beat`…`, time: 0.02, vel: 12, seed: 7) — seeded,
+                // deterministic jitter of timing and velocity. Same seed =
+                // same bits on every machine.
+                "humanize" => {
+                    let mut time = 0.02f64;
+                    let mut vel = 10.0f64;
+                    let mut seed = 1u32;
+                    for (key, arg) in args {
+                        match (key.as_str(), arg) {
+                            ("time", Arg::Num(n, apos)) => {
+                                if *n < 0.0 || *n > 0.5 {
+                                    return Err(Diag::new(
+                                        "E-PAT-004",
+                                        *apos,
+                                        format!("time {n} は 0..0.5 拍にしてください"),
+                                    ));
+                                }
+                                time = *n;
+                            }
+                            ("vel", Arg::Num(n, apos)) => {
+                                if *n < 0.0 || *n > 60.0 {
+                                    return Err(Diag::new(
+                                        "E-PAT-004",
+                                        *apos,
+                                        format!("vel {n} は 0..60 にしてください"),
+                                    ));
+                                }
+                                vel = *n;
+                            }
+                            ("seed", Arg::Num(n, _)) => seed = *n as u32,
+                            (other, arg) => {
+                                return Err(Diag::new(
+                                    "E-PAT-002",
+                                    arg.pos(),
+                                    format!("humanize() に '{other}' という引数はありません(time, vel, seed)"),
+                                ))
+                            }
+                        }
+                    }
+                    let (mut notes, len) = eval_lit(lit, beats_per_bar, beat_pitch)?;
+                    // xorshift32 — the same fixed-seed generator the engine
+                    // uses; two draws per note (timing, velocity)
+                    let mut s = seed.wrapping_mul(0x9e37_79b9).max(1);
+                    let mut next = move || {
+                        s ^= s << 13;
+                        s ^= s >> 17;
+                        s ^= s << 5;
+                        (s as f64 / u32::MAX as f64) * 2.0 - 1.0
+                    };
+                    for n in &mut notes {
+                        n.start = (n.start + next() * time).max(0.0).min(len - 0.01);
+                        let v = n.velocity as f64 + next() * vel;
+                        n.velocity = v.round().clamp(1.0, 127.0) as u8;
+                    }
+                    return Ok((notes, len, "humanize".into(), lit.kind != "beat"));
+                }
+                _ => {}
+            }
             if lit.kind != "prog" {
                 return Err(Diag::new(
                     "E-PAT-001",
@@ -1484,7 +1592,7 @@ fn eval_pattern(
                     return Err(Diag::new(
                         "E-PAT-002",
                         *pos,
-                        format!("パターン関数 '{other}' はありません(chords / arp / bass)"),
+                        format!("パターン関数 '{other}' はありません(chords / arp / bass / cycle / humanize)"),
                     ))
                 }
             };

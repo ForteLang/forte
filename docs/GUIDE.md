@@ -378,6 +378,8 @@ song "Name" {
 
   // ---- Patterns are values. Name them with let and reuse them ----
   let kick  = beat`x--- x-x-`             // x=hit X=accent -=rest. One bar, evenly divided
+  let fill  = beat`x - - x*3`             // x*3 = ratchet: 3 rapid retrigs in one step
+  let clave = beat`euclid(3, 8)`          // Bjorklund: 3 hits spread over 8 steps (x--x--x-)
   let melo  = notes`D4:1/2 F4:1/2 [A3 D4]:1 _:1`  // pitch:beats. []=chord _=rest
   let theme = prog`Dm | Bb F | C`         // chord progression. | separates bars
 
@@ -401,6 +403,8 @@ song "Name" {
     send Space 0.35                        // post-fader send
     play chords(theme) at verse            // block chords
     play arp(theme, rate: 0.25, style: "updown") at hook  // arpeggio
+    play cycle(beat`x--`, span: 1.5) at verse    // polymeter: a 1.5-beat cycle phasing against 4/4
+    play humanize(kick, time: 0.02, vel: 10, seed: 7) at hook  // seeded micro-timing — deterministic
 
     // ---- Move the sound over time ----
     automate volume from 0.2 to 0.8 over verse   // fade in (over bars(1..8) works too)
