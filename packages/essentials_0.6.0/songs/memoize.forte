@@ -20,6 +20,7 @@ song "Memoize" {
   desc "Compute the melody once, return it forever: a music box states the theme and every later call is a cache hit by a different instrument — the whole band serving one phrase from memory, in canon. 112bpm."
   artist "Forte Essentials"
   tempo 112bpm
+  master 3.13  // mastered: -25.0 LUFS raw, aiming near -15
   swing 0.54
   meter 4/4
   key G major

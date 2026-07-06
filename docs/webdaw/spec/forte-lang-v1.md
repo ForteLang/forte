@@ -52,7 +52,7 @@ bodyItem  = "desc" string | "tags" string | "license" string
           | "version" string | "requires" string | "artist" string
           | "sponsor" string
           | "param" ident "=" num [ "in" num ".." num ]              (* the block's public knobs *)
-          | "tempo" num | "swing" num | "meter" num "/" num | "key" ident ident
+          | "tempo" num | "swing" num | "master" num | "meter" num "/" num | "key" ident ident
           | "let" ident "=" ( musicLit | call )                     (* call = a shared modulator *)
           | "section" ident "=" "bars" "(" num ".." num ")"
           | track | return | block | place | placeAuto ;
@@ -91,6 +91,7 @@ num       = [ "-" ] NUMBER [ UNIT ] ;
 | `swing 0.62` | Delays even-position 16th notes (MPC notation: 0.5 = straight, 0.66 ≈ shuffle, range 0.5..0.8). Applies only to notes on the grid |
 | `meter 4/4` | Time signature | Denominator 2/4/8/16 (E-TIME-004). Engine beats = numerator × 4 / denominator |
 | `key D minor` | Key | Root C..B (+#/b), scales major/minor/dorian/phrygian/lydian/mixolydian/locrian/harmonicminor/chromatic |
+| `master 1.6` | Mastering gain: scales the summed mix before the master soft limiter (`tanh`). Brings a finished song to loudness without touching its internal balance | 0.1..4.0 (E-SONG-005), default 1.0 = bit-identical to omitting it |
 
 ### 4.2 Placement
 

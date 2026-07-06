@@ -21,6 +21,7 @@ song "Lazy Evaluation" {
   desc "Downtempo for deferred work: a brushed trio in one nested block that only plays what is strictly needed, an upright bass resolving late, and a whistled thunk the vibraphone evaluates four bars later. 96bpm."
   artist "Forte Essentials"
   tempo 96bpm
+  master 2.19  // mastered: -21.8 LUFS raw, aiming near -15
   swing 0.6
   meter 4/4
   key A major

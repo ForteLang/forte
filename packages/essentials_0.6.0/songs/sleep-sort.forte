@@ -20,6 +20,7 @@ song "Sleep Sort" {
   desc "The album falls asleep, correctly: every note waits proportional to its pitch, so the melody arrives sorted — low registers first, glass last, over a heartbeat sub and duvet pads. 84bpm."
   artist "Forte Essentials"
   tempo 84bpm
+  master 3.0  // mastered: -24.7 LUFS raw, aiming near -15
   meter 4/4
   key E major
 

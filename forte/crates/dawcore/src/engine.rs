@@ -414,6 +414,8 @@ pub struct Engine {
     loop_start: f64,
     loop_end: f64,
     launch_quant: f64,
+    /// Mastering gain on the summed mix, pre-limiter (1.0 = neutral).
+    master: f32,
 
     // metronome click synth
     metronome: bool,
@@ -460,6 +462,7 @@ impl Engine {
             loop_start: 0.0,
             loop_end: 32.0,
             launch_quant: 4.0,
+            master: 1.0,
             metronome: false,
             beats_per_bar: 4.0,
             click_env: 0.0,
@@ -528,6 +531,7 @@ impl Engine {
                     .store(self.position_beats.to_bits(), Ordering::Relaxed);
             }
             Command::SetTempo(bpm) => self.tempo = bpm.clamp(20.0, 300.0),
+            Command::SetMaster(m) => self.master = m.clamp(0.0, 4.0),
             Command::SetLoop { enabled, start, end } => {
                 self.loop_enabled = enabled;
                 self.loop_start = start.max(0.0);
@@ -878,6 +882,16 @@ impl Engine {
                 tpeak = tpeak.max(l.abs()).max(r.abs());
             }
             self.shared.track_peak[slot].store(tpeak.to_bits(), Ordering::Relaxed);
+        }
+
+        // mastering gain: scale the summed music (not the click) ahead of the
+        // limiter. Skipped entirely at 1.0 so untouched songs stay
+        // bit-identical.
+        if self.master != 1.0 {
+            for i in 0..frames {
+                out_l[i] *= self.master;
+                out_r[i] *= self.master;
+            }
         }
 
         // master: metronome click, soft limiter, peak meter

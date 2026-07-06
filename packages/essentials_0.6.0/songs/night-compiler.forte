@@ -22,6 +22,7 @@ song "Night Compiler" {
   desc "Deep dub techno for the long build: one minor-9 stab swimming in feedback delay on a single evolving lane, a sub that moves three notes an hour, hats like keystrokes at 2am. 128bpm."
   artist "Forte Essentials"
   tempo 128bpm
+  master 1.76  // mastered: -18.9 LUFS raw, aiming near -14
   meter 4/4
   key F minor
 

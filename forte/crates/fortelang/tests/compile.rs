@@ -482,3 +482,32 @@ fn stems_are_isolated_deterministic_and_keep_sends() {
         assert!(a.rms > 0.0005, "stem {} must be audible (rms {})", t.name, a.rms);
     }
 }
+
+#[test]
+fn master_gain_scales_the_mix_and_validates_range() {
+    let song = |header: &str| {
+        format!(
+            "song \"M\" {{ tempo 120bpm {header}\n  track T {{ instrument prisma(wave: \"sine\", cutoff: 0.4)\n    play notes`A1:1 _:1 A1:1 _:1` at bars(1..1) }} }}"
+        )
+    };
+    let quiet = fortelang::compile_str(&song("")).unwrap();
+    let loud = fortelang::compile_str(&song("master 2.0")).unwrap();
+    assert_eq!(quiet.master, 1.0);
+    assert_eq!(loud.master, 2.0);
+    let a = fortelang::render_digest(&quiet, 2.0);
+    let b = fortelang::render_digest(&loud, 2.0);
+    // +6 dB pre-limiter: doubled RMS on a signal far below saturation
+    assert!(
+        (b.rms / a.rms - 2.0).abs() < 0.05,
+        "master 2.0 must double the level (rms {} → {})",
+        a.rms,
+        b.rms
+    );
+    assert!(b.peak <= 1.0, "the master limiter still bounds output (peak {})", b.peak);
+    // default is the identity — omitting master must not change a single bit
+    let again = fortelang::render_digest(&quiet, 2.0);
+    assert_eq!(a.f32_digest, again.f32_digest);
+    // out-of-range values are rejected, not clamped silently
+    assert!(err_codes(&song("master 9.0")).contains(&"E-SONG-005"));
+    assert!(err_codes(&song("master 0.0")).contains(&"E-SONG-005"));
+}

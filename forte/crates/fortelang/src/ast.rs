@@ -154,6 +154,8 @@ pub struct SongAst {
     /// args and set from a placement: `play Riff(cutoff: 0.7)`.
     pub params: Vec<DevParam>,
     pub tempo: Option<(f64, Pos)>,
+    /// `master 1.4` — mastering gain on the summed mix, pre-limiter.
+    pub master: Option<(f64, Pos)>,
     pub swing: Option<(f64, Pos)>,
     pub meter: Option<((u32, u32), Pos)>,
     pub key: Option<((String, String), Pos)>, // (root, scale) as written
