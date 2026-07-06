@@ -74,10 +74,14 @@ class ForteProcessor extends AudioWorkletProcessor {
       new Float32Array(this.e.memory.buffer, this.e.fw_out_r(this.ctx), frames)
     );
     if (++this.blocks % 16 === 0) {
+      const n = this.e.fw_debug_tracks(this.ctx);
+      const peaks = new Array(n);
+      for (let i = 0; i < n; i++) peaks[i] = this.e.fw_track_peak(this.ctx, i);
       this.port.postMessage({
         kind: 'pos',
         beats: this.e.fw_position(this.ctx),
         peak: this.e.fw_master_peak(this.ctx),
+        peaks,
       });
     }
     return true;

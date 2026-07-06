@@ -152,7 +152,10 @@ fn resolve_imports(
             }
             if let Some(b) = module.blocks.iter().find(|b| b.name == *name) {
                 if !imported_blocks.iter().any(|x: &ast::BlockAst| x.name == *name) {
-                    imported_blocks.push(b.clone());
+                    let mut b = b.clone();
+                    // code-jumps for imported content land on the import line
+                    b.import_line = Some(im.pos.line);
+                    imported_blocks.push(b);
                 }
                 // an imported block needs the devices of its home module —
                 // carry them along (first definition of a name wins)

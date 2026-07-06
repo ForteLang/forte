@@ -29,6 +29,10 @@ pub struct BlockAst {
     pub parent: Option<(String, Pos)>,
     pub body: SongAst,
     pub pos: Pos,
+    /// For blocks that arrived via `import`: the 1-based line of the import
+    /// statement in the IMPORTING file. Visualization code-jumps land here
+    /// (the block's own positions belong to another file).
+    pub import_line: Option<u32>,
 }
 
 /// `play BlockName(key: "E minor", from: 2, to: 5) at bars(9..16)` — place a

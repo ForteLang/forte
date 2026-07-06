@@ -333,7 +333,10 @@ function onWorklet(e) {
   if (t.lenBeats > 0 && m.beats < lastBeats - 1) { next(); return; }
   lastBeats = m.beats;
   const secs = (m.beats * 60) / t.tempo;
-  if (viz) viz.setPlayhead(m.beats);
+  if (viz) {
+    if (m.peaks) viz.setPeaks(m.peaks);
+    viz.setPlayhead(m.beats);
+  }
   const total = t.seconds || 1;
   $('bar').style.width = `${Math.min(100, (secs / total) * 100)}%`;
   $('time').textContent = `${mmss(Math.min(secs, total))} / ${mmss(total)}`;

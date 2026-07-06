@@ -323,7 +323,10 @@ function ensureRepl(): vscode.Terminal {
   return replTerminal;
 }
 
+let vizFile: string | undefined;
+
 function refreshViz(file: string) {
+  vizFile = file;
   execFile(fortePath(), ['viz', file], { maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
     if (!vizPanel) return;
     if (err) {
@@ -343,6 +346,22 @@ function openViz(context: vscode.ExtensionContext, file: string) {
       { enableScripts: true, retainContextWhenHidden: true }
     );
     vizPanel.onDidDispose(() => (vizPanel = undefined), null, context.subscriptions);
+    // code-jump: a click on a clip/lane reveals its source line
+    vizPanel.webview.onDidReceiveMessage(
+      async (m) => {
+        if (m?.kind !== 'jump' || typeof m.line !== 'number' || m.line < 1 || !vizFile) return;
+        const doc = await vscode.workspace.openTextDocument(vizFile);
+        const ed = await vscode.window.showTextDocument(doc, {
+          viewColumn: vscode.ViewColumn.One,
+          preserveFocus: false,
+        });
+        const pos = new vscode.Position(m.line - 1, 0);
+        ed.selection = new vscode.Selection(pos, pos);
+        ed.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+      },
+      null,
+      context.subscriptions
+    );
     vizPanel.webview.html = VIZ_HTML;
   }
   refreshViz(file);
@@ -365,15 +384,36 @@ const VIZ_HTML = /* html */ `<!DOCTYPE html>
 <path d="M 24 66 L 58 66 L 63 56 L 70 78 L 76 50 L 83 80 L 89 60 L 93 66 L 104 66" fill="none" stroke="#e8b34c" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>FORTE</div>
 <script>
+const vscodeApi = acquireVsCodeApi();
 const canvas = document.getElementById('c');
 const g = canvas.getContext('2d');
 let data = null;
+let mode = 'arrange';   // 'arrange' | 'piano'
+let rollTrack = 0;
 window.addEventListener('message', (e) => {
   const m = e.data;
   if (m.kind === 'viz') { data = m.data; document.getElementById('err').textContent = ''; draw(); }
   else if (m.kind === 'error') { document.getElementById('err').textContent = m.message; }
 });
 new ResizeObserver(draw).observe(canvas);
+// lane header click → that track's piano roll; clip/lane click → code jump
+canvas.addEventListener('click', (ev) => {
+  if (!data || !data.tracks?.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+  if (mode === 'piano') { mode = 'arrange'; draw(); return; }
+  const rulerH = 16, headerW = 92;
+  const laneH = (canvas.clientHeight - rulerH) / data.tracks.length;
+  const i = Math.floor((y - rulerH) / laneH);
+  const t = data.tracks[i];
+  if (!t) return;
+  if (x < headerW) { mode = 'piano'; rollTrack = i; draw(); return; }
+  const span = Math.max(data.lengthBeats, data.beatsPerBar);
+  const beats = ((x - headerW) / (canvas.clientWidth - headerW)) * span;
+  const clip = t.clips.find((c) => beats >= c.start && beats <= c.start + c.duration);
+  const line = (clip && clip.line) || t.line || 0;
+  if (line > 0) vscodeApi.postMessage({ kind: 'jump', line });
+});
 function draw() {
   const dpr = devicePixelRatio || 1;
   const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -381,6 +421,7 @@ function draw() {
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
   if (!data || !data.tracks?.length) return;
+  if (mode === 'piano') return drawPianoRoll(w, h);
   const headerW = 92, rulerH = 16;
   const laneH = (h - rulerH) / data.tracks.length;
   const span = Math.max(data.lengthBeats, data.beatsPerBar);
@@ -420,6 +461,55 @@ function draw() {
       }
     }
   });
+}
+// Piano roll of one track: pitch rows over time, loops unrolled, velocity
+// as opacity — the same projection web/viz.js draws.
+function drawPianoRoll(w, h) {
+  const t = data.tracks[rollTrack];
+  if (!t) return;
+  const headerW = 34, rulerH = 16;
+  const span = Math.max(data.lengthBeats, data.beatsPerBar);
+  const bx = (beats) => headerW + ((w - headerW) * beats) / span;
+  const notes = [];
+  let lo = 127, hi = 0;
+  for (const c of t.clips) {
+    for (let off = 0; off < c.duration; off += c.length) {
+      for (const [p, s, len, vel] of c.notes) {
+        if (off + s >= c.duration) continue;
+        notes.push([p, c.start + off + s, Math.min(len, c.duration - off - s), vel ?? 0.8]);
+        if (p < lo) lo = p;
+        if (p > hi) hi = p;
+      }
+    }
+  }
+  g.fillStyle = '#8a919e'; g.font = '10px sans-serif'; g.textBaseline = 'top';
+  g.fillText('♪ ' + t.name + ' — piano roll (click to go back)', headerW + 6, 2);
+  if (!notes.length) return;
+  lo = Math.max(0, lo - 2); hi = Math.min(127, hi + 2);
+  const rows = hi - lo + 1;
+  const rowH = (h - rulerH) / rows;
+  const py = (p) => rulerH + (hi - p) * rowH;
+  for (let p = lo; p <= hi; p++) {
+    const black = [1, 3, 6, 8, 10].includes(p % 12);
+    g.fillStyle = black ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.02)';
+    g.fillRect(headerW, py(p), w - headerW, rowH);
+    if (p % 12 === 0 && rowH >= 5) {
+      g.fillStyle = '#565d69'; g.font = '8px monospace'; g.textBaseline = 'middle';
+      g.fillText('C' + (Math.floor(p / 12) - 1), 4, py(p) + rowH / 2);
+    }
+  }
+  for (let bnum = 0; bnum * data.beatsPerBar <= span; bnum++) {
+    const x = bx(bnum * data.beatsPerBar);
+    g.strokeStyle = bnum % 4 === 0 ? '#2f3440' : '#232730';
+    g.beginPath(); g.moveTo(x, rulerH); g.lineTo(x, h); g.stroke();
+  }
+  const [r, gg, b] = t.color;
+  for (const [p, s, len, vel] of notes) {
+    const x0 = bx(s);
+    const nw = Math.max(2, bx(s + len) - x0);
+    g.fillStyle = 'rgba(' + r + ',' + gg + ',' + b + ',' + (0.35 + 0.65 * vel) + ')';
+    g.fillRect(x0, py(p) + 0.5, nw, Math.max(1.5, rowH - 1));
+  }
 }
 </script></body></html>`;
 

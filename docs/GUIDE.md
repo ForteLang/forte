@@ -575,7 +575,7 @@ forte web build                      # rebuild the wasm after changing the engin
 | Build digest | Computes the build proof in the browser. Matches the CLI's value exactly |
 | 📦 Packages | Opens the package catalog (`catalog.html`): every vendored package with its desc/tags/license and browsable instruments/blocks/songs sources |
 | History panel | **The repository lives in the browser too**: Commit snapshots all local files, `diff` shows the difference between a commit and your current work in musical terms ("tempo: 96 → 132 bpm"), and Restore returns to that commit's state. Stored in OPFS in the same object format as the CLI (SHA-256) |
-| Arrangement view at the bottom | Read-only visualization (code is the single source of truth for editing) |
+| Arrangement view at the bottom | Read-only visualization (code is the single source of truth for editing). **Click a clip → the editor jumps to its source line** (imported blocks jump to their `import` line). **Click a lane's name → that track's piano roll** (pitch rows over time, velocity as opacity; click again to go back). During playback each lane shows a **live level meter** |
 
 Once opened, it works **fully offline** (PWA). Chromium-based browsers recommended.
 
@@ -699,7 +699,8 @@ Set `forte.path` to the absolute path of `forte` (`~/.cargo/bin/forte`) and you 
   **Shift+Enter** — the selection (or current line) is sent to the REPL and
   plays immediately
 - **Forte: Show Arrangement** — a read-only arrangement view opens alongside
-  and **refreshes on every save**
+  and **refreshes on every save**. Click a clip to jump to its source line;
+  click a lane's name for that track's piano roll
 
 The ♪ icon in the activity bar is the **Forte Studio** sidebar:
 

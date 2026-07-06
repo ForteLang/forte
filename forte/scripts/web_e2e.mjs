@@ -99,6 +99,42 @@ try {
   const vizTracks = await page.evaluate(() => window.__vizTracks ?? 0);
   check('arrangement view rendered', vizTracks >= 6, `${vizTracks} tracks`);
 
+  // 4.5) visualization second wave: meters, code-jump, piano roll
+  const vizBox = await page.evaluate(() => {
+    const r = document.getElementById('viz').getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height, lanes: window.__vizTracks };
+  });
+  const meters = await page.evaluate(async () => {
+    // pos messages feed viz.setPeaks — poll the viz for the live levels
+    for (let i = 0; i < 30; i++) {
+      const p = window.__forteViz?.peaks;
+      if (p?.length) return { n: p.length, max: Math.max(...p) };
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return null;
+  });
+  check(
+    'per-track meters stream from the worklet',
+    meters && meters.n >= 6 && meters.max > 0.01,
+    meters ? `${meters.n} tracks, peak ${meters.max.toFixed(3)}` : 'no peaks'
+  );
+  // click a clip → the editor cursor jumps to that source line
+  const laneH0 = (vizBox.h - 16) / vizBox.lanes;
+  await page.mouse.click(vizBox.x + vizBox.w * 0.3, vizBox.y + 16 + laneH0 * 0.5);
+  const cursorLine = await page.evaluate(() => {
+    if (window.monaco) return monaco.editor.getEditors?.()[0]?.getPosition()?.lineNumber
+      ?? window.__forteCursorLine ?? 0;
+    const ta = document.getElementById('fallback');
+    return ta ? ta.value.slice(0, ta.selectionStart).split('\n').length : 0;
+  });
+  check('clip click jumps the editor to the source line', cursorLine > 1, `line ${cursorLine}`);
+  // click the lane header → piano roll; click again → back to arrange
+  await page.mouse.click(vizBox.x + 40, vizBox.y + 16 + laneH0 * 0.5);
+  const rollOn = await page.evaluate(() => window.__forteViz?.mode ?? 'unknown');
+  await page.mouse.click(vizBox.x + 40, vizBox.y + 16 + laneH0 * 0.5);
+  const rollOff = await page.evaluate(() => window.__forteViz?.mode ?? 'unknown');
+  check('lane header toggles the piano roll', rollOn === 'piano' && rollOff === 'arrange', `${rollOn} → ${rollOff}`);
+
   // 5) local-first: edits autosave to OPFS and survive a reload
   await page.evaluate(async () => {
     const marker = '\n// persisted-marker\n';

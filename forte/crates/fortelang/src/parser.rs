@@ -162,7 +162,7 @@ impl Parser {
             None
         };
         let body = self.body(name.clone())?;
-        Some(BlockAst { name, parent, body, pos })
+        Some(BlockAst { name, parent, body, pos, import_line: None })
     }
 
     /// The shared body of `song`/`block`: header, lets, sections, tracks,
