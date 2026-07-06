@@ -169,6 +169,10 @@ fn main() -> ExitCode {
         Some("package") => {
             let result = match args.get(1).map(String::as_str) {
                 Some("add") if args.len() >= 3 => fortelang::package::add(&args[2]),
+                Some("update") if args.len() >= 3 => fortelang::package::update(
+                    &args[2],
+                    args.iter().any(|a| a == "--force"),
+                ),
                 Some("list") | None => fortelang::package::list(),
                 Some("verify") => fortelang::package::verify(),
                 Some("search") => fortelang::package::search(&args[3..].iter().fold(
@@ -391,6 +395,7 @@ fn main() -> ExitCode {
             eprintln!("       forte init [NAME]           (NAME 付きで package プロジェクトを作成 / なしで cwd をリポジトリに)");
             eprintln!("       forte package add <github:owner/repo[@ref] | URL | PATH>  (packages/ にフラット導入)");
             eprintln!("       forte package list          (導入済み package の一覧と説明)");
+            eprintln!("       forte package update <name> [--force]  (再取得+3方マージ — 更新は聴けるレビュー)");
             eprintln!("       forte package verify        (packages/ が lock どおりかを digest で検証)");
             eprintln!("       forte package search [QUERY] (GitHub の topic:forte-package を検索)");
             eprintln!("       forte package sounddiff <OLD> <NEW> (どの音が変わったか + version bump 提案)");

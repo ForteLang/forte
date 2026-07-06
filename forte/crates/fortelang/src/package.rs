@@ -182,6 +182,292 @@ pub fn add(src: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// `forte package update <name> [--force]` — re-fetch a vendored package and
+/// bring it up to date, pip's ergonomics on fork semantics:
+///
+/// - pristine copy (tree digest matches the lock) → straight replacement;
+/// - locally modified → THREE-WAY MERGE against the lock's recorded commit
+///   (base = as fetched, ours = your edits, theirs = upstream now). Conflicts
+///   or a merge that fails to compile abort with the file list — no
+///   half-updated state. `--force` overwrites instead (your copy is backed
+///   up next to it).
+///
+/// Either way the change is reported as a SEMANTIC diff — what the update
+/// does to the music, not just to the text.
+pub fn update(name: &str, force: bool) -> Result<(), String> {
+    let mut lock: Vec<LockEntry> = serde_json::from_str(
+        &std::fs::read_to_string("package.lock")
+            .map_err(|_| "package.lock がありません(forte package add が作ります)".to_string())?,
+    )
+    .map_err(|e| format!("package.lock を読めません: {e}"))?;
+    let idx = lock
+        .iter()
+        .position(|e| e.name == name.to_ascii_lowercase())
+        .ok_or_else(|| {
+            let names: Vec<&str> = lock.iter().map(|e| e.name.as_str()).collect();
+            format!(
+                "package '{name}' は lock にありません(あるもの: {})",
+                if names.is_empty() { "なし".to_string() } else { names.join(", ") }
+            )
+        })?;
+    let entry = &lock[idx];
+    let old_dir = Path::new("packages").join(format!("{}_{}", entry.name, entry.version));
+    if !old_dir.is_dir() {
+        return Err(format!("{} がありません(forte package add {} で再取得)", old_dir.display(), entry.source));
+    }
+
+    // fetch upstream now (full clone: the merge base commit must be reachable)
+    let (url, git_ref) = resolve_src(&entry.source);
+    let tmp = std::env::temp_dir().join(format!("forte-upd-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    let checkout: PathBuf = if Path::new(&url).exists() {
+        PathBuf::from(&url)
+    } else {
+        let mut cmd = std::process::Command::new("git");
+        cmd.args(["clone"]);
+        if let Some(r) = &git_ref {
+            cmd.args(["--branch", r]);
+        }
+        cmd.arg(&url).arg(&tmp);
+        let out = cmd.output().map_err(|e| format!("git が実行できません: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "{} を取得できません:\n{}",
+                entry.source,
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        tmp.clone()
+    };
+    let (new_name, new_version, _) = read_meta(&checkout)?;
+    if new_name != entry.name {
+        return Err(format!("取得先の package 名が違います: lock は '{}'、取得したのは '{new_name}'", entry.name));
+    }
+
+    let ours = snapshot_tree(&old_dir)?;
+    let pristine = tree_digest(&old_dir)? == entry.digest || entry.digest.is_empty();
+    let theirs = snapshot_tree_filtered(&checkout)?;
+
+    let merged: crate::vcs::Snapshot = if pristine {
+        println!("update : ローカル変更なし — {}@{new_version} に置き換えます", entry.name);
+        theirs.clone()
+    } else if force {
+        // back up your copy, then take upstream wholesale
+        let bak = old_dir.with_extension("bak");
+        let _ = std::fs::remove_dir_all(&bak);
+        std::fs::rename(&old_dir, &bak).map_err(|e| e.to_string())?;
+        println!("update : --force — あなたの変更は {} に退避しました", bak.display());
+        theirs.clone()
+    } else {
+        // three-way: base = the commit recorded at add time
+        if entry.commit.is_empty() || Path::new(&url).exists() {
+            return Err(
+                "ローカル変更がありますが、マージの基準(取得時の commit)を辿れません。\n\
+                 変更を自分のプロジェクト側へ移すか、--force(退避つき上書き)を使ってください"
+                    .to_string(),
+            );
+        }
+        let out = std::process::Command::new("git")
+            .args(["checkout", "--detach", &entry.commit])
+            .current_dir(&checkout)
+            .output()
+            .map_err(|e| format!("git が実行できません: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "基準 commit {} を checkout できません:\n{}",
+                &entry.commit[..12.min(entry.commit.len())],
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        let base = snapshot_tree_filtered(&checkout)?;
+        let out = std::process::Command::new("git")
+            .args(["checkout", "--detach", git_ref.as_deref().unwrap_or("HEAD@{1}")])
+            .current_dir(&checkout)
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err("upstream へ戻れませんでした".to_string());
+        }
+        println!(
+            "update : ローカル変更あり — 3方マージします(base {}, あなたの変更は保持)",
+            &entry.commit[..12.min(entry.commit.len())]
+        );
+        merge_snapshots(&base, &ours, &theirs)?
+    };
+
+    // the merged tree must COMPILE before it may replace anything
+    let stage = std::env::temp_dir().join(format!("forte-upd-stage-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&stage);
+    for (rel, bytes) in &merged {
+        let dst = stage.join(rel);
+        if let Some(parent) = dst.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&dst, bytes).map_err(|e| e.to_string())?;
+    }
+    let mut compile_fails = Vec::new();
+    for (rel, bytes) in &merged {
+        if !rel.ends_with(".forte") {
+            continue;
+        }
+        let src = String::from_utf8_lossy(bytes);
+        let base_dir = stage
+            .join(rel)
+            .parent()
+            .map(|d| d.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if crate::check_with_loader(&src, &crate::FsLoader, &base_dir).is_err() {
+            compile_fails.push(rel.clone());
+        }
+    }
+    if !compile_fails.is_empty() {
+        let _ = std::fs::remove_dir_all(&stage);
+        return Err(format!(
+            "マージ結果がコンパイルできません({})。適用は中止しました — 上流の変更とあなたの変更が衝突しています",
+            compile_fails.join(", ")
+        ));
+    }
+
+    // the audible review: what this update does to the music
+    let report = crate::semdiff::diff_snapshots(&ours, &merged);
+    println!("---- 更新の意味差分(聴けるレビュー) ----");
+    println!("{}", if report.is_empty() { "変更なし".to_string() } else { report });
+    println!("------------------------------------------");
+
+    // swap into place (the version may have moved the directory name)
+    let new_dir = Path::new("packages").join(format!("{}_{new_version}", entry.name));
+    if old_dir != new_dir && old_dir.exists() && !force {
+        std::fs::remove_dir_all(&old_dir).map_err(|e| e.to_string())?;
+    } else if old_dir == new_dir && !force {
+        std::fs::remove_dir_all(&old_dir).map_err(|e| e.to_string())?;
+    }
+    let _ = std::fs::remove_dir_all(&new_dir);
+    std::fs::rename(&stage, &new_dir).map_err(|e| e.to_string())?;
+
+    let commit = if Path::new(&url).exists() { String::new() } else { git_head(&checkout) };
+    let digest = tree_digest(&new_dir)?;
+    println!(
+        "updated: packages/{}_{}{} → {}_{new_version}  {digest}",
+        entry.name, entry.version,
+        if pristine { "" } else { "(あなたの変更を保持)" },
+        entry.name
+    );
+    lock[idx].version = new_version;
+    lock[idx].commit = commit;
+    lock[idx].digest = digest;
+    lock.sort_by(|a, b| a.name.cmp(&b.name));
+    std::fs::write("package.lock", serde_json::to_string_pretty(&lock).unwrap())
+        .map_err(|e| e.to_string())?;
+    println!("lock   : package.lock を更新しました");
+    let _ = std::fs::remove_dir_all(&tmp);
+    Ok(())
+}
+
+/// Read a directory into a Snapshot (relative path → bytes).
+fn snapshot_tree(dir: &Path) -> Result<crate::vcs::Snapshot, String> {
+    let mut snap = crate::vcs::Snapshot::new();
+    fn walk(root: &Path, dir: &Path, snap: &mut crate::vcs::Snapshot) -> Result<(), String> {
+        let mut entries: Vec<_> =
+            std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten().map(|e| e.path()).collect();
+        entries.sort();
+        for p in entries {
+            if p.is_dir() {
+                walk(root, &p, snap)?;
+            } else {
+                let rel = p.strip_prefix(root).unwrap_or(&p).to_string_lossy().replace('\\', "/");
+                snap.insert(rel, std::fs::read(&p).map_err(|e| e.to_string())?);
+            }
+        }
+        Ok(())
+    }
+    walk(dir, dir, &mut snap)?;
+    Ok(snap)
+}
+
+/// Snapshot of a fetched checkout with the same exclusions `copy_tree`
+/// applies when vendoring (no .git / .forte / nested packages / build junk).
+fn snapshot_tree_filtered(dir: &Path) -> Result<crate::vcs::Snapshot, String> {
+    let full = snapshot_tree(dir)?;
+    Ok(full
+        .into_iter()
+        .filter(|(rel, _)| {
+            let top = rel.split('/').next().unwrap_or("");
+            !matches!(top, ".git" | ".forte" | "packages" | "target" | "node_modules")
+                && !rel.ends_with(".wav")
+                && !rel.ends_with(".lock")
+        })
+        .collect())
+}
+
+/// Per-file three-way merge over snapshots. Any conflict aborts the update.
+fn merge_snapshots(
+    base: &crate::vcs::Snapshot,
+    ours: &crate::vcs::Snapshot,
+    theirs: &crate::vcs::Snapshot,
+) -> Result<crate::vcs::Snapshot, String> {
+    let mut out = crate::vcs::Snapshot::new();
+    let mut conflicts = Vec::new();
+    let paths: std::collections::BTreeSet<&String> =
+        base.keys().chain(ours.keys()).chain(theirs.keys()).collect();
+    for path in paths {
+        let b = base.get(path);
+        let o = ours.get(path);
+        let t = theirs.get(path);
+        let winner: Option<Vec<u8>> = match (b, o, t) {
+            // unchanged on our side → upstream wins (incl. deletion)
+            (Some(b), Some(o), t) if b == o => t.cloned(),
+            // unchanged upstream → our side wins (incl. deletion)
+            (Some(b), o, Some(t)) if b == t => o.cloned(),
+            // both added identically / both edited identically
+            (_, Some(o), Some(t)) if o == t => Some(o.clone()),
+            // added on one side only
+            (None, Some(o), None) => Some(o.clone()),
+            (None, None, Some(t)) => Some(t.clone()),
+            // both deleted
+            (Some(_), None, None) => None,
+            // divergent edits (or both-added divergently): text files go
+            // through merge3 — a missing base is an empty file
+            (b, Some(o), Some(t)) => {
+                let empty = Vec::new();
+                let b = b.unwrap_or(&empty);
+                match (std::str::from_utf8(b), std::str::from_utf8(o), std::str::from_utf8(t)) {
+                    (Ok(bs), Ok(os), Ok(ts)) => {
+                        let (merged, conflicted) =
+                            crate::vcs::merge3(bs, os, ts, "あなたの変更", "上流");
+                        if conflicted {
+                            conflicts.push(path.clone());
+                            None
+                        } else {
+                            Some(merged.into_bytes())
+                        }
+                    }
+                    _ => {
+                        conflicts.push(path.clone());
+                        None
+                    }
+                }
+            }
+            // edit vs delete — a human has to decide
+            (Some(_), Some(_), None) | (Some(_), None, Some(_)) => {
+                conflicts.push(path.clone());
+                None
+            }
+            (None, None, None) => None,
+        };
+        if let Some(bytes) = winner {
+            out.insert(path.clone(), bytes);
+        }
+    }
+    if conflicts.is_empty() {
+        Ok(out)
+    } else {
+        Err(format!(
+            "マージ衝突: {}。適用は中止しました — 該当ファイルの変更を自分のプロジェクト側へ移すか、--force(退避つき上書き)を使ってください",
+            conflicts.join(", ")
+        ))
+    }
+}
+
 /// `forte package list` — what this project has, with each package's own words.
 pub fn list() -> Result<(), String> {
     let dir = Path::new("packages");

@@ -716,7 +716,7 @@ fn side_range(base: &[&str], edits: &[Edit], s: usize, e: usize) -> Vec<String> 
 
 /// Three-way merge; returns (text, had_conflicts). Conflicting regions carry
 /// git-style markers labelled with the branch names.
-fn merge3(base: &str, ours: &str, theirs: &str, ours_name: &str, theirs_name: &str) -> (String, bool) {
+pub(crate) fn merge3(base: &str, ours: &str, theirs: &str, ours_name: &str, theirs_name: &str) -> (String, bool) {
     let b: Vec<&str> = base.lines().collect();
     let eo = lcs_edits(&b, &ours.lines().collect::<Vec<_>>());
     let et = lcs_edits(&b, &theirs.lines().collect::<Vec<_>>());

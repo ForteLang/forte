@@ -283,6 +283,15 @@ forte package list                             # name, version, license, desc
   package's own `requires` are fetched and hoisted next to it, so
   `packages/` never nests. `package.lock` pins what was fetched (source +
   commit) for reproducibility.
+- **Updating is a listenable review** — `forte package update <name>`
+  re-fetches a vendored package. A pristine copy is replaced outright; if
+  you edited your copy (fork semantics: it's yours), the update becomes a
+  **three-way merge** against the commit recorded at add time — your
+  edits are preserved, conflicts abort cleanly (`--force` overwrites with
+  a backup), and the merged tree must compile before it may land. Either
+  way the change is reported as a semantic diff in musical vocabulary:
+  "WarmLead: cutoff 0.6 → 0.7(track Lead の音が変わります)" — pip
+  updates silently change behavior; Forte updates you can read and hear.
 - Distribution is just GitHub: `forte remote add github:you/my-album`
   connects the project, and `forte push` publishes it whole (source,
   assets, history; the commit message defaults to your latest `forte
