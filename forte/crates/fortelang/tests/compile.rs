@@ -562,3 +562,31 @@ fn groove_vocabulary_polymeter_euclid_ratchet_humanize() {
     assert!(err_codes(&wrap("play cycle(beat`x--`) at bars(1..1)")).contains(&"E-PAT-004"));
     assert!(err_codes(&wrap("play cycle(prog`Am | F`, span: 2) at bars(1..1)")).contains(&"E-PAT-001"));
 }
+
+#[test]
+fn glitch_effects_render_deterministically_and_audibly() {
+    let song = |fx: &str| {
+        format!(
+            r#"song "GX" {{ tempo 120bpm
+              track T {{ instrument prisma(wave: "saw", cutoff: 0.5)
+                {fx}
+                play beat`x-x- x-x-` at bars(1..1) }} }}"#
+        )
+    };
+    let dry = fortelang::render_digest(&fortelang::compile_str(&song("")).unwrap(), 2.0);
+    for fx in [
+        "insert crush(bits: 0.7, rate: 0.5, mix: 1.0)",
+        "insert stutter(beats: 0.25, mix: 0.8)",
+        "insert gate(depth: 0.9, beats: 0.25, duty: 0.4)",
+    ] {
+        let p = fortelang::compile_str(&song(fx)).unwrap_or_else(|e| panic!("{fx}: {e:?}"));
+        let a = fortelang::render_digest(&p, 2.0);
+        let b = fortelang::render_digest(&p, 2.0);
+        assert_eq!(a.f32_digest, b.f32_digest, "{fx} must render bit-identically");
+        assert_ne!(a.f32_digest, dry.f32_digest, "{fx} must change the sound");
+        assert!(a.rms > 0.003, "{fx} must stay audible (rms {})", a.rms);
+        assert!(a.peak <= 1.0, "{fx} stays inside the limiter (peak {})", a.peak);
+    }
+    // unknown knobs are rejected, not ignored
+    assert!(!err_codes(&song("insert crush(foo: 0.5)")).is_empty());
+}

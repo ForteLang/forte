@@ -39,6 +39,12 @@ pub enum DeviceKind {
     Pump,
     /// Mid/side stereo width.
     Width,
+    /// Bit-depth + sample-rate reduction (the lo-fi/glitch crunch).
+    Crush,
+    /// Tempo-synced buffer repeat — the glitch stutter.
+    Stutter,
+    /// Tempo-synced pattern chopper (trance gate).
+    Gate,
     /// A user-defined effect: a Grid graph fed by AudioIn (`device X : Effect`).
     MeshFx,
 }
@@ -64,7 +70,7 @@ impl DeviceStage {
 impl DeviceKind {
     /// Every device, in stage order. The browser and factories iterate this —
     /// adding a device here is the only registration step the UI needs.
-    pub const ALL: [DeviceKind; 16] = [
+    pub const ALL: [DeviceKind; 19] = [
         DeviceKind::Arpeggiator,
         DeviceKind::NoteTranspose,
         DeviceKind::NoteRepeat,
@@ -81,6 +87,9 @@ impl DeviceKind {
         DeviceKind::Chorus,
         DeviceKind::Pump,
         DeviceKind::Width,
+        DeviceKind::Crush,
+        DeviceKind::Stutter,
+        DeviceKind::Gate,
     ];
 
     pub fn label(self) -> &'static str {
@@ -101,6 +110,9 @@ impl DeviceKind {
             DeviceKind::Chorus => "Chorus",
             DeviceKind::Pump => "Pump",
             DeviceKind::Width => "Width",
+            DeviceKind::Crush => "Crush",
+            DeviceKind::Stutter => "Stutter",
+            DeviceKind::Gate => "Gate",
             DeviceKind::MeshFx => "Mesh FX",
         }
     }
@@ -146,6 +158,9 @@ impl DeviceKind {
             DeviceKind::Chorus => &["Rate", "Depth", "Mix"],
             DeviceKind::Pump => &["Amount", "Period"],
             DeviceKind::Width => &["Amount"],
+            DeviceKind::Crush => &["Bits", "Rate", "Mix"],
+            DeviceKind::Stutter => &["Period", "Mix"],
+            DeviceKind::Gate => &["Depth", "Period", "Duty"],
             DeviceKind::MeshFx => &[],
         }
     }
@@ -174,6 +189,10 @@ impl DeviceKind {
             // Period is seconds per duck; the compiler overwrites it from tempo
             DeviceKind::Pump => vec![0.6, 0.5],
             DeviceKind::Width => vec![0.75],
+            DeviceKind::Crush => vec![0.5, 0.35, 1.0],
+            // Period is seconds per repeat; the compiler overwrites it from tempo
+            DeviceKind::Stutter => vec![0.25, 0.0],
+            DeviceKind::Gate => vec![0.9, 0.25, 0.5],
             DeviceKind::MeshFx => Vec::new(),
         }
     }
