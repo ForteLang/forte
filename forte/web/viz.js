@@ -174,7 +174,7 @@ export class Viz {
     g.fillStyle = '#8a919e';
     g.font = '10px ui-sans-serif, system-ui';
     g.textBaseline = 'top';
-    g.fillText(`♪ ${t.name} — piano roll(クリックで一覧へ戻る)`, headerW + 6, 2);
+    g.fillText(`♪ ${t.name} — piano roll (click to go back)`, headerW + 6, 2);
     if (!notes.length) return;
     lo = Math.max(0, lo - 2);
     hi = Math.min(127, hi + 2);

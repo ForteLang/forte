@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Forte Player — .fortesong をブラウザで</title>
+<title>Forte Player — .fortesong in your browser</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -68,8 +68,8 @@
 <body>
 <header>
   <img id="logo" src="logo.svg" alt=""><h1>FORTE PLAYER</h1>
-  <span>WAV ではなくコード。あなたのブラウザが決定論レンダーで演奏します。</span>
-  <a class="back" href="catalog.html">📦 カタログ</a>
+  <span>Not a WAV — code. Your browser performs the deterministic render.</span>
+  <a class="back" href="catalog.html">📦 Catalog</a>
 </header>
 <main>
   <div id="now" hidden>
@@ -83,25 +83,25 @@
     </div>
   </div>
   <div id="transport" hidden>
-    <button id="prev" title="前の曲">⏮</button>
-    <button id="toggle" class="primary" title="再生/一時停止">▶</button>
-    <button id="next" title="次の曲">⏭</button>
+    <button id="prev" title="Previous track">⏮</button>
+    <button id="toggle" class="primary" title="Play / pause">▶</button>
+    <button id="next" title="Next track">⏭</button>
     <div id="bar-wrap"><div id="bar"></div></div>
     <div id="time"></div>
   </div>
   <div id="tracks"></div>
   <div id="arr-wrap">
     <canvas id="arr"></canvas>
-    <div id="arr-hint">トラックをクリックすると、その block のコードと import 行が下に出ます — 聴きながら盗む
-      <button id="full-src-btn" style="margin-left:10px; padding: 3px 10px; font-size: 11px;">📄 曲全体の .forte を見る</button></div>
+    <div id="arr-hint">Click a track: its block's code and import line appear below — steal while you listen
+      <button id="full-src-btn" style="margin-left:10px; padding: 3px 10px; font-size: 11px;">📄 View the whole piece</button></div>
     <div id="blk-src-wrap">
       <div id="blk-title"></div>
       <div id="blk-import"></div>
       <pre id="blk-src"></pre>
     </div>
   </div>
-  <div id="drop">.fortesong ファイルをここにドロップ(複数でプレイリスト)<br>
-    <span class="hint">または <code>player.html?src=path/to/song.fortesong</code></span></div>
+  <div id="drop">Drop .fortesong files here (several make a playlist)<br>
+    <span class="hint">or <code>player.html?src=path/to/song.fortesong</code></span></div>
   <div id="status"></div>
 </main>
 <script>
@@ -126,7 +126,7 @@ function unzip(buf) {
     files.set(name, bytes.slice(start, start + csize));
     off = start + csize;
   }
-  if (!files.size) throw new Error('.fortesong を読めません(zip ではない?)');
+  if (!files.size) throw new Error('cannot read .fortesong (not a zip?)');
   return files;
 }
 
@@ -167,7 +167,7 @@ function parseSong(buf, label) {
   files.delete('fortesong.manifest.json');
   const expect = manifest.files_digest_fnv1a64 || '';
   if (expect && filesDigest(files) !== expect) {
-    throw new Error(`${label}: ソースが改竄されています(digest 不一致)`);
+    throw new Error(`${label}: sources have been tampered with (digest mismatch)`);
   }
   const entry = manifest.entry;
   const modules = {}, assets = {};
@@ -250,7 +250,7 @@ function showTrackSource(t, tr) {
   $('blk-title').innerHTML = `${name ?? tr.name}<span>${tr.name} — ${
     tr.instrument || '(return)'}${fx}</span>`;
   if (!name) {
-    $('blk-import').textContent = 'root トラック(この曲のファイル直下)';
+    $('blk-import').textContent = 'root track (defined directly in this piece)';
     $('blk-src').textContent = '';
     $('blk-src-wrap').style.display = 'block';
     return;
@@ -278,7 +278,7 @@ function showTrackSource(t, tr) {
     $('blk-src-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     return;
   }
-  $('blk-import').textContent = `block ${name} — このコンテナ内で定義(entry 直下)`;
+  $('blk-import').textContent = `block ${name} — defined inside this container (next to the entry)`;
   $('blk-src').textContent = '';
   $('blk-src-wrap').style.display = 'block';
 }
@@ -290,9 +290,9 @@ $('full-src-btn').onclick = () => {
   const entryBase = t.entry.split('/').pop();
   const pkg = (t.creditsRaw ?? [])[0];
   const base = pkg ? `packages/${pkg.package.toLowerCase()}_${pkg.version}/` : '';
-  $('blk-title').innerHTML = `${t.name}<span>${entryBase} — 曲全体(${
-    Object.keys(t.modules).length} ファイルのソース閉包)</span>`;
-  $('blk-import').textContent = `${base}${t.entry} — この曲のすべての音はこのコードから決定論レンダーされます`;
+  $('blk-title').innerHTML = `${t.name}<span>${entryBase} — the whole piece (source closure of ${
+    Object.keys(t.modules).length} files)</span>`;
+  $('blk-import').textContent = `${base}${t.entry} — every sound in this piece is deterministically rendered from this code`;
   $('blk-src').textContent = t.text;
   $('blk-src-wrap').style.display = 'block';
   $('blk-src-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -382,7 +382,7 @@ async function play(i) {
   $('t-name').textContent = t.name;
   $('t-artist').textContent = t.artist;
   $('t-desc').textContent = t.desc;
-  $('t-proof').textContent = t.digest ? `build digest ${t.digest} — 同じコードは誰の環境でも同じ音` : '';
+  $('t-proof').textContent = t.digest ? `build digest ${t.digest} — the same code sounds the same on every machine` : '';
   $('t-credits').textContent = t.credits.length ? `credits: ${t.credits.join(', ')}` : '';
   $('toggle').textContent = '⏸';
   renderList();
@@ -463,7 +463,7 @@ drop.ondrop = async (e) => {
   if (playlist.length) {
     renderList();
     drop.style.display = 'none';
-    status('▶ を押すと再生します(初回はブラウザの自動再生制限のためクリックが必要)');
+    status('Press ▶ to play (a first click is required by the browser autoplay policy)');
   }
 })();
 </script>

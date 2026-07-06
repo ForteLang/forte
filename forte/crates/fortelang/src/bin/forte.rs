@@ -375,8 +375,8 @@ fn main() -> ExitCode {
             eprintln!("       forte play  <song.forte> [--for SECS] [--from bars(9)] [--block Name]  (タイムライン付き再生)");
             eprintln!("       forte play  <name.fortesong | ALBUM-DIR> [--verify]  (プレイヤー: n/p/space/q)");
             eprintln!("       forte repl                  (打った行がその場で鳴る)");
-            eprintln!("       forte instruments list [QUERY]  (カタログ。list bass / list 808 で絞り込み)");
-            eprintln!("       forte instruments play <Name[(args)]>  (キーボードが鍵盤に。1..9/-/= でノブ)");
+            eprintln!("       forte instruments list [QUERY | path.forte]  (カタログ。list bass / list 808 で絞り込み、path でファイル直接)");
+            eprintln!("       forte instruments play <Name[(args)] | path/to/lib.forte[:Name(args)]>  (キーボードが鍵盤に。1..9/-/= でノブ)");
             eprintln!("       forte instruments edit <Name> [--watch] (instruments/ で編集。--watch は保存ごとに自動コミット)");
             eprintln!("       forte instruments new <Name>            (テンプレートから自作楽器を開始)");
             eprintln!("       forte instruments fix <Name> k=v …      (パラメータ固定の派生を instruments/ に書き出し)");
