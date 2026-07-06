@@ -43,19 +43,37 @@ pub fn parse_pitch(s: &str, pos: Pos) -> Result<u8, Diag> {
 }
 
 /// `beat` literal: `x` = hit, `X` = accent, `-` = rest; whitespace is visual
-/// grouping. The steps span exactly one bar of `beats_per_bar` beats.
-/// Hits become notes at `pitch` lasting 60% of a step.
+/// grouping. `x*3` is a ratchet — the step subdivides into 3 rapid retrigs
+/// with decaying velocity. A literal of the form `euclid(k, n[, rot: r])`
+/// expands to a Euclidean pattern (k hits spread evenly over n steps).
+/// The steps span exactly `beats_per_bar` beats — one bar, or the `span:`
+/// of a `cycle()` wrapper. Hits become notes at `pitch` lasting 60% of a
+/// (sub)step.
 pub fn parse_beat(
     raw: &str,
     beats_per_bar: f64,
     pitch: u8,
     pos: Pos,
 ) -> Result<(Vec<Note>, f64), Diag> {
-    let steps: Vec<char> = raw.chars().filter(|c| !c.is_whitespace()).collect();
-    if steps.is_empty() {
-        return Err(Diag::new("E-BEAT-001", pos, "beat リテラルが空です"));
-    }
-    for &c in &steps {
+    let expanded;
+    let text = raw.trim();
+    let src: &str = if let Some(rest) = text.strip_prefix("euclid(") {
+        let inner = rest
+            .strip_suffix(')')
+            .ok_or_else(|| Diag::new("E-BEAT-003", pos, "euclid(…) の閉じ括弧がありません"))?;
+        expanded = euclid_steps(inner, pos)?;
+        &expanded
+    } else {
+        raw
+    };
+
+    // tokenize: one step per hit/rest char, an optional `*N` ratchet suffix
+    let mut steps: Vec<(char, u32)> = Vec::new();
+    let mut chars = src.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c.is_whitespace() {
+            continue;
+        }
         if c != 'x' && c != 'X' && c != '-' && c != '.' {
             return Err(Diag::new(
                 "E-BEAT-002",
@@ -63,20 +81,108 @@ pub fn parse_beat(
                 format!("beat リテラルで使えるのは x(通常)/ X(アクセント)/ .(ゴースト)/ -(休符)です(見つかったのは '{c}')"),
             ));
         }
+        let mut ratchet = 1u32;
+        if chars.peek() == Some(&'*') {
+            chars.next();
+            let mut digits = String::new();
+            while chars.peek().is_some_and(|d| d.is_ascii_digit()) {
+                digits.push(chars.next().unwrap());
+            }
+            ratchet = digits.parse().unwrap_or(0);
+            if !(2..=16).contains(&ratchet) {
+                return Err(Diag::new(
+                    "E-BEAT-004",
+                    pos,
+                    format!("ラチェット *{digits} は 2..16 の範囲で書いてください"),
+                ));
+            }
+            if c == '-' {
+                return Err(Diag::new("E-BEAT-004", pos, "休符 - にラチェットは付けられません"));
+            }
+        }
+        steps.push((c, ratchet));
     }
+    if steps.is_empty() {
+        return Err(Diag::new("E-BEAT-001", pos, "beat リテラルが空です"));
+    }
+
     let step_len = beats_per_bar / steps.len() as f64;
     let mut notes = Vec::new();
-    for (i, &c) in steps.iter().enumerate() {
-        if c == 'x' || c == 'X' || c == '.' {
+    for (i, &(c, ratchet)) in steps.iter().enumerate() {
+        if c == '-' {
+            continue;
+        }
+        let base: f64 = if c == 'X' { 120.0 } else if c == '.' { 55.0 } else { 100.0 };
+        let sub = step_len / ratchet as f64;
+        for r in 0..ratchet {
+            // retrigs decay: 100, 78, 61, … — the classic stutter shape
+            let vel = (base * 0.78f64.powi(r as i32)).round().max(25.0) as u8;
             notes.push(Note {
                 pitch,
-                start: i as f64 * step_len,
-                length: step_len * 0.6,
-                velocity: if c == 'X' { 120 } else if c == '.' { 55 } else { 100 },
+                start: i as f64 * step_len + r as f64 * sub,
+                length: sub * 0.6,
+                velocity: vel,
             });
         }
     }
     Ok((notes, beats_per_bar))
+}
+
+/// `euclid(k, n[, rot: r])` — Bjorklund's algorithm: k hits spread as
+/// evenly as possible over n steps ("x--x--x-" for 3,8). `rot` rotates the
+/// pattern. Positional or named (`hits:` / `steps:` / `rot:`) arguments.
+fn euclid_steps(inner: &str, pos: Pos) -> Result<String, Diag> {
+    let mut k: Option<i64> = None;
+    let mut n: Option<i64> = None;
+    let mut rot: i64 = 0;
+    for (i, part) in inner.split(',').enumerate() {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let (key, val) = match part.split_once(':') {
+            Some((key, v)) => (key.trim(), v.trim()),
+            None => ("", part),
+        };
+        let num: i64 = val
+            .parse()
+            .map_err(|_| Diag::new("E-BEAT-003", pos, format!("euclid の引数が読めません: {part}")))?;
+        match (key, i) {
+            ("hits", _) | ("", 0) => k = Some(num),
+            ("steps", _) | ("", 1) => n = Some(num),
+            ("rot", _) | ("", 2) => rot = num,
+            _ => {
+                return Err(Diag::new(
+                    "E-BEAT-003",
+                    pos,
+                    format!("euclid の引数は euclid(打数, ステップ数[, rot: 回転]) です(見つかったのは {part})"),
+                ))
+            }
+        }
+    }
+    let (Some(k), Some(n)) = (k, n) else {
+        return Err(Diag::new(
+            "E-BEAT-003",
+            pos,
+            "euclid(打数, ステップ数[, rot: 回転]) の形で書いてください".to_string(),
+        ));
+    };
+    if !(1..=128).contains(&n) || !(1..=n).contains(&k) {
+        return Err(Diag::new(
+            "E-BEAT-003",
+            pos,
+            format!("euclid({k}, {n}) は範囲外です(1 ≤ 打数 ≤ ステップ数 ≤ 128)"),
+        ));
+    }
+    let mut s = String::with_capacity(n as usize);
+    for i in 0..n {
+        let j = (i + rot).rem_euclid(n);
+        // evenly distributed hits with the first on step 0 (tresillo shape:
+        // euclid(3,8) = x--x--x-)
+        let hit = (j * k).rem_euclid(n) < k;
+        s.push(if hit { 'x' } else { '-' });
+    }
+    Ok(s)
 }
 
 /// `notes` literal: whitespace-separated events placed sequentially.

@@ -511,3 +511,54 @@ fn master_gain_scales_the_mix_and_validates_range() {
     assert!(err_codes(&song("master 9.0")).contains(&"E-SONG-005"));
     assert!(err_codes(&song("master 0.0")).contains(&"E-SONG-005"));
 }
+
+#[test]
+fn groove_vocabulary_polymeter_euclid_ratchet_humanize() {
+    let src = r#"song "G" { tempo 120bpm
+      track Poly { instrument prisma(wave: "sine")
+        play cycle(beat`x--`, span: 1.5) at bars(1..2) }
+      track Euclid { instrument prisma(wave: "square")
+        play beat`euclid(3, 8)` at bars(1..1) }
+      track Ratchet { instrument prisma(wave: "tri")
+        play beat`x*3 - - x*2` at bars(1..1) }
+    }"#;
+    let p = fortelang::compile_str(src).expect("groove song must compile");
+
+    // polymeter: the clip cycles at its own 1.5-beat period, not the bar
+    let poly = &p.tracks.iter().find(|t| t.name == "Poly").unwrap().arranger[0];
+    assert_eq!(poly.clip.length, 1.5);
+    assert_eq!(poly.duration, 8.0, "placed over 2 bars of 4/4");
+
+    // euclid(3,8) = x--x--x- : hits on steps 0, 3, 6 of 8 over 4 beats
+    let euc = &p.tracks.iter().find(|t| t.name == "Euclid").unwrap().arranger[0].clip;
+    let starts: Vec<f64> = euc.notes.iter().map(|n| n.start).collect();
+    assert_eq!(starts, vec![0.0, 1.5, 3.0]);
+
+    // ratchet: x*3 subdivides step one into 3 retrigs, velocity decaying
+    let rat = &p.tracks.iter().find(|t| t.name == "Ratchet").unwrap().arranger[0].clip;
+    assert_eq!(rat.notes.len(), 5);
+    assert!((rat.notes[1].start - 1.0 / 3.0).abs() < 1e-9);
+    assert!(rat.notes[0].velocity > rat.notes[1].velocity);
+    assert!(rat.notes[1].velocity > rat.notes[2].velocity);
+
+    // humanize: seeded and deterministic — same seed same bits, seeds differ
+    let hsong = |seed: u32| {
+        format!(
+            r#"song "H" {{ tempo 120bpm
+              track T {{ instrument prisma(wave: "saw")
+                play humanize(beat`x-x- x-x-`, time: 0.03, vel: 12, seed: {seed}) at bars(1..1) }} }}"#
+        )
+    };
+    let a = fortelang::render_digest(&fortelang::compile_str(&hsong(7)).unwrap(), 2.0);
+    let b = fortelang::render_digest(&fortelang::compile_str(&hsong(7)).unwrap(), 2.0);
+    let c = fortelang::render_digest(&fortelang::compile_str(&hsong(8)).unwrap(), 2.0);
+    assert_eq!(a.f32_digest, b.f32_digest, "same seed must be bit-identical");
+    assert_ne!(a.f32_digest, c.f32_digest, "different seeds must differ");
+
+    // error paths carry the documented codes
+    let wrap = |body: &str| format!(r#"song "E" {{ tempo 120bpm track T {{ instrument prisma() {body} }} }}"#);
+    assert!(err_codes(&wrap("play beat`euclid(0, 8)` at bars(1..1)")).contains(&"E-BEAT-003"));
+    assert!(err_codes(&wrap("play beat`x*20 -` at bars(1..1)")).contains(&"E-BEAT-004"));
+    assert!(err_codes(&wrap("play cycle(beat`x--`) at bars(1..1)")).contains(&"E-PAT-004"));
+    assert!(err_codes(&wrap("play cycle(prog`Am | F`, span: 2) at bars(1..1)")).contains(&"E-PAT-001"));
+}

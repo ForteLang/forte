@@ -104,6 +104,8 @@ num       = [ "-" ] NUMBER [ UNIT ] ;
 | Literal | Content | Generation |
 | --- | --- | --- |
 | `` beat`x--- X.x-` `` | `x` = hit (vel 100), `X` = accent (120), `.` = ghost (55), `-` = rest. Whitespace is visual grouping | The step count divides one bar equally. Length = 60% of a step. Velocity is reflected as gain on all sound sources (100 = unity) |
+| `` beat`x*3 - x*2 -` `` | `*N` after a hit = ratchet: the step subdivides into N rapid retrigs (2..16, E-BEAT-004) | Retrig velocities decay by ×0.78 per hit — the classic stutter/fill shape |
+| `` beat`euclid(3, 8)` `` | Bjorklund: k hits spread as evenly as possible over n steps; optional `rot:` rotates. `euclid(3,8)` = `x--x--x-` (1 ≤ k ≤ n ≤ 128, E-BEAT-003) | Expands to plain hits before step processing — layer a second play for accents |
 | `` notes`C4:1/2 [E4 G4]:1 _:1` `` | `pitch:length` (in beats). `[…]` = chord, `_` = rest; lengths are `1` `0.5` `1/2` | Placed sequentially. C4 = MIDI 60 |
 | `` notes`C2!:1/4 C2~:1/4 D2:1/2` `` | `!` = accent (vel 120), `~` = tie: holds the gate until the next note. Becomes a slide on mono/glide instruments (303 notation). To use both, write `C2!~` | Ties overlap at 102% of the length |
 | `` prog`Em \| C G \| D` `` | `\|` = bar. Multiple chords within one bar divide the time equally | ChordEvent sequence. Playing it bare produces block chords |
@@ -118,6 +120,8 @@ Chord qualities: (unmarked = major), `m`, `min`, `7`, `maj7`, `m7`, `min7`, `dim
 | `chords(p)` | — | Holds all chord tones for the chord duration (root oct3, vel 90) |
 | `bass(p, rate: 0.5)` | If rate omitted, one note per chord | Root note oct2, vel 100 |
 | `arp(p, rate: 0.5, style: "up\|down\|updown")` | rate is 0<r≤1 bar | Cycles through chord tones at oct4, vel 95 |
+| `cycle(p, span: 1.5)` | p = beat/notes literal (or let). `span` in beats, 0<span≤128 — **required** (E-PAT-004) | Polymeter: the pattern's period is `span` instead of one bar. A beat literal's steps divide the span; the clip tiles at that period and phases against the meter |
+| `humanize(p, time: 0.02, vel: 10, seed: 1)` | p = any literal. `time` ≤ 0.5 beats, `vel` ≤ 60 | Seeded xorshift jitter of note timing and velocity. Deterministic: the same seed renders bit-identically on every machine |
 
 ### 4.5 Device DSL (defining instruments and effects in code)
 
