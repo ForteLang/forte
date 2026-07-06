@@ -359,3 +359,124 @@ impl Default for Width {
         Self::new()
     }
 }
+
+/// Bit-depth + sample-rate reduction — the lo-fi/glitch crunch. `bits`
+/// sweeps 16 (clean) down to 1 (square-ish grit); `rate` holds each sample
+/// for 1..64 input samples. Everything is a pure function of the input and
+/// the phase counter: deterministic on every backend.
+pub struct Crush {
+    pub bits: f32, // 0..1 → 16..1 effective bits
+    pub rate: f32, // 0..1 → hold 1..64 samples
+    pub mix: f32,
+    phase: f32,
+    held: (f32, f32),
+}
+
+impl Crush {
+    pub fn new() -> Self {
+        Self { bits: 0.5, rate: 0.35, mix: 1.0, phase: 0.0, held: (0.0, 0.0) }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let hold = 1.0 + self.rate.clamp(0.0, 1.0) * 63.0;
+        self.phase += 1.0;
+        if self.phase >= hold {
+            self.phase -= hold;
+            // quantize to 2^bits amplitude levels
+            let bits = 16.0 - self.bits.clamp(0.0, 1.0) * 15.0;
+            let levels = crate::dmath::powf(2.0, bits - 1.0);
+            self.held = ((l * levels).round() / levels, (r * levels).round() / levels);
+        }
+        let m = self.mix.clamp(0.0, 1.0);
+        (l * (1.0 - m) + self.held.0 * m, r * (1.0 - m) + self.held.1 * m)
+    }
+}
+
+impl Default for Crush {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Tempo-synced buffer repeat — THE glitch stutter. The last `period`
+/// seconds of dry signal loop while `mix` is up; automate `stutter.mix`
+/// for fills. The buffer is preallocated (2 s) so the audio thread never
+/// allocates.
+pub struct Stutter {
+    sr: f32,
+    buf_l: Vec<f32>,
+    buf_r: Vec<f32>,
+    write: usize,
+    pos: f32,
+    pub period: f32, // seconds per repeat cycle (compiler sets from tempo)
+    pub mix: f32,
+}
+
+impl Stutter {
+    pub fn new(sr: f32) -> Self {
+        let cap = (sr * 2.0) as usize;
+        Self {
+            sr,
+            buf_l: vec![0.0; cap],
+            buf_r: vec![0.0; cap],
+            write: 0,
+            pos: 0.0,
+            period: 0.125,
+            mix: 0.0,
+        }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let cap = self.buf_l.len();
+        self.buf_l[self.write] = l;
+        self.buf_r[self.write] = r;
+        let loop_len = ((self.period.max(0.01) * self.sr) as usize).clamp(1, cap);
+        // read the loop that ends at the write head: freeze-repeat the
+        // most recent chunk
+        let idx = (self.write + cap - loop_len + self.pos as usize % loop_len) % cap;
+        let (wl, wr) = (self.buf_l[idx], self.buf_r[idx]);
+        self.write = (self.write + 1) % cap;
+        self.pos += 1.0;
+        if self.pos >= loop_len as f32 {
+            self.pos -= loop_len as f32;
+        }
+        let m = self.mix.clamp(0.0, 1.0);
+        (l * (1.0 - m) + wl * m, r * (1.0 - m) + wr * m)
+    }
+}
+
+/// Tempo-synced chopper (trance gate): open for `duty` of each period,
+/// attenuated by `depth` for the rest, with a 1 ms slew so the edges click
+/// only as much as you want them to (crank depth for hard chops).
+pub struct Gate {
+    sr: f32,
+    pos: f32,
+    g: f32,
+    pub depth: f32,  // 0..1 → how far closed
+    pub period: f32, // seconds per cycle (compiler sets from tempo)
+    pub duty: f32,   // 0..1 open fraction
+}
+
+impl Gate {
+    pub fn new(sr: f32) -> Self {
+        Self { sr, pos: 0.0, g: 1.0, depth: 0.9, period: 0.125, duty: 0.5 }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let period_samples = self.period.max(0.01) * self.sr;
+        let frac = self.pos / period_samples;
+        let target = if frac < self.duty.clamp(0.02, 0.98) { 1.0 } else { 1.0 - self.depth };
+        // ~1 ms one-pole slew keeps the chop tight but unclicked
+        // (linear approx of 1 - e^(-1/(0.001*sr)) — deterministic, no libm)
+        let a = (1.0 / (0.001 * self.sr)).min(1.0);
+        self.g += (target - self.g) * a;
+        self.pos += 1.0;
+        if self.pos >= period_samples {
+            self.pos -= period_samples;
+        }
+        (l * self.g, r * self.g)
+    }
+}

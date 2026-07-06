@@ -1640,7 +1640,7 @@ fn eval_lit(lit: &PatternLit, beats_per_bar: f64, beat_pitch: u8) -> Result<(Vec
 
 const INSTRUMENTS: &[&str] = &["sampler", "kit", "prisma", "mesh"];
 const EFFECTS: &[&str] =
-    &["filter", "eq", "drive", "delay", "reverb", "comp", "chorus", "pump", "width"];
+    &["filter", "eq", "drive", "delay", "reverb", "comp", "chorus", "pump", "width", "crush", "stutter", "gate"];
 
 /// Build an instrument device. Returns the device plus the root pitch that
 /// `beat` literals on this track trigger.
@@ -2121,6 +2121,9 @@ fn build_effect(
             "chorus" => (DeviceKind::Chorus, &[("rate", 0), ("depth", 1), ("mix", 2)], &[]),
             "pump" => (DeviceKind::Pump, &[("amount", 0), ("beats", 1)], &[]),
             "width" => (DeviceKind::Width, &[("amount", 0)], &[]),
+            "crush" => (DeviceKind::Crush, &[("bits", 0), ("rate", 1), ("mix", 2)], &[]),
+            "stutter" => (DeviceKind::Stutter, &[("beats", 0), ("mix", 1)], &[]),
+            "gate" => (DeviceKind::Gate, &[("depth", 0), ("beats", 1), ("duty", 2)], &[]),
             other => {
                 return Err(Diag::new(
                     "E-DEV-001",
@@ -2139,9 +2142,14 @@ fn build_effect(
     for (key, arg) in &call.args {
         set_param(&mut dev, key, arg, params, opts, call)?;
     }
-    if kind == DeviceKind::Pump {
-        // the knob is in beats; the engine wants seconds per duck cycle
-        dev.params[1] *= (60.0 / bpm) as f32;
+    // tempo-synced periods: the knob is in beats, the engine wants seconds
+    let beats_slot = match kind {
+        DeviceKind::Pump | DeviceKind::Gate => Some(1),
+        DeviceKind::Stutter => Some(0),
+        _ => None,
+    };
+    if let Some(slot) = beats_slot {
+        dev.params[slot] *= (60.0 / bpm) as f32;
     }
     Ok(dev)
 }

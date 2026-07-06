@@ -17,7 +17,7 @@
 //! audio thread pre-boxed. `process`/`next` must not allocate; bounded pushes
 //! only (use [`push_bounded`]).
 
-use crate::dsp::effects::{Chorus, Compressor, Drive, Eq3, FdnReverb, Pump, StereoDelay, Width};
+use crate::dsp::effects::{Chorus, Compressor, Crush, Drive, Eq3, FdnReverb, Gate, Pump, StereoDelay, Stutter, Width};
 use crate::dsp::filter::{FilterMode, Svf};
 use crate::dsp::grid::GridSynth;
 use crate::dsp::sampler::Sampler;
@@ -142,6 +142,9 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
         DeviceKind::Chorus => Dsp::Audio(Box::new(Chorus::new(sr))),
         DeviceKind::Pump => Dsp::Audio(Box::new(Pump::new(sr))),
         DeviceKind::Width => Dsp::Audio(Box::new(Width::new())),
+        DeviceKind::Crush => Dsp::Audio(Box::new(Crush::new())),
+        DeviceKind::Stutter => Dsp::Audio(Box::new(Stutter::new(sr))),
+        DeviceKind::Gate => Dsp::Audio(Box::new(Gate::new(sr))),
     }
 }
 
@@ -640,6 +643,44 @@ impl AudioFx for Chorus {
             self.rate = p[0];
             self.depth = p[1];
             self.mix = p[2];
+        }
+    }
+}
+
+impl AudioFx for Crush {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Crush::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 3 {
+            self.bits = p[0];
+            self.rate = p[1];
+            self.mix = p[2];
+        }
+    }
+}
+
+impl AudioFx for Stutter {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Stutter::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 2 {
+            self.period = p[0];
+            self.mix = p[1];
+        }
+    }
+}
+
+impl AudioFx for Gate {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Gate::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 3 {
+            self.depth = p[0];
+            self.period = p[1];
+            self.duty = p[2];
         }
     }
 }

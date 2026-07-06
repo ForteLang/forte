@@ -187,6 +187,9 @@ user-space code written in the device DSL of §4.5, used via ordinary `import`.
 | `comp` | thresh, ratio, attack, release, makeup — stereo-linked compressor |
 | `chorus` | rate, depth, mix — modulated delay with L/R quadrature phase |
 | `pump` | amount, beats — tempo-synced ducking (a deterministic version of sidechain pumping. beats is the number of beats per cycle, default 1)|
+| `crush` | bits, rate, mix — bit-depth (16→1 across 0..1) + sample-rate reduction (hold 1..64 samples). The lo-fi/glitch crunch |
+| `stutter` | beats, mix — tempo-synced buffer repeat: the last `beats` of dry signal loop while mix is up. Automate `stutter.mix` for glitch fills |
+| `gate` | depth, beats, duty — tempo-synced chopper (trance gate): open for `duty` of each cycle, closed by `depth` for the rest, 1 ms anti-click slew |
 | `width` | amount — M/S stereo width (0.5 is unity. Since insert is pre-pan, use on stereo sources)|
 
 All numeric knobs are normalized 0..1 (out of range is E-TYPE-002). volume 0..1, pan -1..1,
