@@ -78,11 +78,62 @@ fn workspace_files() -> Vec<std::path::PathBuf> {
     files
 }
 
-/// Find `device NAME` (case-insensitive): your instruments/ workspace wins
-/// (so a `fix`ed variant shadows the packaged original), then every
-/// installed package. Returns (import path, canonical name) so
-/// `forte instruments subbass` still resolves to SubBass.
+/// `path/to/lib.forte[:Device]` — the explicit form: no lookup, the file
+/// itself is the source of truth. Returns (path, device-or-None).
+fn parse_path_arg(arg: &str) -> Option<(String, Option<String>)> {
+    if let Some((path, dev)) = arg.split_once(".forte:") {
+        return Some((format!("{path}.forte"), Some(dev.to_string())));
+    }
+    if arg.ends_with(".forte") {
+        return Some((arg.to_string(), None));
+    }
+    None
+}
+
+/// Resolve a `.forte` path (+ optional device name) to (path, canonical
+/// device name). Errors speak: a missing file, a device not in the file,
+/// or several devices with none named.
+fn resolve_path_device(path: &str, dev: Option<&str>) -> Result<(String, String), String> {
+    let src = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+    let ast = crate::parser::parse(&src)
+        .map_err(|ds| format!("{path}: {}", ds.first().map(|d| d.to_string()).unwrap_or_default()))?;
+    if ast.devices.is_empty() {
+        return Err(format!("{path} に device がありません"));
+    }
+    match dev {
+        Some(want) => {
+            let want = want.split('(').next().unwrap_or(want).trim();
+            ast.devices
+                .iter()
+                .find(|d| d.name.eq_ignore_ascii_case(want))
+                .map(|d| (path.to_string(), d.name.clone()))
+                .ok_or_else(|| {
+                    let names: Vec<&str> = ast.devices.iter().map(|d| d.name.as_str()).collect();
+                    format!("device '{want}' は {path} にありません(あるもの: {})", names.join(", "))
+                })
+        }
+        None if ast.devices.len() == 1 => Ok((path.to_string(), ast.devices[0].name.clone())),
+        None => {
+            let names: Vec<&str> = ast.devices.iter().map(|d| d.name.as_str()).collect();
+            Err(format!(
+                "{path} には device が {} 個あります。名前を足してください: forte instruments play {path}:{}\n(あるもの: {})",
+                ast.devices.len(),
+                names[0],
+                names.join(", ")
+            ))
+        }
+    }
+}
+
+/// Find `device NAME` (case-insensitive): an explicit `.forte` path wins
+/// (no lookup at all — `packages/…/bass.forte:SubBass`), then your
+/// instruments/ workspace (so a `fix`ed variant shadows the packaged
+/// original), then every installed package. Returns (import path,
+/// canonical name) so `forte instruments subbass` still resolves to SubBass.
 fn find_device(name: &str) -> Option<(String, String)> {
+    if let Some((path, dev)) = parse_path_arg(name) {
+        return resolve_path_device(&path, dev.as_deref()).ok();
+    }
     let scan = |files: &[std::path::PathBuf]| -> Option<(String, String)> {
         for f in files {
             let Ok(src) = std::fs::read_to_string(f) else { continue };
@@ -144,22 +195,38 @@ pub fn names(prefix: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
-/// `forte instruments [QUERY]` — the catalog: every device in lib/std with
-/// its params, the import line to copy, and how to audition it. QUERY
-/// filters case-insensitively on device name or library name.
+/// `forte instruments [QUERY | path.forte]` — the catalog: every device
+/// across your workspace and installed packages, with params, the import
+/// line to copy, and how to audition it. QUERY filters case-insensitively
+/// on device name or library name; a `.forte` path lists just that file.
 pub fn list(query: Option<&str>) -> Result<(), String> {
-    // locate lib/std the same way `forte instrument` does
-    let mut dir = std::env::current_dir().map_err(|e| e.to_string())?;
-    let pkg_root = loop {
-        let candidate = dir.join("packages");
-        if candidate.is_dir() {
-            break candidate;
+    // a path argument bypasses discovery: list exactly that file
+    let path_only: Option<std::path::PathBuf> = query
+        .and_then(parse_path_arg)
+        .map(|(p, _)| std::path::PathBuf::from(p));
+    if let Some(p) = &path_only {
+        if !p.is_file() {
+            return Err(format!("{} がありません", p.display()));
         }
-        if !dir.pop() {
-            return Err("packages/ が見つかりません(Forte リポジトリの中で実行してください)".into());
+    }
+    // locate packages/ the same way `forte instruments play` does
+    let pkg_root = if path_only.is_some() {
+        std::path::PathBuf::from("packages")
+    } else {
+        let mut dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        loop {
+            let candidate = dir.join("packages");
+            if candidate.is_dir() {
+                break candidate;
+            }
+            if !dir.pop() {
+                return Err(
+                    "packages/ が見つかりません。Forte リポジトリの中で実行するか、path で指定してください:\n\
+                     forte instruments list path/to/lib.forte".into());
+            }
         }
     };
-    let q = query.map(str::to_ascii_lowercase);
+    let q = if path_only.is_some() { None } else { query.map(str::to_ascii_lowercase) };
     let matches = |name: &str, lib: &str| {
         q.as_deref().is_none_or(|q| {
             name.to_ascii_lowercase().contains(q) || lib.to_ascii_lowercase().contains(q)
@@ -167,9 +234,17 @@ pub fn list(query: Option<&str>) -> Result<(), String> {
     };
 
     // your workspace first — the instruments you made or fixed
-    let mut files = workspace_files();
-    let ws_count = files.len();
-    files.extend(instrument_files(&pkg_root));
+    let (mut files, ws_count) = match &path_only {
+        Some(p) => (vec![p.clone()], 0),
+        None => {
+            let files = workspace_files();
+            let n = files.len();
+            (files, n)
+        }
+    };
+    if path_only.is_none() {
+        files.extend(instrument_files(&pkg_root));
+    }
 
     let mut shown = 0usize;
     let mut total = 0usize;
@@ -207,7 +282,8 @@ pub fn list(query: Option<&str>) -> Result<(), String> {
         }
         println!();
     }
-    if matches("prisma", "builtin") || matches("sampler", "builtin") || matches("mesh", "builtin")
+    if path_only.is_none()
+        && (matches("prisma", "builtin") || matches("sampler", "builtin") || matches("mesh", "builtin"))
     {
         println!("builtin(import 不要)");
         println!("  prisma         wave cutoff reso attack decay sustain release detune sub filtenv");
@@ -218,7 +294,7 @@ pub fn list(query: Option<&str>) -> Result<(), String> {
     if shown == 0 {
         println!("'{}' に当たる楽器はありません(forte instruments で全 {total} 件)", query.unwrap_or(""));
     } else {
-        println!("試聴: forte instruments play <Name>   曲で使う: import {{ <Name> }} from \"packages/<pkg>/instruments/<lib>.forte\"");
+        println!("試聴: forte instruments play <Name | path/to/lib.forte[:Name]>   曲で使う: import {{ <Name> }} from \"packages/<pkg>/instruments/<lib>.forte\"");
     }
     Ok(())
 }
@@ -543,23 +619,35 @@ impl Drop for RawTerm {
 
 pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
     use std::io::IsTerminal;
-    if !std::io::stdin().is_terminal() {
-        return Err("キーボード演奏には端末が必要です(パイプ経由では動きません)".into());
-    }
+    // the explicit form first: packages/…/bass.forte[:SubBass(args)] —
+    // the path IS the resolution, no catalog lookup involved
+    let (call, from) = match parse_path_arg(call) {
+        Some((path, dev)) => {
+            let args_part = dev
+                .as_deref()
+                .and_then(|d| d.find('(').map(|i| d[i..].to_string()))
+                .unwrap_or_default();
+            let (path, canonical) = resolve_path_device(&path, dev.as_deref())?;
+            (format!("{canonical}{args_part}"), Some(path))
+        }
+        None => (call.to_string(), from.map(str::to_string)),
+    };
+    let call = call.as_str();
     let typed = call.split('(').next().unwrap_or(call).trim().to_string();
     let args_part = call.strip_prefix(&typed).unwrap_or("");
     // builtins need no import; anything else is looked up (case-insensitively)
-    // in lib/std — the canonical spelling wins so `subbass` finds SubBass
+    // across installed packages — the canonical spelling wins so `subbass`
+    // finds SubBass
     let lower = typed.to_ascii_lowercase();
     let (name, import) = match from {
-        Some(f) => (typed.clone(), Some(f.to_string())),
+        Some(f) => (typed.clone(), Some(f)),
         None if matches!(lower.as_str(), "prisma" | "mesh" | "sampler") => (lower, None),
         None => {
             let (path, canonical) = find_device(&typed).ok_or_else(|| {
                 format!(
-                    "instrument '{typed}' が見つかりません(lib/std を探しました)。\n\
+                    "instrument '{typed}' が見つかりません(instruments/ workspace と packages/*/instruments/ を探しました)。\n\
                  一覧: forte instruments   絞り込み: forte instruments 808\n\
-                 ファイル指定: forte instrument {typed} --from path/to/lib.forte"
+                 path 指定: forte instruments play packages/<pkg>/instruments/<lib>.forte:{typed}"
                 )
             })?;
             (canonical, Some(path))
@@ -570,6 +658,9 @@ pub fn run(call: &str, from: Option<&str>) -> Result<(), String> {
     let project = crate::compile_with_loader(&src, &crate::FsLoader, ".").map_err(|ds| {
         ds.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n")
     })?;
+    if !std::io::stdin().is_terminal() {
+        return Err("キーボード演奏には端末が必要です(パイプ経由では動きません)".into());
+    }
 
     // the instrument's live knobs: exposed device params (grid instruments)
     // or the builtin's parameter table, tweakable while playing

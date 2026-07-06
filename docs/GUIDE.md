@@ -76,6 +76,7 @@ hardware clones tr808 / tr909 / tb303 / juno60 / sh101 / prophet5 / cr78):
 forte instruments list        # all 148 instruments: names, parameters, usage
 forte instruments list bass   # filter by genre/library or name
 forte instruments list acid   # brings up the tb303
+forte instruments list packages/essentials_0.6.0/instruments/bass.forte  # list one file directly
 forte instruments play SubBass  # audition on the keyboard
 
 # tab-completion (the library keeps growing, so names complete dynamically):
@@ -101,6 +102,11 @@ genre-specific usage examples live in `packages/essentials_0.6.0/blocks/`.
 forte instruments play Bass303                  # resolved by name from packages/*/instruments
 forte instruments play "JunoPad(cutoff: 0.5)"   # parameters work too
 forte instruments play prisma                  # built-ins as well
+
+# or skip name lookup entirely and point at the file — any package path works:
+forte instruments play packages/essentials_0.6.0/instruments/bass.forte             # one device in the file? plays it
+forte instruments play packages/essentials_0.6.0/instruments/bass.forte:SubBass     # several? name the one you want
+forte instruments play "packages/essentials_0.6.0/instruments/tb303.forte:Bass303(cutoff: 0.4)"
 ```
 
 Your keyboard becomes a piano:

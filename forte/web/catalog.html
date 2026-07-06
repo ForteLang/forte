@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <meta charset="utf-8">
-<title>Forte Packages — カタログ</title>
+<title>Forte Packages — catalog</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -53,12 +53,12 @@
 <body>
 <header>
   <img id="logo" src="logo.svg" alt=""><h1>FORTE PACKAGES</h1>
-  <span>すべてのコンテンツは package。取り込みは forte package add、配信は forte push。</span>
-  <a class="back" href="player.html" style="margin-left:auto">▶ プレイヤー</a>
-  <a class="back" href="index.html" id="editor-link" style="margin-left:0; display:none">← エディタ</a>
+  <span>Everything is a package. Pull with forte package add, publish with forte push.</span>
+  <a class="back" href="player.html" style="margin-left:auto">▶ Player</a>
+  <a class="back" href="index.html" id="editor-link" style="margin-left:0; display:none">← Editor</a>
 </header>
 <main>
-  <div id="list">読み込み中…</div>
+  <div id="list">Loading…</div>
   <div id="src-wrap">
     <div id="src-title"></div>
     <pre id="src"></pre>
@@ -71,7 +71,7 @@ const esc = (s) => s.replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt
 async function showSrc(rel) {
   const res = await fetch(`../../${rel}`);
   $('src-title').textContent = rel;
-  $('src').textContent = res.ok ? await res.text() : `読み込めません: ${res.status}`;
+  $('src').textContent = res.ok ? await res.text() : `cannot load: ${res.status}`;
   $('src-wrap').style.display = 'block';
   $('src-wrap').scrollIntoView({ behavior: 'smooth' });
 }
@@ -88,7 +88,7 @@ function albumList(pkgDir, albums, staticSite) {
     // on the published site each album has a share page with OGP tags —
     // paste that URL anywhere and the cover + description unfurl
     const share = staticSite
-      ? ` <a class="share" href="share/${esc(a.dir)}.html" title="共有用 URL(OGP 付き)" onclick="event.stopPropagation()">🔗</a>`
+      ? ` <a class="share" href="share/${esc(a.dir)}.html" title="Share URL (with OGP tags)" onclick="event.stopPropagation()">🔗</a>`
       : '';
     return `<span class="album-row"><a class="album" href="player.html?${q}" title="${esc(a.desc)}">${art}<span>▶ ${esc(a.title)}${
       a.artist ? ` — ${esc(a.artist)}` : ''} (${a.tracks.length} tracks)</span></a>${share}</span>`;
@@ -100,7 +100,7 @@ function fileList(pkgDir, sub, files) {
   if (!files.length) return '';
   const items = files.map((f) => {
     const rel = `packages/${pkgDir}/${sub}/${f}`;
-    return `<a data-rel="${esc(rel)}" title="ソースを表示">${esc(f)}</a>`;
+    return `<a data-rel="${esc(rel)}" title="View source">${esc(f)}</a>`;
   }).join('\n');
   return `<div class="section-h">${sub} (${files.length})</div><div class="files">${items}</div>`;
 }
@@ -121,12 +121,12 @@ async function load() {
       data = await (await fetch('packages.json')).json();
       staticSite = true;
     } catch (e2) {
-      $('list').innerHTML = `<div class="hint">カタログ API に届きません(<code>forte browser</code> で開いていますか?)</div>`;
+      $('list').innerHTML = `<div class="hint">The catalog API is unreachable (did you open this with <code>forte browser</code>?)</div>`;
       return;
     }
   }
   if (!data.packages.length) {
-    $('list').innerHTML = `<div class="hint">packages/ が空です。<code>forte package add github:owner/repo</code> で取り込めます。</div>`;
+    $('list').innerHTML = `<div class="hint">packages/ is empty. Pull one with <code>forte package add github:owner/repo</code>.</div>`;
     return;
   }
   $('list').innerHTML = data.packages.map((p) => {
@@ -142,7 +142,7 @@ async function load() {
       ${fileList(p.dir, 'instruments', p.instruments)}
       ${fileList(p.dir, 'blocks', p.blocks)}
       ${fileList(p.dir, 'songs', p.songs)}
-      <div class="hint" style="margin-top:8px">取り込み:
+      <div class="hint" style="margin-top:8px">Use it:
         <code>import { … } from "packages/${esc(p.dir)}/blocks/…"</code></div>
     </div>`;
   }).join('\n');

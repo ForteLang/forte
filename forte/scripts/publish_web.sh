@@ -69,7 +69,7 @@ for pkg in data['packages']:
         desc = html.escape(a.get('desc', ''))
         cover = f"{origin}/{base}/{a['cover']}" if a.get('cover') else ''
         page = f"""<!DOCTYPE html>
-<html lang="ja"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <title>{title}</title>
 <meta property="og:type" content="music.album">
 <meta property="og:title" content="{title}">
@@ -80,7 +80,7 @@ for pkg in data['packages']:
 <meta http-equiv="refresh" content="0; url={player}">
 <script>location.replace({json.dumps(player)});</script>
 </head><body>
-<p><a href="{player}">▶ {title} をブラウザで再生</a>(音源ではなくソースコードが届き、あなたのブラウザが決定論レンダーで演奏します)</p>
+<p><a href="{player}">▶ Play {title} in your browser</a> — what arrives is source code, not audio; your browser performs the deterministic render.</p>
 </body></html>"""
         open(os.path.join(site, 'share', f"{a['dir']}.html"), 'w').write(page)
         print(f"   share: share/{a['dir']}.html")
