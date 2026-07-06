@@ -319,6 +319,16 @@ block AcidLine {
   dependency. `forte package add` resolves requires recursively and hoists
   every dependency into the consumer's ONE flat `packages/` directory —
   vendored packages never contain a nested `packages/` of their own.
+- **`package.lock`** (written by add/update, checked by `forte package
+  verify`) pins each vendored package as sorted JSON entries
+  `{name, version, source, commit, digest}` — `commit` is the upstream
+  git HEAD at fetch time (the base for update's three-way merge),
+  `digest` is FNV-1a 64 over the vendored tree (sorted rel-path + bytes;
+  the same hash family as the build digest). `forte package update
+  <name>` re-fetches: a pristine copy is replaced, a locally-edited copy
+  is three-way merged (base = the locked commit; conflicts or a
+  non-compiling merge abort; `--force` overwrites with a backup), and
+  the change is reported through the semantic differ.
 - `artist "…"` names who made the piece. Albums declare it in their
   `album.forte` meta block; songs may carry their own; players display it.
 - `sponsor "https://…"` is where listeners can support the author.
