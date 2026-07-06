@@ -21,6 +21,7 @@ song "Zero One" {
   desc "The closer: a heartbeat sub, glass keys falling like cursor blinks on one dissolving lane, a shimmer pad that never resolves, one last melody on the way out. 112bpm ambient techno."
   artist "Forte Essentials"
   tempo 112bpm
+  master 2.48  // mastered: -21.9 LUFS raw, aiming near -14
   meter 4/4
   key C minor
 

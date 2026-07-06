@@ -17,6 +17,8 @@ pub enum Command {
     /// Jump the playhead to an absolute beat position (playing or paused).
     Seek(f64),
     SetTempo(f64),
+    /// Mastering gain on the summed mix, pre-limiter (1.0 = neutral).
+    SetMaster(f32),
     SetLoop { enabled: bool, start: f64, end: f64 },
     SetLaunchQuant(f64),
     SetMetronome(bool),

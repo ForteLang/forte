@@ -17,6 +17,7 @@ song "Hello World" {
   desc "Two 303s in call-and-response on one evolving lane each, a 909 that never blinks, one long filter conversation from closed to screaming. 128bpm acid."
   artist "Forte Essentials"
   tempo 128bpm
+  master 1.16  // mastered: -15.3 LUFS raw, aiming near -14
   meter 4/4
   key A minor
 

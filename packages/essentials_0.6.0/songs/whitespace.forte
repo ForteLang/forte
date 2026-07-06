@@ -20,6 +20,7 @@ song "Whitespace" {
   desc "The notes are delimiters; the music is the space between them. Celesta and kalimba interleaved by nested blocks over a brushed pulse — significant whitespace at 108bpm."
   artist "Forte Essentials"
   tempo 108bpm
+  master 3.39  // mastered: -26.7 LUFS raw, aiming near -16
   swing 0.55
   meter 4/4
   key C major

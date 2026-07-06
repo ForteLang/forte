@@ -68,6 +68,17 @@ pub fn compile(
         // a block built as root without a tempo gets the house default
         None => p.tempo = 120.0,
     }
+    if let Some((m, pos)) = root.master {
+        if !(0.1..=4.0).contains(&m) {
+            diags.push(Diag::new(
+                "E-SONG-005",
+                pos,
+                format!("master {m} は 0.1..4.0 の範囲外です(1.0 が等倍)"),
+            ));
+        } else {
+            p.master = m as f32;
+        }
+    }
     if let Some(((num, den), pos)) = root.meter {
         if num == 0 || !(den == 2 || den == 4 || den == 8 || den == 16) {
             diags.push(Diag::new("E-TIME-004", pos, format!("拍子 {num}/{den} は解釈できません")));

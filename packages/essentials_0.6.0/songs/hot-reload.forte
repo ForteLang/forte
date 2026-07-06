@@ -21,6 +21,7 @@ song "Hot Reload" {
   desc "Warm electronica: detuned electric-piano chords that wobble like heat haze over a rhythm machine built from nested blocks — the same groove lane swaps its inner parts as the song reloads. 104bpm."
   artist "Forte Essentials"
   tempo 104bpm
+  master 1.74  // mastered: -19.8 LUFS raw, aiming near -15
   swing 0.54
   meter 4/4
   key F major

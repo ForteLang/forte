@@ -372,6 +372,9 @@ song "Name" {
   tempo 96bpm            // required
   meter 6/8              // defaults to 4/4
   key D minor            // optional
+  master 1.4             // optional mastering gain (0.1..4.0, default 1.0):
+                         // scales the whole mix before the master soft
+                         // limiter — loudness without re-balancing tracks
 
   // ---- Patterns are values. Name them with let and reuse them ----
   let kick  = beat`x--- x-x-`             // x=hit X=accent -=rest. One bar, evenly divided

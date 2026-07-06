@@ -8,6 +8,7 @@ use crate::model::{Project, Track};
 /// Push an entire project into a freshly-created engine.
 pub fn full_sync(handle: &mut EngineHandle, project: &Project) {
     handle.send(Command::SetTempo(project.tempo));
+    handle.send(Command::SetMaster(project.master));
     for t in &project.tracks {
         handle.send(Command::AddTrack { slot: t.id, track: build_track(t, handle.sample_rate) });
     }

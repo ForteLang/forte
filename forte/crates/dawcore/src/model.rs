@@ -737,7 +737,16 @@ pub struct Project {
     pub cue_markers: Vec<CueMarker>,
     /// Launch quantization in beats. 0 = off (immediate). Bitwig default: 1 bar.
     pub launch_quant: f64,
+    /// Mastering gain applied to the summed mix BEFORE the master soft
+    /// limiter. 1.0 = neutral and bit-identical to projects that never set
+    /// it — the song-level `master` statement drives loudness here.
+    #[serde(default = "default_master")]
+    pub master: f32,
     next_id: usize,
+}
+
+fn default_master() -> f32 {
+    1.0
 }
 
 impl Project {
@@ -761,6 +770,7 @@ impl Project {
             loop_end: 16.0,
             cue_markers: Vec::new(),
             launch_quant: 0.0,
+            master: 1.0,
             next_id: 0,
         }
     }
@@ -824,6 +834,7 @@ impl Project {
                 CueMarker { name: "Verse".into(), position: 16.0 },
             ],
             launch_quant: 4.0, // 1 bar, Bitwig default
+            master: 1.0,
             next_id: 0,
         };
 

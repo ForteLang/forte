@@ -20,6 +20,7 @@ song "Pure Function" {
   desc "Precision rhythm programming: sticks, blocks and rims composed as a nested click ensemble over a deep sub — one cold chord, no side effects, same groove every time. 118bpm."
   artist "Forte Essentials"
   tempo 118bpm
+  master 1.51  // mastered: -18.6 LUFS raw, aiming near -15
   meter 4/4
   key D minor
 
