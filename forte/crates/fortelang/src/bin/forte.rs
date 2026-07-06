@@ -713,15 +713,17 @@ fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
         PathBuf::from(path).with_extension("wav").to_string_lossy().into_owned()
     });
     const TAIL_BEATS: f64 = 8.0;
-    if let Err(e) = dawcore::bounce::render_wav(&project, PathBuf::from(&out).as_path(), TAIL_BEATS)
-    {
+    // render + master (loudness-balance the tracks, then normalise to
+    // streaming level); the master owns every stem, already leveled
+    let master = dawcore::bounce::render_master(&project, TAIL_BEATS);
+    if let Err(e) = master.write_master(PathBuf::from(&out).as_path()) {
         eprintln!("レンダリング失敗: {e}");
         return ExitCode::FAILURE;
     }
-    let info = fortelang::render_digest(&project, TAIL_BEATS);
 
-    // open-stems: each non-effect track rendered soloed (sends included) —
-    // a fork can rehearse against any subset, and every stem has a digest
+    // open-stems: each audible track written at its mix level (auto-level +
+    // master makeup), so the stems reconstruct the master; the digest is of the
+    // raw captured contribution, so every stem still carries a build proof
     let mut stem_digests = serde_json::Map::new();
     if stems {
         let dir = PathBuf::from(&out).with_extension("").to_string_lossy().into_owned() + "-stems";
@@ -729,27 +731,28 @@ fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
             eprintln!("stems ディレクトリ作成失敗: {e}");
             return ExitCode::FAILURE;
         }
-        for t in &project.tracks {
-            if t.kind == dawcore::model::TrackKind::Effect {
-                continue;
-            }
-            let soloed = fortelang::solo_project(&project, t.id);
+        for t in &master.tracks {
             let safe: String = t.name.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
             let wav = PathBuf::from(&dir).join(format!("{safe}.wav"));
-            if let Err(e) = dawcore::bounce::render_wav(&soloed, &wav, TAIL_BEATS) {
+            if let Err(e) = master.write_stem(t, &wav) {
                 eprintln!("stem {} のレンダリング失敗: {e}", t.name);
                 return ExitCode::FAILURE;
             }
-            let sinfo = fortelang::render_digest(&soloed, TAIL_BEATS);
+            let digest = master.stem_digest(t);
             stem_digests.insert(
                 t.name.clone(),
                 serde_json::json!({
                     "output": wav.to_string_lossy(),
-                    "f32_digest_fnv1a64": format!("{:016x}", sinfo.f32_digest),
-                    "rms": sinfo.rms,
+                    "f32_digest_fnv1a64": format!("{:016x}", digest),
+                    "rms": t.rms,
+                    "presence_lufs": t.lufs,
+                    "level_gain_db": t.level_db,
                 }),
             );
-            println!("stem   : {} → {} ({:016x})", t.name, wav.display(), sinfo.f32_digest);
+            println!(
+                "stem   : {} → {} ({:016x}, {:+.1} dB)",
+                t.name, wav.display(), digest, t.level_db
+            );
         }
     }
 
@@ -759,10 +762,15 @@ fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
         "engine": { "name": "dawcore", "version": env!("CARGO_PKG_VERSION") },
         "render": {
             "sample_rate": 48000,
-            "seconds": info.seconds,
-            "f32_digest_fnv1a64": format!("{:016x}", info.f32_digest),
-            "peak": info.peak,
-            "rms": info.rms,
+            "seconds": master.seconds,
+            "f32_digest_fnv1a64": format!("{:016x}", master.raw_digest),
+            "peak": master.raw_peak,
+            "rms": master.raw_rms,
+        },
+        "loudness": {
+            "target_lufs": dawcore::bounce::TARGET_LUFS,
+            "measured_lufs": master.in_lufs,
+            "makeup_gain_db": master.makeup_db,
         },
         "output": out,
         "stems": stem_digests,
@@ -773,8 +781,14 @@ fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    println!("built  : {out} ({:.1}s @ 48kHz)", info.seconds);
-    println!("digest : {:016x} (f32, fnv1a64)", info.f32_digest);
+    println!("built  : {out} ({:.1}s @ 48kHz)", master.seconds);
+    if master.in_lufs.is_finite() {
+        println!(
+            "loud   : {:.1} LUFS → {:.1} LUFS ({:+.1} dB)",
+            master.in_lufs, dawcore::bounce::TARGET_LUFS, master.makeup_db
+        );
+    }
+    println!("digest : {:016x} (f32, fnv1a64)", master.raw_digest);
     println!("proof  : {}", mpath.display());
     ExitCode::SUCCESS
 }

@@ -8,6 +8,45 @@ use dawcore::model::Project;
 use dawcore::sync::full_sync;
 
 #[test]
+fn capture_digest_matches_plain_render() {
+    // The mastered bounce derives the build proof from its single capture pass;
+    // that digest must equal a plain (uncaptured) full render bit-for-bit, or
+    // every committed manifest would suddenly fail verification.
+    let project = Project::demo();
+    let tail = 4.0;
+
+    // plain full render, digested exactly like `fortelang::render_digest`
+    let sr = 48_000.0;
+    let (mut engine, mut handle) = Engine::new(sr);
+    full_sync(&mut handle, &project);
+    handle.send(Command::SetLoop { enabled: false, start: 0.0, end: f64::MAX / 4.0 });
+    handle.send(Command::SetLaunchQuant(0.0));
+    handle.send(Command::Play);
+    let total_beats = dawcore::bounce::arrangement_len(&project) + tail;
+    let total_samples = (total_beats * 60.0 / project.tempo * sr as f64) as usize;
+    let mut digest = 0xcbf2_9ce4_8422_2325u64;
+    let mut bl = vec![0.0f32; 512];
+    let mut br = vec![0.0f32; 512];
+    let mut done = 0;
+    while done < total_samples {
+        let n = 512.min(total_samples - done);
+        engine.process(&mut bl, &mut br, n);
+        for i in 0..n {
+            for s in [bl[i], br[i]] {
+                for b in s.to_bits().to_le_bytes() {
+                    digest ^= b as u64;
+                    digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
+                }
+            }
+        }
+        done += n;
+    }
+
+    let master = dawcore::bounce::render_master(&project, tail);
+    assert_eq!(master.raw_digest, digest, "capture digest diverged from plain render");
+}
+
+#[test]
 fn grid_synth_makes_sound() {
     // The demo's Bass track is a Poly Grid (NoteIn->Osc->SVF->Gain*ADSR->Out).
     let sr = 48_000.0;

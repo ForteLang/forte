@@ -432,6 +432,16 @@ pub struct Engine {
     /// never resizes them).
     send_l: Vec<Vec<f32>>,
     send_r: Vec<Vec<f32>>,
+
+    /// Offline stem capture (disabled by default; see [`Engine::enable_capture`]).
+    /// When on, `process` tees each source track's post-fader contribution into
+    /// `cap_l`/`cap_r[slot]` and the summed effect-return wash into `cap_fx_*`,
+    /// so an offline bounce can separate the mix in a single pass.
+    capturing: bool,
+    cap_l: Vec<Vec<f32>>,
+    cap_r: Vec<Vec<f32>>,
+    cap_fx_l: Vec<f32>,
+    cap_fx_r: Vec<f32>,
 }
 
 impl Engine {
@@ -472,6 +482,11 @@ impl Engine {
             audio_r: vec![0.0; MAX_BLOCK],
             send_l: (0..MAX_TRACKS).map(|_| vec![0.0; MAX_BLOCK]).collect(),
             send_r: (0..MAX_TRACKS).map(|_| vec![0.0; MAX_BLOCK]).collect(),
+            capturing: false,
+            cap_l: Vec::new(),
+            cap_r: Vec::new(),
+            cap_fx_l: Vec::new(),
+            cap_fx_r: Vec::new(),
         };
 
         let handle = EngineHandle { cmd: cmd_prod, garbage: garbage_cons, shared, sample_rate };
@@ -480,6 +495,30 @@ impl Engine {
 
     pub fn sample_rate(&self) -> f32 {
         self.sample_rate
+    }
+
+    /// Turn on offline stem capture (allocates the per-slot tap buffers). After
+    /// each [`Engine::process`] call, [`Engine::cap_source`] and
+    /// [`Engine::cap_fx`] hold that block's separated signals. Offline only —
+    /// the real-time path never enables this.
+    pub fn enable_capture(&mut self) {
+        let n = self.tracks.len();
+        self.cap_l = (0..n).map(|_| vec![0.0; MAX_BLOCK]).collect();
+        self.cap_r = (0..n).map(|_| vec![0.0; MAX_BLOCK]).collect();
+        self.cap_fx_l = vec![0.0; MAX_BLOCK];
+        self.cap_fx_r = vec![0.0; MAX_BLOCK];
+        self.capturing = true;
+    }
+
+    /// One source track's post-fader contribution from the last `process`
+    /// block. Valid for `frames` samples. Requires [`Engine::enable_capture`].
+    pub fn cap_source(&self, slot: usize) -> (&[f32], &[f32]) {
+        (&self.cap_l[slot], &self.cap_r[slot])
+    }
+
+    /// The summed effect-return wash from the last `process` block.
+    pub fn cap_fx(&self) -> (&[f32], &[f32]) {
+        (&self.cap_fx_l, &self.cap_fx_r)
     }
 
     fn recycle(&mut self, g: Garbage) {
@@ -712,6 +751,12 @@ impl Engine {
             out_l[i] = 0.0;
             out_r[i] = 0.0;
         }
+        if self.capturing {
+            for i in 0..frames {
+                self.cap_fx_l[i] = 0.0;
+                self.cap_fx_r[i] = 0.0;
+            }
+        }
 
         let spb = self.sample_rate as f64 * 60.0 / self.tempo; // samples per beat
         let dt_beats = 1.0 / spb;
@@ -820,12 +865,17 @@ impl Engine {
             let theta = (track.pan + 1.0) * 0.5 * std::f32::consts::FRAC_PI_2;
             let (pl, pr) = (crate::dmath::cos(theta), crate::dmath::sin(theta));
 
+            let cap = self.capturing;
             let mut tpeak = 0.0f32;
             for i in 0..frames {
                 let l = self.scratch_l[i] * g * pl;
                 let r = self.scratch_r[i] * g * pr;
                 out_l[i] += l;
                 out_r[i] += r;
+                if cap {
+                    self.cap_l[slot][i] = l;
+                    self.cap_r[slot][i] = r;
+                }
                 tpeak = tpeak.max(l.abs()).max(r.abs());
             }
 
@@ -869,12 +919,17 @@ impl Engine {
             let theta = (track.pan + 1.0) * 0.5 * std::f32::consts::FRAC_PI_2;
             let (pl, pr) = (crate::dmath::cos(theta), crate::dmath::sin(theta));
 
+            let cap = self.capturing;
             let mut tpeak = 0.0f32;
             for i in 0..frames {
                 let l = self.scratch_l[i] * g * pl;
                 let r = self.scratch_r[i] * g * pr;
                 out_l[i] += l;
                 out_r[i] += r;
+                if cap {
+                    self.cap_fx_l[i] += l;
+                    self.cap_fx_r[i] += r;
+                }
                 tpeak = tpeak.max(l.abs()).max(r.abs());
             }
             self.shared.track_peak[slot].store(tpeak.to_bits(), Ordering::Relaxed);
