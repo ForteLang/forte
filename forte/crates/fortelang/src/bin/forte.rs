@@ -471,6 +471,7 @@ fn ci(quick: bool) -> ExitCode {
         )
         && run_step("2/4 determinism gate", script("scripts/determinism_test.sh"))
         && (quick || run_step("3/4 corpus", script("scripts/check_corpus.sh")))
+        && (quick || run_step("3.5/4 edit→sound latency", script("scripts/latency_bench.sh")))
         && (quick || {
             // E2E needs playwright; skip gracefully when absent
             if core.join("node_modules/playwright").is_dir() {

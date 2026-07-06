@@ -134,6 +134,15 @@ try {
   await page.mouse.click(vizBox.x + 40, vizBox.y + 16 + laneH0 * 0.5);
   const rollOff = await page.evaluate(() => window.__forteViz?.mode ?? 'unknown');
   check('lane header toggles the piano roll', rollOn === 'piano' && rollOff === 'arrange', `${rollOn} → ${rollOff}`);
+  // 4.6) edit→sound latency: a full in-browser recompile (the hot-reload
+  // unit of work) must fit far inside the 1-second budget (issue #2)
+  const compileMs = await page.evaluate(() => {
+    const src = window.__forteGetText();
+    const t0 = performance.now();
+    window.__forteCompileCheck(src); // compiles twice (probe + restore)
+    return (performance.now() - t0) / 2;
+  });
+  check('edit→compile under 1s in the browser', compileMs < 1000, `${compileMs.toFixed(0)}ms per compile`);
 
   // 5) local-first: edits autosave to OPFS and survive a reload
   await page.evaluate(async () => {
