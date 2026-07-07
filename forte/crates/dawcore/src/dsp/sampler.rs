@@ -29,6 +29,13 @@ impl Sample {
 struct SampleVoice {
     pos: f64,   // fractional read position in source samples
     step: f64,  // per-output-sample advance (pitch ratio; negative = reverse)
+    /// glide target: `step` slews toward this exponentially (the 808 slide)
+    step_target: f64,
+    /// per-sample multiplicative slew factor (1.0 = no glide in flight)
+    step_factor: f64,
+    /// gate currently held (note-on seen, no note-off yet) — glide engages
+    /// only into a held voice, the tie/legato semantics of the 303
+    gate: bool,
     region: (f64, f64), // play region [start, end) in source samples
     looping: bool,
     note: u8,
@@ -44,6 +51,9 @@ impl SampleVoice {
         Self {
             pos: 0.0,
             step: 1.0,
+            step_target: 1.0,
+            step_factor: 1.0,
+            gate: false,
             region: (0.0, 0.0),
             looping: false,
             vel: 1.0,
@@ -76,6 +86,14 @@ pub struct Sampler {
     pub loop_on: bool,
     /// play the region backwards
     pub reverse: bool,
+    /// glide time in seconds: >0 makes overlapping notes slide the pitch of
+    /// the running voice (mono/legato, the 808/303 slide) instead of
+    /// retriggering
+    pub glide: f32,
+    /// slice mode: >0 chops the play region into this many equal slices;
+    /// the incoming note picks the slice (root = slice 0, root+1 = slice 1,
+    /// wrapping) and plays it at ORIGINAL speed — the MPC chop
+    pub slices: u8,
 }
 
 impl Sampler {
@@ -96,6 +114,8 @@ impl Sampler {
             end: 1.0,
             loop_on: false,
             reverse: false,
+            glide: 0.0,
+            slices: 0,
         }
     }
 
@@ -109,6 +129,71 @@ impl Sampler {
     pub fn note_on(&mut self, note: u8, velocity: f32) {
         let Some(sample) = &self.sample else { return };
         self.clock += 1;
+        // slice mode: the note picks a chunk of the region, played at
+        // original speed — the unnatural cut is the instrument
+        if self.slices > 0 {
+            let len = sample.data.len() as f64;
+            let rs = (self.start.clamp(0.0, 1.0) as f64 * len).floor();
+            let re = ((self.end.clamp(0.0, 1.0) as f64 * len).floor()).clamp(rs + 1.0, len);
+            let n = self.slices as f64;
+            // slice 0 sits at the note that plays the sample untouched
+            let played = (note as f32 + self.transpose).round() as i32;
+            let idx = (played - sample.root as i32).rem_euclid(self.slices as i32) as f64;
+            let w = (re - rs) / n;
+            let (ss, se) = (rs + idx * w, rs + (idx + 1.0) * w);
+            let mut best = 0;
+            let mut oldest = u64::MAX;
+            for (i, v) in self.voices.iter().enumerate() {
+                if !v.active {
+                    best = i;
+                    break;
+                }
+                if self.age[i] < oldest {
+                    oldest = self.age[i];
+                    best = i;
+                }
+            }
+            let v = &mut self.voices[best];
+            v.region = (ss, se);
+            v.looping = false;
+            v.pos = if self.reverse { se - 1.0 } else { ss };
+            v.step = sample.sample_rate as f64 / self.sample_rate as f64;
+            if self.reverse {
+                v.step = -v.step;
+            }
+            v.step_target = v.step;
+            v.step_factor = 1.0;
+            v.gate = true;
+            v.vel = ((velocity * 127.0 + 0.5) as u32 as f32 / 100.0).clamp(0.0, 1.27);
+            v.note = note;
+            v.active = true;
+            v.env.set(self.attack, self.decay, self.sustain, self.release);
+            v.env.trigger();
+            self.age[best] = self.clock;
+            return;
+        }
+        // glide: a new note while another is HELD slides the running voice's
+        // pitch instead of starting a new one (mono legato, the 808 slide)
+        if self.glide > 0.0001 {
+            let semis = note as f32 + self.transpose;
+            let ratio = midi_to_freq(semis.round() as u8) / midi_to_freq(sample.root);
+            let target = {
+                let t = ratio as f64 * (sample.sample_rate as f64 / self.sample_rate as f64);
+                if self.reverse { -t } else { t }
+            };
+            if let Some(v) = self.voices.iter_mut().filter(|v| v.active && v.gate).last() {
+                v.step_target = target;
+                let n = (self.glide as f64 * self.sample_rate as f64).max(1.0);
+                // exponential slew: equal semitone speed regardless of range
+                v.step_factor = crate::dmath::powf((target / v.step) as f32, (1.0 / n) as f32) as f64;
+                if !v.step_factor.is_finite() || v.step_factor <= 0.0 {
+                    v.step = target;
+                    v.step_factor = 1.0;
+                }
+                v.note = note;
+                return;
+            }
+        }
         let mut idx = 0;
         let mut oldest = u64::MAX;
         for (i, v) in self.voices.iter().enumerate() {
@@ -137,6 +222,9 @@ impl Sampler {
         if self.reverse {
             v.step = -v.step;
         }
+        v.step_target = v.step;
+        v.step_factor = 1.0;
+        v.gate = true;
         // velocity arrives 0..1 (127-normalised); 100/127 → unity so plain
         // `x` hits keep their nominal level, `X` lifts, `.` ghosts duck
         // reconstruct the 0..127 step so velocity 100 lands on exactly 1.0 —
@@ -153,6 +241,7 @@ impl Sampler {
         for v in &mut self.voices {
             if v.active && v.note == note {
                 v.env.release();
+                v.gate = false;
             }
         }
     }
@@ -160,6 +249,7 @@ impl Sampler {
     pub fn all_notes_off(&mut self) {
         for v in &mut self.voices {
             v.env.release();
+            v.gate = false;
         }
     }
 
@@ -190,6 +280,16 @@ impl Sampler {
             let amp = v.env.next();
             sum += s * amp * v.vel;
 
+            if v.step_factor != 1.0 {
+                v.step *= v.step_factor;
+                // stop on crossing the target (either direction)
+                if (v.step_factor > 1.0 && v.step >= v.step_target)
+                    || (v.step_factor < 1.0 && v.step <= v.step_target)
+                {
+                    v.step = v.step_target;
+                    v.step_factor = 1.0;
+                }
+            }
             v.pos += v.step;
             let (rs, re) = v.region;
             let span = (re - rs).max(1.0);
