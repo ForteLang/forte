@@ -125,7 +125,19 @@ pub fn compile(
     // deterministic engine, so the asset is bit-identical everywhere)
     let no_bounces: HashMap<String, (String, u8)> = HashMap::new();
     let mut bounces: HashMap<String, (String, u8)> = HashMap::new();
-    for sl in &root.sample_lets {
+    // collect from the root AND every block (imported wrapped-instrument
+    // libraries declare their samples inside their blocks); one flat
+    // namespace, curated packages keep names unique
+    let mut all_sample_lets: Vec<&SampleLetAst> = root.sample_lets.iter().collect();
+    fn collect_sample_lets<'a>(blocks: &'a [BlockAst], out: &mut Vec<&'a SampleLetAst>) {
+        for b in blocks {
+            out.extend(b.body.sample_lets.iter());
+            collect_sample_lets(&b.body.blocks, out);
+        }
+    }
+    collect_sample_lets(&file.blocks, &mut all_sample_lets);
+    collect_sample_lets(&root.blocks, &mut all_sample_lets);
+    for sl in all_sample_lets {
         let pitch = match music::parse_pitch(&sl.note, sl.pos) {
             Ok(v) => v,
             Err(d) => {
