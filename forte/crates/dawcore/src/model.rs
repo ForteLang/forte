@@ -295,6 +295,8 @@ pub enum GridModuleKind {
     Adsr,
     Filter,
     Shaper, // waveshaper: tanh / clip / fold
+    /// Tuned modal resonator: rings at a frequency (physical modeling).
+    Resonator,
     Gain,
     Mix,
     Out,
@@ -316,6 +318,7 @@ impl GridModuleKind {
             GridModuleKind::Lfo => "LFO",
             GridModuleKind::Adsr => "ADSR",
             GridModuleKind::Filter => "SVF",
+            GridModuleKind::Resonator => "Resonator",
             GridModuleKind::Gain => "Gain",
             GridModuleKind::Mix => "Mix",
             GridModuleKind::Out => "Audio Out",
@@ -331,6 +334,7 @@ impl GridModuleKind {
             GridModuleKind::Lfo => &[],
             GridModuleKind::Adsr => &["Gate"],
             GridModuleKind::Filter => &["In", "Cutoff"],
+            GridModuleKind::Resonator => &["In", "Fm"],
             GridModuleKind::Shaper => &["In", "Mod"],
             GridModuleKind::Gain => &["In", "Mod"],
             GridModuleKind::Mix => &["A", "B"],
@@ -348,6 +352,7 @@ impl GridModuleKind {
             GridModuleKind::Lfo => &["Out"],
             GridModuleKind::Adsr => &["Env"],
             GridModuleKind::Filter => &["Out"],
+            GridModuleKind::Resonator => &["Out"],
             GridModuleKind::Gain => &["Out"],
             GridModuleKind::Mix => &["Out"],
             GridModuleKind::Out => &[],
@@ -360,6 +365,7 @@ impl GridModuleKind {
             GridModuleKind::Lfo => &["Rate", "Shape"],
             GridModuleKind::Adsr => &["A", "D", "S", "R"],
             GridModuleKind::Filter => &["Cutoff", "Reso"],
+            GridModuleKind::Resonator => &["Freq", "Ring"],
             GridModuleKind::Shaper => &["Drive", "Mode"],
             GridModuleKind::Gain => &["Level"],
             _ => &[],
@@ -372,6 +378,7 @@ impl GridModuleKind {
             GridModuleKind::Lfo => vec![0.3, 0.0],
             GridModuleKind::Adsr => vec![0.05, 0.3, 0.6, 0.25],
             GridModuleKind::Filter => vec![0.65, 0.2],
+            GridModuleKind::Resonator => vec![0.5, 0.3],
             GridModuleKind::Shaper => vec![0.3, 0.1], // tanh
             GridModuleKind::Gain => vec![0.8],
             _ => Vec::new(),

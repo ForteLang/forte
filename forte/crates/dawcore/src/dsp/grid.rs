@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::model::{GridConn, GridGraph, GridModuleKind};
 
 use super::envelope::Adsr;
-use super::filter::{FilterMode, Svf};
+use super::filter::{FilterMode, Resonator, Svf};
 use super::oscillator::{Oscillator, Waveform};
 use super::sampler::Sample;
 use super::voice::midi_to_freq;
@@ -33,6 +33,7 @@ enum NodeState {
     Osc(Oscillator),
     Adsr { env: Adsr, prev_gate: f32 },
     Filter(Svf),
+    Resonator(Resonator),
     Lfo { phase: f32 },
     /// xorshift32 state — deterministic noise, reseeded per note-on so the
     /// same source renders the same bits everywhere.
@@ -107,6 +108,7 @@ fn fresh_state(kind: GridModuleKind, sr: f32, node_idx: usize) -> NodeState {
         GridModuleKind::Osc => NodeState::Osc(Oscillator::default()),
         GridModuleKind::Adsr => NodeState::Adsr { env: Adsr::new(sr), prev_gate: 0.0 },
         GridModuleKind::Filter => NodeState::Filter(Svf::new(sr)),
+        GridModuleKind::Resonator => NodeState::Resonator(Resonator::new(sr)),
         GridModuleKind::Lfo => NodeState::Lfo { phase: 0.0 },
         // two noise nodes in one patch must not correlate: seed by node index
         GridModuleKind::Noise => {
@@ -280,6 +282,18 @@ fn eval_node(
                 let cutoff = base * crate::dmath::powf(2.0, ins[1] * 4.0);
                 svf.set(cutoff, params[1]);
                 out[0] = svf.process(ins[0], FilterMode::Lowpass);
+            }
+        }
+        GridModuleKind::Resonator => {
+            if let NodeState::Resonator(r) = state {
+                // freq maps like cutoff (30 Hz..~18 kHz); the Freq input
+                // shifts up to ±4 octaves (pitch envelopes = drum body drop)
+                let base = 30.0 * crate::dmath::powf(600.0, params[0].clamp(0.0, 1.0));
+                let freq = base * crate::dmath::powf(2.0, ins[1] * 4.0);
+                // ring: 0..1 → 3 ms..1.2 s to −60 dB
+                let ring = 0.003 + params[1].clamp(0.0, 1.0) * 1.2;
+                r.set(freq, ring);
+                out[0] = r.process(ins[0]);
             }
         }
         GridModuleKind::Gain => {
