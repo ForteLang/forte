@@ -432,6 +432,10 @@ song "Name" {
     // insert parcomp(amount: 0.4, color: 0.4)
     // insert exciter(amount: 0.3)
     // automate tapestop.amount from 0 to 1 over bars(16..16)  // the tape stop
+    // automate pitch from 0.5 to 0.75 over bars(1..8)   // bend the held audio
+    //   continuously — glide/tape-warble; a constant pitch is a true no-op
+    // automate duck.release from 0.05 to 0.9 over drop   // open the carve up
+    //   over a build — the duck's attack/release/amount/shape are automatable
     // insert duck(from: Kick, amount: 0.9, release: 0.3)  // SIDECHAIN: this
     //   track ducks hard on every kick hit — the pumping space IS the groove.
     //   Deep amounts carve to near-silence; that carving is what glitch is.
