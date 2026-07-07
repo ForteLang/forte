@@ -625,3 +625,38 @@ fn bounce_to_sample_wraps_instruments_deterministically() {
     ))
     .contains(&"E-SMP-002"));
 }
+
+#[test]
+fn sampler_glide_and_slices_are_audio_domain_tools() {
+    // glide: tied notes slide the running voice instead of retriggering
+    let song = |glide: &str| {
+        format!(
+            r#"song "G" {{ tempo 120bpm
+              sample Sub = bounce(prisma(wave: "sine", cutoff: 0.4, sustain: 0.9), note: C2, beats: 2)
+              track B {{ instrument sampler(sample: Sub{glide}, sustain: 0.9, loop: "on")
+                play notes`C1~:1 Eb1~:1 C1:1` at bars(1..1) }} }}"#
+        )
+    };
+    let with = fortelang::render_digest(&fortelang::compile_str(&song(", glide: 0.2")).unwrap(), 2.0);
+    let without = fortelang::render_digest(&fortelang::compile_str(&song("")).unwrap(), 2.0);
+    assert_ne!(with.f32_digest, without.f32_digest, "glide must change the sound");
+    assert!(with.rms > 0.0005, "glide render must sound (rms {})", with.rms);
+    let again = fortelang::render_digest(&fortelang::compile_str(&song(", glide: 0.2")).unwrap(), 2.0);
+    assert_eq!(with.f32_digest, again.f32_digest, "glide must be deterministic");
+
+    // slices: notes pick chunks at original speed; different notes = different cuts
+    let chop = |pat: &str| {
+        format!(
+            r#"song "S" {{ tempo 120bpm
+              sample L = bounce(prisma(wave: "saw", cutoff: 0.6, decay: 0.15), note: C3, beats: 2)
+              track C {{ instrument sampler(sample: L, slices: 8, decay: 0.2, sustain: 0.0)
+                play notes`{pat}` at bars(1..1) }} }}"#
+        )
+    };
+    let a = fortelang::render_digest(&fortelang::compile_str(&chop("C3:0.5 G3:0.5 D#3:0.5 A3:0.5")).unwrap(), 2.0);
+    let b = fortelang::render_digest(&fortelang::compile_str(&chop("C3:0.5 C3:0.5 C3:0.5 C3:0.5")).unwrap(), 2.0);
+    assert_ne!(a.f32_digest, b.f32_digest, "different slices must sound different");
+    assert!(a.rms > 0.0005, "sliced render must sound (rms {})", a.rms);
+    // bad slice counts are rejected
+    assert!(!err_codes(&chop("C3:0.5").replace("slices: 8", "slices: 99")).is_empty());
+}

@@ -142,7 +142,7 @@ impl DeviceKind {
             ],
             DeviceKind::Sampler => &[
                 "Gain", "Attack", "Decay", "Sustain", "Release", "Pitch", "Start", "End",
-                "Loop", "Reverse",
+                "Loop", "Reverse", "Glide", "Slices",
             ],
             DeviceKind::Kit => &["Gain", "Attack", "Decay", "Sustain", "Release"],
             DeviceKind::PolyMesh => &[],
@@ -173,7 +173,7 @@ impl DeviceKind {
             }
             // Pitch 0.5 == centre (no transpose); ±24 semitones across the range.
             // Start/End trim the play region; Loop/Reverse are 0/1 switches.
-            DeviceKind::Sampler => vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5, 0.0, 1.0, 0.0, 0.0],
+            DeviceKind::Sampler => vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
             DeviceKind::Kit => vec![0.8, 0.01, 0.3, 1.0, 0.25],
             DeviceKind::PolyMesh => Vec::new(),
             DeviceKind::Arpeggiator => vec![0.55, 0.0, 0.0], // 1/8, 1 octave, up

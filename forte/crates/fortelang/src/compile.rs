@@ -1822,6 +1822,18 @@ fn build_instrument(
                         dev.sample = SampleSource::Asset(key.clone());
                         root = *broot; // the bounced pitch plays back untouched
                     }
+                    // slice mode: chop the region into N pads (root+n picks
+                    // slice n at original speed — the MPC chop / breakbeat cut)
+                    ("slices", Arg::Num(n, pos)) => {
+                        if !(2.0..=32.0).contains(n) || n.fract() != 0.0 {
+                            return Err(Diag::new(
+                                "E-TYPE-002",
+                                *pos,
+                                format!("slices {n} は 2..32 の整数で指定してください"),
+                            ));
+                        }
+                        dev.params[11] = (*n / 32.0) as f32;
+                    }
                     ("sample", Arg::Str(s, pos)) => {
                         let canon = match s.to_ascii_lowercase().as_str() {
                             "kick" => ("Kick", 36),
@@ -1847,6 +1859,7 @@ fn build_instrument(
                         &[
                             ("gain", 0), ("attack", 1), ("decay", 2), ("sustain", 3),
                             ("release", 4), ("pitch", 5), ("start", 6), ("end", 7),
+                            ("glide", 10),
                         ],
                         &[("loop", 8, &["off", "on"]), ("reverse", 9, &["off", "on"])],
                         call,

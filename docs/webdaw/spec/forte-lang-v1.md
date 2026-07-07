@@ -167,7 +167,7 @@ anyone can plug their own recording into a published instrument.
 
 | instrument | Parameters |
 | --- | --- |
-| `sampler(sample: "Kick"\|"Snare"\|"Hat")` | gain, attack, decay, sustain, release, pitch, start, end, loop("off"/"on"), reverse("off"/"on") |
+| `sampler(sample: "Kick"\|"Snare"\|"Hat"\|<bounce name>)` | gain, attack, decay, sustain, release, pitch, start, end, loop("off"/"on"), reverse("off"/"on"), glide (0..1 → 0..0.5 s of mono/legato slide between overlapping notes — the 808/303 slide), slices (2..32: chop the region into pads; root+n plays slice n at ORIGINAL speed — the MPC chop) |
 | `sampler(take: <imported recording>, root: A3)` | Same as above. A recorded take becomes an instrument: `root` is the note name (C2..C6) at which the take was performed; playing that note gives the original sound, others are repitched chromatically |
 | `sampler(…, start: 0.25, end: 0.6, loop: "on", reverse: "on")` | Sound design: `start`/`end` set the playback range (as a 0..1 fraction), `loop: "on"` loops the range while the note is held (short ranges become sustained tones), `reverse: "on"` plays in reverse. All are fixed at note-on time, preserving determinism |
 | `kit(C2: kickTake, D2: snareTake, …)` | gain, attack, decay, sustain, release. Note-name keys assign recorded takes to pads (only an exactly matching pitch sounds; original-speed playback, no repitching). A `beat` literal strikes the lowest-pitched pad |

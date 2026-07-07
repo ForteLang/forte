@@ -492,6 +492,14 @@ impl Instrument for Sampler {
             self.loop_on = p[8] > 0.5;
             self.reverse = p[9] > 0.5;
         }
+        if p.len() >= 11 {
+            // knob is 0..1 → 0..0.5 s of slide
+            self.glide = p[10] * 0.5;
+        }
+        if p.len() >= 12 {
+            // knob is 0..1 → 0..32 slices (0 = slice mode off)
+            self.slices = (p[11] * 32.0).round() as u8;
+        }
     }
     fn voices(&self) -> usize {
         self.active_voices()
