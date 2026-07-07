@@ -1,0 +1,42 @@
+// glitchworks/wrapped/prophetx — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { P5Vapor } from "packages/glitchworks_0.1.0/wrapped/prophetx.forte"
+//   block Line : P5Vapor { track Pad { play … at bars(1..4) } }
+import { P5Brass, P5Strings, P5Sweep } from "../../essentials_0.6.0/instruments/prophet5.forte"
+
+// P5Vapor — P5Strings played backwards into a crushed reverb — the vapor texture.
+block P5Vapor {
+  sample P5VaporSrc = bounce(P5Strings(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: P5VaporSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.6
+  }
+}
+
+// P5Stab — P5Brass fuzz bite + parallel crush + sparkle — cuts through any mix.
+block P5Stab {
+  sample P5StabSrc = bounce(P5Brass(), note: C3, beats: 1)
+  track Hit {
+    instrument sampler(sample: P5StabSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.7
+  }
+}
+
+// P5SweepRing — P5Sweep ring-modulated into inharmonic metal, tube-warmed.
+block P5SweepRing {
+  sample P5SweepRingSrc = bounce(P5Sweep(), note: C3, beats: 3)
+  track Pad {
+    instrument sampler(sample: P5SweepRingSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.55
+  }
+}

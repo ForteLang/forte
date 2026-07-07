@@ -1,0 +1,146 @@
+// glitchworks/wrapped/keysx — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { EPianoDust } from "packages/glitchworks_0.1.0/wrapped/keysx.forte"
+//   block Line : EPianoDust { track Key { play … at bars(1..4) } }
+import { Bell, Celesta, Clav, EPiano, Glass, Kalimba, Marimba, MusicBox, Organ, Vibraphone, Wurli } from "../../essentials_0.6.0/instruments/keys.forte"
+
+// EPianoDust — EPiano bit-dusted and tape-warmed — the lofi convention.
+block EPianoDust {
+  sample EPianoDustSrc = bounce(EPiano(), note: C4, beats: 2)
+  track Key {
+    instrument sampler(sample: EPianoDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.75
+  }
+}
+
+// EPianoVapor — EPiano played backwards into a crushed reverb — the vapor texture.
+block EPianoVapor {
+  sample EPianoVaporSrc = bounce(EPiano(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: EPianoVaporSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.6
+  }
+}
+
+// WurliTape — Wurli bit-dusted and tape-warmed — the lofi convention.
+block WurliTape {
+  sample WurliTapeSrc = bounce(Wurli(), note: C4, beats: 2)
+  track Key {
+    instrument sampler(sample: WurliTapeSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.75
+  }
+}
+
+// BellRing — Bell ring-modulated into inharmonic metal, tube-warmed.
+block BellRing {
+  sample BellRingSrc = bounce(Bell(), note: C5, beats: 2)
+  track Metal {
+    instrument sampler(sample: BellRingSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.55
+  }
+}
+
+// BoxReverse — MusicBox played backwards into a crushed reverb — the vapor texture.
+block BoxReverse {
+  sample BoxReverseSrc = bounce(MusicBox(), note: C5, beats: 2)
+  track Pad {
+    instrument sampler(sample: BoxReverseSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.55
+  }
+}
+
+// GlassShine — Glass excited highs and chorus width — expensive sheen.
+block GlassShine {
+  sample GlassShineSrc = bounce(Glass(), note: C5, beats: 2)
+  track Key {
+    instrument sampler(sample: GlassShineSrc, sustain: 0.8, release: 0.35)
+    insert exciter(amount: 0.45, freq: 0.6)
+    insert chorus(rate: 0.25, depth: 0.4, mix: 0.35)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.8
+  }
+}
+
+// ClavWire — Clav fuzz-crushed and compressed — audio-domain acid.
+block ClavWire {
+  sample ClavWireSrc = bounce(Clav(), note: C3, beats: 1)
+  track Wire {
+    instrument sampler(sample: ClavWireSrc, glide: 0.06, sustain: 0.7, loop: "on")
+    insert saturate(mode: "fuzz", drive: 0.55, tone: 0.5)
+    insert comp(thresh: 0.4, ratio: 0.7, attack: 0.01, release: 0.12, makeup: 0.25)
+    volume 0.8
+  }
+}
+
+// MarimbaChop — Marimba sliced into 8 pads (root+n = slice n at original speed) — the MPC chop.
+block MarimbaChop {
+  sample MarimbaChopSrc = bounce(Marimba(), note: C4, beats: 2)
+  track Chop {
+    instrument sampler(sample: MarimbaChopSrc, slices: 8, sustain: 0.0, decay: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.65
+  }
+}
+
+// KalimbaDust — Kalimba bit-dusted and tape-warmed — the lofi convention.
+block KalimbaDust {
+  sample KalimbaDustSrc = bounce(Kalimba(), note: C5, beats: 1)
+  track Key {
+    instrument sampler(sample: KalimbaDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.65
+  }
+}
+
+// VibeShine — Vibraphone excited highs and chorus width — expensive sheen.
+block VibeShine {
+  sample VibeShineSrc = bounce(Vibraphone(), note: C4, beats: 3)
+  track Key {
+    instrument sampler(sample: VibeShineSrc, sustain: 0.8, release: 0.35)
+    insert exciter(amount: 0.45, freq: 0.6)
+    insert chorus(rate: 0.25, depth: 0.4, mix: 0.35)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.8
+  }
+}
+
+// OrganStab — Organ fuzz bite + parallel crush + sparkle — cuts through any mix.
+block OrganStab {
+  sample OrganStabSrc = bounce(Organ(), note: C3, beats: 1)
+  track Hit {
+    instrument sampler(sample: OrganStabSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.7
+  }
+}
+
+// CelestaGhost — Celesta played backwards into a crushed reverb — the vapor texture.
+block CelestaGhost {
+  sample CelestaGhostSrc = bounce(Celesta(), note: C5, beats: 2)
+  track Pad {
+    instrument sampler(sample: CelestaGhostSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.55
+  }
+}

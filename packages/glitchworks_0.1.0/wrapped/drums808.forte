@@ -1,0 +1,124 @@
+// glitchworks/wrapped/drums808 — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { Knock808 } from "packages/glitchworks_0.1.0/wrapped/drums808.forte"
+//   block Line : Knock808 { track Hit { play … at bars(1..4) } }
+import { BD808, CB808, CH808, CP808, CY808, LT808, OH808, RS808, SD808 } from "../../essentials_0.6.0/instruments/tr808.forte"
+
+// Knock808 — BD808 transient-shaped, tape-saturated, NY-compressed — the produced hit.
+block Knock808 {
+  sample Knock808Src = bounce(BD808(), note: C1, beats: 1)
+  track Hit {
+    instrument sampler(sample: Knock808Src, sustain: 0.0, decay: 0.35)
+    insert transient(attack: 0.8, sustain: 0.35)
+    insert saturate(mode: "tape", drive: 0.5)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.35)
+    volume 0.8
+  }
+}
+
+// Sub808Deep — BD808 tail looped and repitched with glide — the 808-sub treatment.
+block Sub808Deep {
+  sample Sub808DeepSrc = bounce(BD808(), note: C1, beats: 2)
+  track Sub {
+    instrument sampler(sample: Sub808DeepSrc, glide: 0.12, sustain: 0.9, loop: "on", release: 0.25)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.8
+  }
+}
+
+// Crack808 — SD808 fuzz bite + parallel crush + sparkle — cuts through any mix.
+block Crack808 {
+  sample Crack808Src = bounce(SD808(), note: D2, beats: 1)
+  track Hit {
+    instrument sampler(sample: Crack808Src, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.8
+  }
+}
+
+// Clap808Wide — CP808 fuzz bite + parallel crush + sparkle — cuts through any mix.
+block Clap808Wide {
+  sample Clap808WideSrc = bounce(CP808(), note: D#2, beats: 1)
+  track Hit {
+    instrument sampler(sample: Clap808WideSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.8
+  }
+}
+
+// Dust808Hat — CH808 bit-dusted and tape-warmed — the lofi convention.
+block Dust808Hat {
+  sample Dust808HatSrc = bounce(CH808(), note: F#2, beats: 0.5)
+  track Hat {
+    instrument sampler(sample: Dust808HatSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.6
+  }
+}
+
+// Wash808 — OH808 played backwards into a crushed reverb — the vapor texture.
+block Wash808 {
+  sample Wash808Src = bounce(OH808(), note: A#2, beats: 1)
+  track Pad {
+    instrument sampler(sample: Wash808Src, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.6
+  }
+}
+
+// Bell808Ring — CB808 ring-modulated into inharmonic metal, tube-warmed.
+block Bell808Ring {
+  sample Bell808RingSrc = bounce(CB808(), note: G2, beats: 1)
+  track Metal {
+    instrument sampler(sample: Bell808RingSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.8
+  }
+}
+
+// Boom808 — LT808 tail looped and repitched with glide — the 808-sub treatment.
+block Boom808 {
+  sample Boom808Src = bounce(LT808(), note: C1, beats: 2)
+  track Sub {
+    instrument sampler(sample: Boom808Src, glide: 0.12, sustain: 0.9, loop: "on", release: 0.25)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.8
+  }
+}
+
+// Cym808Rise — CY808 played backwards into a crushed reverb — the vapor texture.
+block Cym808Rise {
+  sample Cym808RiseSrc = bounce(CY808(), note: C3, beats: 2)
+  track Pad {
+    instrument sampler(sample: Cym808RiseSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.55
+  }
+}
+
+// Rim808Wire — RS808 ring-modulated into inharmonic metal, tube-warmed.
+block Rim808Wire {
+  sample Rim808WireSrc = bounce(RS808(), note: E2, beats: 0.5)
+  track Metal {
+    instrument sampler(sample: Rim808WireSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.8
+  }
+}

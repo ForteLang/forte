@@ -1,0 +1,147 @@
+// glitchworks/wrapped/synthsx — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { PolyVapor } from "packages/glitchworks_0.1.0/wrapped/synthsx.forte"
+//   block Line : PolyVapor { track Pad { play … at bars(1..4) } }
+import { AnalogBrass, ChorusPulse, DreamSynth, ElectricGrand, FifthStack, Hoover, PolySaw, RetroWave, SoftSquare, StringMachine, TranceSaw, VintagePoly } from "../../essentials_0.6.0/instruments/synths.forte"
+
+// PolyVapor — PolySaw played backwards into a crushed reverb — the vapor texture.
+block PolyVapor {
+  sample PolyVaporSrc = bounce(PolySaw(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: PolyVaporSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.6
+  }
+}
+
+// TranceWire — TranceSaw fuzz-crushed and compressed — audio-domain acid.
+block TranceWire {
+  sample TranceWireSrc = bounce(TranceSaw(), note: C3, beats: 2)
+  track Wire {
+    instrument sampler(sample: TranceWireSrc, glide: 0.06, sustain: 0.7, loop: "on")
+    insert saturate(mode: "fuzz", drive: 0.55, tone: 0.5)
+    insert comp(thresh: 0.4, ratio: 0.7, attack: 0.01, release: 0.12, makeup: 0.25)
+    volume 0.8
+  }
+}
+
+// RetroDust — RetroWave bit-dusted and tape-warmed — the lofi convention.
+block RetroDust {
+  sample RetroDustSrc = bounce(RetroWave(), note: C4, beats: 2)
+  track Key {
+    instrument sampler(sample: RetroDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.7
+  }
+}
+
+// HooverStab — Hoover fuzz bite + parallel crush + sparkle — cuts through any mix.
+block HooverStab {
+  sample HooverStabSrc = bounce(Hoover(), note: C3, beats: 1)
+  track Hit {
+    instrument sampler(sample: HooverStabSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.65
+  }
+}
+
+// MachineGhost — StringMachine played backwards into a crushed reverb — the vapor texture.
+block MachineGhost {
+  sample MachineGhostSrc = bounce(StringMachine(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: MachineGhostSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.55
+  }
+}
+
+// DreamShine — DreamSynth excited highs and chorus width — expensive sheen.
+block DreamShine {
+  sample DreamShineSrc = bounce(DreamSynth(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: DreamShineSrc, sustain: 0.8, release: 0.35)
+    insert exciter(amount: 0.45, freq: 0.6)
+    insert chorus(rate: 0.25, depth: 0.4, mix: 0.35)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.6
+  }
+}
+
+// VintageDust — VintagePoly bit-dusted and tape-warmed — the lofi convention.
+block VintageDust {
+  sample VintageDustSrc = bounce(VintagePoly(), note: C4, beats: 2)
+  track Key {
+    instrument sampler(sample: VintageDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.7
+  }
+}
+
+// GrandTape — ElectricGrand bit-dusted and tape-warmed — the lofi convention.
+block GrandTape {
+  sample GrandTapeSrc = bounce(ElectricGrand(), note: C4, beats: 2)
+  track Key {
+    instrument sampler(sample: GrandTapeSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.75
+  }
+}
+
+// BrassStab — AnalogBrass fuzz bite + parallel crush + sparkle — cuts through any mix.
+block BrassStab {
+  sample BrassStabSrc = bounce(AnalogBrass(), note: C3, beats: 1)
+  track Hit {
+    instrument sampler(sample: BrassStabSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.7
+  }
+}
+
+// SquareGhost — SoftSquare played backwards into a crushed reverb — the vapor texture.
+block SquareGhost {
+  sample SquareGhostSrc = bounce(SoftSquare(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: SquareGhostSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.55
+  }
+}
+
+// FifthRing — FifthStack ring-modulated into inharmonic metal, tube-warmed.
+block FifthRing {
+  sample FifthRingSrc = bounce(FifthStack(), note: C3, beats: 2)
+  track Metal {
+    instrument sampler(sample: FifthRingSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.55
+  }
+}
+
+// PulseChop — ChorusPulse sliced into 8 pads (root+n = slice n at original speed) — the MPC chop.
+block PulseChop {
+  sample PulseChopSrc = bounce(ChorusPulse(), note: C3, beats: 2)
+  track Chop {
+    instrument sampler(sample: PulseChopSrc, slices: 8, sustain: 0.0, decay: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.65
+  }
+}

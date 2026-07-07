@@ -1,0 +1,137 @@
+// glitchworks/wrapped/percx — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { CongaChop } from "packages/glitchworks_0.1.0/wrapped/percx.forte"
+//   block Line : CongaChop { track Chop { play … at bars(1..4) } }
+import { Agogo, Bongo, Cabasa, Cajon, Clave, Conga, Guiro, Maracas, Timbale, Triangle, Woodblock } from "../../essentials_0.6.0/instruments/percussion.forte"
+
+// CongaChop — Conga sliced into 8 pads (root+n = slice n at original speed) — the MPC chop.
+block CongaChop {
+  sample CongaChopSrc = bounce(Conga(), note: C3, beats: 2)
+  track Chop {
+    instrument sampler(sample: CongaChopSrc, slices: 8, sustain: 0.0, decay: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.65
+  }
+}
+
+// BongoRing — Bongo ring-modulated into inharmonic metal, tube-warmed.
+block BongoRing {
+  sample BongoRingSrc = bounce(Bongo(), note: F2, beats: 0.5)
+  track Metal {
+    instrument sampler(sample: BongoRingSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.8
+  }
+}
+
+// CajonDust — Cajon bit-dusted and tape-warmed — the lofi convention.
+block CajonDust {
+  sample CajonDustSrc = bounce(Cajon(), note: D2, beats: 1)
+  track Hit {
+    instrument sampler(sample: CajonDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.65
+  }
+}
+
+// TimbaleCrack — Timbale fuzz bite + parallel crush + sparkle — cuts through any mix.
+block TimbaleCrack {
+  sample TimbaleCrackSrc = bounce(Timbale(), note: E2, beats: 1)
+  track Hit {
+    instrument sampler(sample: TimbaleCrackSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.8
+  }
+}
+
+// TriangleShine — Triangle excited highs and chorus width — expensive sheen.
+block TriangleShine {
+  sample TriangleShineSrc = bounce(Triangle(), note: C5, beats: 1)
+  track Key {
+    instrument sampler(sample: TriangleShineSrc, sustain: 0.8, release: 0.35)
+    insert exciter(amount: 0.45, freq: 0.6)
+    insert chorus(rate: 0.25, depth: 0.4, mix: 0.35)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.5
+  }
+}
+
+// WoodRing — Woodblock ring-modulated into inharmonic metal, tube-warmed.
+block WoodRing {
+  sample WoodRingSrc = bounce(Woodblock(), note: G2, beats: 0.5)
+  track Metal {
+    instrument sampler(sample: WoodRingSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.8
+  }
+}
+
+// GuiroChop — Guiro sliced into 8 pads (root+n = slice n at original speed) — the MPC chop.
+block GuiroChop {
+  sample GuiroChopSrc = bounce(Guiro(), note: A2, beats: 1)
+  track Chop {
+    instrument sampler(sample: GuiroChopSrc, slices: 8, sustain: 0.0, decay: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.55
+  }
+}
+
+// CabasaDust — Cabasa bit-dusted and tape-warmed — the lofi convention.
+block CabasaDust {
+  sample CabasaDustSrc = bounce(Cabasa(), note: A2, beats: 0.5)
+  track Hat {
+    instrument sampler(sample: CabasaDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.55
+  }
+}
+
+// MaracasChop — Maracas sliced into 8 pads (root+n = slice n at original speed) — the MPC chop.
+block MaracasChop {
+  sample MaracasChopSrc = bounce(Maracas(), note: A2, beats: 1)
+  track Chop {
+    instrument sampler(sample: MaracasChopSrc, slices: 8, sustain: 0.0, decay: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.5
+  }
+}
+
+// AgogoWire — Agogo ring-modulated into inharmonic metal, tube-warmed.
+block AgogoWire {
+  sample AgogoWireSrc = bounce(Agogo(), note: G3, beats: 0.5)
+  track Metal {
+    instrument sampler(sample: AgogoWireSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.55
+  }
+}
+
+// ClaveCrack — Clave fuzz bite + parallel crush + sparkle — cuts through any mix.
+block ClaveCrack {
+  sample ClaveCrackSrc = bounce(Clave(), note: E3, beats: 0.5)
+  track Hit {
+    instrument sampler(sample: ClaveCrackSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.6
+  }
+}

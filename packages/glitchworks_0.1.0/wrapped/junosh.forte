@@ -1,0 +1,65 @@
+// glitchworks/wrapped/junosh — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { JunoVapor } from "packages/glitchworks_0.1.0/wrapped/junosh.forte"
+//   block Line : JunoVapor { track Pad { play … at bars(1..4) } }
+import { JunoBass, JunoBrass, JunoKeys, JunoPad, JunoStrings } from "../../essentials_0.6.0/instruments/juno60.forte"
+
+// JunoVapor — JunoStrings played backwards into a crushed reverb — the vapor texture.
+block JunoVapor {
+  sample JunoVaporSrc = bounce(JunoStrings(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: JunoVaporSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.6
+  }
+}
+
+// JunoDustPad — JunoPad bit-dusted and tape-warmed — the lofi convention.
+block JunoDustPad {
+  sample JunoDustPadSrc = bounce(JunoPad(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: JunoDustPadSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.65
+  }
+}
+
+// JunoSub — JunoBass tail looped and repitched with glide — the 808-sub treatment.
+block JunoSub {
+  sample JunoSubSrc = bounce(JunoBass(), note: C1, beats: 2)
+  track Sub {
+    instrument sampler(sample: JunoSubSrc, glide: 0.12, sustain: 0.9, loop: "on", release: 0.25)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.8
+  }
+}
+
+// JunoShine — JunoKeys excited highs and chorus width — expensive sheen.
+block JunoShine {
+  sample JunoShineSrc = bounce(JunoKeys(), note: C4, beats: 2)
+  track Key {
+    instrument sampler(sample: JunoShineSrc, sustain: 0.8, release: 0.35)
+    insert exciter(amount: 0.45, freq: 0.6)
+    insert chorus(rate: 0.25, depth: 0.4, mix: 0.35)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.8
+  }
+}
+
+// JunoStab — JunoBrass fuzz bite + parallel crush + sparkle — cuts through any mix.
+block JunoStab {
+  sample JunoStabSrc = bounce(JunoBrass(), note: C3, beats: 1)
+  track Hit {
+    instrument sampler(sample: JunoStabSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.7
+  }
+}
