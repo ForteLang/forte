@@ -36,6 +36,10 @@ struct SampleVoice {
     /// gate currently held (note-on seen, no note-off yet) — glide engages
     /// only into a held voice, the tie/legato semantics of the 303
     gate: bool,
+    /// the sampler's `transpose` at note-on — automating `pitch` bends the
+    /// running voice relative to this, so a CONSTANT transpose multiplies by
+    /// exactly 1.0 and leaves the sound bit-identical
+    tp0: f32,
     region: (f64, f64), // play region [start, end) in source samples
     looping: bool,
     note: u8,
@@ -54,6 +58,7 @@ impl SampleVoice {
             step_target: 1.0,
             step_factor: 1.0,
             gate: false,
+            tp0: 0.0,
             region: (0.0, 0.0),
             looping: false,
             vel: 1.0,
@@ -164,6 +169,7 @@ impl Sampler {
             v.step_target = v.step;
             v.step_factor = 1.0;
             v.gate = true;
+            v.tp0 = self.transpose;
             v.vel = ((velocity * 127.0 + 0.5) as u32 as f32 / 100.0).clamp(0.0, 1.27);
             v.note = note;
             v.active = true;
@@ -190,6 +196,7 @@ impl Sampler {
                     v.step = target;
                     v.step_factor = 1.0;
                 }
+                v.tp0 = self.transpose;
                 v.note = note;
                 return;
             }
@@ -225,6 +232,7 @@ impl Sampler {
         v.step_target = v.step;
         v.step_factor = 1.0;
         v.gate = true;
+        v.tp0 = self.transpose;
         // velocity arrives 0..1 (127-normalised); 100/127 → unity so plain
         // `x` hits keep their nominal level, `X` lifts, `.` ghosts duck
         // reconstruct the 0..127 step so velocity 100 lands on exactly 1.0 —
@@ -290,7 +298,15 @@ impl Sampler {
                     v.step_factor = 1.0;
                 }
             }
-            v.pos += v.step;
+            // live transpose: automating `pitch` bends every held voice.
+            // Equal to the note-on transpose → multiply by exactly 1.0, so a
+            // constant `pitch` renders bit-identically to before this existed.
+            let eff = if self.transpose == v.tp0 {
+                v.step
+            } else {
+                v.step * crate::dmath::powf(2.0, (self.transpose - v.tp0) / 12.0) as f64
+            };
+            v.pos += eff;
             let (rs, re) = v.region;
             let span = (re - rs).max(1.0);
             if v.step >= 0.0 {

@@ -761,3 +761,36 @@ fn sidechain_duck_carves_the_source_hits() {
     assert!(fortelang::compile_str(&wrap("insert duck(amount: 0.9)")).is_err());
     assert!(fortelang::compile_str(&wrap("insert duck(from: Nope)")).is_err());
 }
+
+#[test]
+fn sampler_pitch_automation_bends_held_audio_and_stays_bitexact_when_constant() {
+    let song = |auto: &str| {
+        format!(
+            r#"song "P" {{ tempo 120bpm
+              sample Tone = bounce(prisma(wave: "saw", cutoff: 0.5, sustain: 0.9), note: C3, beats: 2)
+              track S {{ instrument sampler(sample: Tone, sustain: 0.9, loop: "on")
+                {auto}
+                play notes`C2:4` at bars(1..1) }} }}"#
+        )
+    };
+    // automating pitch bends the running voice — differs from constant pitch
+    let swept = fortelang::render_digest(&fortelang::compile_str(&song("automate pitch from 0.5 to 0.75 over bars(1..1)")).unwrap(), 1.0);
+    let flat = fortelang::render_digest(&fortelang::compile_str(&song("")).unwrap(), 1.0);
+    assert_ne!(swept.f32_digest, flat.f32_digest, "a pitch sweep must bend the sound");
+    // and a CONSTANT pitch is bit-identical to no automation at all
+    let const_pitch = fortelang::render_digest(&fortelang::compile_str(&song("automate pitch from 0.5 to 0.5 over bars(1..1)")).unwrap(), 1.0);
+    assert_eq!(const_pitch.f32_digest, flat.f32_digest, "constant pitch must be a true no-op");
+
+    // duck params are automatable (attack/release/amount)
+    let dsong = |auto: &str| format!(
+        r#"song "D" {{ tempo 128bpm
+          track Kick {{ instrument sampler(sample: "Kick", sustain: 0.0) volume 0.0
+            play beat`x--- x--- x--- x---` at bars(1..1) }}
+          track Pad {{ instrument prisma(wave: "saw", sustain: 0.9)
+            insert duck(from: Kick, amount: 0.9, release: 0.1)
+            {auto}
+            play notes`C3:4` at bars(1..1) }} }}"#);
+    let a = fortelang::render_digest(&fortelang::compile_str(&dsong("automate duck.release from 0.05 to 0.9 over bars(1..1)")).unwrap(), 1.0);
+    let b = fortelang::render_digest(&fortelang::compile_str(&dsong("")).unwrap(), 1.0);
+    assert_ne!(a.f32_digest, b.f32_digest, "automating the duck release must change the carve");
+}
