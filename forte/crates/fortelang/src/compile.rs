@@ -211,6 +211,7 @@ pub fn compile(
         lowered.tracks.into_iter().partition(|t| t.is_return);
     let mut return_ids: HashMap<String, usize> = HashMap::new();
     let mut pending_sends: Vec<(usize, String, f32, Pos)> = Vec::new();
+    let mut pending_ducks: Vec<(usize, usize, String, Pos)> = Vec::new();
     for lt in inst.into_iter().chain(fx) {
         let id = p.alloc_id();
         let idx = p.tracks.len();
@@ -226,6 +227,9 @@ pub fn compile(
         for (dest, level, pos) in lt.sends {
             pending_sends.push((idx, dest, level, pos));
         }
+        for (dev_i, source, pos) in lt.ducks {
+            pending_ducks.push((idx, dev_i, source, pos));
+        }
         p.tracks.push(track);
     }
     for (ti, dest, level, pos) in pending_sends {
@@ -240,6 +244,46 @@ pub fn compile(
             continue;
         };
         p.tracks[ti].sends.push((dest_id, level));
+    }
+
+    // sidechain ducks: bake the source track's (swung) hit times, in seconds,
+    // into the Duck device. `from: X` matches any track whose name equals X or
+    // ends with it (so `from: Kick` finds a placed block's Kick lane too).
+    let sec_per_beat = 60.0 / p.tempo;
+    for (ti, di, source, pos) in pending_ducks {
+        let mut hits: Vec<f64> = Vec::new();
+        for t in &p.tracks {
+            let bare = t.name.rsplit(['.', ' ']).next().unwrap_or(&t.name);
+            if t.name == source || t.name.ends_with(&source) || bare == source {
+                for ac in &t.arranger {
+                    let span = ac.duration.max(0.0);
+                    let period = ac.clip.length.max(1e-6);
+                    let reps = (span / period).ceil() as usize + 1;
+                    for rep in 0..reps {
+                        let base = ac.start + rep as f64 * period;
+                        for n in &ac.clip.notes {
+                            let beat = base + n.start;
+                            if beat >= ac.start && beat < ac.start + span {
+                                hits.push(beat * sec_per_beat);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if hits.is_empty() {
+            let mut names: Vec<&str> = p.tracks.iter().map(|t| t.name.as_str()).collect();
+            names.sort();
+            names.dedup();
+            diags.push(Diag::new(
+                "E-DUCK-002",
+                pos,
+                format!("duck の from: '{source}' に当たる音のあるトラックがありません(トラック: {})", names.join(", ")),
+            ));
+            continue;
+        }
+        hits.sort_by(|a, b| a.total_cmp(b));
+        p.tracks[ti].devices[di].sidechain = hits;
     }
 
     if diags.is_empty() {
@@ -267,6 +311,9 @@ struct LTrack {
     is_return: bool,
     /// (prefixed return name, level, position) — resolved at the root.
     sends: Vec<(String, f32, Pos)>,
+    /// (device index, source track name, position) — a `duck(from: …)`
+    /// insert whose trigger times are baked from the source at the root.
+    ducks: Vec<(usize, String, Pos)>,
 }
 
 struct Lowered {
@@ -450,7 +497,21 @@ fn lower_body(
         // insert effects, in order; remember their names so automate/modulate
         // can target `<insert>.<param>` (first match wins on duplicates)
         let mut insert_devs: Vec<(String, usize)> = Vec::new();
+        let mut ducks: Vec<(usize, String, Pos)> = Vec::new();
         for call in &tast.inserts {
+            // duck(from: Track, …) is a sidechain: `from:` names another
+            // track whose (swung) hits are baked in at the root
+            if call.name == "duck" {
+                match build_duck(&bind_params(call, &param_env)) {
+                    Ok((dev, source)) => {
+                        insert_devs.push((call.name.clone(), track.devices.len()));
+                        ducks.push((track.devices.len(), source, call.pos));
+                        track.devices.push(dev);
+                    }
+                    Err(d) => diags.push(d),
+                }
+                continue;
+            }
             match build_effect(&bind_params(call, &param_env), env.user_devices, env.tempo) {
                 Ok(dev) => {
                     insert_devs.push((call.name.clone(), track.devices.len()));
@@ -767,7 +828,7 @@ fn lower_body(
                 Some((format!("{prefix}{dest}"), *level as f32, *pos))
             })
             .collect();
-        out.push(LTrack { track, is_return: false, sends });
+        out.push(LTrack { track, is_return: false, sends, ducks });
     }
 
     // ---- return (effect) tracks ---------------------------------------------
@@ -799,7 +860,7 @@ fn lower_body(
             diags.push(Diag::new("E-MOD-002", rast.pos, format!("return '{}' が重複しています", rast.name)));
         }
         seen_returns.push(rast.name.as_str());
-        out.push(LTrack { track, is_return: true, sends: Vec::new() });
+        out.push(LTrack { track, is_return: true, sends: Vec::new(), ducks: Vec::new() });
     }
 
     // ---- block placements -----------------------------------------------------
@@ -1032,7 +1093,7 @@ fn lower_body(
                     for lane in &mut fresh.param_automation {
                         lane.points.clear();
                     }
-                    out.push(LTrack { track: fresh, is_return: lt.is_return, sends: lt.sends.clone() });
+                    out.push(LTrack { track: fresh, is_return: lt.is_return, sends: lt.sends.clone(), ducks: lt.ducks.clone() });
                     out.last_mut().unwrap()
                 }
             };
@@ -2161,6 +2222,52 @@ fn build_lfo(
     }
     lfo.routes.push(ModRoute { param: idx, amount, device: None });
     Ok((di, lfo))
+}
+
+/// `duck(from: Kick, amount: 0.9, attack: 0.2, release: 0.35, shape: 0.7)`
+/// — build the Duck device and return the source track name for the root
+/// to resolve. The trigger times are baked there (once every track exists).
+fn build_duck(call: &Call) -> Result<(Device, String), Diag> {
+    let mut dev = Device::new(DeviceKind::Duck);
+    let mut source: Option<String> = None;
+    for (key, arg) in &call.args {
+        match (key.as_str(), arg) {
+            ("from", Arg::Ident(s, _)) | ("from", Arg::Str(s, _)) => source = Some(s.clone()),
+            ("from", arg) => {
+                return Err(Diag::new(
+                    "E-DUCK-001",
+                    arg.pos(),
+                    "duck.from はトラック名で指定します(例: from: Kick)",
+                ))
+            }
+            ("amount", Arg::Num(n, pos)) => dev.params[0] = validate01(*n, "duck.amount", *pos)?,
+            ("attack", Arg::Num(n, pos)) => dev.params[1] = validate01(*n, "duck.attack", *pos)?,
+            ("release", Arg::Num(n, pos)) => dev.params[2] = validate01(*n, "duck.release", *pos)?,
+            ("shape", Arg::Num(n, pos)) => dev.params[3] = validate01(*n, "duck.shape", *pos)?,
+            (other, arg) => {
+                return Err(Diag::new(
+                    "E-DUCK-001",
+                    arg.pos(),
+                    format!("duck() に '{other}' という引数はありません(from, amount, attack, release, shape)"),
+                ))
+            }
+        }
+    }
+    match source {
+        Some(s) => Ok((dev, s)),
+        None => Err(Diag::new(
+            "E-DUCK-001",
+            call.pos,
+            "duck() には from: <トラック名> が必要です(例: duck(from: Kick, amount: 0.9))",
+        )),
+    }
+}
+
+fn validate01(n: f64, what: &str, pos: Pos) -> Result<f32, Diag> {
+    if !(0.0..=1.0).contains(&n) {
+        return Err(Diag::new("E-TYPE-002", pos, format!("{what} = {n} は 0..1 の範囲外です")));
+    }
+    Ok(n as f32)
 }
 
 fn build_effect(

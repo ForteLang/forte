@@ -429,6 +429,9 @@ song "Name" {
     // insert parcomp(amount: 0.4, color: 0.4)
     // insert exciter(amount: 0.3)
     // automate tapestop.amount from 0 to 1 over bars(16..16)  // the tape stop
+    // insert duck(from: Kick, amount: 0.9, release: 0.3)  // SIDECHAIN: this
+    //   track ducks hard on every kick hit — the pumping space IS the groove.
+    //   Deep amounts carve to near-silence; that carving is what glitch is.
   }
 }
 ```

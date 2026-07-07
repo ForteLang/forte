@@ -729,3 +729,35 @@ fn wrapped_instrument_blocks_carry_their_own_samples() {
     assert_eq!(a.f32_digest, b.f32_digest, "block-scoped bounce must be bit-stable");
     assert!(a.rms > 0.001, "wrapped instrument must sound (rms {})", a.rms);
 }
+
+#[test]
+fn sidechain_duck_carves_the_source_hits() {
+    // a sustained pad ducked by the kick should dip hard right after each
+    // kick and recover between them — the glitch groove engine
+    let song = |duck: &str| {
+        format!(
+            r#"song "D" {{ tempo 128bpm
+              track Kick {{ instrument sampler(sample: "Kick", decay: 0.3, sustain: 0.0)
+                volume 0.0
+                play beat`x--- x--- x--- x---` at bars(1..1) }}
+              track Pad {{ instrument prisma(wave: "saw", cutoff: 0.4, sustain: 0.9)
+                {duck}
+                play notes`C3:4` at bars(1..1) }} }}"#
+        )
+    };
+    let ducked = fortelang::compile_str(&song("insert duck(from: Kick, amount: 0.9, release: 0.3)")).unwrap();
+    let plain = fortelang::compile_str(&song("")).unwrap();
+    let a = fortelang::render_digest(&ducked, 1.0);
+    let b = fortelang::render_digest(&plain, 1.0);
+    assert_ne!(a.f32_digest, b.f32_digest, "the duck must reshape the sound");
+    // the duck lowers overall energy (it removes signal between hits)
+    assert!(a.rms < b.rms, "ducked rms {} must be below plain {}", a.rms, b.rms);
+    // deterministic
+    let again = fortelang::render_digest(&fortelang::compile_str(&song("insert duck(from: Kick, amount: 0.9, release: 0.3)")).unwrap(), 1.0);
+    assert_eq!(a.f32_digest, again.f32_digest, "duck must be bit-stable");
+
+    // errors: missing from, unknown source
+    let wrap = |body: &str| format!(r#"song "E" {{ tempo 120bpm track T {{ instrument prisma() {body} play beat`x` at bars(1..1) }} }}"#);
+    assert!(fortelang::compile_str(&wrap("insert duck(amount: 0.9)")).is_err());
+    assert!(fortelang::compile_str(&wrap("insert duck(from: Nope)")).is_err());
+}
