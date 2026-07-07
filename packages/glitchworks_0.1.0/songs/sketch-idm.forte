@@ -9,13 +9,14 @@ import { SubWrap } from "../wrapped/bassx.forte"
 import { Dust, Hiss } from "../instruments/textures.forte"
 import { SawLead } from "../../essentials_0.6.0/instruments/leads.forte"
 import { GlassPad } from "../../essentials_0.6.0/instruments/pads.forte"
+import { SnareBed, LiveSnare, TightSnare } from "../wrapped/snares.forte"
 
 song "Sketch IDM" {
   desc "Audition sketch: snare-backbeat groove destabilized by glitch, reverb tails cut mid-ring, melody up top, noise carved under. Breakbeat/IDM. Not an album track."
   artist "Forte Essentials"
-  tempo 170bpm
+  tempo 180bpm
   swing 0.58
-  master 2.2
+  master 0.92
   key D minor
 
   // ---- LOW: kick + sub, the floor ----
@@ -34,20 +35,15 @@ song "Sketch IDM" {
   // ---- HIGH: the snare backbeat — the groove engine, then glitched ----
   // a bright snare on 2 and 4 with reverb, then a ghost/roll layer whose
   // rests get destabilized. The reverb is CUT by the next hit.
-  block Back {
+  // the produced snare drives the backbeat — layered, saturated, roomy
+  block Back : LiveSnare {
     track Snare {
-      instrument SnareTight(snap: 0.75)
-      insert eq(low: 0.3, mid: 0.6, high: 0.7)
-      insert reverb(size: 0.5, decay: 0.45, mix: 0.25)
-      insert transient(attack: 0.75, sustain: 0.4)
-      volume 1.0
-      play beat`---- x--- ---- x---` at bars(1..32)
+      play notes`_:1 F3:1 _:1 F3:1` at bars(1..32)
     }
-    track Clap {
-      instrument Clap
-      insert eq(low: 0.2, mid: 0.55, high: 0.8)
-      volume 0.6
-      play beat`---- x--- ---- x---` at bars(9..28)
+  }
+  block Backfill : TightSnare {
+    track Snare {
+      play notes`_:1 _:1 _:1 _:0.5 G3:0.5` at bars(9..28)
     }
   }
   // the glitch snare: a bounced snare hit, sliced and re-cut into unstable
@@ -120,6 +116,7 @@ song "Sketch IDM" {
   play Kick at bars(1..32)
   play Sub at bars(5..28)
   play Back at bars(1..32)
+  play Backfill at bars(9..28)
   play Ghost at bars(9..28)
   play Hats at bars(5..28)
   play Stab at bars(9..28)
