@@ -1,0 +1,65 @@
+// Sketch: carve — audition piece, NOT an album track. The groove is not
+// sequenced; it is CARVED. A straight kick, a sub, and two sustained
+// layers (a saw drone and a noise bed) ducked to near-silence on every
+// kick. The pumping space IS the music. Swung 16th blips ride on top.
+// This is what glitch minimal actually is: audio shaved to the edge.
+import { Knock808, Sub808Deep, Dust808Hat } from "../wrapped/drums808.forte"
+import { Blip } from "../instruments/clicks.forte"
+
+song "Sketch Carve" {
+  desc "Audition sketch: sustained layers carved to silence by a sidechain kick. The pumping is the groove. Not an album track."
+  artist "Forte Essentials"
+  tempo 126bpm
+  swing 0.56
+  master 1.5
+  key A minor
+
+  // the trigger: a dry, straight kick
+  block Kick : Knock808 {
+    track Hit { play beat`x--- x--- x--- x---` at bars(1..16) }
+  }
+  block Sub : Sub808Deep {
+    track Sub { play notes`A0:1 _:1 A0:1 _:1` at bars(1..16) }
+  }
+
+  // a saw drone that only exists in the gaps between kicks
+  block Drone {
+    track Pad {
+      instrument prisma(wave: "saw", cutoff: 0.35, reso: 0.3, sustain: 0.95, attack: 0.08, release: 0.4)
+      insert saturate(mode: "tape", drive: 0.4)
+      insert duck(from: Kick, amount: 0.97, attack: 0.03, release: 0.28, shape: 0.75)
+      volume 0.55
+      play notes`[A2 E3]:8 [A2 F3]:8` at bars(1..16)
+    }
+  }
+  // a noise bed carved by the same kick — the "white noise on the edge"
+  block Bed {
+    track Air {
+      instrument prisma(wave: "square", cutoff: 0.8, reso: 0.1, sustain: 0.9, attack: 0.1, release: 0.3)
+      insert crush(bits: 0.4, rate: 0.3, mix: 0.5)
+      insert duck(from: Kick, amount: 0.95, attack: 0.02, release: 0.22, shape: 0.6)
+      volume 0.25
+      play notes`E5:16` at bars(3..16)
+    }
+  }
+  // swung blips ride over the carved space
+  block Blips {
+    track Blip {
+      instrument Blip(decay: 0.05)
+      insert delay(time: 0.28, fdbk: 0.35, mix: 0.3)
+      insert duck(from: Kick, amount: 0.6, attack: 0.01, release: 0.12, shape: 0.5)
+      volume 0.5
+      play notes`E5:0.25 _:0.75 A4:0.25 _:0.25 B4:0.25 _:1.25` at bars(5..16)
+    }
+  }
+  block Hats : Dust808Hat {
+    track Hat { play beat`--x- --x- --x- --xx` at bars(9..16) }
+  }
+
+  play Kick at bars(1..16)
+  play Sub at bars(1..16)
+  play Drone at bars(1..16)
+  play Bed at bars(3..16)
+  play Blips at bars(5..16)
+  play Hats at bars(9..16)
+}

@@ -373,6 +373,9 @@ song "Name" {
   meter 6/8              // defaults to 4/4
   key D minor            // optional
   sample Sub = bounce(BD808(decay: 0.9), note: C1, beats: 2)
+                         // bounce(BlockName) resamples a whole PHRASE — a
+                         // multi-track block — into one asset. Slice it (slices: 16)
+                         // and re-cut with rests: the breakbeat workflow.
                          // bounce-to-sample: render a hit into an audio asset,
                          // then play the AUDIO with a sampler — repitch, chop,
                          // reverse. sampler(sample: Sub, decay: 0.4) plays it;
