@@ -1,0 +1,29 @@
+// glitchworks/wrapped/bass — essentials instruments bounced to audio and
+// re-instrumentalized through a sampler + a convention chain. Inherit a
+// block and add plays:
+//   import { Sub808 } from "packages/glitchworks_0.1.0/wrapped/bass.forte"
+//   block Line : Sub808 { track Sub { play notes`C1~:1 Eb1:1` at bars(1..4) } }
+import { BD808 } from "../../essentials_0.6.0/instruments/tr808.forte"
+import { Bass303 } from "../../essentials_0.6.0/instruments/tb303.forte"
+
+// THE hip-hop 808: the kick's sine tail looped and repitched with glide.
+block Sub808 {
+  sample Sub808Src = bounce(BD808(decay: 0.95, tone: 0.15), note: C1, beats: 2)
+  track Sub {
+    instrument sampler(sample: Sub808Src, glide: 0.12, sustain: 0.9, loop: "on", release: 0.25)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.85
+  }
+}
+
+// The 303 bounced and fuzz-crushed: acid as audio, not oscillator.
+block AcidWire {
+  sample AcidWireSrc = bounce(Bass303(cutoff: 0.5, reso: 0.8), note: C2, beats: 1)
+  track Wire {
+    instrument sampler(sample: AcidWireSrc, glide: 0.06, sustain: 0.7, loop: "on")
+    insert saturate(mode: "fuzz", drive: 0.55, tone: 0.5)
+    insert comp(thresh: 0.4, ratio: 0.7, attack: 0.01, release: 0.12, makeup: 0.25)
+    volume 0.7
+  }
+}

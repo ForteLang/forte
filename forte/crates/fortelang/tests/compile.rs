@@ -704,3 +704,28 @@ fn pedal_effects_render_deterministically_and_change_the_sound() {
     );
     assert!(fortelang::compile_str(&chain).is_ok(), "the eq->saturate->comp chain must compile");
 }
+
+#[test]
+fn wrapped_instrument_blocks_carry_their_own_samples() {
+    // a block library declares the bounce inside the block; a song inherits
+    // the block and adds plays — the shipping form of wrapped instruments
+    let src = r#"song "W" { tempo 140bpm
+      block Wrapped {
+        sample Src = bounce(prisma(wave: "sine", cutoff: 0.4, sustain: 0.9), note: C1, beats: 2)
+        track Sub {
+          instrument sampler(sample: Src, glide: 0.1, sustain: 0.9, loop: "on")
+          insert saturate(mode: "tape", drive: 0.4)
+          insert comp(thresh: 0.45, ratio: 0.6, makeup: 0.2)
+        }
+      }
+      block Line : Wrapped {
+        track Sub { play notes`C1~:1 Eb1~:0.5 C1:1.5` at bars(1..1) }
+      }
+      play Line at bars(1..1)
+    }"#;
+    let p = fortelang::compile_str(src).expect("block-scoped sample must compile");
+    let a = fortelang::render_digest(&p, 2.0);
+    let b = fortelang::render_digest(&fortelang::compile_str(src).unwrap(), 2.0);
+    assert_eq!(a.f32_digest, b.f32_digest, "block-scoped bounce must be bit-stable");
+    assert!(a.rms > 0.001, "wrapped instrument must sound (rms {})", a.rms);
+}
