@@ -137,6 +137,16 @@ pub fn compile(
     }
     collect_sample_lets(&file.blocks, &mut all_sample_lets);
     collect_sample_lets(&root.blocks, &mut all_sample_lets);
+    // every block by name, for `bounce(BlockName)` phrase resampling
+    let mut all_blocks: Vec<&BlockAst> = Vec::new();
+    fn collect_blocks<'a>(blocks: &'a [BlockAst], out: &mut Vec<&'a BlockAst>) {
+        for b in blocks {
+            out.push(b);
+            collect_blocks(&b.body.blocks, out);
+        }
+    }
+    collect_blocks(&file.blocks, &mut all_blocks);
+    collect_blocks(&root.blocks, &mut all_blocks);
     for sl in all_sample_lets {
         let pitch = match music::parse_pitch(&sl.note, sl.pos) {
             Ok(v) => v,
@@ -153,22 +163,67 @@ pub fn compile(
             ));
             continue;
         }
-        let dev = match build_instrument(&sl.call, &user_devices, assets, &no_bounces) {
-            Ok((dev, _root)) => dev,
-            Err(d) => {
-                diags.push(d);
-                continue;
-            }
+        // bounce(BlockName) renders a whole PHRASE — a multi-track block — to
+        // one audio asset (the breakbeat / resample workflow). bounce(Device())
+        // renders one instrument hit. A block reference has no args.
+        let block_src = if sl.call.args.is_empty() {
+            all_blocks.iter().find(|b| b.name == sl.call.name).copied()
+        } else {
+            None
         };
         let mut mini = Project::empty();
         mini.tempo = p.tempo;
-        let mut t = Track::new(mini.alloc_id(), "Bounce".to_string(), TrackKind::Instrument, TRACK_COLORS[0]);
-        t.devices[0] = dev;
-        let mut clip = Clip::new("bounce".to_string(), TRACK_COLORS[0]);
-        clip.length = sl.beats;
-        clip.notes = vec![Note { pitch, start: 0.0, length: sl.beats, velocity: 100 }];
-        t.arranger.push(ArrangerClip { clip, start: 0.0, duration: sl.beats, src_line: sl.pos.line });
-        mini.tracks.push(t);
+        mini.time_sig = p.time_sig;
+        if let Some(block) = block_src {
+            let tmp_env = Env {
+                beats_per_bar,
+                swing,
+                tempo: p.tempo,
+                assets,
+                user_devices: &user_devices,
+                bounces: &no_bounces,
+            };
+            let mut sub_stack = vec![block.name.clone()];
+            let lowered = lower_body(
+                &block.body,
+                &PlaceEnv { prefix: "", eff_root: None, overrides: &[], swing: None, import_line: None },
+                &[&file.blocks],
+                &mut sub_stack,
+                &tmp_env,
+                &mut diags,
+            );
+            for lt in lowered.tracks {
+                if lt.is_return {
+                    continue; // a phrase bounce ignores return buses
+                }
+                let mut t = lt.track;
+                t.id = mini.alloc_id();
+                mini.tracks.push(t);
+            }
+            if mini.tracks.is_empty() {
+                diags.push(Diag::new(
+                    "E-SMP-003",
+                    sl.pos,
+                    format!("bounce({}) に音のあるトラックがありません", sl.call.name),
+                ));
+                continue;
+            }
+        } else {
+            let dev = match build_instrument(&sl.call, &user_devices, assets, &no_bounces) {
+                Ok((dev, _root)) => dev,
+                Err(d) => {
+                    diags.push(d);
+                    continue;
+                }
+            };
+            let mut t = Track::new(mini.alloc_id(), "Bounce".to_string(), TrackKind::Instrument, TRACK_COLORS[0]);
+            t.devices[0] = dev;
+            let mut clip = Clip::new("bounce".to_string(), TRACK_COLORS[0]);
+            clip.length = sl.beats;
+            clip.notes = vec![Note { pitch, start: 0.0, length: sl.beats, velocity: 100 }];
+            t.arranger.push(ArrangerClip { clip, start: 0.0, duration: sl.beats, src_line: sl.pos.line });
+            mini.tracks.push(t);
+        }
         // 2 beats of tail so releases and reverbs ring out into the sample
         let (key, _sample) = crate::render_to_sample(&mini, 2.0, pitch);
         bounces.insert(sl.name.clone(), (key, pitch));
@@ -253,8 +308,13 @@ pub fn compile(
     for (ti, di, source, pos) in pending_ducks {
         let mut hits: Vec<f64> = Vec::new();
         for t in &p.tracks {
-            let bare = t.name.rsplit(['.', ' ']).next().unwrap_or(&t.name);
-            if t.name == source || t.name.ends_with(&source) || bare == source {
+            // match the source against the full name or any of its segments
+            // (a track is named `Block.Track`, so `from: Kick` finds the
+            // Kick block's lane and `from: Hit` finds its Hit track)
+            let matches = t.name == source
+                || t.name.ends_with(&source)
+                || t.name.split(['.', ' ']).any(|seg| seg == source);
+            if matches {
                 for ac in &t.arranger {
                     let span = ac.duration.max(0.0);
                     let period = ac.clip.length.max(1e-6);

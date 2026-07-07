@@ -1,0 +1,70 @@
+// Sketch: break — audition piece, NOT an album track. A breakbeat is a
+// recorded drum PHRASE chopped and resequenced, where the hard cuts leave
+// silence and the silence is the groove. A busy 1-bar phrase is bounced to
+// ONE audio asset (bounce of a whole block), sliced into 16, then re-cut
+// with rests and reversals. A sub ducks to the re-cut. Swung.
+import { Kick808, SnareTight, HatClosed, HatOpen, Rim } from "../../essentials_0.6.0/instruments/drums.forte"
+import { SubWrap } from "../wrapped/bassx.forte"
+
+song "Sketch Break" {
+  desc "Audition sketch: a drum phrase bounced whole, sliced into 16, re-cut so the gaps are the groove. Not an album track."
+  artist "Forte Essentials"
+  tempo 170bpm
+  swing 0.57
+  master 1.5
+  key E minor
+
+  // the source phrase: a busy 1-bar amen-ish kit, all in one block
+  block Amen {
+    track K { instrument Kick808(decay: 0.35) volume 0.95
+      play beat`x--- ---- --x- ----` at bars(1..1) }
+    track S { instrument SnareTight(snap: 0.7) volume 0.9
+      play beat`---- x--- ---- x-x-` at bars(1..1) }
+    track HC { instrument HatClosed volume 0.5
+      play beat`x-x- x-x- x-x- x-x-` at bars(1..1) }
+    track HO { instrument HatOpen volume 0.45
+      play beat`--x- ---- --x- ----` at bars(1..1) }
+    track R { instrument Rim volume 0.4
+      play beat`---- --x- ---- -x--` at bars(1..1) }
+  }
+
+  // bounce the WHOLE phrase into one asset, then chop it
+  sample Break = bounce(Amen, note: C3, beats: 4)
+
+  block Chop {
+    track Cut {
+      instrument sampler(sample: Break, slices: 16, sustain: 0.0, decay: 0.4)
+      insert transient(attack: 0.75, sustain: 0.4)
+      insert saturate(mode: "tape", drive: 0.35)
+      insert parcomp(amount: 0.5, drive: 0.55, color: 0.4)
+      volume 0.85
+      // slice indices (root C3 = slice 0). rests = hard silence = the groove
+      play notes`C3:0.25 _:0.25 D#3:0.25 C3:0.25 G3:0.25 _:0.25 D3:0.25 _:0.25` at bars(1..8)
+      play notes`C3:0.25 C3:0.25 _:0.5 F3:0.25 D#3:0.25 A3:0.25 _:0.25` at bars(9..16)
+    }
+  }
+  block ChopB {
+    track Cut2 {
+      instrument sampler(sample: Break, slices: 16, sustain: 0.0, decay: 0.2, reverse: "on")
+      insert crush(bits: 0.4, rate: 0.2, mix: 0.4)
+      volume 0.5
+      play notes`_:1 E3:0.25 _:0.25 B3:0.25 _:0.25 G3:0.25 _:0.75` at bars(5..16)
+    }
+  }
+
+  block Trig {
+    track Kick { instrument Kick808(decay: 0.3, punch: 0.6) volume 0.9
+      play beat`x--- x--- x--- x---` at bars(1..16) }
+  }
+  block Sub : SubWrap {
+    track Sub {
+      insert duck(from: Trig, amount: 0.85, attack: 0.02, release: 0.14, shape: 0.7)
+      play notes`E1~:2 E1~:1 G1:1` at bars(3..16)
+    }
+  }
+
+  play Trig at bars(1..16)
+  play Chop at bars(1..16)
+  play ChopB at bars(5..16)
+  play Sub at bars(3..16)
+}
