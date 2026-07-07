@@ -317,6 +317,60 @@ pub struct RenderInfo {
     pub rms: f64,
 }
 
+/// Bounce-to-sample: render a project offline into a mono [`Sample`] and
+/// register it in the in-memory asset store, keyed by its content digest.
+/// The render is the same deterministic engine as playback, so the asset —
+/// and everything a sampler later does to it — is bit-identical on every
+/// machine. `root` is the MIDI note at which the sample plays back at its
+/// bounced pitch (the sampler repitches relative to it).
+pub fn render_to_sample(
+    project: &dawcore::model::Project,
+    tail_beats: f64,
+    root: u8,
+) -> (String, std::sync::Arc<dawcore::dsp::sampler::Sample>) {
+    use dawcore::command::Command;
+    use dawcore::engine::Engine;
+    use dawcore::sync::full_sync;
+    const BLOCK: usize = 512;
+    let sr = 48_000.0f32;
+    let (mut engine, mut handle) = Engine::new(sr);
+    full_sync(&mut handle, project);
+    handle.send(Command::SetLoop { enabled: false, start: 0.0, end: f64::MAX / 4.0 });
+    handle.send(Command::SetLaunchQuant(0.0));
+    handle.send(Command::Play);
+
+    let total_beats = dawcore::bounce::arrangement_len(project) + tail_beats.max(0.0);
+    let seconds = total_beats * 60.0 / project.tempo;
+    let total_samples = (seconds * sr as f64) as usize;
+
+    let mut digest = 0xcbf2_9ce4_8422_2325u64;
+    let mut data = Vec::with_capacity(total_samples);
+    let mut bl = vec![0.0f32; BLOCK];
+    let mut br = vec![0.0f32; BLOCK];
+    let mut done = 0;
+    while done < total_samples {
+        let n = BLOCK.min(total_samples - done);
+        engine.process(&mut bl, &mut br, n);
+        for i in 0..n {
+            let mono = (bl[i] + br[i]) * 0.5;
+            for &b in &mono.to_bits().to_le_bytes() {
+                digest ^= b as u64;
+                digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            data.push(mono);
+        }
+        done += n;
+    }
+    let key = format!("bounce-{digest:016x}");
+    let sample = std::sync::Arc::new(dawcore::dsp::sampler::Sample::one_shot(
+        data.into(),
+        sr,
+        root,
+    ));
+    dawcore::samples::register_asset(&key, sample.clone());
+    (key, sample)
+}
+
 /// Render the arrangement offline (same engine as playback) and digest the
 /// exact f32 bit stream — the build proof recorded in build.manifest.json
 /// (SRS-BLD-001). FNV-1a 64 stands in for SHA-256 in the v0 slice.

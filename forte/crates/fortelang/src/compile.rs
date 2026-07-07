@@ -120,7 +120,49 @@ pub fn compile(
         None => 0.5,
     };
 
-    let env = Env { beats_per_bar, swing, tempo: p.tempo, assets, user_devices: &user_devices };
+    // ---- bounce-to-sample: render instrument hits into audio assets --------
+    // (song-level `sample X = bounce(...)`; the render is the same
+    // deterministic engine, so the asset is bit-identical everywhere)
+    let no_bounces: HashMap<String, (String, u8)> = HashMap::new();
+    let mut bounces: HashMap<String, (String, u8)> = HashMap::new();
+    for sl in &root.sample_lets {
+        let pitch = match music::parse_pitch(&sl.note, sl.pos) {
+            Ok(v) => v,
+            Err(d) => {
+                diags.push(d);
+                continue;
+            }
+        };
+        if !(0.05..=32.0).contains(&sl.beats) {
+            diags.push(Diag::new(
+                "E-SMP-001",
+                sl.pos,
+                format!("bounce の beats {} は 0.05..32 の範囲で指定してください", sl.beats),
+            ));
+            continue;
+        }
+        let dev = match build_instrument(&sl.call, &user_devices, assets, &no_bounces) {
+            Ok((dev, _root)) => dev,
+            Err(d) => {
+                diags.push(d);
+                continue;
+            }
+        };
+        let mut mini = Project::empty();
+        mini.tempo = p.tempo;
+        let mut t = Track::new(mini.alloc_id(), "Bounce".to_string(), TrackKind::Instrument, TRACK_COLORS[0]);
+        t.devices[0] = dev;
+        let mut clip = Clip::new("bounce".to_string(), TRACK_COLORS[0]);
+        clip.length = sl.beats;
+        clip.notes = vec![Note { pitch, start: 0.0, length: sl.beats, velocity: 100 }];
+        t.arranger.push(ArrangerClip { clip, start: 0.0, duration: sl.beats, src_line: sl.pos.line });
+        mini.tracks.push(t);
+        // 2 beats of tail so releases and reverbs ring out into the sample
+        let (key, _sample) = crate::render_to_sample(&mini, 2.0, pitch);
+        bounces.insert(sl.name.clone(), (key, pitch));
+    }
+
+    let env = Env { beats_per_bar, swing, tempo: p.tempo, assets, user_devices: &user_devices, bounces: &bounces };
     let mut stack: Vec<String> = vec![root.name.clone()];
     let lowered = lower_body(
         root,
@@ -203,6 +245,8 @@ struct Env<'a> {
     tempo: f64,
     assets: &'a HashMap<String, crate::AssetInfo>,
     user_devices: &'a HashMap<&'a str, &'a DeviceAst>,
+    /// Bounce-to-sample assets: name → (asset key, root pitch).
+    bounces: &'a HashMap<String, (String, u8)>,
 }
 
 /// A lowered track whose engine id / color / send targets are still symbolic.
@@ -374,7 +418,7 @@ fn lower_body(
         // instrument (required unless the track only places recorded audio)
         let mut beat_pitch = 36u8; // C2 default; samplers use their sample root
         match &tast.instrument {
-            Some(call) => match build_instrument(&bind_params(call, &param_env), env.user_devices, env.assets) {
+            Some(call) => match build_instrument(&bind_params(call, &param_env), env.user_devices, env.assets, env.bounces) {
                 Ok((dev, root)) => {
                     beat_pitch = root;
                     track.devices[0] = dev;
@@ -1648,6 +1692,7 @@ fn build_instrument(
     call: &Call,
     user_devices: &HashMap<&str, &DeviceAst>,
     assets: &HashMap<String, crate::AssetInfo>,
+    bounces: &HashMap<String, (String, u8)>,
 ) -> Result<(Device, u8), Diag> {
     if let Some(dev_ast) = user_devices.get(call.name.as_str()) {
         if dev_ast.kind == "Effect" {
@@ -1757,6 +1802,25 @@ fn build_instrument(
                             arg.pos(),
                             "sampler.root は音名で指定します(例: root: A3)",
                         ))
+                    }
+                    // bounce-to-sample asset by name: the wrapped-instrument
+                    // idiom (sample Sub = bounce(BD808(...)); sampler(sample: Sub))
+                    ("sample", Arg::Ident(name, pos)) => {
+                        let Some((key, broot)) = bounces.get(name) else {
+                            let mut names: Vec<&str> =
+                                bounces.keys().map(String::as_str).collect();
+                            names.sort();
+                            return Err(Diag::new(
+                                "E-SMP-002",
+                                *pos,
+                                format!(
+                                    "bounce サンプル '{name}' がありません(あるもの: {})",
+                                    if names.is_empty() { "なし — song 直下に sample {name} = bounce(...) を書きます".into() } else { names.join(", ") }
+                                ),
+                            ));
+                        };
+                        dev.sample = SampleSource::Asset(key.clone());
+                        root = *broot; // the bounced pitch plays back untouched
                     }
                     ("sample", Arg::Str(s, pos)) => {
                         let canon = match s.to_ascii_lowercase().as_str() {

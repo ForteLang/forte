@@ -590,3 +590,38 @@ fn glitch_effects_render_deterministically_and_audibly() {
     // unknown knobs are rejected, not ignored
     assert!(!err_codes(&song("insert crush(foo: 0.5)")).is_empty());
 }
+
+#[test]
+fn bounce_to_sample_wraps_instruments_deterministically() {
+    let src = r#"song "B" { tempo 120bpm
+      sample Sub = bounce(prisma(wave: "sine", cutoff: 0.5, sustain: 0.8), note: C2, beats: 1)
+      track Bass { instrument sampler(sample: Sub, decay: 0.6)
+        play notes`C1:1 C2:0.5 G1:0.5 C2:1` at bars(1..1) } }"#;
+    let p = fortelang::compile_str(src).expect("bounce song must compile");
+    let a = fortelang::render_digest(&p, 2.0);
+    // the bounce is part of compilation: recompile end-to-end and compare
+    let p2 = fortelang::compile_str(src).unwrap();
+    let b = fortelang::render_digest(&p2, 2.0);
+    assert_eq!(a.f32_digest, b.f32_digest, "bounce assets must be bit-stable");
+    assert!(a.rms > 0.0005, "sampler-wrapped instrument must sound (rms {})", a.rms);
+
+    // repitching audio is not the same sound as playing the source directly
+    let direct = r#"song "D" { tempo 120bpm
+      track Bass { instrument prisma(wave: "sine", cutoff: 0.5, sustain: 0.8)
+        play notes`C1:1 C2:0.5 G1:0.5 C2:1` at bars(1..1) } }"#;
+    let d = fortelang::render_digest(&fortelang::compile_str(direct).unwrap(), 2.0);
+    assert_ne!(a.f32_digest, d.f32_digest, "audio-domain repitch must differ from synthesis");
+
+    // error paths
+    let bad = |body: &str| {
+        format!(r#"song "E" {{ tempo 120bpm {body} }}"#)
+    };
+    assert!(err_codes(&bad(
+        "sample S = bounce(prisma(), note: C2, beats: 99)\n track T { instrument sampler(sample: S) play beat`x` at bars(1..1) }"
+    ))
+    .contains(&"E-SMP-001"));
+    assert!(err_codes(&bad(
+        "track T { instrument sampler(sample: NoSuch) play beat`x` at bars(1..1) }"
+    ))
+    .contains(&"E-SMP-002"));
+}

@@ -372,6 +372,11 @@ song "Name" {
   tempo 96bpm            // required
   meter 6/8              // defaults to 4/4
   key D minor            // optional
+  sample Sub = bounce(BD808(decay: 0.9), note: C1, beats: 2)
+                         // bounce-to-sample: render a hit into an audio asset,
+                         // then play the AUDIO with a sampler — repitch, chop,
+                         // reverse. sampler(sample: Sub, decay: 0.4) plays it;
+                         // notes far from C1 drag their artifacts with them
   master 1.4             // optional mastering gain (0.1..4.0, default 1.0):
                          // scales the whole mix before the master soft
                          // limiter — loudness without re-balancing tracks

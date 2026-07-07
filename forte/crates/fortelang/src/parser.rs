@@ -188,6 +188,7 @@ impl Parser {
             key: None,
             lets: Vec::new(),
             mod_lets: Vec::new(),
+            sample_lets: Vec::new(),
             sections: Vec::new(),
             tracks: Vec::new(),
             returns: Vec::new(),
@@ -320,6 +321,54 @@ impl Parser {
                         if let Some((n, _unit, pos)) = self.number("master") {
                             song.master = Some((n, pos));
                         }
+                    }
+                    "sample" => {
+                        // sample Name = bounce(Call[, note: C1][, beats: 2])
+                        let pos = self.pos();
+                        self.bump();
+                        let Some(name) = self.ident("sample の名前") else { continue };
+                        self.expect(Tok::Eq, "`=`");
+                        if !self.keyword("bounce") {
+                            self.err("E-PARSE-024", "sample には bounce(楽器コール) を書きます(例: sample Sub = bounce(BD808(), note: C1, beats: 2))");
+                            continue;
+                        }
+                        self.expect(Tok::LParen, "`(`");
+                        let Some(call) = self.call() else { continue };
+                        let mut note = "C3".to_string();
+                        let mut beats = 2.0;
+                        loop {
+                            match self.peek().clone() {
+                                Tok::RParen => {
+                                    self.bump();
+                                    break;
+                                }
+                                Tok::Comma => {
+                                    self.bump();
+                                    let Some(key) = self.ident("引数名") else { break };
+                                    self.expect(Tok::Colon, "引数の `:`");
+                                    match key.as_str() {
+                                        "note" => {
+                                            if let Some(id) = self.ident("ピッチ名(例: C1)") {
+                                                note = id;
+                                            }
+                                        }
+                                        "beats" => {
+                                            if let Some((n, _u, _p)) = self.number("beats") {
+                                                beats = n;
+                                            }
+                                        }
+                                        other => {
+                                            self.err("E-PARSE-024", format!("bounce() に '{other}' という引数はありません(note, beats)"));
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    self.err("E-PARSE-024", "bounce の引数は `, note: C1` / `, beats: 2` の形です");
+                                    self.bump();
+                                }
+                            }
+                        }
+                        song.sample_lets.push(SampleLetAst { name, call, note, beats, pos });
                     }
                     "meter" => {
                         self.bump();
