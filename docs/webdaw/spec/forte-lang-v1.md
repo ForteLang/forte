@@ -197,6 +197,7 @@ user-space code written in the device DSL of §4.5, used via ordinary `import`.
 | `exciter` | amount, freq — saturated high band mixed on top: synthesized sparkle where the source has none |
 | `ringmod` | freq (20 Hz..4 kHz log), mix — sine-carrier multiplication: inharmonic, metallic, the broken-machine voice |
 | `tapestop` | amount — 0 is a bit-exact bypass; automate toward 1 and a buffered read head slows to a halt, pitch falling like power-cut tape |
+| `duck(from: Kick, amount, attack, release, shape)` | Sidechain ducker — the glitch groove engine. `from:` names another track; the compiler bakes that track's (swung) hit times and this insert slams its input's gain down by `amount` (1 = to silence) over `attack`, then recovers over `release` (`shape` 0 linear, 1 snappy). The unnatural cuts and the space between them ARE the groove. Deterministic (baked triggers). Missing source is E-DUCK-002 |
 | `width` | amount — M/S stereo width (0.5 is unity. Since insert is pre-pan, use on stereo sources)|
 
 All numeric knobs are normalized 0..1 (out of range is E-TYPE-002). volume 0..1, pan -1..1,

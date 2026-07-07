@@ -17,7 +17,7 @@
 //! audio thread pre-boxed. `process`/`next` must not allocate; bounded pushes
 //! only (use [`push_bounded`]).
 
-use crate::dsp::effects::{Chorus, Compressor, Crush, Drive, Eq3, Exciter, FdnReverb, Gate, ParComp, Pump, RingMod, Saturate, StereoDelay, Stutter, TapeStop, Transient, Width};
+use crate::dsp::effects::{Chorus, Compressor, Crush, Drive, Duck, Eq3, Exciter, FdnReverb, Gate, ParComp, Pump, RingMod, Saturate, StereoDelay, Stutter, TapeStop, Transient, Width};
 use crate::dsp::filter::{FilterMode, Svf};
 use crate::dsp::grid::GridSynth;
 use crate::dsp::sampler::Sampler;
@@ -151,6 +151,11 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
         DeviceKind::Exciter => Dsp::Audio(Box::new(Exciter::new(sr))),
         DeviceKind::RingMod => Dsp::Audio(Box::new(RingMod::new(sr))),
         DeviceKind::TapeStop => Dsp::Audio(Box::new(TapeStop::new(sr))),
+        DeviceKind::Duck => {
+            let mut d = Duck::new(sr);
+            d.set_triggers(&dev.sidechain);
+            Dsp::Audio(Box::new(d))
+        }
     }
 }
 
@@ -731,6 +736,20 @@ impl AudioFx for TapeStop {
     fn configure(&mut self, p: &[f32]) {
         if !p.is_empty() {
             self.amount = p[0];
+        }
+    }
+}
+
+impl AudioFx for Duck {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Duck::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 4 {
+            self.amount = p[0];
+            self.attack = 0.0005 + p[1] * 0.05; // knob 0..1 → up to 50 ms slam
+            self.release = 0.005 + p[2] * 0.6; // knob 0..1 → up to 600 ms recovery
+            self.shape = p[3];
         }
     }
 }

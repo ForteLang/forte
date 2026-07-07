@@ -57,6 +57,9 @@ pub enum DeviceKind {
     RingMod,
     /// Tape stop: buffered read head slowing to a halt (automatable).
     TapeStop,
+    /// Sidechain ducker keyed to another track's hits (compiler bakes the
+    /// swung trigger times) — the glitch groove engine.
+    Duck,
     /// A user-defined effect: a Grid graph fed by AudioIn (`device X : Effect`).
     MeshFx,
 }
@@ -82,7 +85,7 @@ impl DeviceStage {
 impl DeviceKind {
     /// Every device, in stage order. The browser and factories iterate this —
     /// adding a device here is the only registration step the UI needs.
-    pub const ALL: [DeviceKind; 25] = [
+    pub const ALL: [DeviceKind; 26] = [
         DeviceKind::Arpeggiator,
         DeviceKind::NoteTranspose,
         DeviceKind::NoteRepeat,
@@ -108,6 +111,7 @@ impl DeviceKind {
         DeviceKind::Exciter,
         DeviceKind::RingMod,
         DeviceKind::TapeStop,
+        DeviceKind::Duck,
     ];
 
     pub fn label(self) -> &'static str {
@@ -137,6 +141,7 @@ impl DeviceKind {
             DeviceKind::Exciter => "Exciter",
             DeviceKind::RingMod => "RingMod",
             DeviceKind::TapeStop => "TapeStop",
+            DeviceKind::Duck => "Duck",
             DeviceKind::MeshFx => "Mesh FX",
         }
     }
@@ -191,6 +196,7 @@ impl DeviceKind {
             DeviceKind::Exciter => &["Amount", "Freq"],
             DeviceKind::RingMod => &["Freq", "Mix"],
             DeviceKind::TapeStop => &["Amount"],
+            DeviceKind::Duck => &["Amount", "Attack", "Release", "Shape"],
             DeviceKind::MeshFx => &[],
         }
     }
@@ -229,6 +235,8 @@ impl DeviceKind {
             DeviceKind::Exciter => vec![0.3, 0.5],
             DeviceKind::RingMod => vec![0.4, 0.5],
             DeviceKind::TapeStop => vec![0.0],
+            // Amount 0.85 (deep duck), fast attack, medium release, curved shape
+            DeviceKind::Duck => vec![0.85, 0.3, 0.3, 0.6],
             DeviceKind::MeshFx => Vec::new(),
         }
     }
@@ -455,6 +463,11 @@ pub struct Device {
     /// Pitch → sample map for a Kit device.
     #[serde(default)]
     pub kit: Vec<(u8, SampleSource)>,
+    /// Sidechain trigger times in SECONDS (a Duck effect ducks its input at
+    /// each of these, keyed to another track's hits). Empty for every other
+    /// device; the compiler bakes them from the source track's swung notes.
+    #[serde(default)]
+    pub sidechain: Vec<f64>,
 }
 
 impl Device {
@@ -467,6 +480,7 @@ impl Device {
             sample: SampleSource::None,
             grid: None,
             kit: Vec::new(),
+            sidechain: Vec::new(),
         }
     }
 

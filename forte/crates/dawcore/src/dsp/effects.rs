@@ -717,3 +717,85 @@ impl TapeStop {
         )
     }
 }
+
+/// Sidechain ducker — the glitch groove engine. The compiler bakes the
+/// trigger times (another track's swung hits, in seconds) into `triggers`;
+/// at each one the gain slams down by `amount` over `attack` seconds, then
+/// recovers over `release`. Deep amounts carve the audio to near-silence
+/// between hits — the unnatural cut, and the space it leaves, IS the groove.
+/// A free-running sample counter walks the trigger list (deterministic on
+/// the offline render path that produces every .fortesong and digest).
+pub struct Duck {
+    sr: f32,
+    /// trigger sample positions (absolute from song start), sorted
+    triggers: Vec<u32>,
+    cursor: usize,
+    counter: u32,
+    /// current gain, slewing toward 1.0 between hits
+    gain: f32,
+    pub amount: f32,  // 0..1 duck depth (1 = to silence)
+    pub attack: f32,  // seconds to reach the ducked floor
+    pub release: f32, // seconds to recover to unity
+    pub shape: f32,   // 0 = linear recovery, 1 = exponential (snappy)
+    /// samples since the last trigger, for the envelope
+    since: f32,
+}
+
+impl Duck {
+    pub fn new(sr: f32) -> Self {
+        Self {
+            sr,
+            triggers: Vec::new(),
+            cursor: 0,
+            counter: 0,
+            gain: 1.0,
+            amount: 0.85,
+            attack: 0.02,
+            release: 0.18,
+            shape: 0.6,
+            since: f32::MAX,
+        }
+    }
+
+    /// Bake trigger times (seconds) into sample positions.
+    pub fn set_triggers(&mut self, secs: &[f64]) {
+        self.triggers = secs.iter().map(|&t| (t * self.sr as f64).round().max(0.0) as u32).collect();
+        self.triggers.sort_unstable();
+        self.triggers.dedup();
+        self.cursor = 0;
+        self.counter = 0;
+        self.since = f32::MAX;
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        // fire every trigger reached this sample (cursor never rewinds)
+        while self.cursor < self.triggers.len() && self.counter >= self.triggers[self.cursor] {
+            self.since = 0.0;
+            self.cursor += 1;
+        }
+        // envelope: dip to (1-amount) over attack, recover to 1 over release
+        let floor = 1.0 - self.amount.clamp(0.0, 1.0);
+        let atk = (self.attack.max(0.0005) * self.sr).max(1.0);
+        let rel = (self.release.max(0.001) * self.sr).max(1.0);
+        let target = if self.since < atk {
+            // slam down
+            1.0 - (1.0 - floor) * (self.since / atk)
+        } else {
+            // recover
+            let t = ((self.since - atk) / rel).min(1.0);
+            let curve = if self.shape > 0.5 {
+                // exponential ease-out: snappy at first, then settles
+                let k = 1.0 + self.shape * 6.0;
+                1.0 - crate::dmath::powf(1.0 - t, k)
+            } else {
+                t
+            };
+            floor + (1.0 - floor) * curve
+        };
+        self.gain = target;
+        self.since += 1.0;
+        self.counter = self.counter.wrapping_add(1);
+        (l * self.gain, r * self.gain)
+    }
+}
