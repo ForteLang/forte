@@ -1,0 +1,69 @@
+// Lazy Evaluation — downtempo for deferred work. A trio that only plays
+// what is strictly needed: brushed drums a hair behind the beat, an
+// upright bass that resolves late, wurli chords that wait to be forced.
+// The whistle states the thunk; the band evaluates it four bars later. 96bpm.
+//
+// STRUCTURE: the trio is a nested block — `Trio` contains `Kit`, `Upright`
+// and `Comping` placed on its own timeline, and the variants
+// (TrioSketch/TrioSwing) replace inner members while `as Trio` keeps
+// everything on one set of lanes.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./lazy-evaluation/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Trio, TrioSketch, TrioSwing } from "./lazy-evaluation/trio.forte"
+import { Hands } from "./lazy-evaluation/hands.forte"
+import { Thunk, Force } from "./lazy-evaluation/thunk.forte"
+import { Air } from "./lazy-evaluation/air.forte"
+import { Sigh } from "./lazy-evaluation/transitions.forte"
+
+song "Lazy Evaluation" {
+  desc "Downtempo for deferred work: a brushed trio in one nested block that only plays what is strictly needed, an upright bass resolving late, and a whistled thunk the vibraphone evaluates four bars later. 96bpm."
+  artist "Forte Essentials"
+  tempo 96bpm
+  master 2.19  // mastered: -21.8 LUFS raw, aiming near -15
+  swing 0.6
+  meter 4/4
+  key A major
+
+  section chart  = bars(1..8)
+  section head   = bars(9..24)
+  section solo   = bars(25..40)
+  section pause  = bars(41..46)
+  section commit = bars(47..62)
+  section coda   = bars(63..72)
+
+  // chart: the trio sketches while the pad warms the room
+  play TrioSketch as Trio at chart
+  play Air at chart
+
+  // head: the trio plays for real, the thunk gets whistled
+  play Trio at head
+  play Air(volume: 0.8) at head
+  play Thunk at bars(11..24)
+  play Hands at bars(17..24)
+
+  // solo: evaluation begins — vibes answer the whistle
+  play Trio at solo
+  play Air(volume: 0.7) at solo
+  play Hands at solo
+  play Force as Thunk at solo
+
+  // pause: garbage collection — everyone breathes
+  play Sigh at bars(41..41)
+  play TrioSketch as Trio at pause
+  play Air at pause
+
+  // commit: the swing lands, evaluation completes
+  play TrioSwing as Trio at commit
+  play Air(volume: 0.7) at commit
+  play Hands at commit
+  play Force as Thunk at commit
+
+  // coda: the trio marks the chart once more and leaves it unresolved
+  play TrioSketch as Trio at coda
+  play Air at coda
+  play Thunk(volume: 0.7) at bars(63..68)
+  automate Air.volume from 1 to 0 over bars(69..72)
+  automate Trio.volume from 1 to 0.3 over bars(69..72)
+}

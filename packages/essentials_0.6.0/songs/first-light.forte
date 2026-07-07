@@ -1,0 +1,53 @@
+// First Light — Forte v0 reference song.
+// Everything is code: patterns, instruments, effects, mix.
+// Build: forte build songs/first-light.forte
+
+song "First Light" {
+  tempo 96bpm
+  meter 4/4
+  key D minor
+
+  let kick  = beat`x--- x--- x-x- x---`
+  let hats  = beat`-x-x -x-x -x-x -xXx`
+  let snare = beat`---- x--- ---- x--x`
+
+  track Kick {
+    instrument sampler(sample: "Kick")
+    play kick at bars(1..16)
+  }
+
+  track Hats {
+    instrument sampler(sample: "Hat")
+    volume 0.55
+    play hats at bars(5..16)
+  }
+
+  track Snare {
+    instrument sampler(sample: "Snare")
+    volume 0.75
+    play snare at bars(9..16)
+  }
+
+  track Bass {
+    instrument prisma(wave: "saw", cutoff: 0.35, reso: 0.3, sub: 0.6, release: 0.2)
+    insert drive(drive: 0.25)
+    volume 0.7
+    play notes`D2:1 D2:1/2 D2:1/2 F2:1 C3:1` at bars(1..16)
+  }
+
+  track Keys {
+    instrument prisma(wave: "square", cutoff: 0.5, attack: 0.05, release: 0.4)
+    insert reverb(size: 0.6, decay: 0.5, mix: 0.35)
+    volume 0.5
+    pan -0.15
+    play notes`[D4 F4 A4]:4 [Bb3 D4 F4]:4 [G3 Bb3 D4]:4 [A3 C4 E4]:4` at bars(1..16)
+  }
+
+  track Lead {
+    instrument prisma(wave: "tri", cutoff: 0.7, attack: 0.01, release: 0.3)
+    insert delay(time: 0.35, fdbk: 0.4, mix: 0.3)
+    volume 0.45
+    pan 0.2
+    play notes`D5:1/2 F5:1/2 A5:1/2 G5:1/2 F5:1/2 D5:1/2 C5:1/2 D5:1` at bars(9..16)
+  }
+}

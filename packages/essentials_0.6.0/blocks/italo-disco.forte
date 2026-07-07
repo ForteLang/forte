@@ -1,0 +1,67 @@
+// Italo Disco (118bpm) — octave-bass arpeggio, claps, and a sparkling
+// arpeggiator. The age of love and lasers.
+import { BD909, SD909, CH909, CP909 } from "../instruments/tr909.forte"
+import { JunoBass, JunoStrings } from "../instruments/juno60.forte"
+import { RetroWave } from "../instruments/synths.forte"
+
+block ItaloDiscoDrums {
+  let four = beat`x--- x--- x--- x---`
+  let chh  = beat`--x- --x- --x- --x-`
+
+  track BD { instrument BD909(attack: 0.5) volume 0.9 play four at bars(1..8) }
+  track CH { instrument CH909() volume 0.45 pan 0.15 play chh at bars(1..8) }
+}
+
+block ItaloDiscoBass {
+  key A minor
+  let amore = prog`Am | F | Dm | E7`
+
+  track Bass {
+    instrument JunoBass()
+    volume 0.8
+    play arp(amore, rate: 0.25, style: "up") at bars(1..8)
+  }
+}
+
+// Everything that feeds the Laser reverb return lives here.
+block ItaloDiscoSpace {
+  key A minor
+  let snr  = beat`---- x--- ---- x---`
+  let clap = beat`---- x--- ---- x--x`
+  let amore = prog`Am | F | Dm | E7`
+
+  return Laser {
+    insert reverb(size: 0.65, decay: 0.4, mix: 1.0)
+    volume 0.7
+  }
+
+  track SD { instrument SD909(snappy: 0.6) send Laser 0.35 volume 0.7 play snr at bars(1..8) }
+  track CP { instrument CP909(room: 0.55) send Laser 0.3 volume 0.5 play clap at bars(5..8) }
+
+  track Arp {
+    instrument RetroWave()
+    insert delay(time: 0.25, fdbk: 0.35, mix: 0.3)
+    send Laser 0.3
+    volume 0.45
+    pan 0.2
+    play arp(amore, rate: 0.25, style: "updown") at bars(3..8)
+  }
+
+  track Strings {
+    instrument JunoStrings(bright: 0.5)
+    insert chorus(rate: 0.3, depth: 0.55, mix: 0.55)
+    send Laser 0.4
+    volume 0.45
+    play chords(amore) at bars(1..8)
+  }
+}
+
+block ItaloDisco {
+  tempo 118bpm
+  meter 4/4
+  key A minor
+
+  play ItaloDiscoDrums at bars(1..8)
+  play ItaloDiscoBass at bars(1..8)
+  play ItaloDiscoSpace at bars(1..8)
+}

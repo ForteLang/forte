@@ -1,0 +1,83 @@
+// Night Compiler — deep dub techno for the long build. A chord stab
+// swimming in feedback delay, a sub that only moves when it must, hats
+// like keystrokes at 2am. Nothing shouts; everything accumulates. 128bpm.
+//
+// The floor, the keystrokes and the echo chord are FAMILIES of inherited
+// variants on ONE lane each (`as`): the same stab lane gets wetter and
+// wider the deeper the night goes, and the drum lane grows a ride and
+// ghost 16ths without ever adding a second track.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./night-compiler/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Floor, FloorLean, Rides } from "./night-compiler/floor.forte"
+import { Keys2am, KeysFlow } from "./night-compiler/keys2am.forte"
+import { Deep, DeepOpen } from "./night-compiler/deep.forte"
+import { Echo, EchoDub, EchoTail } from "./night-compiler/echo.forte"
+import { Loop } from "./night-compiler/loop.forte"
+import { Room, Hum } from "./night-compiler/room.forte"
+import { Drop, Boom } from "./night-compiler/transitions.forte"
+
+song "Night Compiler" {
+  desc "Deep dub techno for the long build: one minor-9 stab swimming in feedback delay on a single evolving lane, a sub that moves three notes an hour, hats like keystrokes at 2am. 128bpm."
+  artist "Forte Essentials"
+  tempo 128bpm
+  master 1.76  // mastered: -18.9 LUFS raw, aiming near -14
+  meter 4/4
+  key F minor
+
+  section boot    = bars(1..8)
+  section work    = bars(9..32)
+  section deeper  = bars(33..56)
+  section pause   = bars(57..64)
+  section flow    = bars(65..88)
+  section commit  = bars(89..96)
+
+  // boot: room tone and the first echoes
+  play Room at boot
+  play Echo at bars(5..8)
+  automate Room.volume from 0 to 1 over bars(1..6)
+
+  // work: the floor lands, the loop starts compiling
+  play Boom at bars(9..9)
+  play Floor at work
+  play Keys2am at bars(13..32)
+  play Deep at work
+  play Echo at work
+  play Loop at bars(17..32)
+
+  // deeper: the night nods — leaning floor, dubbier echo, ride joins
+  play FloorLean as Floor at deeper
+  play Keys2am at deeper
+  play Deep at deeper
+  play EchoDub as Echo at deeper
+  play Loop at deeper
+  play Rides at bars(41..56)
+  play Room(volume: 0.7) at deeper
+  play Hum at bars(41..48)
+
+  // pause: the floor drops out — the stab dissolves into its tail
+  play Drop at bars(57..57)
+  play EchoTail as Echo at pause
+  play Room at pause
+  play Loop(volume: 0.6) at pause
+  play Hum at bars(61..64)
+
+  // flow: everything returns, arp wide open, ghost 16ths in the hats
+  play Boom at bars(65..65)
+  play FloorLean as Floor at flow
+  play KeysFlow as Keys2am at flow
+  play DeepOpen as Deep at flow
+  play EchoDub as Echo at flow
+  play Loop at flow
+  play Rides at flow
+  play Room(volume: 0.6) at flow
+  play Hum at bars(73..80)
+  play Hum at bars(81..88)
+
+  // commit: the floor stops; the delay tail is the exit
+  play EchoTail as Echo at commit
+  play Room at commit
+  automate Echo.volume from 1 to 0 over bars(93..96)
+  automate Room.volume from 1 to 0 over bars(93..96)
+}

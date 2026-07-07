@@ -1,0 +1,76 @@
+// Whitespace — the notes are just delimiters; the music is the space
+// between them. Celesta and kalimba scattered over a brushed pulse,
+// pads as wide as an empty buffer, a flute that phrases in indents.
+// Significant whitespace, 108bpm.
+//
+// STRUCTURE: `Lattice` nests `Bells` (celesta + glass) and `Grain`
+// (kalimba), placed offset inside the block so they interleave without
+// ever colliding — the variants re-indent the same lattice (`as Lattice`).
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./whitespace/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Lattice, LatticeThin, LatticeFull } from "./whitespace/lattice.forte"
+import { Pulse, PulseTabs } from "./whitespace/pulse.forte"
+import { Margin, Page } from "./whitespace/page.forte"
+import { Indent, Blink } from "./whitespace/indent.forte"
+import { Hush } from "./whitespace/transitions.forte"
+
+song "Whitespace" {
+  desc "The notes are delimiters; the music is the space between them. Celesta and kalimba interleaved by nested blocks over a brushed pulse — significant whitespace at 108bpm."
+  artist "Forte Essentials"
+  tempo 108bpm
+  master 3.39  // mastered: -26.7 LUFS raw, aiming near -16
+  swing 0.55
+  meter 4/4
+  key C major
+
+  section blank   = bars(1..8)
+  section draft   = bars(9..24)
+  section phrase  = bars(25..40)
+  section fold    = bars(41..48)
+  section indent2 = bars(49..64)
+  section eof     = bars(65..76)
+
+  // blank page: pads and the lattice land together, already beautiful
+  play Page at blank
+  play Lattice at blank
+  play Blink at blank
+
+  // draft: the pulse writes the first lines
+  play Pulse at draft
+  play Margin at draft
+  play Lattice at draft
+  play Page(volume: 0.8) at draft
+  play Blink at draft
+
+  // phrase: the flute reads the paragraph aloud
+  play Pulse at phrase
+  play Margin at phrase
+  play LatticeFull as Lattice at phrase
+  play Page(volume: 0.75) at phrase
+  play Indent at phrase
+  play Blink at phrase
+
+  // fold: everything collapses to the thin lattice — whitespace only
+  play Hush at bars(41..41)
+  play LatticeThin as Lattice at fold
+  play Page at fold
+  play Margin(volume: 0.6) at fold
+  play Blink at fold
+
+  // indent2: the deepest level — tab-stop brushes, full lattice, flute
+  play PulseTabs as Pulse at indent2
+  play Margin at indent2
+  play LatticeFull as Lattice at indent2
+  play Page(volume: 0.75) at indent2
+  play Indent at indent2
+  play Blink at indent2
+
+  // eof: the lattice thins back out; the file ends in a newline
+  play LatticeThin as Lattice at eof
+  play Page at eof
+  play Blink at eof
+  automate Page.volume from 1 to 0 over bars(71..76)
+  automate Lattice.volume from 1 to 0 over bars(73..76)
+}

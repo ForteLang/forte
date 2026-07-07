@@ -1,0 +1,79 @@
+// Hello World — the first program, as acid techno. Two 303s in
+// call-and-response, a 909 that never blinks, one long filter conversation
+// from closed to screaming. 128bpm.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./hello-world/ as a block family (base + inherited variants), and this
+// file only decides WHEN each variant plays and on WHICH lane (`as`).
+// Steal any part: the import line below is the whole recipe.
+import { Floor, FloorIn, FloorPeak } from "./hello-world/floor.forte"
+import { Tops, TopsIn, TopsPeak, Rides } from "./hello-world/tops.forte"
+import { Ask, AskWarm, AskTalk, AskOpen, AskPeak, AskFade, Answer, AnswerTalk, AnswerOpen, AnswerPeak } from "./hello-world/acid.forte"
+import { Stabs, StabsPeak } from "./hello-world/stabs.forte"
+import { Deep, Siren } from "./hello-world/deep.forte"
+import { Lift, Boom, Fall, Wash } from "./hello-world/transitions.forte"
+
+song "Hello World" {
+  desc "Two 303s in call-and-response on one evolving lane each, a 909 that never blinks, one long filter conversation from closed to screaming. 128bpm acid."
+  artist "Forte Essentials"
+  tempo 128bpm
+  master 1.16  // mastered: -15.3 LUFS raw, aiming near -14
+  meter 4/4
+  key A minor
+
+  section warmup = bars(1..16)
+  section talk   = bars(17..32)
+  section open   = bars(33..48)
+  section breakdown = bars(49..56)
+  section peak   = bars(57..80)
+  section fade   = bars(81..96)
+
+  // ONE kick lane: in → base → base → peak (ratchet fills) → base
+  play FloorIn as Floor at warmup
+  play Floor at talk
+  play Floor at open
+  play FloorPeak as Floor at peak
+  play Floor at bars(81..88)
+
+  // ONE tops lane: ghosts → full → full → crowded → full
+  play TopsIn as Tops at bars(9..16)
+  play Tops at talk
+  play Tops at open
+  play TopsPeak as Tops at peak
+  play Tops at bars(81..88)
+
+  // ONE question lane, ONE answer lane — the whole filter journey
+  play AskWarm as Ask at warmup
+  play AskTalk as Ask at talk
+  play AskOpen as Ask at open
+  play AskPeak as Ask at peak
+  play AskFade as Ask at fade
+  play AnswerTalk as Answer at talk
+  play AnswerOpen as Answer at open
+  play AnswerPeak as Answer at peak
+
+  // stabs join late, get wilder at the peak — same lane
+  play Stabs at bars(25..32)
+  play Stabs at open
+  play StabsPeak as Stabs at peak
+
+  play Rides at open
+  play Rides at peak
+
+  // breakdown: drums fall away, the hoover speaks over the dark pad
+  play Fall at bars(49..49)
+  play Deep at breakdown
+  play Siren at breakdown
+  play Lift at bars(55..56)
+  automate Deep.volume from 0 to 1 over bars(49..52)
+
+  // peak: impact + crash, pad returns half-volume under everything
+  play Boom at bars(57..57)
+  play Wash at bars(57..57)
+  play Wash at bars(33..33)
+  play Deep(volume: 0.5) at peak
+
+  // fade: the question keeps asking as the room empties
+  play Deep(volume: 0.6) at bars(89..96)
+  automate Deep.volume from 0.6 to 0 over bars(93..96)
+}

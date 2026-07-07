@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forte Player — .fortesong in your browser</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #16181d; color: #d7dae0;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    background: #1e2128; border-bottom: 1px solid #2b2f38; }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: 2px; color: #e8b34c; }
+  header span { font-size: 12px; color: #8a919e; }
+  #logo { width: 26px; height: 26px; margin-right: -6px; }
+  a.back { color: #e8b34c; font-size: 12px; margin-left: auto; text-decoration: none; }
+  main { max-width: 720px; margin: 0 auto; padding: 22px 16px; }
+  #now { display: flex; gap: 18px; align-items: flex-start; }
+  #now .txt { min-width: 0; }
+  #cover { width: 132px; height: 132px; border-radius: 12px; border: 1px solid #2b2f38;
+    display: none; flex: none; }
+  #now h2 { margin: 0 0 2px; font-size: 20px; }
+  #now .artist { color: #e8b34c; font-size: 13px; }
+  #now .desc { color: #8a919e; font-size: 13px; margin-top: 6px; }
+  #now .proof { color: #566070; font-size: 11px; font-family: ui-monospace, monospace; margin-top: 6px; }
+  #transport { display: flex; align-items: center; gap: 10px; margin: 18px 0 6px; flex-wrap: wrap; }
+  button { background: #2b2f38; color: #d7dae0; border: 1px solid #3a3f4b;
+    border-radius: 8px; padding: 8px 18px; font-size: 15px; cursor: pointer; }
+  button.primary { background: #e8b34c; color: #16181d; border-color: #e8b34c; font-weight: 700; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  #bar-wrap { flex: 1; min-width: 150px; height: 14px; background: #23262e; border-radius: 99px; overflow: hidden;
+    cursor: pointer; touch-action: none; }
+  #bar { height: 100%; width: 0%; background: #e8b34c; pointer-events: none; }
+  #time { font: 12px/1 ui-monospace, monospace; color: #8a919e; min-width: 86px; text-align: right; }
+  #boost-wrap { display: flex; align-items: center; gap: 5px; color: #8a919e; font-size: 13px; }
+  #boost { width: 88px; accent-color: #e8b34c; }
+  #boost-val { font: 11px/1 ui-monospace, monospace; min-width: 52px; color: #8a919e; }
+  #tracks { margin-top: 18px; }
+  .trk { display: flex; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    font-size: 14px; color: #b6bcc6; align-items: baseline; }
+  .trk:hover { background: #1e2128; }
+  .trk.on { background: #1e2128; color: #fff; font-weight: 600; }
+  .trk .n { color: #566070; font: 12px/1 ui-monospace, monospace; min-width: 18px; }
+  .trk .len { margin-left: auto; font: 12px/1 ui-monospace, monospace; color: #8a919e; }
+  #drop { border: 1px dashed #3a3f4b; border-radius: 10px; padding: 26px; text-align: center;
+    color: #8a919e; font-size: 13px; margin-top: 20px; }
+  #drop.hot { border-color: #e8b34c; color: #e8b34c; }
+  #status { font-size: 12px; color: #8a919e; margin-top: 12px; min-height: 1.2em; }
+  #arr-wrap { margin-top: 18px; display: none; }
+  #arr { width: 100%; height: 260px; background: #14161b; border: 1px solid #2b2f38;
+    border-radius: 10px; }
+  #arr { cursor: pointer; }
+  #arr-hint { font-size: 11px; color: #566070; margin-top: 6px; }
+  #blk-title { font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+  #blk-title span { color: #8a919e; font-weight: 400; font-family: ui-monospace, monospace;
+    font-size: 11px; margin-left: 8px; }
+  #blk-src-wrap { display: none; margin-top: 12px; }
+  #blk-import { font: 12px/1.6 ui-monospace, monospace; color: #e8b34c;
+    background: #14161b; border: 1px solid #2b2f38; border-radius: 8px;
+    padding: 8px 12px; margin-bottom: 8px; user-select: all; }
+  #blk-src { background: #14161b; border: 1px solid #2b2f38; border-radius: 8px;
+    padding: 12px; font: 12px/1.6 ui-monospace, monospace; overflow-x: auto;
+    white-space: pre; max-height: 340px; overflow-y: auto; color: #b6bcc6; }
+  .hint code { color: #b6bcc6; }
+</style>
+</head>
+<body>
+<header>
+  <img id="logo" src="logo.svg" alt=""><h1>FORTE PLAYER</h1>
+  <span>Not a WAV — code. Your browser performs the deterministic render.</span>
+  <a class="back" href="catalog.html">📦 Catalog</a>
+</header>
+<main>
+  <div id="now" hidden>
+    <img id="cover" alt="">
+    <div class="txt">
+      <h2 id="t-name"></h2>
+      <div class="artist" id="t-artist"></div>
+      <div class="desc" id="t-desc"></div>
+      <div class="proof" id="t-proof"></div>
+      <div class="proof" id="t-credits"></div>
+    </div>
+  </div>
+  <div id="transport" hidden>
+    <button id="prev" title="Previous track">⏮</button>
+    <button id="toggle" class="primary" title="Play / pause">▶</button>
+    <button id="next" title="Next track">⏭</button>
+    <div id="bar-wrap"><div id="bar"></div></div>
+    <div id="time"></div>
+    <div id="boost-wrap" title="Volume boost — playback only, saved on this device. A limiter catches the overs.">🔊
+      <input type="range" id="boost" min="0.5" max="4" step="0.05">
+      <span id="boost-val"></span></div>
+  </div>
+  <div id="tracks"></div>
+  <div id="arr-wrap">
+    <canvas id="arr"></canvas>
+    <div id="arr-hint">Click a track: its block's code and import line appear below — steal while you listen
+      <button id="full-src-btn" style="margin-left:10px; padding: 3px 10px; font-size: 11px;">📄 View the whole piece</button></div>
+    <div id="blk-src-wrap">
+      <div id="blk-title"></div>
+      <div id="blk-import"></div>
+      <pre id="blk-src"></pre>
+    </div>
+  </div>
+  <div id="drop">Drop .fortesong files here (several make a playlist)<br>
+    <span class="hint">or <code>player.html?src=path/to/song.fortesong</code></span></div>
+  <div id="status"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const status = (m) => { $('status').textContent = m; };
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+// ---- store-only zip reader (the exact format zip.rs writes) -----------------
+function unzip(buf) {
+  const v = new DataView(buf);
+  const bytes = new Uint8Array(buf);
+  const files = new Map();
+  let off = 0;
+  while (off + 4 <= buf.byteLength && v.getUint32(off, true) === 0x04034b50) {
+    const method = v.getUint16(off + 8, true);
+    const csize = v.getUint32(off + 18, true);
+    const nlen = v.getUint16(off + 26, true);
+    const xlen = v.getUint16(off + 28, true);
+    const name = new TextDecoder().decode(bytes.subarray(off + 30, off + 30 + nlen));
+    const start = off + 30 + nlen + xlen;
+    if (method !== 0) throw new Error('store-only zip expected');
+    files.set(name, bytes.slice(start, start + csize));
+    off = start + csize;
+  }
+  if (!files.size) throw new Error('cannot read .fortesong (not a zip?)');
+  return files;
+}
+
+// ---- FNV-1a 64 over sorted (path, bytes) — the manifest's files digest ------
+function filesDigest(files) {
+  let h = 0xcbf29ce484222325n;
+  const P = 0x100000001b3n, M = 0xffffffffffffffffn;
+  const upd = (bs) => { for (const b of bs) { h ^= BigInt(b); h = (h * P) & M; } };
+  const enc = new TextEncoder();
+  for (const name of [...files.keys()].sort()) {
+    upd(enc.encode(name)); upd([0]); upd(files.get(name)); upd([0]);
+  }
+  return h.toString(16).padStart(16, '0');
+}
+
+// rebase every packed path relative to the entry's directory (imports may
+// climb with ../ — the wasm compiler resolves against base_dir "")
+function relFromEntry(entry, path) {
+  const dir = entry.split('/').slice(0, -1);
+  const parts = path.split('/');
+  let i = 0;
+  while (i < dir.length && i < parts.length - 1 && dir[i] === parts[i]) i++;
+  return '../'.repeat(dir.length - i) + parts.slice(i).join('/');
+}
+
+function toBase64(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) {
+    s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  }
+  return btoa(s);
+}
+
+// ---- load a .fortesong into a playlist track --------------------------------
+function parseSong(buf, label) {
+  const files = unzip(buf);
+  const manifest = JSON.parse(new TextDecoder().decode(files.get('fortesong.manifest.json')));
+  files.delete('fortesong.manifest.json');
+  const expect = manifest.files_digest_fnv1a64 || '';
+  if (expect && filesDigest(files) !== expect) {
+    throw new Error(`${label}: sources have been tampered with (digest mismatch)`);
+  }
+  const entry = manifest.entry;
+  const modules = {}, assets = {};
+  const dec = new TextDecoder();
+  for (const [name, data] of files) {
+    const rel = relFromEntry(entry, name);
+    if (name.endsWith('.frec')) assets[rel] = toBase64(data);
+    else modules[rel] = dec.decode(data);
+  }
+  return {
+    label,
+    name: manifest.name || label,
+    artist: manifest.artist || '',
+    desc: manifest.desc || '',
+    creditsRaw: manifest.credits || [],
+    credits: (manifest.credits || [])
+      .map((c) => `${c.package} ${c.version}${c.artist ? ` (${c.artist})` : ''}${
+        c.sponsor ? ` — support: ${c.sponsor}` : ''}`),
+    seconds: manifest.render?.seconds || 0,
+    tempo: manifest.render?.tempo || 120,
+    lenBeats: manifest.render?.len_beats || 0,
+    digest: manifest.render?.f32_digest_fnv1a64 || '',
+    text: modules[entry.split('/').pop()] ?? dec.decode(files.get(entry)),
+    entry,
+    modules, assets,
+  };
+}
+
+// ---- composer view: compile in a main-thread wasm for the arrangement ------
+import('./viz.js').then((m) => { VizClass = m.Viz; });
+let VizClass = null, viz = null, main = null, vizData = null;
+
+async function ensureMainWasm() {
+  if (main) return;
+  if (!wasmBytes) wasmBytes = await (await fetch('forte.wasm')).arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(wasmBytes.slice(0), {});
+  main = { e: instance.exports, ctx: instance.exports.fw_new(48000) };
+}
+function stage(json, commit) {
+  const bytes = new TextEncoder().encode(json);
+  const ptr = main.e.fw_modules_prepare(main.ctx, bytes.length);
+  new Uint8Array(main.e.memory.buffer, ptr, bytes.length).set(bytes);
+  commit(main.ctx);
+}
+async function composerView(t) {
+  try {
+    await ensureMainWasm();
+    stage(JSON.stringify(t.modules), main.e.fw_modules_commit);
+    stage(JSON.stringify(t.assets), main.e.fw_assets_commit);
+    const src = new TextEncoder().encode(t.text);
+    const sp = main.e.fw_src_prepare(main.ctx, src.length);
+    new Uint8Array(main.e.memory.buffer, sp, src.length).set(src);
+    if (main.e.fw_compile(main.ctx) !== 0) return;
+    const vp = main.e.fw_viz_ptr(main.ctx), vl = main.e.fw_viz_len(main.ctx);
+    vizData = JSON.parse(new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, vp, vl)));
+    if (!viz && VizClass) {
+      viz = new VizClass($('arr'));
+      $('arr').onclick = (ev) => {
+        if (!vizData?.tracks?.length) return;
+        const rect = $('arr').getBoundingClientRect();
+        const laneH = (rect.height - 16) / vizData.tracks.length;
+        const i = Math.floor((ev.clientY - rect.top - 16) / laneH);
+        const tr = vizData.tracks[i];
+        if (tr) showTrackSource(currentTrackFile, tr);
+      };
+    }
+    if (viz) { $('arr-wrap').style.display = 'block'; viz.setData(vizData); }
+    currentTrackFile = t;
+    $('blk-src-wrap').style.display = 'none';
+  } catch (e) { /* the view is optional; playback must never depend on it */ }
+}
+let currentTrackFile = null;
+
+// click a lane: the block's source from the container + the import line
+function showTrackSource(t, tr) {
+  if (!t) return;
+  const dot = tr.name.indexOf('.');
+  const name = dot > 0 ? tr.name.slice(0, dot) : null;
+  const fx = tr.inserts?.length ? ` + ${tr.inserts.join(' + ')}` : '';
+  $('blk-title').innerHTML = `${name ?? tr.name}<span>${tr.name} — ${
+    tr.instrument || '(return)'}${fx}</span>`;
+  if (!name) {
+    $('blk-import').textContent = 'root track (defined directly in this piece)';
+    $('blk-src').textContent = '';
+    $('blk-src-wrap').style.display = 'block';
+    return;
+  }
+  const re = new RegExp(`^block\\s+${name}[\\s:{]`, 'm');
+  for (const [path, src] of Object.entries(t.modules)) {
+    if (!re.test(src)) continue;
+    // pull the block's own definition (brace matching from its header)
+    const at = src.search(re);
+    let depth = 0, end = at;
+    for (let i = src.indexOf('{', at); i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) { end = i + 1; break; }
+    }
+    const pkg = (t.creditsRaw ?? [])[0];
+    const base = pkg ? `packages/${pkg.package.toLowerCase()}_${pkg.version}/` : '';
+    // module keys are entry-relative; resolve back to the package root
+    const dir = t.entry.split('/').slice(0, -1);
+    const parts = path.split('/');
+    while (parts[0] === '..') { parts.shift(); dir.pop(); }
+    const real = [...dir, ...parts].join('/');
+    $('blk-import').textContent = `import { ${name} } from "${base}${real}"`;
+    $('blk-src').textContent = src.slice(at, end);
+    $('blk-src-wrap').style.display = 'block';
+    $('blk-src-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+  $('blk-import').textContent = `block ${name} — defined inside this container (next to the entry)`;
+  $('blk-src').textContent = '';
+  $('blk-src-wrap').style.display = 'block';
+}
+
+// the whole piece: the entry .forte exactly as packed in the container
+$('full-src-btn').onclick = () => {
+  const t = currentTrackFile;
+  if (!t) return;
+  const entryBase = t.entry.split('/').pop();
+  const pkg = (t.creditsRaw ?? [])[0];
+  const base = pkg ? `packages/${pkg.package.toLowerCase()}_${pkg.version}/` : '';
+  $('blk-title').innerHTML = `${t.name}<span>${entryBase} — the whole piece (source closure of ${
+    Object.keys(t.modules).length} files)</span>`;
+  $('blk-import').textContent = `${base}${t.entry} — every sound in this piece is deterministically rendered from this code`;
+  $('blk-src').textContent = t.text;
+  $('blk-src-wrap').style.display = 'block';
+  $('blk-src-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
+
+// ---- audio: the editor's worklet, unchanged ---------------------------------
+// Playback boost: monitoring-only gain AFTER the deterministic render (the
+// digest never sees it), followed by a limiter so cranking it stays clean.
+// Loudness at the ear varies wildly by device — phones especially — so the
+// listener owns this knob and the choice sticks per device.
+const BOOST_KEY = 'forte-boost';
+let boost = parseFloat(localStorage.getItem(BOOST_KEY) ?? '') || 1.5;
+let ac, node, wasmBytes, boostGain;
+async function ensureAudio() {
+  if (ac) return;
+  // iOS treats Web Audio as an "ambient" session unless told otherwise and
+  // plays it noticeably quieter (and duckable) than media playback
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* hint only */ }
+  wasmBytes = await (await fetch('forte.wasm')).arrayBuffer();
+  ac = new AudioContext({ sampleRate: 48000, latencyHint: 'playback' });
+  const src = await (await fetch('worklet.js')).text();
+  const blobUrl = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  await ac.audioWorklet.addModule(blobUrl);
+  node = new AudioWorkletNode(ac, 'forte', { outputChannelCount: [2] });
+  boostGain = new GainNode(ac, { gain: boost });
+  const limiter = new DynamicsCompressorNode(ac, {
+    threshold: -3, knee: 3, ratio: 20, attack: 0.001, release: 0.12,
+  });
+  node.connect(boostGain);
+  boostGain.connect(limiter);
+  limiter.connect(ac.destination);
+  await new Promise((res) => {
+    node.port.onmessage = (e) => e.data.kind === 'ready' && res();
+    node.port.postMessage({ cmd: 'init', wasm: wasmBytes.slice(0) });
+  });
+  node.port.onmessage = onWorklet;
+}
+
+// ---- player state ------------------------------------------------------------
+const playlist = [];
+let cur = -1, playing = false, lastBeats = 0;
+
+function onWorklet(e) {
+  const m = e.data;
+  if (m.kind === 'err') { status(`worklet error: ${m.message}`); return; }
+  if (m.kind === 'compiled') {
+    if (m.diagCount > 0) status(`compile failed: ${m.diagCount} diagnostics`);
+    return;
+  }
+  if (m.kind !== 'pos' || cur < 0 || !playing || scrubbing) return;
+  const t = playlist[cur];
+  // the engine loops the arrangement — a wrap means the track ended
+  if (t.lenBeats > 0 && m.beats < lastBeats - 1) { next(); return; }
+  lastBeats = m.beats;
+  const secs = (m.beats * 60) / t.tempo;
+  if (viz) {
+    if (m.peaks) viz.setPeaks(m.peaks);
+    viz.setPlayhead(m.beats);
+  }
+  const total = t.seconds || 1;
+  $('bar').style.width = `${Math.min(100, (secs / total) * 100)}%`;
+  $('time').textContent = `${mmss(Math.min(secs, total))} / ${mmss(total)}`;
+}
+
+function renderList() {
+  $('tracks').innerHTML = playlist
+    .map(
+      (t, i) => `<div class="trk${i === cur ? ' on' : ''}" data-i="${i}">
+        <span class="n">${String(i + 1).padStart(2, '0')}</span>
+        <span>${t.name}</span>
+        <span class="len">${mmss(t.seconds)}</span></div>`
+    )
+    .join('');
+  document.querySelectorAll('.trk').forEach((el) => {
+    el.onclick = () => play(Number(el.dataset.i));
+  });
+}
+
+async function play(i) {
+  if (!playlist.length) return;
+  cur = ((i % playlist.length) + playlist.length) % playlist.length;
+  const t = playlist[cur];
+  await ensureAudio();
+  await ac.resume();
+  const enc = new TextEncoder();
+  node.port.postMessage({
+    cmd: 'src',
+    text: enc.encode(t.text),
+    modules: enc.encode(JSON.stringify(t.modules)),
+    assets: enc.encode(JSON.stringify(t.assets)),
+  });
+  // a new song ALWAYS starts from zero — the transport survives the src
+  // swap, so jump it home explicitly before pressing play
+  node.port.postMessage({ cmd: 'seek', beats: 0 });
+  node.port.postMessage({ cmd: 'play' });
+  playing = true;
+  lastBeats = 0;
+  $('bar').style.width = '0%';
+  $('time').textContent = `0:00 / ${mmss(t.seconds || 0)}`;
+  $('now').hidden = false;
+  $('transport').hidden = false;
+  $('t-name').textContent = t.name;
+  $('t-artist').textContent = t.artist;
+  $('t-desc').textContent = t.desc;
+  $('t-proof').textContent = t.digest ? `build digest ${t.digest} — the same code sounds the same on every machine` : '';
+  $('t-credits').textContent = t.credits.length ? `credits: ${t.credits.join(', ')}` : '';
+  $('toggle').textContent = '⏸';
+  renderList();
+  status('');
+  composerView(t);
+}
+const next = () => play(cur + 1);
+const prev = () => play(cur - 1);
+
+// ---- seek: click or drag anywhere on the progress bar -------------------------
+let scrubbing = false;
+function seekTo(clientX) {
+  if (cur < 0 || !node) return;
+  const t = playlist[cur];
+  if (!t.lenBeats) return;
+  const rect = $('bar-wrap').getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  const beats = frac * t.lenBeats;
+  lastBeats = beats; // keep the end-of-track detector quiet on a backwards jump
+  node.port.postMessage({ cmd: 'seek', beats });
+  const total = t.seconds || 1;
+  $('bar').style.width = `${frac * 100}%`;
+  $('time').textContent = `${mmss(Math.min((beats * 60) / t.tempo, total))} / ${mmss(total)}`;
+  if (viz) viz.setPlayhead(beats);
+}
+$('bar-wrap').onpointerdown = (e) => {
+  scrubbing = true;
+  $('bar-wrap').setPointerCapture(e.pointerId);
+  seekTo(e.clientX);
+};
+$('bar-wrap').onpointermove = (e) => { if (scrubbing) seekTo(e.clientX); };
+$('bar-wrap').onpointerup = () => { scrubbing = false; };
+$('bar-wrap').onpointercancel = () => { scrubbing = false; };
+
+$('next').onclick = next;
+$('prev').onclick = prev;
+const drawBoost = () => {
+  $('boost').value = boost;
+  const db = 20 * Math.log10(boost);
+  $('boost-val').textContent = `${db >= 0 ? '+' : ''}${db.toFixed(1)} dB`;
+};
+$('boost').oninput = () => {
+  boost = parseFloat($('boost').value) || 1;
+  if (boostGain) boostGain.gain.value = boost;
+  localStorage.setItem(BOOST_KEY, String(boost));
+  drawBoost();
+};
+drawBoost();
+$('toggle').onclick = async () => {
+  if (cur < 0) { play(0); return; }
+  if (playing) { await ac.suspend(); playing = false; $('toggle').textContent = '▶'; }
+  else { await ac.resume(); playing = true; $('toggle').textContent = '⏸'; }
+};
+
+// ---- intake: URL params + drag & drop ----------------------------------------
+async function addFromUrl(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  const label = decodeURIComponent(url.split('/').pop().replace(/\.fortesong$/, ''));
+  playlist.push(parseSong(await res.arrayBuffer(), label));
+}
+
+const drop = $('drop');
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('hot'); };
+drop.ondragleave = () => drop.classList.remove('hot');
+drop.ondrop = async (e) => {
+  e.preventDefault();
+  drop.classList.remove('hot');
+  for (const f of e.dataTransfer.files) {
+    if (!f.name.endsWith('.fortesong')) continue;
+    try {
+      playlist.push(parseSong(await f.arrayBuffer(), f.name.replace(/\.fortesong$/, '')));
+    } catch (err) { status(String(err.message || err)); }
+  }
+  renderList();
+  if (cur < 0 && playlist.length) play(0);
+};
+
+(async () => {
+  const params = new URLSearchParams(location.search);
+  const cover = params.get('cover');
+  if (cover) {
+    $('cover').src = cover;
+    $('cover').style.display = 'block';
+  }
+  const srcs = params.getAll('src');
+  for (const s of srcs) {
+    try { await addFromUrl(s); } catch (err) { status(String(err.message || err)); }
+  }
+  if (playlist.length) {
+    renderList();
+    drop.style.display = 'none';
+    status('Press ▶ to play (a first click is required by the browser autoplay policy)');
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+// Night Drive — a demo song that uses the same progression as night-parade, in A minor.
+// Em|C|G|D and Am|F|C|G are the same progression once transposed, so the hub's
+// similarity search (`forte hub similar`) links these two songs key-independently.
+
+song "Night Drive" {
+  tempo 92bpm
+  meter 4/4
+  key A minor
+
+  let drive = beat`x--x --x- x--- x-x-`
+  let theme = prog`Am | F | C | G`
+
+  track Kick {
+    instrument sampler(sample: "Kick")
+    play drive at bars(1..8)
+  }
+
+  track Bass {
+    instrument prisma(wave: "saw", cutoff: 0.28, sub: 0.8, release: 0.2)
+    volume 0.7
+    play bass(theme, rate: 0.5) at bars(1..8)
+  }
+
+  track Pad {
+    instrument prisma(wave: "tri", cutoff: 0.4, attack: 0.3, release: 0.8)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.4)
+    volume 0.45
+    play chords(theme) at bars(1..8)
+  }
+}

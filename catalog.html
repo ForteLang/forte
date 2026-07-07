@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<meta charset="utf-8">
+<title>Forte Packages — catalog</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #16181d; color: #d7dae0;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    background: #1e2128; border-bottom: 1px solid #2b2f38; }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: 2px; color: #e8b34c; }
+  header span { font-size: 12px; color: #8a919e; }
+  #logo { width: 26px; height: 26px; margin-right: -6px; }
+  main { max-width: 860px; margin: 0 auto; padding: 18px 16px; }
+  .pkg { border: 1px solid #2b2f38; border-radius: 10px; padding: 12px 16px;
+    margin-bottom: 12px; background: #1a1d23; }
+  .pkg h2 { margin: 0 0 4px; font-size: 15px; }
+  .pkg h2 .ver { color: #8a919e; font-weight: 400; font-size: 13px; margin-left: 6px; }
+  .meta { font-size: 12px; color: #8a919e; margin-bottom: 6px; }
+  .badge { display: inline-block; font-size: 10px; padding: 2px 8px;
+    border-radius: 99px; border: 1px solid #3a3f4b; margin-left: 6px; color: #8a919e; }
+  .tag { display: inline-block; font-size: 10px; padding: 1px 7px; margin: 0 4px 4px 0;
+    border-radius: 99px; background: #23262e; color: #a8b0bd; }
+  .section-h { font-size: 11px; letter-spacing: 1px; color: #8a919e;
+    text-transform: uppercase; margin: 10px 0 4px; }
+  .files { font: 12px/1.9 ui-monospace, monospace; }
+  .files a { color: #d6d9de; text-decoration: none; cursor: pointer;
+    display: inline-block; margin-right: 14px; }
+  .files a:hover { color: #e8b34c; }
+  .albums .album { display: inline-flex; align-items: center; gap: 10px; }
+  .albums .album-row { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; }
+  .albums .share { text-decoration: none; font-size: 13px; opacity: 0.7; }
+  .albums .share:hover { opacity: 1; }
+  .albums .cover { width: 56px; height: 56px; border-radius: 8px; display: block;
+    border: 1px solid #2b2f38; }
+  #src-wrap { display: none; }
+  #src-title { font: 13px/1.4 ui-monospace, monospace; color: #e8b34c; margin: 14px 0 6px; }
+  pre { background: #14161b; border: 1px solid #2b2f38; border-radius: 8px;
+    padding: 12px; font: 12px/1.6 ui-monospace, monospace; overflow-x: auto;
+    white-space: pre; }
+  .hint { font-size: 12px; color: #8a919e; }
+  .hint code { color: #b6bcc6; }
+  button { background: #2b2f38; color: #d7dae0; border: 1px solid #3a3f4b;
+    border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+  a.back { color: #e8b34c; font-size: 12px; margin-left: auto; text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <img id="logo" src="logo.svg" alt=""><h1>FORTE PACKAGES</h1>
+  <span>Everything is a package. Pull with forte package add, publish with forte push.</span>
+  <a class="back" href="player.html" style="margin-left:auto">▶ Player</a>
+  <a class="back" href="index.html" id="editor-link" style="margin-left:0; display:none">← Editor</a>
+</header>
+<main>
+  <div id="list">Loading…</div>
+  <div id="src-wrap">
+    <div id="src-title"></div>
+    <pre id="src"></pre>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function showSrc(rel) {
+  const res = await fetch(`${rel}`);
+  $('src-title').textContent = rel;
+  $('src').textContent = res.ok ? await res.text() : `cannot load: ${res.status}`;
+  $('src-wrap').style.display = 'block';
+  $('src-wrap').scrollIntoView({ behavior: 'smooth' });
+}
+
+function albumList(pkgDir, albums, staticSite) {
+  if (!albums.length) return '';
+  const items = albums.map((a) => {
+    const base = `packages/${pkgDir}/albums/${a.dir}`;
+    let q = a.tracks.map((t) => `src=${encodeURIComponent(`${base}/${t}`)}`).join('&');
+    if (a.cover) q += `&cover=${encodeURIComponent(`${base}/${a.cover}`)}`;
+    const art = a.cover
+      ? `<img class="cover" src="${esc(`${base}/${a.cover}`)}" alt="">`
+      : '';
+    // on the published site each album has a share page with OGP tags —
+    // paste that URL anywhere and the cover + description unfurl
+    const share = staticSite
+      ? ` <a class="share" href="share/${esc(a.dir)}.html" title="Share URL (with OGP tags)" onclick="event.stopPropagation()">🔗</a>`
+      : '';
+    return `<span class="album-row"><a class="album" href="player.html?${q}" title="${esc(a.desc)}">${art}<span>▶ ${esc(a.title)}${
+      a.artist ? ` — ${esc(a.artist)}` : ''} (${a.tracks.length} tracks)</span></a>${share}</span>`;
+  }).join('\n');
+  return `<div class="section-h">albums</div><div class="files albums">${items}</div>`;
+}
+
+function fileList(pkgDir, sub, files) {
+  if (!files.length) return '';
+  const items = files.map((f) => {
+    const rel = `packages/${pkgDir}/${sub}/${f}`;
+    return `<a data-rel="${esc(rel)}" title="View source">${esc(f)}</a>`;
+  }).join('\n');
+  return `<div class="section-h">${sub} (${files.length})</div><div class="files">${items}</div>`;
+}
+
+async function load() {
+  let data;
+  let staticSite = false;
+  try {
+    const res = await fetch('/api/packages');
+    if (!res.ok) throw new Error(String(res.status));
+    data = await res.json();
+    // the editor is a local development tool — only offer it when this
+    // catalog is served by `forte browser` (static hosting hides it)
+    $('editor-link').style.display = '';
+  } catch (e) {
+    // static hosting (GitHub Pages): the catalog ships as packages.json
+    try {
+      data = await (await fetch('packages.json')).json();
+      staticSite = true;
+    } catch (e2) {
+      $('list').innerHTML = `<div class="hint">The catalog API is unreachable (did you open this with <code>forte browser</code>?)</div>`;
+      return;
+    }
+  }
+  if (!data.packages.length) {
+    $('list').innerHTML = `<div class="hint">packages/ is empty. Pull one with <code>forte package add github:owner/repo</code>.</div>`;
+    return;
+  }
+  $('list').innerHTML = data.packages.map((p) => {
+    const tags = (p.tags || []).flatMap((t) => t.split(',')).map((t) => t.trim()).filter(Boolean)
+      .map((t) => `<span class="tag">${esc(t)}</span>`).join('');
+    return `<div class="pkg">
+      <h2>${esc(p.name)}<span class="ver">${esc(p.version)}</span>
+        ${p.license ? `<span class="badge">${esc(p.license)}</span>` : ''}</h2>
+      <div class="meta">${esc(p.desc)}${p.sponsor
+        ? ` — <a href="${esc(p.sponsor)}" style="color:#e8b34c">♥ support</a>` : ''}</div>
+      <div>${tags}</div>
+      ${albumList(p.dir, p.albums || [], staticSite)}
+      ${fileList(p.dir, 'instruments', p.instruments)}
+      ${fileList(p.dir, 'blocks', p.blocks)}
+      ${fileList(p.dir, 'songs', p.songs)}
+      <div class="hint" style="margin-top:8px">Use it:
+        <code>import { … } from "packages/${esc(p.dir)}/blocks/…"</code></div>
+    </div>`;
+  }).join('\n');
+  $('list').querySelectorAll('a[data-rel]').forEach((a) => {
+    a.onclick = () => showSrc(a.dataset.rel);
+  });
+}
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+// Night Compiler — floor parts.
+import { Kick909, KickSub, Ride } from "../../instruments/drums.forte"
+
+// ---- the floor at 2am: ONE lane, lands → leans in ------------------------------
+block Floor {
+  track Kick {
+    instrument Kick909(click: 0.45)
+    insert eq(low: 0.6, mid: 0.45, high: 0.48)
+    insert comp(thresh: 0.36, ratio: 0.65, attack: 0.02, release: 0.18, makeup: 0.25)
+    volume 0.92
+    play beat`X--- x--- x--- x---` at bars(1..4)
+  }
+  track Sub {
+    instrument KickSub(weight: 0.75)
+    insert comp(thresh: 0.4, ratio: 0.6, attack: 0.03, release: 0.2, makeup: 0.15)
+    volume 0.5
+    play beat`x--- x--- x--- x---` at bars(1..4)
+  }
+}
+
+// deeper: a ghost before the one — the night starts nodding
+block FloorLean : Floor {
+  track Kick {
+    insert comp(thresh: 0.33, ratio: 0.68, attack: 0.018, release: 0.16, makeup: 0.28)
+    play beat`X--- x--- x--- x--. X--- x--- x--. x---` at bars(1..2)
+  }
+  track Sub { volume 0.54 }
+}
+
+// Ride for the deep hours — barely there, pumped against the kick.
+block Rides {
+  track Ride {
+    instrument Ride(wash: 0.35)
+    insert eq(low: 0.1, mid: 0.45, high: 0.58)
+    insert pump(amount: 0.3, beats: 1)
+    volume 0.22
+    pan 0.28
+    play beat`x-x- x-x- x-x- x-x-` at bars(1..4)
+  }
+}

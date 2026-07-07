@@ -1,0 +1,54 @@
+// Memoize — motif parts.
+import { MusicBox, EPiano, Vibraphone } from "../../instruments/keys.forte"
+import { SoftLead } from "../../instruments/leads.forte"
+
+// ---- the motif and its cache hits -------------------------------------------------
+// the first computation: a music box works out the phrase
+block Motif {
+  key G major
+  track M {
+    instrument MusicBox()
+    insert eq(low: 0.15, mid: 0.5, high: 0.58)
+    insert delay(time: 0.536, fdbk: 0.42, mix: 0.34)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.26)
+    volume 0.42
+    pan -0.15
+    play notes`D5:0.75 B4:0.25 G4:1 A4:0.75 B4:0.25 D5:1 E5:0.75 D5:0.25 B4:1 A4:0.5 G4:1 _:0.5 E4:0.5 G4:0.75 A4:0.25 B4:1.5 A4:1 G4:1.5 _:2.5` at bars(1..4)
+  }
+}
+
+// cache hits: the same stored notes, retrieved by other voices
+block HitVibe : Motif {
+  track M {
+    instrument Vibraphone(motor: 0.4)
+    insert delay(time: 0.536, fdbk: 0.45, mix: 0.3)
+    volume 0.38
+    pan 0.25
+  }
+}
+
+block HitKeys : Motif {
+  track M {
+    instrument EPiano(tine: 0.5)
+    insert delay(time: 0.536, fdbk: 0.4, mix: 0.26)
+    volume 0.44
+    pan 0.05
+  }
+}
+
+block HitVoice : Motif {
+  track M {
+    instrument SoftLead()
+    insert delay(time: 0.536, fdbk: 0.48, mix: 0.36)
+    volume 0.4
+    pan -0.05
+  }
+}
+
+// the cache: motif against its own copies, two bars apart — a canon of hits
+block Cache {
+  key G major
+  play HitKeys at bars(1..8)
+  play HitVibe(from: 1, to: 4) at bars(3..8)
+  play Motif(from: 1, to: 4, volume: 0.8) at bars(5..8)
+}

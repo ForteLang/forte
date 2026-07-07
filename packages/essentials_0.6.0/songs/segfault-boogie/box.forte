@@ -1,0 +1,55 @@
+// Segfault Boogie — box parts.
+import { HatClosed } from "../../instruments/drums.forte"
+import { Cowbell78, Claves78, Tamb78 } from "../../instruments/cr78.forte"
+
+// ---- the rhythm box: ONE lane of CR-78 doing its best --------------------------
+block Box {
+  track Hat {
+    instrument HatClosed(bright: 0.85)
+    insert eq(low: 0.15, mid: 0.45, high: 0.68)
+    volume 0.3
+    pan -0.15
+    play beat`x.x. x.xX x.x. Xxx.` at bars(1..2)
+  }
+  track Bell {
+    instrument Cowbell78()
+    insert eq(low: 0.2, mid: 0.6, high: 0.55)
+    insert delay(time: 0.25, fdbk: 0.3, mix: 0.25)
+    volume 0.35
+    pan 0.3
+    play beat`---- --x- ---- ---- ---- --x- -x-- ----` at bars(1..2)
+  }
+  track Claves {
+    instrument Claves78()
+    insert eq(low: 0.2, mid: 0.55, high: 0.58)
+    volume 0.3
+    pan -0.35
+    play beat`---x ---- --x- ---- ---x ---- ---- x---` at bars(1..2)
+  }
+  track Tamb {
+    instrument Tamb78()
+    insert eq(low: 0.1, mid: 0.5, high: 0.6)
+    volume 0.25
+    pan 0.1
+    play beat`--x- --x- --x- --x-` at bars(1..1)
+  }
+}
+
+// walk-in: just claves and a far cowbell — the box warming up
+block BoxIn : Box {
+  track Hat    { volume 0.18 play beat`..x. ..x. ..x. ..x.` at bars(1..1) }
+  track Bell   { volume 0.28 insert delay(time: 0.25, fdbk: 0.45, mix: 0.4) play beat`---- ---- ---- --x-` at bars(1..2) }
+  track Claves { volume 0.26 play beat`---x ---- ---- ----` at bars(1..2) }
+  track Tamb   { volume 0.12 play beat`---- --x- ---- --x-` at bars(1..1) }
+}
+
+// jam: the box chatters — tambourine 16ths, cowbell answering itself
+block BoxJam : Box {
+  track Hat  { volume 0.33 play beat`x.xX xxx. x.xX x.xx` at bars(1..1) }
+  track Bell {
+    insert delay(time: 0.25, fdbk: 0.4, mix: 0.32)
+    volume 0.38
+    play beat`---- --x- ---- -x-- ---- --x- -x-- --x-` at bars(1..2)
+  }
+  track Tamb { volume 0.28 play beat`x.x. x.x. x.x. xxx.` at bars(1..1) }
+}

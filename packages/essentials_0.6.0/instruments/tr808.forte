@@ -1,0 +1,160 @@
+// std/tr808 — the full 808 kit: 13 voices modeling the hardware architecture
+// (bridged-T pitch-dropping sine for the kick, a 6-square-wave bank for the
+// metalwork, band-limited noise everywhere else) in the device DSL.
+// Trigger with C2 (root 36). Frequencies are ratios of note.freq to recreate the hardware tuning.
+// Usage: import { BD808, SD808, CH808 } from "packages/essentials_0.6.0/instruments/tr808.forte"
+
+device BD808 : Instrument {
+  param tone  = 0.35 in 0.0..1.0   // amount of click component
+  param decay = 0.6  in 0.1..1.0   // boom length
+
+  node env  = adsr(a: 0.001, d: decay, s: 0.0, r: 0.25)
+  node penv = adsr(a: 0.001, d: 0.07, s: 0.0, r: 0.03)     // pitch drop
+  node body = osc(freq: gain(in: note.freq, level: 0.8), shape: "sine",
+                  mod: gain(in: penv, level: 0.4))
+  node clkenv = adsr(a: 0.001, d: 0.012, s: 0.0, r: 0.008)
+  node click  = gain(in: svf(in: noise(), cutoff: 0.65, reso: 0.2), mod: clkenv, level: tone)
+  node sum  = mix(a: shaper(in: body, drive: 0.35, mode: "tanh"), b: click)
+  out gain(in: sum, mod: env, level: 1.0)
+}
+
+device SD808 : Instrument {
+  param tone  = 0.5 in 0.0..1.0    // balance between the two resonances
+  param snappy = 0.6 in 0.0..1.0   // noise amount (the hardware's SNAPPY knob)
+
+  node env  = adsr(a: 0.001, d: 0.16, s: 0.0, r: 0.08)
+  node f275 = mix(a: mix(a: note.freq, b: note.freq), b: gain(in: note.freq, level: 0.75))
+  node f505 = mix(a: mix(a: mix(a: note.freq, b: note.freq),
+                         b: mix(a: note.freq, b: note.freq)), b: note.freq)
+  node r1   = osc(freq: f275, shape: "sine")
+  node r2   = osc(freq: f505, shape: "sine")
+  node body = mix(a: r1, b: gain(in: r2, level: tone))
+  node nz   = gain(in: svf(in: noise(), cutoff: 0.75, reso: 0.2), level: snappy)
+  out gain(in: mix(a: gain(in: body, level: 0.5), b: nz), mod: env, level: 0.9)
+}
+
+device LT808 : Instrument {
+  node env  = adsr(a: 0.001, d: 0.38, s: 0.0, r: 0.15)
+  node penv = adsr(a: 0.001, d: 0.1, s: 0.0, r: 0.05)
+  node o    = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.22)),
+                  shape: "sine", mod: gain(in: penv, level: 0.3))
+  node nz   = gain(in: svf(in: noise(), cutoff: 0.3, reso: 0.2), level: 0.08)
+  out gain(in: mix(a: o, b: nz), mod: env, level: 0.9)
+}
+
+device MT808 : Instrument {
+  node env  = adsr(a: 0.001, d: 0.32, s: 0.0, r: 0.12)
+  node penv = adsr(a: 0.001, d: 0.09, s: 0.0, r: 0.04)
+  node o    = osc(freq: mix(a: note.freq, b: gain(in: note.freq, level: 0.83)),
+                  shape: "sine", mod: gain(in: penv, level: 0.3))
+  node nz   = gain(in: svf(in: noise(), cutoff: 0.35, reso: 0.2), level: 0.07)
+  out gain(in: mix(a: o, b: nz), mod: env, level: 0.85)
+}
+
+device HT808 : Instrument {
+  node env  = adsr(a: 0.001, d: 0.26, s: 0.0, r: 0.1)
+  node penv = adsr(a: 0.001, d: 0.08, s: 0.0, r: 0.04)
+  node f25  = mix(a: mix(a: note.freq, b: note.freq), b: gain(in: note.freq, level: 0.52))
+  node o    = osc(freq: f25, shape: "sine", mod: gain(in: penv, level: 0.3))
+  node nz   = gain(in: svf(in: noise(), cutoff: 0.4, reso: 0.2), level: 0.06)
+  out gain(in: mix(a: o, b: nz), mod: env, level: 0.8)
+}
+
+device RS808 : Instrument {
+  node env = adsr(a: 0.001, d: 0.035, s: 0.0, r: 0.02)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node f8  = mix(a: mix(a: f2, b: f2), b: mix(a: f2, b: f2))
+  node f26 = mix(a: mix(a: f8, b: f8), b: mix(a: f8, b: f2))
+  node o   = osc(freq: f26, shape: "tri")
+  node bp  = svf(in: o, cutoff: 0.8, reso: 0.7)
+  node sh  = shaper(in: bp, drive: 0.4, mode: "clip")
+  out gain(in: sh, mod: env, level: 0.85)
+}
+
+device CP808 : Instrument {
+  param room = 0.4 in 0.0..1.0   // amount of trailing "splash"
+
+  node burst = adsr(a: 0.001, d: 0.028, s: 0.0, r: 0.01)
+  node rate  = lfo(rate: 0.99, shape: "square")            // the multi-burst chop
+  node nz    = svf(in: noise(), cutoff: 0.6, reso: 0.55, mod: gain(in: rate, level: 0.06))
+  node head  = gain(in: nz, mod: burst, level: 1.0)
+  node tail_env = adsr(a: 0.012, d: 0.22, s: 0.0, r: 0.12)
+  node tail  = gain(in: svf(in: noise(), cutoff: 0.55, reso: 0.4), mod: tail_env, level: room)
+  out mix(a: head, b: tail)
+}
+
+device CB808 : Instrument {
+  node env  = adsr(a: 0.001, d: 0.28, s: 0.0, r: 0.12)
+  node f2   = mix(a: note.freq, b: note.freq)
+  node f8   = mix(a: mix(a: f2, b: f2), b: mix(a: f2, b: f2))
+  node f825 = mix(a: f8, b: gain(in: note.freq, level: 0.25))     // ~540Hz
+  node f122 = mix(a: mix(a: f8, b: mix(a: f2, b: f2)), b: gain(in: note.freq, level: 0.2)) // ~800Hz
+  node o1   = osc(freq: f825, shape: "square")
+  node o2   = osc(freq: f122, shape: "square")
+  node bp   = svf(in: mix(a: o1, b: gain(in: o2, level: 0.8)), cutoff: 0.6, reso: 0.5)
+  out gain(in: bp, mod: env, level: 0.55)
+}
+
+// Metal bank: the hardware shares six square waves around 540 Hz. Here we build
+// six at inharmonic ratios; CY (cymbal) / OH / CH change character through filter and decay alone.
+device CY808 : Instrument {
+  param decay = 0.8 in 0.3..1.0
+
+  node env = adsr(a: 0.001, d: decay, s: 0.05, r: 1.0)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node f4  = mix(a: f2, b: f2)
+  node b1  = osc(freq: mix(a: f2, b: gain(in: note.freq, level: 0.63)), shape: "square")
+  node b2  = osc(freq: mix(a: f4, b: gain(in: note.freq, level: 0.71)), shape: "square")
+  node b3  = osc(freq: mix(a: mix(a: f4, b: f2), b: gain(in: note.freq, level: 0.52)), shape: "square")
+  node b4  = osc(freq: mix(a: mix(a: f4, b: f4), b: gain(in: note.freq, level: 0.37)), shape: "square")
+  node b5  = osc(freq: mix(a: mix(a: f4, b: f4), b: mix(a: f2, b: gain(in: note.freq, level: 0.83))), shape: "square")
+  node b6  = osc(freq: mix(a: mix(a: mix(a: f4, b: f4), b: f4), b: gain(in: note.freq, level: 0.11)), shape: "square")
+  node bank = mix(a: mix(a: b1, b: b2), b: mix(a: mix(a: b3, b: b4), b: mix(a: b5, b: b6)))
+  node hp  = svf(in: bank, cutoff: 0.85, reso: 0.3)
+  node fz  = shaper(in: hp, drive: 0.25, mode: "clip")
+  out gain(in: fz, mod: env, level: 0.3)
+}
+
+device OH808 : Instrument {
+  param decay = 0.35 in 0.1..0.7
+
+  node env = adsr(a: 0.001, d: decay, s: 0.0, r: 0.2)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node f4  = mix(a: f2, b: f2)
+  node b1  = osc(freq: mix(a: f2, b: gain(in: note.freq, level: 0.63)), shape: "square")
+  node b2  = osc(freq: mix(a: f4, b: gain(in: note.freq, level: 0.71)), shape: "square")
+  node b3  = osc(freq: mix(a: mix(a: f4, b: f2), b: gain(in: note.freq, level: 0.52)), shape: "square")
+  node b4  = osc(freq: mix(a: mix(a: f4, b: f4), b: gain(in: note.freq, level: 0.37)), shape: "square")
+  node bank = mix(a: mix(a: b1, b: b2), b: mix(a: b3, b: b4))
+  node hp  = svf(in: bank, cutoff: 0.92, reso: 0.25)
+  out gain(in: hp, mod: env, level: 0.4)
+}
+
+device CH808 : Instrument {
+  node env = adsr(a: 0.001, d: 0.045, s: 0.0, r: 0.03)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node f4  = mix(a: f2, b: f2)
+  node b1  = osc(freq: mix(a: f2, b: gain(in: note.freq, level: 0.63)), shape: "square")
+  node b2  = osc(freq: mix(a: f4, b: gain(in: note.freq, level: 0.71)), shape: "square")
+  node b3  = osc(freq: mix(a: mix(a: f4, b: f2), b: gain(in: note.freq, level: 0.52)), shape: "square")
+  node b4  = osc(freq: mix(a: mix(a: f4, b: f4), b: gain(in: note.freq, level: 0.37)), shape: "square")
+  node bank = mix(a: mix(a: b1, b: b2), b: mix(a: b3, b: b4))
+  node hp  = svf(in: bank, cutoff: 0.94, reso: 0.25)
+  out gain(in: hp, mod: env, level: 0.4)
+}
+
+device MA808 : Instrument {
+  node env = adsr(a: 0.003, d: 0.045, s: 0.0, r: 0.03)
+  node nz  = svf(in: noise(), cutoff: 0.9, reso: 0.2)
+  out gain(in: nz, mod: env, level: 0.5)
+}
+
+device CL808 : Instrument {
+  node env = adsr(a: 0.001, d: 0.045, s: 0.0, r: 0.03)
+  node f2  = mix(a: note.freq, b: note.freq)
+  node f8  = mix(a: mix(a: f2, b: f2), b: mix(a: f2, b: f2))
+  node f18 = mix(a: mix(a: f8, b: f8), b: f2)
+  node o   = osc(freq: f18, shape: "sine")
+  node sh  = shaper(in: o, drive: 0.25, mode: "tanh")
+  out gain(in: sh, mod: env, level: 0.8)
+}

@@ -1,0 +1,41 @@
+// Race Condition — rave parts.
+import { FifthStack } from "../../instruments/synths.forte"
+import { SweepPad } from "../../instruments/pads.forte"
+import { Zap } from "../../instruments/fx.forte"
+
+// Fifth stack chords for the drop — rave gloves on.
+block Rave {
+  key G minor
+  track Stack {
+    instrument FifthStack()
+    insert drive(drive: 0.2)
+    insert eq(low: 0.3, mid: 0.55, high: 0.58)
+    insert width(amount: 0.7)
+    insert delay(time: 0.224, fdbk: 0.3, mix: 0.2)
+    volume 0.5
+    pan -0.2
+    play beat`x--- --x- ---- x--- ---- --x- x--- ----` at bars(1..2)
+  }
+}
+
+// The deadlock: sweep pad + zap panic while both threads wait.
+block Deadlock {
+  key G minor
+  track Sweep {
+    instrument SweepPad(rate: 0.12)
+    insert eq(low: 0.3, mid: 0.5, high: 0.55)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.9, decay: 0.75, mix: 0.4)
+    volume 0.55
+    pan 0.05
+    play notes`[G2 D3 A#3 F4]:16` at bars(1..4)
+  }
+  track Panic {
+    instrument Zap()
+    insert eq(low: 0.2, mid: 0.5, high: 0.6)
+    insert delay(time: 0.28, fdbk: 0.6, mix: 0.5)
+    volume 0.4
+    pan -0.3
+    play beat`x--- ---- --x- ---- -x-- ---- ---x ----` at bars(1..2)
+  }
+}

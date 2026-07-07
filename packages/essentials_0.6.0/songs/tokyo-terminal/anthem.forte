@@ -1,0 +1,26 @@
+// Tokyo Terminal — anthem parts.
+import { NightLead } from "../../instruments/leads.forte"
+
+// The chorus lead — a night synth singing the big tune over everything.
+block Anthem {
+  key D minor
+  track Lead {
+    instrument NightLead()
+    insert eq(low: 0.25, mid: 0.55, high: 0.6)
+    insert delay(time: 0.369, fdbk: 0.4, mix: 0.3)
+    insert reverb(size: 0.6, decay: 0.5, mix: 0.18)
+    volume 0.6
+    pan -0.05
+    play notes`D5:0.75 E5:0.25 F5:1 A5~:1.5 G5:0.5 F5:0.5 E5:0.5 D5~:1 D5:1 _:0.5 C5:0.5 D5:0.75 E5:0.25 F5:0.5 E5:0.5 D5:0.5 C5~:1.5 D5:2.5 _:1` at bars(1..4)
+  }
+}
+
+// second chorus: the delay sings along and the room doubles
+block AnthemWide : Anthem {
+  track Lead {
+    insert delay(time: 0.369, fdbk: 0.5, mix: 0.38)
+    insert reverb(size: 0.72, decay: 0.6, mix: 0.26)
+    volume 0.62
+    automate delay.mix from 0.3 to 0.45 over bars(9..16)
+  }
+}

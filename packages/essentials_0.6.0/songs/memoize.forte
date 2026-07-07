@@ -1,0 +1,75 @@
+// Memoize — compute the melody once, return it forever. A music box
+// states the theme; every later "call" is a cache hit played back by a
+// different instrument (inheritance swaps the voice, the stored notes
+// never change). By the end the whole band is serving the same phrase
+// from memory, two bars apart, in canon. 112bpm.
+//
+// STRUCTURE: `Cache` is a nested block that PLACES the motif against its
+// copies at offsets — a canon written as block placements. The groove is
+// a nested kit + hands machine with `as`-aliased density variants.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./memoize/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Motif, HitVibe, HitKeys, HitVoice, Cache } from "./memoize/motif.forte"
+import { Groove, GrooveCold, GrooveHot } from "./memoize/groove.forte"
+import { Lookup, Chords, Memory } from "./memoize/band.forte"
+import { Hit } from "./memoize/transitions.forte"
+
+song "Memoize" {
+  desc "Compute the melody once, return it forever: a music box states the theme and every later call is a cache hit by a different instrument — the whole band serving one phrase from memory, in canon. 112bpm."
+  artist "Forte Essentials"
+  tempo 112bpm
+  master 3.13  // mastered: -25.0 LUFS raw, aiming near -15
+  swing 0.54
+  meter 4/4
+  key G major
+
+  section compute = bars(1..8)
+  section call1   = bars(9..24)
+  section call2   = bars(25..40)
+  section evict   = bars(41..48)
+  section hotpath = bars(49..64)
+  section retain  = bars(65..76)
+
+  // compute: the music box works the phrase out over warm strings
+  play Hit at bars(1..1)
+  play Motif at compute
+  play Memory at compute
+  play Chords at bars(5..8)
+
+  // first call: the groove arrives cold, EPiano returns the cached phrase
+  play GrooveCold as Groove at call1
+  play Lookup at call1
+  play Chords at call1
+  play HitKeys at bars(13..20)
+  play Memory(volume: 0.7) at call1
+
+  // second call: full groove, vibes and box hit the cache in canon
+  play Groove at call2
+  play Lookup at call2
+  play Chords at call2
+  play Cache at bars(27..34)
+  play Memory(volume: 0.7) at call2
+
+  // evict: drums flushed, strings hold what the cache remembers
+  play Memory at evict
+  play Chords(volume: 0.7) at evict
+  play HitVoice at bars(43..48)
+
+  // hot path: every voice serves the phrase, groove at full density
+  play Hit at bars(49..49)
+  play GrooveHot as Groove at hotpath
+  play Lookup at hotpath
+  play Chords at hotpath
+  play Cache at bars(51..58)
+  play HitVoice at bars(57..64)
+  play Memory(volume: 0.75) at hotpath
+
+  // retain: the box alone again — the value was never recomputed
+  play GrooveCold as Groove at bars(65..70)
+  play Motif at bars(65..72)
+  play Memory at retain
+  automate Memory.volume from 1 to 0 over bars(71..76)
+  automate Groove.volume from 1 to 0 over bars(67..70)
+}

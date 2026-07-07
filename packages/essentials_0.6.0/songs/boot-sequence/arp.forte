@@ -1,0 +1,20 @@
+// Boot Sequence — arp parts.
+import { PolySaw } from "../../instruments/synths.forte"
+
+// The fifths arp — the signature. It runs the whole song; sections fade
+// and filter it from outside.
+block ArpFifths {
+  key A minor
+  param cutoff = 0.55 in 0..1
+  let seq = prog`Am | F | C | G`
+  track Arp {
+    instrument PolySaw(cutoff: cutoff)
+    insert eq(low: 0.3, mid: 0.5, high: 0.6)
+    insert chorus(rate: 0.25, depth: 0.4, mix: 0.35)
+    insert delay(time: 0.318, fdbk: 0.4, mix: 0.22)
+    insert pump(amount: 0.3, beats: 1)
+    volume 0.5
+    pan -0.2
+    play arp(seq, rate: 0.25, style: "updown") at bars(1..4)
+  }
+}

@@ -1,0 +1,26 @@
+// Tail Call — frame parts.
+import { FMBass } from "../../instruments/bass.forte"
+
+// The frame pointer: an FM bass that never loses its place.
+block Frame {
+  key B minor
+  track Bass {
+    instrument FMBass(bite: 0.5)
+    insert eq(low: 0.58, mid: 0.5, high: 0.5)
+    insert comp(thresh: 0.42, ratio: 0.56, attack: 0.012, release: 0.14, makeup: 0.2)
+    insert drive(drive: 0.22)
+    insert pump(amount: 0.35, beats: 1)
+    volume 0.74
+    play notes`B1:0.25 _:0.25 B1:0.25 B2:0.25 _:0.25 B1:0.25 A1:0.25 B1:0.25 _:0.25 B1:0.25 D2:0.25 B1:0.25 E2:0.25 _:0.25 F#2:0.25 A1:0.25` at bars(1..1)
+    modulate bite with lfo(rate: 0.16, amount: 0.14, shape: "tri")
+  }
+}
+
+// the return: same pointer, filter opening as frames pop
+block FrameOpen : Frame {
+  track Bass {
+    instrument FMBass(bite: 0.6)
+    insert drive(drive: 0.3)
+    automate drive.drive from 0.22 to 0.36 over bars(1..16)
+  }
+}

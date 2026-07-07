@@ -1,0 +1,4 @@
+// Lazy Evaluation — transitions parts.
+import { Downlifter } from "../../instruments/fx.forte"
+
+block Sigh { track D { instrument Downlifter() volume 0.35 pan -0.1 play beat`x--- ---- ---- ----` at bars(1..1) } }

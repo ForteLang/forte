@@ -1,0 +1,29 @@
+// Sleep Sort — goodnight parts.
+import { SoftLead } from "../../instruments/leads.forte"
+import { Triangle } from "../../instruments/percussion.forte"
+
+// One last hum before sleep — the album's goodnight.
+block Goodnight {
+  key E major
+  track Voice {
+    instrument SoftLead()
+    insert eq(low: 0.22, mid: 0.52, high: 0.55)
+    insert delay(time: 0.714, fdbk: 0.45, mix: 0.34)
+    insert reverb(size: 0.85, decay: 0.75, mix: 0.32)
+    volume 0.44
+    pan 0.05
+    play notes`_:2 G#4~:1.5 B4~:1.5 G#4~:1.5 E4~:2 _:1.5 F#4~:1 G#4~:1.5 F#4~:1.5 E4~:1.5 C#4~:2 _:1.5 B3~:1 C#4~:1.5 E4~:2.5 D#4~:1.5 E4~:3 _:3` at bars(1..8)
+  }
+}
+
+// The triangle: one ping per eight bars, the last process still running.
+block Night {
+  track Tri {
+    instrument Triangle()
+    insert eq(low: 0.1, mid: 0.45, high: 0.6)
+    insert reverb(size: 0.9, decay: 0.8, mix: 0.45)
+    volume 0.2
+    pan -0.28
+    play beat`x--- ---- ---- ----` at bars(1..8)
+  }
+}

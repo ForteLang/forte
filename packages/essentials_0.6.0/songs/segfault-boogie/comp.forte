@@ -1,0 +1,16 @@
+// Segfault Boogie — comp parts.
+import { Wurli } from "../../instruments/keys.forte"
+
+// Wurli comping — lazy offbeat chords that keep the funk polite.
+block Comp {
+  key E minor
+  track Keys {
+    instrument Wurli(bark: 0.45)
+    insert eq(low: 0.3, mid: 0.5, high: 0.55)
+    insert chorus(rate: 0.3, depth: 0.5, mix: 0.4)
+    insert width(amount: 0.6)
+    volume 0.45
+    pan 0.05
+    play notes`_:0.5 [E3 G3 B3]:0.75 _:0.75 [E3 G3 B3]:0.5 _:1.5 _:0.5 [D3 G3 B3]:0.75 _:0.75 [C3 E3 G3]:0.5 _:1.5` at bars(1..2)
+  }
+}

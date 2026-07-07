@@ -1,0 +1,25 @@
+// Zero One — air parts.
+import { ShimmerPad, GlassPad } from "../../instruments/pads.forte"
+
+// The pad: shimmer over glass, wide as the empty office.
+block Air {
+  key C minor
+  track Shimmer {
+    instrument ShimmerPad()
+    insert eq(low: 0.3, mid: 0.5, high: 0.56)
+    insert width(amount: 0.9)
+    insert reverb(size: 0.95, decay: 0.85, mix: 0.45)
+    volume 0.5
+    pan -0.05
+    play notes`[C3 G3 D#4 A#4]:16 [G#2 D#3 C4 G4]:16` at bars(1..8)
+  }
+  track Under {
+    instrument GlassPad()
+    insert eq(low: 0.32, mid: 0.5, high: 0.52)
+    insert pump(amount: 0.25, beats: 1)
+    insert width(amount: 0.7)
+    volume 0.35
+    pan 0.15
+    play notes`[D#3 A#3 F4]:16 [C3 G3 D#4]:16` at bars(1..8)
+  }
+}

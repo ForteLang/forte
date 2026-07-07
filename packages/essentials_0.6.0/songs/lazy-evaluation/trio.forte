@@ -1,0 +1,129 @@
+// Lazy Evaluation — trio parts.
+import { Kick808, SnareBrush, HatPedal } from "../../instruments/drums.forte"
+import { UprightBass } from "../../instruments/bass.forte"
+import { Wurli } from "../../instruments/keys.forte"
+
+// ---- the trio: three musicians in one nested block -------------------------------
+block Trio {
+  // the kit: kick barely there, brushes drawing circles, pedal hat timekeeping
+  block Kit {
+    track Kick {
+      instrument Kick808(punch: 0.4, decay: 0.42)
+      insert eq(low: 0.58, mid: 0.45, high: 0.45)
+      insert comp(thresh: 0.45, ratio: 0.55, attack: 0.025, release: 0.18, makeup: 0.15)
+      volume 0.78
+      play beat`X--- ---- --x- ---- X--- ---- --x- -.--` at bars(1..2)
+    }
+    track Brush {
+      instrument SnareBrush()
+      insert eq(low: 0.2, mid: 0.55, high: 0.58)
+      insert comp(thresh: 0.48, ratio: 0.45, attack: 0.008, release: 0.12, makeup: 0.12)
+      insert reverb(size: 0.5, decay: 0.4, mix: 0.16)
+      volume 0.44
+      pan 0.08
+      play beat`---- x--. ---- x--- ---- x--. --.- x-.-` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.18
+      pan -0.15
+      play beat`--x- --x- --x- --x-` at bars(1..4)
+    }
+  }
+  // the upright: roots on time, resolutions deliberately late
+  block Upright {
+    track Bass {
+      instrument UprightBass()
+      insert eq(low: 0.56, mid: 0.5, high: 0.45)
+      insert comp(thresh: 0.42, ratio: 0.55, attack: 0.015, release: 0.16, makeup: 0.2)
+      volume 0.74
+      play notes`A1:1.5 _:0.5 E2:1 _:0.5 C#2:0.5 D2:1.5 _:0.5 A1:1 F#1:0.5 G#1:0.5 A1:1.5 _:0.5 E2:1 _:0.5 E2:0.5 F#2:1.5 _:0.5 D2:0.75 C#2:0.75 B1:0.5` at bars(1..4)
+    }
+  }
+  // the comping: wurli chords that arrive only when the phrase forces them
+  block Comping {
+    track Keys {
+      instrument Wurli(bark: 0.35)
+      insert eq(low: 0.28, mid: 0.52, high: 0.55)
+      insert chorus(rate: 0.2, depth: 0.5, mix: 0.45)
+      insert width(amount: 0.6)
+      volume 0.5
+      pan -0.1
+      play notes`_:1.5 [A2 E3 G#3 C#4]:1.5 _:1 _:1.5 [D3 F#3 A3 C#4]:1.5 _:1 _:1.5 [A2 E3 G#3 C#4]:1 _:0.5 [B2 F#3 A3 D#4]:1 _:1.5 [E3 G#3 B3 D4]:2.5` at bars(1..4)
+    }
+  }
+  play Kit at bars(1..4)
+  play Upright at bars(1..4)
+  play Comping at bars(1..4)
+}
+
+// the sketch: the trio marking the chart, not committing yet
+block TrioSketch : Trio {
+  block Kit {
+    track Kick {
+      instrument Kick808(punch: 0.35, decay: 0.4)
+      insert eq(low: 0.58, mid: 0.45, high: 0.45)
+      insert comp(thresh: 0.46, ratio: 0.5, attack: 0.025, release: 0.18, makeup: 0.12)
+      volume 0.7
+      play beat`X--- ---- ---- ----` at bars(1..2)
+    }
+    track Brush {
+      instrument SnareBrush()
+      insert eq(low: 0.2, mid: 0.55, high: 0.58)
+      insert comp(thresh: 0.48, ratio: 0.45, attack: 0.008, release: 0.12, makeup: 0.12)
+      insert reverb(size: 0.5, decay: 0.4, mix: 0.2)
+      volume 0.36
+      pan 0.08
+      play beat`---- ---- ---- x---` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.12
+      pan -0.15
+      play beat`---- --x- ---- --x-` at bars(1..4)
+    }
+  }
+}
+
+// the swing: everyone finally commits — ghosts, drops, answered chords
+block TrioSwing : Trio {
+  block Kit {
+    track Kick {
+      instrument Kick808(punch: 0.45, decay: 0.42)
+      insert eq(low: 0.58, mid: 0.45, high: 0.45)
+      insert comp(thresh: 0.42, ratio: 0.58, attack: 0.02, release: 0.16, makeup: 0.18)
+      volume 0.8
+      play beat`X--- --.- --x- ---- X--- ---- --x- x-.-` at bars(1..2)
+    }
+    track Brush {
+      instrument SnareBrush()
+      insert eq(low: 0.2, mid: 0.55, high: 0.58)
+      insert comp(thresh: 0.46, ratio: 0.48, attack: 0.008, release: 0.12, makeup: 0.14)
+      insert reverb(size: 0.5, decay: 0.4, mix: 0.16)
+      volume 0.48
+      pan 0.08
+      play beat`--.- x--. -.-- x--- ---. x-.- --.- x.x.` at bars(1..2)
+    }
+    track Ped {
+      instrument HatPedal()
+      insert eq(low: 0.1, mid: 0.5, high: 0.56)
+      volume 0.22
+      pan -0.15
+      play beat`--x- --x- --x- --xx` at bars(1..4)
+    }
+  }
+  block Comping {
+    track Keys {
+      instrument Wurli(bark: 0.45)
+      insert eq(low: 0.28, mid: 0.52, high: 0.58)
+      insert chorus(rate: 0.2, depth: 0.55, mix: 0.5)
+      insert width(amount: 0.65)
+      volume 0.52
+      pan -0.1
+      play notes`_:0.5 [A2 E3 G#3 C#4]:1 _:1 [A2 E3 G#3 C#4]:0.5 _:1 _:1.5 [D3 F#3 A3 C#4]:1 _:0.5 [D3 F#3 A3 C#4]:0.5 _:0.5 _:0.5 [A2 E3 G#3 C#4]:1 _:0.5 [B2 F#3 A3 D#4]:1.5 _:0.5 _:1 [E3 G#3 B3 D4]:1.5 [D3 F#3 A3 C#4]:1.5` at bars(1..4)
+      automate chorus.mix from 0.45 to 0.58 over bars(1..16)
+    }
+  }
+}

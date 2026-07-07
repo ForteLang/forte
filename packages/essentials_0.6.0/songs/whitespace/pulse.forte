@@ -1,0 +1,45 @@
+// Whitespace — pulse parts.
+import { Kick808, SnareBrush, HatPedal, Shaker } from "../../instruments/drums.forte"
+
+// The pulse: a kick you feel more than hear, brushes sweeping the floor.
+block Pulse {
+  track Kick {
+    instrument Kick808(punch: 0.4, decay: 0.4)
+    insert eq(low: 0.56, mid: 0.44, high: 0.44)
+    insert comp(thresh: 0.45, ratio: 0.55, attack: 0.025, release: 0.18, makeup: 0.15)
+    volume 0.72
+    play beat`X--- ---- x--- ---- X--- ---- x--- --.-` at bars(1..2)
+  }
+  track Brush {
+    instrument SnareBrush()
+    insert eq(low: 0.2, mid: 0.55, high: 0.56)
+    insert comp(thresh: 0.48, ratio: 0.45, attack: 0.008, release: 0.12, makeup: 0.12)
+    insert reverb(size: 0.55, decay: 0.45, mix: 0.2)
+    volume 0.36
+    pan 0.1
+    play beat`---- x--- ---- --.- ---- x--- .--- ----` at bars(1..2)
+  }
+  track Ped {
+    instrument HatPedal()
+    insert eq(low: 0.1, mid: 0.5, high: 0.55)
+    volume 0.16
+    pan -0.15
+    play beat`--x- --x- --x- --x-` at bars(1..4)
+  }
+  track Shk {
+    instrument Shaker(soft: 0.6)
+    insert eq(low: 0.1, mid: 0.5, high: 0.58)
+    volume 0.16
+    pan 0.25
+    play beat`.x.. .x.x .x.. .x..` at bars(1..2)
+  }
+}
+
+// the pulse with tab stops: ghost brushes marking every indent level
+block PulseTabs : Pulse {
+  track Brush {
+    volume 0.4
+    play beat`--.- x--. ---- x--- .--- x--. --.- x.-.` at bars(1..2)
+  }
+  track Shk { volume 0.2 play beat`.x.x .x.x .x.x .xx.` at bars(1..2) }
+}

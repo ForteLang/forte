@@ -1,0 +1,9 @@
+// Forte Essentials 0.6.0 — the standard package. Everything here is source
+// code: fork any instrument, block or song and make it yours.
+block Essentials {
+  desc "The Forte standard package: 150 instruments (full 808/909/CR-78 kits, 303 bass with real accent+slide, Juno/SH-101/Prophet-style polys), 320+ reusable blocks across 49 genres, and 28 complete songs."
+  tags "essentials, standard, instruments, blocks, songs, 0.6.0"
+  artist "Forte Essentials"
+  license "CC-BY-NC-SA-4.0"
+  version "0.6.0"
+}

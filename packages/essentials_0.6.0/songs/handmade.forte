@@ -1,0 +1,34 @@
+// Handmade — Forte v0 reference song 4.
+// Instruments are code: they can be split into libraries and imported.
+// (In the ecosystem the import source is recorded as fork lineage — 02-system-requirements.md)
+// Play: forte play songs/handmade.forte
+
+import { WarmLead, SubBass } from "./devices/warm.forte"
+
+song "Handmade" {
+  tempo 100bpm
+  meter 4/4
+  key G minor
+
+  let pulse = beat`x--- x--- x--- x-x-`
+  let line  = prog`Gm | Eb | Bb | F`
+
+  track Kick {
+    instrument sampler(sample: "Kick")
+    play pulse at bars(1..12)
+  }
+
+  track Bass {
+    instrument SubBass(drivein: 0.8)
+    volume 0.75
+    play bass(line, rate: 1) at bars(1..12)
+  }
+
+  track Lead {
+    instrument WarmLead(cutoff: 0.7, vib: 0.35)
+    insert delay(time: 0.3, fdbk: 0.3, mix: 0.25)
+    volume 0.55
+    pan 0.1
+    play arp(line, rate: 0.5, style: "updown") at bars(5..12)
+  }
+}

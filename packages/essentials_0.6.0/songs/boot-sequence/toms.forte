@@ -1,0 +1,28 @@
+// Boot Sequence — toms parts.
+import { Tom, TomFloor } from "../../instruments/drums.forte"
+
+// ---- Rydeen's grandchildren: ONE tom-fill lane, phrase-end → finale ------------
+block TomFill {
+  track Toms {
+    instrument Tom(fall: 0.4)
+    insert eq(low: 0.45, mid: 0.55, high: 0.5)
+    insert comp(thresh: 0.45, ratio: 0.5, attack: 0.008, release: 0.12, makeup: 0.15)
+    volume 0.55
+    pan -0.15
+    play beat`---- ---- x-x- xxxx` at bars(1..1)
+  }
+  track Floor {
+    instrument TomFloor(decay: 0.45)
+    insert eq(low: 0.55, mid: 0.5, high: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.5, attack: 0.01, release: 0.14, makeup: 0.15)
+    volume 0.5
+    pan 0.2
+    play beat`---- ---- ---- x-x-` at bars(1..1)
+  }
+}
+
+// the big one: a full-bar ratchet cascade high to low
+block TomFillBig : TomFill {
+  track Toms  { volume 0.6 play beat`x-x- xx-x x.xx xxxx` at bars(1..1) }
+  track Floor { volume 0.55 play beat`---- x--- x-x- xxxx` at bars(1..1) }
+}

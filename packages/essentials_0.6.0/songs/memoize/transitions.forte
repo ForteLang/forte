@@ -1,0 +1,4 @@
+// Memoize — transitions parts.
+import { Impact } from "../../instruments/fx.forte"
+
+block Hit { track I { instrument Impact() insert reverb(size: 0.8, decay: 0.6, mix: 0.3) insert filter(type: "lp", cutoff: 0.45) volume 0.5 play beat`x--- ---- ---- ----` at bars(1..1) } }

@@ -1,0 +1,78 @@
+// Tail Call — a phrase that ends by calling itself a fourth higher.
+// The recursion is unrolled as nested placements: one two-bar motif,
+// placed against its own transpositions until the stack is a chord.
+// Driving but warm — congas and a pick attack under detuned keys. 122bpm.
+//
+// STRUCTURE: `Unroll` is a block whose body is nothing but placements of
+// `Call` at three call sites (home, +4th, +7th) — the deepest nesting in
+// the album: song → Unroll → Call. The engine below is a nested kit with
+// `as`-aliased intensities.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./tail-call/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Call, Unroll, UnrollBase } from "./tail-call/call.forte"
+import { Engine, EngineIn, EngineDeep } from "./tail-call/engine.forte"
+import { Frame, FrameOpen } from "./tail-call/frame.forte"
+import { Accum, Trace, Stack } from "./tail-call/band.forte"
+import { Up, Land } from "./tail-call/transitions.forte"
+
+song "Tail Call" {
+  desc "A phrase that ends by calling itself a fourth higher — recursion unrolled as nested block placements over congas, an FM frame pointer and dream-synth accumulators. 122bpm."
+  artist "Forte Essentials"
+  tempo 122bpm
+  meter 4/4
+  key B minor
+
+  section base    = bars(1..8)
+  section frame1  = bars(9..24)
+  section frame2  = bars(25..40)
+  section popped  = bars(41..48)
+  section deepest = bars(49..68)
+  section returned = bars(69..80)
+
+  // base case: the call lands with the kick already running
+  play Land at bars(1..1)
+  play EngineIn as Engine at base
+  play UnrollBase as Unroll at base
+  play Frame at bars(5..8)
+  play Accum at bars(5..8)
+
+  // frame 1: full engine, the phrase starts calling itself
+  play Engine at frame1
+  play Frame at frame1
+  play Unroll at frame1
+  play Accum at frame1
+  play Stack at bars(17..24)
+
+  // frame 2: the trace narrates over the recursion
+  play Engine at frame2
+  play Frame at frame2
+  play Unroll at frame2
+  play Accum at frame2
+  play Trace at frame2
+  play Stack(volume: 0.8) at frame2
+
+  // popped: engine holds its breath — the stack rings out alone
+  play Up at bars(47..48)
+  play UnrollBase as Unroll at popped
+  play Stack at popped
+  play Accum(volume: 0.7) at popped
+
+  // deepest: everything at once, drive opening as the frames return
+  play Land at bars(49..49)
+  play EngineDeep as Engine at deepest
+  play FrameOpen as Frame at deepest
+  play Unroll at deepest
+  play Accum at deepest
+  play Trace at deepest
+  play Stack(volume: 0.75) at deepest
+
+  // returned: base case again — the phrase finally just ends
+  play EngineIn as Engine at bars(69..76)
+  play UnrollBase as Unroll at returned
+  play Frame at bars(69..76)
+  play Stack at returned
+  automate Stack.volume from 1 to 0 over bars(75..80)
+  automate Unroll.volume from 1 to 0.4 over bars(77..80)
+}

@@ -1,0 +1,74 @@
+// Sleep Sort — the album falls asleep, correctly. Every note waits for a
+// time proportional to its pitch and then plays: the low notes arrive
+// first, the high ones drift in later, and the melody comes out sorted.
+// A heartbeat sub, a music box, and pads like a duvet. 84bpm.
+//
+// STRUCTURE: `Sort` nests `LowWord` / `MidWord` / `HighWord` — three
+// registers placed at staggered offsets so the ensemble literally sleeps
+// its values into order. Variants re-run the sort with more elements.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./sleep-sort/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Sort, SortFirst, SortAll } from "./sleep-sort/sort.forte"
+import { Heart, Duvet } from "./sleep-sort/heart.forte"
+import { Covers } from "./sleep-sort/covers.forte"
+import { Goodnight, Night } from "./sleep-sort/goodnight.forte"
+import { Sigh } from "./sleep-sort/transitions.forte"
+
+song "Sleep Sort" {
+  desc "The album falls asleep, correctly: every note waits proportional to its pitch, so the melody arrives sorted — low registers first, glass last, over a heartbeat sub and duvet pads. 84bpm."
+  artist "Forte Essentials"
+  tempo 84bpm
+  master 3.0  // mastered: -24.7 LUFS raw, aiming near -15
+  meter 4/4
+  key E major
+
+  section spawn  = bars(1..8)
+  section sleep1 = bars(9..20)
+  section sleep2 = bars(21..32)
+  section wake   = bars(33..38)
+  section sorted = bars(39..50)
+  section done   = bars(51..60)
+
+  // spawn: the covers and the first values, low register only
+  play Covers at spawn
+  play SortFirst as Sort at spawn
+  play Night at spawn
+
+  // sleep 1: the heartbeat settles in, values start arriving in order
+  play Heart at sleep1
+  play Duvet at sleep1
+  play Sort at sleep1
+  play Covers(volume: 0.8) at sleep1
+  play Night at sleep1
+
+  // sleep 2: the goodnight hum over the sorting ensemble
+  play Heart at sleep2
+  play Duvet at sleep2
+  play Sort at sleep2
+  play Covers(volume: 0.75) at sleep2
+  play Goodnight at sleep2
+  play Night at sleep2
+
+  // wake (briefly): the heart pauses, the array holds its breath
+  play Sigh at bars(33..33)
+  play Covers at wake
+  play SortFirst as Sort at wake
+  play Night at wake
+
+  // sorted: every register interleaved — the output, in order
+  play Heart at sorted
+  play Duvet at sorted
+  play SortAll as Sort at sorted
+  play Covers(volume: 0.75) at sorted
+  play Goodnight at bars(41..48)
+  play Night at sorted
+
+  // done: the last values, the covers, the ping — exit 0
+  play SortFirst as Sort at bars(51..56)
+  play Covers at done
+  play Night at done
+  automate Covers.volume from 1 to 0 over bars(55..60)
+  automate Sort.volume from 0.9 to 0 over bars(53..56)
+}

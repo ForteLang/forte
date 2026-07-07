@@ -1,0 +1,31 @@
+// glitchworks/textures — the air of the record: hiss beds, granular dust
+// and cold sine drones. Alva Noto's palette is mostly THIS plus a kick.
+// Usage: import { Hiss, Dust, ColdTone } from "packages/glitchworks_0.1.0/instruments/textures.forte"
+
+// A band of hiss — play long notes for a static bed, pitch sets the band.
+device Hiss : Instrument {
+  param body = 0.4 in 0.0..1.0
+  node env = adsr(a: 0.15, d: 0.5, s: 0.7, r: 0.4)
+  node f   = svf(in: noise(), cutoff: body, reso: 0.15)
+  out gain(in: f, mod: env, level: 0.4)
+}
+
+// Granular dust: resonant filtered noise, short and quiet — sprinkle with
+// euclid patterns and ratchets.
+device Dust : Instrument {
+  param color = 0.6 in 0.1..1.0
+  node env = adsr(a: 0.001, d: 0.03, s: 0.0, r: 0.02)
+  node f   = svf(in: noise(), cutoff: color, reso: 0.85)
+  out gain(in: f, mod: env, level: 0.6)
+}
+
+// A cold, steady sine tone — the Raster-Noton test-signal aesthetic.
+// Two slightly detuned sines beat against each other.
+device ColdTone : Instrument {
+  param beatrate = 0.15 in 0.0..1.0
+  node env = adsr(a: 0.08, d: 0.3, s: 0.8, r: 0.3)
+  node a   = osc(freq: note.freq, shape: "sine")
+  node b   = osc(freq: gain(in: note.freq, level: 0.998), shape: "sine")
+  node sum = mix(a: a, b: gain(in: b, level: beatrate))
+  out gain(in: sum, mod: env, level: 0.5)
+}

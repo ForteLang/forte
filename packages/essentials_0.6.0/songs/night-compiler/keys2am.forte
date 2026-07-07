@@ -1,0 +1,40 @@
+// Night Compiler — keys2am parts.
+import { HatClosed, Rim, Shaker } from "../../instruments/drums.forte"
+
+// ---- keystrokes: ONE lane — typing, flowing ------------------------------------
+block Keys2am {
+  track Shk {
+    instrument Shaker(soft: 0.4)
+    insert eq(low: 0.1, mid: 0.5, high: 0.6)
+    volume 0.3
+    pan -0.2
+    play beat`x.x. x.x. x.x. x.x.` at bars(1..4)
+  }
+  track Hat {
+    instrument HatClosed(bright: 0.8)
+    insert eq(low: 0.1, mid: 0.45, high: 0.65)
+    insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+    volume 0.26
+    pan 0.15
+    play beat`--x- --x- --x- --xX` at bars(1..4)
+  }
+  track Rim {
+    instrument Rim()
+    insert eq(low: 0.2, mid: 0.58, high: 0.55)
+    insert delay(time: 0.352, fdbk: 0.5, mix: 0.4)
+    volume 0.32
+    pan 0.35
+    play beat`---- ---- --x- ---- ---- -x-- ---- ----` at bars(1..2)
+  }
+}
+
+// flow: ghost 16ths crowd the shaker, the rim chatters down its delay
+block KeysFlow : Keys2am {
+  track Shk { volume 0.33 play beat`x.x. xxx. x.x. x.xx x.x. x.xX x.x. xxx.` at bars(1..2) }
+  track Hat { volume 0.3 play beat`--x- --x- -.x- --xX --x- --x. --x- x-xX` at bars(1..2) }
+  track Rim {
+    insert delay(time: 0.352, fdbk: 0.58, mix: 0.48)
+    volume 0.34
+    play beat`---- ---- --x- ---x ---- -x-- ---- --x-` at bars(1..2)
+  }
+}

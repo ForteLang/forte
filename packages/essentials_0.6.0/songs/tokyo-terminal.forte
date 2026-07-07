@@ -1,0 +1,94 @@
+// Tokyo Terminal — technopolis synthpop. A pentatonic marimba riff that
+// could run a train station, brass hits stabbing the offbeat, strings
+// that open like doors, and a disco machine underneath. 122bpm.
+//
+// The machine, the riff, the bass and the tom runs are FAMILIES of
+// inherited variants sharing ONE lane each (`as`): the drum track goes
+// platform → express → full anthem on a single line, and the departure
+// riff gains echo and a celesta answer as the song travels.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./tokyo-terminal/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Machine, MachineIn, MachineFull } from "./tokyo-terminal/machine.forte"
+import { Walk, WalkRun } from "./tokyo-terminal/walk.forte"
+import { Departure, DepartureEcho, DepartureFull } from "./tokyo-terminal/departure.forte"
+import { Hits } from "./tokyo-terminal/brass.forte"
+import { Skyline, Ghost } from "./tokyo-terminal/strings.forte"
+import { Anthem, AnthemWide } from "./tokyo-terminal/anthem.forte"
+import { TomRun, TomRunBig } from "./tokyo-terminal/toms.forte"
+import { Boom, Up, Wash } from "./tokyo-terminal/transitions.forte"
+
+song "Tokyo Terminal" {
+  desc "Technopolis synthpop: a pentatonic departure-board riff, Juno brass exclamation marks, strings that open like doors over a disco machine — every lane an evolving family of blocks. 122bpm."
+  artist "Forte Essentials"
+  tempo 122bpm
+  meter 4/4
+  key D minor
+
+  section doors   = bars(1..8)
+  section platform = bars(9..24)
+  section express = bars(25..40)
+  section transfer = bars(41..48)
+  section anthem  = bars(49..64)
+  section anthem2 = bars(65..80)
+  section last    = bars(81..90)
+
+  // doors open: the riff alone with the ghost choir
+  play Departure at doors
+  play Ghost at doors
+  automate Ghost.volume from 0 to 1 over bars(1..4)
+
+  // platform: the machine idles in, the bass walks
+  play Boom at bars(9..9)
+  play MachineIn as Machine at bars(9..16)
+  play Machine at bars(17..24)
+  play Walk at platform
+  play Departure at platform
+  play Hits at bars(17..24)
+  play TomRun at bars(16..16)
+  play TomRun at bars(24..24)
+
+  // express: strings widen the frame, riff keeps running
+  play Wash at bars(25..25)
+  play Machine at express
+  play Walk at express
+  play Departure at express
+  play Hits at express
+  play Skyline at express
+  play TomRun at bars(32..32)
+  play TomRunBig as TomRun at bars(40..40)
+
+  // transfer: drums thin out, the riff recedes into its echo
+  play Up at bars(47..48)
+  play Ghost at transfer
+  play Skyline(volume: 0.8) at transfer
+  play DepartureEcho as Departure at transfer
+
+  // anthem: the big tune over the full machine
+  play Boom at bars(49..49)
+  play MachineFull as Machine at anthem
+  play WalkRun as Walk at anthem
+  play DepartureFull as Departure at anthem
+  play Hits at anthem
+  play Anthem at anthem
+  play TomRun at bars(56..56)
+  play TomRunBig as TomRun at bars(64..64)
+
+  // anthem again, a tone up — the classic key lift
+  play Wash at bars(65..65)
+  play MachineFull as Machine at anthem2
+  play WalkRun(key: "E minor") as Walk at anthem2
+  play DepartureFull(key: "E minor") as Departure at anthem2
+  play Hits(key: "E minor") at anthem2
+  play Skyline(key: "E minor", volume: 0.8) at anthem2
+  play AnthemWide(key: "E minor") as Anthem at anthem2
+  play TomRun at bars(72..72)
+  play TomRunBig as TomRun at bars(80..80)
+
+  // last train: the riff and the choir, fading down the tunnel
+  play DepartureEcho(key: "E minor") as Departure at last
+  play Ghost(key: "E minor") at last
+  automate Departure.volume from 1 to 0 over bars(85..90)
+  automate Ghost.volume from 1 to 0 over bars(85..90)
+}

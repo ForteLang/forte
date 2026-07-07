@@ -1,0 +1,75 @@
+// Pure Function — precision rhythm programming. Clicks, sticks and a
+// deep sub locked to a 16th grid so tight it feels hand-played; one cold
+// chord for harmony and no side effects anywhere. Same input, same
+// groove, every single time. 118bpm.
+//
+// STRUCTURE: the machine is nested three levels — `Machine` places `Grid`
+// (kick+sub), `Clicks` (the micro-percussion ensemble) and `Tops`, and
+// the section variants swap `Clicks` wholesale: the same lane set clicks
+// a different sentence each act (`as Machine`).
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./pure-function/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Machine, MachineA, MachineB } from "./pure-function/machine.forte"
+import { Argument, ReturnValue } from "./pure-function/argument.forte"
+import { Constant, Map, Stateless } from "./pure-function/harmony.forte"
+import { Hit, Ping } from "./pure-function/transitions.forte"
+
+song "Pure Function" {
+  desc "Precision rhythm programming: sticks, blocks and rims composed as a nested click ensemble over a deep sub — one cold chord, no side effects, same groove every time. 118bpm."
+  artist "Forte Essentials"
+  tempo 118bpm
+  master 1.51  // mastered: -18.6 LUFS raw, aiming near -15
+  meter 4/4
+  key D minor
+
+  section call    = bars(1..8)
+  section applyA  = bars(9..24)
+  section applyB  = bars(25..40)
+  section identity = bars(41..48)
+  section compose = bars(49..68)
+  section returns = bars(69..80)
+
+  // call: the grid and the argument land together — no fade, full stop
+  play Hit at bars(1..1)
+  play Machine at call
+  play Argument at call
+  play Constant at call
+
+  // apply, input A: cache warm-up clicks, the map starts iterating
+  play MachineA as Machine at applyA
+  play Argument at applyA
+  play Constant at applyA
+  play Map at bars(17..24)
+  play Ping at bars(9..12)
+
+  // apply, input B: the full click sentence
+  play MachineB as Machine at applyB
+  play Argument at applyB
+  play Constant at applyB
+  play Map at applyB
+  play Stateless at applyB
+
+  // identity: drums hold their breath — the chord and the pad prove purity
+  play Constant at identity
+  play Stateless at identity
+  play Argument(volume: 0.6) at identity
+  play Ping at bars(45..48)
+
+  // compose: everything applied at once, filter opening on the return
+  play Hit at bars(49..49)
+  play MachineB as Machine at compose
+  play ReturnValue as Argument at compose
+  play Constant at compose
+  play Map at compose
+  play Stateless(volume: 0.8) at compose
+
+  // returns: the machine unwinds to input A and hands back the groove
+  play MachineA as Machine at returns
+  play Argument at returns
+  play Constant at returns
+  play Stateless at returns
+  automate Machine.volume from 1 to 0.4 over bars(77..80)
+  automate Argument.volume from 1 to 0 over bars(77..80)
+}

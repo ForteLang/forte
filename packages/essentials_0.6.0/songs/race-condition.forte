@@ -1,0 +1,74 @@
+// Race Condition — two threads fight for the same lock at 134bpm. A
+// hoover riff and a scream lead race each other, the drums deadlock into
+// half-time (the same block, stretched), and the winner takes the outro.
+//
+// The drums and both threads are FAMILIES of inherited variants on ONE
+// lane each (`as`): the sprint gains ghost kicks and ratchet claps as the
+// race heats up, thread A opens its filter leg by leg — and the deadlock
+// is the very same drum lane, stretched to half-time by the placement.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./race-condition/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Sprint, SprintIn, SprintDrop } from "./race-condition/sprint.forte"
+import { ThreadA, ThreadARace, ThreadAWin, ThreadB, ThreadBLoud } from "./race-condition/threads.forte"
+import { Lock, LockOpen } from "./race-condition/lock.forte"
+import { Rave, Deadlock } from "./race-condition/rave.forte"
+import { Boom, Up, Smash } from "./race-condition/transitions.forte"
+
+song "Race Condition" {
+  desc "Two threads fight for the same lock: a hoover riff races a scream lead on one evolving lane each, the drums deadlock into half-time, and the winner takes the outro. 134bpm rave."
+  artist "Forte Essentials"
+  tempo 134bpm
+  meter 4/4
+  key G minor
+
+  section grid    = bars(1..16)
+  section raceA   = bars(17..32)
+  section raceB   = bars(33..48)
+  section deadlock = bars(49..56)
+  section drop    = bars(57..80)
+  section winner  = bars(81..96)
+
+  // grid: drums and bass establish the track everyone will fight on
+  play SprintIn as Sprint at grid
+  play Lock at bars(5..16)
+  play Rave at bars(13..16)
+
+  // race, leg one: thread A takes the lock, filter opening
+  play Boom at bars(17..17)
+  play Sprint at raceA
+  play Lock at raceA
+  play ThreadARace as ThreadA at raceA
+  play Rave at bars(25..32)
+
+  // leg two: thread B preempts — A keeps running underneath, swung
+  play Smash at bars(33..33)
+  play Sprint at raceB
+  play Lock at raceB
+  play ThreadA(swing: 0.6, volume: 0.7) at raceB
+  play ThreadBLoud as ThreadB at raceB
+
+  // DEADLOCK: the same drum lane, stretched to half-time — time dilates
+  play Up at bars(55..56)
+  play Sprint(stretch: 2, volume: 0.7) at deadlock
+  play Deadlock at deadlock
+  play ThreadA(stretch: 2, volume: 0.5) at deadlock
+
+  // the scheduler decides: full-speed drop, both threads, rave chords
+  play Boom at bars(57..57)
+  play Smash at bars(57..57)
+  play SprintDrop as Sprint at drop
+  play LockOpen as Lock at drop
+  play ThreadA at drop
+  play ThreadB at drop
+  play Rave at drop
+  play Deadlock(volume: 0.4) at bars(73..80)
+
+  // winner: thread A alone with the crowd, then the lights
+  play Sprint at bars(81..88)
+  play Lock at bars(81..88)
+  play ThreadAWin as ThreadA at winner
+  play Rave at bars(81..88)
+  automate ThreadA.volume from 1 to 0 over bars(91..96)
+}

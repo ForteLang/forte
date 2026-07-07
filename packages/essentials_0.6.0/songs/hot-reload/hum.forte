@@ -1,0 +1,41 @@
+// Hot Reload — hum parts.
+import { MusicBox } from "../../instruments/keys.forte"
+import { VoxLead } from "../../instruments/leads.forte"
+
+// ---- the theme: hummed, then remembered by a music box ---------------------------
+block Hum {
+  key F major
+  track Voice {
+    instrument VoxLead()
+    insert eq(low: 0.25, mid: 0.55, high: 0.56)
+    insert delay(time: 0.433, fdbk: 0.4, mix: 0.3)
+    insert reverb(size: 0.65, decay: 0.55, mix: 0.22)
+    volume 0.52
+    pan 0.08
+    play notes`_:1 A4~:1 C5~:1.5 A4~:0.5 G4~:1.5 F4~:1.5 _:1 F4~:0.5 G4~:1 A4~:1.5 G4~:1 F4~:1.5 D4~:1.5 _:1.5 C4~:0.5 D4~:1 F4~:2 G4~:1.5 A4~:2.5 _:2` at bars(1..8)
+  }
+}
+
+// the reload of the theme: delay singing, a third higher inside the key
+block HumHigh : Hum {
+  track Voice {
+    insert delay(time: 0.433, fdbk: 0.5, mix: 0.38)
+    volume 0.55
+    play notes`_:1 C5~:1 E5~:1.5 C5~:0.5 A4~:1.5 G4~:1.5 _:1 G4~:0.5 A4~:1 C5~:1.5 A4~:1 G4~:1.5 F4~:1.5 _:1.5 F4~:0.5 G4~:1 A4~:2 G4~:1.5 F4~:2.5 _:2` at bars(1..8)
+    automate delay.mix from 0.3 to 0.45 over bars(1..8)
+  }
+}
+
+// The music box remembers the theme four bars later, in miniature.
+block Recall {
+  key F major
+  track Box {
+    instrument MusicBox()
+    insert eq(low: 0.15, mid: 0.5, high: 0.6)
+    insert delay(time: 0.577, fdbk: 0.45, mix: 0.4)
+    insert reverb(size: 0.75, decay: 0.65, mix: 0.3)
+    volume 0.34
+    pan 0.3
+    play notes`_:4 A5:0.5 C6:0.75 A5:0.75 G5:1 F5:1 _:2 F5:0.5 G5:0.75 A5:0.75 G5:1 F5:1 D5:1.5 _:2.5` at bars(1..8)
+  }
+}

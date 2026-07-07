@@ -1,0 +1,79 @@
+// Zero One — the closer. Ambient techno: a heartbeat sub, glass keys
+// falling like cursor blinks, a shimmer pad that never resolves, and one
+// last melody hummed on the way out of the building. 112bpm.
+//
+// Even the quiet songs get the discipline: every track carries fader,
+// pan, EQ and compression, and the heartbeat, the small hours and the
+// blinks are FAMILIES of inherited variants sharing ONE lane each (`as`)
+// — the same lane beats softer or echoes longer as the night ends.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./zero-one/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Heart, HeartAwake, Small, SmallBreathe } from "./zero-one/heart.forte"
+import { Ground, GroundOpen } from "./zero-one/ground.forte"
+import { Blink, BlinkEcho } from "./zero-one/blink.forte"
+import { Air } from "./zero-one/air.forte"
+import { Home, HomeSoft, Answer, Count } from "./zero-one/home.forte"
+import { Exhale } from "./zero-one/transitions.forte"
+
+song "Zero One" {
+  desc "The closer: a heartbeat sub, glass keys falling like cursor blinks on one dissolving lane, a shimmer pad that never resolves, one last melody on the way out. 112bpm ambient techno."
+  artist "Forte Essentials"
+  tempo 112bpm
+  master 2.48  // mastered: -21.9 LUFS raw, aiming near -14
+  meter 4/4
+  key C minor
+
+  section zero   = bars(1..8)
+  section pulse  = bars(9..24)
+  section hum    = bars(25..40)
+  section still  = bars(41..48)
+  section one    = bars(49..72)
+  section sleep  = bars(73..84)
+
+  // zero: the pad and the blinks, no time yet
+  play Air at zero
+  play Blink at bars(5..8)
+  automate Air.volume from 0 to 1 over bars(1..6)
+
+  // pulse: the heartbeat starts, ground arcs underneath
+  play Heart at pulse
+  play Ground at pulse
+  play Blink at pulse
+  play Air(volume: 0.8) at pulse
+  play Small at bars(17..24)
+  play Count at bars(9..16)
+
+  // hum: the melody arrives over everything — the lanes wake up
+  play HeartAwake as Heart at hum
+  play Ground at hum
+  play Blink at hum
+  play Air(volume: 0.7) at hum
+  play SmallBreathe as Small at hum
+  play Home at hum
+  play Answer at bars(33..40)
+
+  // still: heartbeat rests — pad, dissolving blinks and the bell hold the room
+  play Exhale at bars(41..41)
+  play Air at still
+  play BlinkEcho(volume: 0.7) as Blink at still
+  play Count at still
+
+  // one: everything breathes together, melody twice, answer following
+  play HeartAwake as Heart at one
+  play GroundOpen as Ground at one
+  play Blink at one
+  play Air(volume: 0.75) at one
+  play SmallBreathe as Small at one
+  play Home at bars(49..64)
+  play Answer at bars(57..64)
+  play HomeSoft as Home at bars(65..72)
+
+  // sleep: the pad dims, the last blinks dissolve, the bell lets go
+  play Air at sleep
+  play BlinkEcho(volume: 0.6) as Blink at sleep
+  play Count at bars(73..80)
+  automate Air.volume from 1 to 0 over bars(77..84)
+  automate Blink.volume from 0.8 to 0 over bars(79..84)
+}

@@ -1,0 +1,26 @@
+// Tokyo Terminal — walk parts.
+import { PluckBass } from "../../instruments/bass.forte"
+
+// ---- the bass: ONE lane, walking → sprinting ------------------------------------
+block Walk {
+  key D minor
+  track Bass {
+    instrument PluckBass(decay: 0.32)
+    insert eq(low: 0.58, mid: 0.5, high: 0.5)
+    insert comp(thresh: 0.42, ratio: 0.55, attack: 0.012, release: 0.14, makeup: 0.2)
+    insert drive(drive: 0.2)
+    insert pump(amount: 0.35, beats: 1)
+    volume 0.75
+    play notes`D1:0.5 D1:0.5 D2:0.5 D1:0.5 D1:0.5 C2:0.5 D1:0.5 A1:0.5 A#0:0.5 A#0:0.5 A#1:0.5 A#0:0.5 C1:0.5 C1:0.5 C2:0.5 G1:0.5` at bars(1..2)
+  }
+}
+
+// anthem: 16th pickups between the eighths — the last train is leaving
+block WalkRun : Walk {
+  track Bass {
+    instrument PluckBass(decay: 0.28)
+    insert drive(drive: 0.28)
+    volume 0.78
+    play notes`D1:0.5 D1:0.25 D2:0.25 D2:0.5 D1:0.5 D1:0.5 C2:0.5 D1:0.25 D2:0.25 A1:0.5 A#0:0.5 A#0:0.25 A#1:0.25 A#1:0.5 A#0:0.5 C1:0.5 C1:0.25 C2:0.25 C2:0.5 G1:0.5` at bars(1..2)
+  }
+}

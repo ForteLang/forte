@@ -1,0 +1,19 @@
+// Tokyo Terminal — brass parts.
+import { JunoBrass } from "../../instruments/juno60.forte"
+
+// Brass hits — the exclamation marks. Juno brass, driven, on the
+// and-of-two and the four.
+block Hits {
+  key D minor
+  track Brass {
+    instrument JunoBrass()
+    insert eq(low: 0.4, mid: 0.55, high: 0.55)
+    insert comp(thresh: 0.45, ratio: 0.5, attack: 0.008, release: 0.12, makeup: 0.18)
+    insert drive(drive: 0.25)
+    insert width(amount: 0.55)
+    insert reverb(size: 0.45, decay: 0.35, mix: 0.12)
+    volume 0.55
+    pan 0.1
+    play notes`_:1.5 [D3 A3 D4]:0.25 _:1.25 [D3 A3 D4]:0.5 _:0.5 _:1.5 [C3 G3 C4]:0.25 _:1.25 [A2 E3 A3]:0.5 _:0.5` at bars(1..2)
+  }
+}

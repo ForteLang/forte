@@ -1,0 +1,79 @@
+// Hot Reload — warm electronica. Detuned electric-piano chords that
+// wobble like heat haze, a rhythm machine built from nested blocks, and
+// a hummed theme that keeps coming back slightly changed. 104bpm.
+//
+// STRUCTURE SHOWCASE: the drum machine is a block OF blocks — `Groove`
+// nests `Feet` / `Hands` / `Fingers` and places them on its own internal
+// timeline. Variants (GrooveIn/GrooveFull) override the INNER blocks by
+// name, and every variant shares one lane set via `as Groove`. The band
+// (keys + bass) is the same shape: a nested ensemble with swappable parts.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./hot-reload/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Groove, GrooveIn, GrooveFull } from "./hot-reload/groove.forte"
+import { Band, BandOpen } from "./hot-reload/band.forte"
+import { Haze } from "./hot-reload/haze.forte"
+import { Hum, HumHigh, Recall } from "./hot-reload/hum.forte"
+import { Warm } from "./hot-reload/transitions.forte"
+
+song "Hot Reload" {
+  desc "Warm electronica: detuned electric-piano chords that wobble like heat haze over a rhythm machine built from nested blocks — the same groove lane swaps its inner parts as the song reloads. 104bpm."
+  artist "Forte Essentials"
+  tempo 104bpm
+  master 1.74  // mastered: -19.8 LUFS raw, aiming near -15
+  swing 0.54
+  meter 4/4
+  key F major
+
+  section state   = bars(1..8)
+  section run     = bars(9..24)
+  section theme   = bars(25..40)
+  section reload  = bars(41..48)
+  section flow    = bars(49..64)
+  section rest    = bars(65..72)
+  section exhale  = bars(73..80)
+
+  // state: the full chords land on beat one — warmth first, no fade-in
+  play Warm at bars(1..1)
+  play Band at state
+  play Haze at state
+  play GrooveIn as Groove at bars(5..8)
+
+  // run: the machine assembles around the changes
+  play Groove at run
+  play Band at run
+  play Haze(volume: 0.8) at run
+  play Recall at bars(17..24)
+
+  // theme: the voice hums over everything
+  play Groove at theme
+  play Band at theme
+  play Haze(volume: 0.7) at theme
+  play Hum at theme
+  play Recall at bars(33..40)
+
+  // reload: drums drop to warm-up parts, keys ring out an octave up
+  play Warm at bars(41..41)
+  play GrooveIn as Groove at reload
+  play BandOpen as Band at reload
+  play Haze at reload
+
+  // flow: the full machine, the theme a third higher, box answering
+  play GrooveFull as Groove at flow
+  play Band at flow
+  play Haze(volume: 0.7) at flow
+  play HumHigh as Hum at flow
+  play Recall at bars(57..64)
+
+  // rest: band alone, the box remembering
+  play Band at rest
+  play Haze at rest
+  play Recall at rest
+
+  // exhale: the chords ring, everything else already left
+  play BandOpen as Band at exhale
+  play Haze at exhale
+  automate Haze.volume from 1 to 0 over bars(77..80)
+  automate Band.volume from 1 to 0.4 over bars(77..80)
+}

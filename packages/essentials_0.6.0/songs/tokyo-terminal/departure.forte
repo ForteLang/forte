@@ -1,0 +1,44 @@
+// Tokyo Terminal — departure parts.
+import { Marimba, Celesta } from "../../instruments/keys.forte"
+
+// ---- the station riff: ONE lane — plain, echoed, answered ----------------------
+// Marimba pentatonic 16ths, doubled by a celesta an octave up — the
+// melody a departure board would sing.
+block Departure {
+  key D minor
+  track Marimba {
+    instrument Marimba()
+    insert eq(low: 0.25, mid: 0.55, high: 0.58)
+    insert delay(time: 0.246, fdbk: 0.35, mix: 0.22)
+    volume 0.6
+    pan -0.15
+    play notes`D4:0.25 F4:0.25 G4:0.25 A4:0.25 C5:0.25 A4:0.25 G4:0.25 F4:0.25 D4:0.25 F4:0.25 G4:0.25 A4:0.25 G4:0.25 F4:0.25 D4:0.25 C4:0.25` at bars(1..2)
+  }
+  track Celesta {
+    instrument Celesta()
+    insert eq(low: 0.15, mid: 0.5, high: 0.6)
+    insert reverb(size: 0.55, decay: 0.45, mix: 0.2)
+    volume 0.35
+    pan 0.3
+    play notes`D5:0.25 F5:0.25 G5:0.25 A5:0.25 C6:0.25 A5:0.25 G5:0.25 F5:0.25 _:4` at bars(1..2)
+  }
+}
+
+// transfer/last: the riff recedes into its own echo
+block DepartureEcho : Departure {
+  track Marimba {
+    insert delay(time: 0.246, fdbk: 0.52, mix: 0.4)
+    volume 0.52
+    automate delay.mix from 0.25 to 0.45 over bars(1..8)
+  }
+  track Celesta { volume 0.3 insert reverb(size: 0.7, decay: 0.55, mix: 0.3) }
+}
+
+// anthem: the celesta stops waiting and answers the whole phrase
+block DepartureFull : Departure {
+  track Marimba { volume 0.62 }
+  track Celesta {
+    volume 0.4
+    play notes`_:2 C6:0.25 A5:0.25 G5:0.25 F5:0.25 _:1 D5:0.25 F5:0.25 G5:0.25 A5:0.25 _:2` at bars(1..2)
+  }
+}

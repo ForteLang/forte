@@ -1,0 +1,51 @@
+// Pattern: Waltz (90bpm, 3/4) — boom, chat, chat.
+// The celesta melody traces the waltz's turning motion.
+import { KickSub, HatClosed } from "../instruments/drums.forte"
+import { StringPad } from "../instruments/pads.forte"
+import { Celesta } from "../instruments/keys.forte"
+import { UprightBass } from "../instruments/bass.forte"
+
+// The "boom" is an upright bass walking the progression, so this block is melodic.
+block Waltz34Pulse {
+  key C minor
+  let chat = beat`---- x--- x---`
+  let sway = prog`Cm | Ab | Eb | G7`
+
+  track Boom { instrument UprightBass() volume 0.75 play bass(sway, rate: 3) at bars(1..8) }
+  track Chat { instrument HatClosed(bright: 0.75) volume 0.35 pan 0.2 play chat at bars(1..8) }
+}
+
+// Strings and celesta share the Salon reverb — they stay with the return.
+block Waltz34Salon {
+  key C minor
+  let sway = prog`Cm | Ab | Eb | G7`
+
+  return Salon {
+    insert reverb(size: 0.65, decay: 0.5, mix: 1.0)
+    volume 0.7
+  }
+
+  track Strings {
+    instrument StringPad(bright: 0.5)
+    send Salon 0.4
+    volume 0.5
+    play chords(sway) at bars(1..8)
+  }
+
+  track Celesta {
+    instrument Celesta()
+    send Salon 0.35
+    volume 0.55
+    pan 0.15
+    play notes`G4:1 Eb5:1 D5:1 C5:1 G4:1 Ab4:1 B4:1 D5:1 F5:1 Eb5:1 C5:1 G4:1` at bars(3..8)
+  }
+}
+
+block Waltz34 {
+  tempo 90bpm
+  meter 3/4
+  key C minor
+
+  play Waltz34Pulse at bars(1..8)
+  play Waltz34Salon at bars(1..8)
+}

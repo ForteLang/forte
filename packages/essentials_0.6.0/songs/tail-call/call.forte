@@ -1,0 +1,32 @@
+// Tail Call — call parts.
+import { Pluck } from "../../instruments/leads.forte"
+
+// ---- the recursive phrase and its unrolling --------------------------------------
+// the call: two bars that end pointing at their own beginning
+block Call {
+  key B minor
+  track Arp {
+    instrument Pluck()
+    insert eq(low: 0.2, mid: 0.52, high: 0.58)
+    insert delay(time: 0.246, fdbk: 0.42, mix: 0.3)
+    insert width(amount: 0.55)
+    volume 0.46
+    pan -0.12
+    play notes`B3:0.25 D4:0.25 F#4:0.25 B4:0.25 A4:0.25 F#4:0.25 D4:0.25 F#4:0.25 B3:0.25 D4:0.25 F#4:0.25 A4:0.25 B4:0.5 A4:0.25 F#4:0.25 B3:0.25 D4:0.25 F#4:0.25 B4:0.25 C#5:0.25 B4:0.25 A4:0.25 F#4:0.25 E4:0.5 D4:0.25 C#4:0.25 D4:0.5 F#4:0.5` at bars(1..2)
+  }
+}
+
+// the unrolled stack: home call, then itself a fourth up, then a fifth
+block Unroll {
+  key B minor
+  play Call at bars(1..2)
+  play Call(key: "E minor", volume: 0.85) at bars(3..4)
+  play Call(key: "F# minor", volume: 0.75) at bars(5..6)
+  play Call at bars(7..8)
+}
+
+// base case: just the home phrase, twice as patient
+block UnrollBase {
+  key B minor
+  play Call(volume: 0.8) at bars(1..8)
+}

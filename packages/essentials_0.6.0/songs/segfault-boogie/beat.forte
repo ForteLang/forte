@@ -1,0 +1,52 @@
+// Segfault Boogie — beat parts.
+import { Kick808, Snare908, Snap } from "../../instruments/drums.forte"
+
+// ---- the beat: ONE lane — funk, harder reboot, jam with fills ------------------
+// 808 kick syncopated against a 908 snare, snaps on the backbeat ghosts.
+// This is a FUNK pattern, not a techno one.
+block Beat {
+  track Kick {
+    instrument Kick808(punch: 0.65, decay: 0.42)
+    insert eq(low: 0.6, mid: 0.45, high: 0.5)
+    insert comp(thresh: 0.4, ratio: 0.6, attack: 0.02, release: 0.16, makeup: 0.2)
+    volume 0.92
+    play beat`X--- --x- ---- x-x- X--- --x- ---x ----` at bars(1..2)
+  }
+  track Snare {
+    instrument Snare908(tone: 0.7, snap: 0.65)
+    insert eq(low: 0.3, mid: 0.55, high: 0.6)
+    insert comp(thresh: 0.42, ratio: 0.55, attack: 0.005, release: 0.1, makeup: 0.2)
+    insert reverb(size: 0.4, decay: 0.3, mix: 0.12)
+    volume 0.7
+    play beat`---- X--- ---- X--.` at bars(1..1)
+  }
+  track Snap {
+    instrument Snap()
+    insert eq(low: 0.15, mid: 0.55, high: 0.6)
+    volume 0.4
+    pan 0.25
+    play beat`---- ---- --x- ----` at bars(1..1)
+  }
+}
+
+// reboot: tighter comp, ghost kick doubled, snare drags a ghost behind the 2
+block BeatHard : Beat {
+  track Kick {
+    insert comp(thresh: 0.35, ratio: 0.68, attack: 0.015, release: 0.14, makeup: 0.28)
+    play beat`X--- --x- --.- x-x- X--- --x- ---x -.x-` at bars(1..2)
+  }
+  track Snare { volume 0.74 play beat`---- X--- .--- X-.x` at bars(1..1) }
+  track Snap  { volume 0.45 play beat`---- ---- --x- --.x` at bars(1..1) }
+}
+
+// jam: the full boogie — ratchet snare fill closing every 4th bar
+block BeatJam : Beat {
+  track Kick {
+    play beat`X--- --x- --.- x-x- X--- --x- ---x ---- X--- --x- ---- x-x- X--- --x- x-xx -xx-` at bars(1..4)
+  }
+  track Snare {
+    volume 0.74
+    play beat`---- X--- ---- X--. ---- X--- ---- X--. ---- X--- ---- X--. ---- X--- .xxX x.xX` at bars(1..4)
+  }
+  track Snap { volume 0.45 play beat`---- ---- --x- ---x` at bars(1..1) }
+}

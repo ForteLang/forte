@@ -1,0 +1,94 @@
+// Boot Sequence — the machine wakes up. YMO-school electro: a fifths arp
+// that never stops, tom fills answering the melody, block chords stabbed
+// on the offbeat. Every section is a block; the song is just placements —
+// and the pulse, tops, bass and tom fills are FAMILIES of inherited
+// variants sharing one lane each (`as`), so each track evolves from soft
+// boot to full finale on a single line of the arrangement.
+//
+// The song is THIN on purpose: every part lives in its own file under
+// ./boot-sequence/ as a block family, and this file only decides WHEN each
+// variant plays and on WHICH lane. The import lines are the recipe.
+import { Pulse, PulseWide } from "./boot-sequence/pulse.forte"
+import { Tops, TopsIn, TopsWide } from "./boot-sequence/tops.forte"
+import { Engine, EngineRise, EngineWide } from "./boot-sequence/engine.forte"
+import { ArpFifths } from "./boot-sequence/arp.forte"
+import { Stabs } from "./boot-sequence/stabs.forte"
+import { Hook, HookWide, Counter } from "./boot-sequence/hook.forte"
+import { TomFill, TomFillBig } from "./boot-sequence/toms.forte"
+import { Blips } from "./boot-sequence/blips.forte"
+import { Dream, Horns } from "./boot-sequence/strings.forte"
+import { Lift, Hit } from "./boot-sequence/transitions.forte"
+
+song "Boot Sequence" {
+  desc "The machine wakes up: a fifths arp that never stops, YMO block chords, tom fills answering a bell hook — every lane a family of blocks that evolves from boot to finale. 118bpm electro."
+  artist "Forte Essentials"
+  tempo 118bpm
+  meter 4/4
+  key A minor
+
+  section boot    = bars(1..8)
+  section groove  = bars(9..24)
+  section theme   = bars(25..40)
+  section dream   = bars(41..48)
+  section rise    = bars(49..64)
+  section finale  = bars(65..80)
+  section off     = bars(81..88)
+
+  // boot: POWER ON — an impact, a full tom cascade, the kick and the arp
+  // already open on beat one. The machine doesn't fade in, it boots.
+  play Hit at bars(1..1)
+  play TomFillBig as TomFill at bars(1..1)
+  play Pulse at bars(1..8)
+  play Blips at bars(3..8)
+  play ArpFifths(cutoff: 0.55) at bars(1..88)
+
+  // groove: a second impact, tops and the engine bass pile on
+  play Hit at bars(9..9)
+  play Pulse at groove
+  play TopsIn as Tops at bars(9..16)
+  play Tops at bars(17..24)
+  play Engine at bars(13..24)
+  play TomFill at bars(16..16)
+  play TomFill at bars(24..24)
+
+  // theme: the hook sings over the full band
+  play Pulse at theme
+  play Tops at theme
+  play Engine at theme
+  play Stabs at theme
+  play Hook at theme
+  play TomFill at bars(32..32)
+  play TomFillBig as TomFill at bars(40..40)
+
+  // dream: drums drop out, strings swell, the arp filters open
+  play Lift at bars(40..40)
+  play Dream at dream
+  play Blips at bars(45..48)
+  automate Dream.volume from 0 to 1 over bars(41..44)
+
+  // rise: everything returns a fourth up — the classic YMO lift
+  play Hit at bars(49..49)
+  play Pulse at rise
+  play Tops at rise
+  play EngineRise(key: "D minor") as Engine at rise
+  play Stabs(key: "D minor") at rise
+  play Hook(key: "D minor") at rise
+  play TomFill at bars(56..56)
+  play TomFillBig as TomFill at bars(64..64)
+
+  // finale: back home, wide variants of every lane, horns and counter on top
+  play PulseWide as Pulse at finale
+  play TopsWide as Tops at finale
+  play EngineWide as Engine at finale
+  play Stabs at finale
+  play HookWide as Hook at finale
+  play Counter at finale
+  play Horns at finale
+  play TomFill at bars(72..72)
+  play TomFillBig as TomFill at bars(80..80)
+
+  // off: the band leaves, the arp and blips power down alone
+  play Blips at off
+  play Dream(volume: 0.6) at off
+  automate ArpFifths.volume from 1 to 0 over bars(81..88)
+}

@@ -1,0 +1,130 @@
+// Pure Function — machine parts.
+import { Kick909, KickSub, Rim, Stick, HatClosed, HatOpen } from "../../instruments/drums.forte"
+import { Woodblock } from "../../instruments/percussion.forte"
+
+// ---- the machine: three nested sections on one internal timeline ----------------
+block Machine {
+  // grid: a 909 that steps AROUND the one, sub answering underneath
+  block Grid {
+    track Kick {
+      instrument Kick909(click: 0.55)
+      insert eq(low: 0.6, mid: 0.45, high: 0.5)
+      insert comp(thresh: 0.38, ratio: 0.65, attack: 0.018, release: 0.15, makeup: 0.25)
+      volume 0.9
+      play beat`X--- --x- ---- x--- X--- ---- x--- --x-` at bars(1..2)
+    }
+    track Sub {
+      instrument KickSub(weight: 0.7)
+      insert eq(low: 0.58, mid: 0.42, high: 0.4)
+      insert comp(thresh: 0.42, ratio: 0.6, attack: 0.03, release: 0.2, makeup: 0.15)
+      volume 0.45
+      play beat`---- x--- --x- ---- --x- x--- ---- x---` at bars(1..2)
+    }
+  }
+  // clicks: the ensemble of tiny sounds — the actual melody of the track
+  block Clicks {
+    track Stick {
+      instrument Stick()
+      insert eq(low: 0.2, mid: 0.58, high: 0.58)
+      insert delay(time: 0.254, fdbk: 0.3, mix: 0.24)
+      volume 0.34
+      pan 0.3
+      play beat`-x-- ---x -x-- ---- ---x -x-- ---- x-x-` at bars(1..2)
+    }
+    track Block {
+      instrument Woodblock()
+      insert eq(low: 0.2, mid: 0.55, high: 0.58)
+      volume 0.26
+      pan -0.35
+      play beat`---- x--- --x- ---- ---- --x- ---- -x--` at bars(1..2)
+    }
+    track Rim {
+      instrument Rim()
+      insert eq(low: 0.2, mid: 0.58, high: 0.55)
+      insert comp(thresh: 0.48, ratio: 0.45, attack: 0.004, release: 0.08, makeup: 0.12)
+      volume 0.3
+      pan 0.12
+      play beat`---- x-.- ---- x--. --.- x--- ---- x---` at bars(1..2)
+    }
+  }
+  // tops: hats kept almost subliminal — the grid needs air, not wash
+  block Tops {
+    track Hat {
+      instrument HatClosed(bright: 0.85)
+      insert eq(low: 0.1, mid: 0.45, high: 0.66)
+      insert comp(thresh: 0.5, ratio: 0.45, attack: 0.005, release: 0.08, makeup: 0.1)
+      volume 0.24
+      pan 0.15
+      play beat`x.x. x.x. x.xX x.x.` at bars(1..4)
+    }
+    track Open {
+      instrument HatOpen(decay: 0.18)
+      insert eq(low: 0.1, mid: 0.5, high: 0.6)
+      insert pump(amount: 0.3, beats: 1)
+      volume 0.28
+      pan -0.1
+      play beat`--x- ---- --x- ----` at bars(1..4)
+    }
+  }
+  play Grid at bars(1..4)
+  play Clicks at bars(1..4)
+  play Tops at bars(1..4)
+}
+
+// input A: sparser clicks — the function warming its cache
+block MachineA : Machine {
+  block Clicks {
+    track Stick {
+      instrument Stick()
+      insert eq(low: 0.2, mid: 0.58, high: 0.58)
+      insert delay(time: 0.254, fdbk: 0.3, mix: 0.24)
+      volume 0.28
+      pan 0.3
+      play beat`-x-- ---- ---- ---x ---- -x-- ---- ----` at bars(1..2)
+    }
+    track Block {
+      instrument Woodblock()
+      insert eq(low: 0.2, mid: 0.55, high: 0.58)
+      volume 0.2
+      pan -0.35
+      play beat`---- x--- ---- ---- ---- --x- ---- ----` at bars(1..2)
+    }
+    track Rim {
+      instrument Rim()
+      insert eq(low: 0.2, mid: 0.58, high: 0.55)
+      insert comp(thresh: 0.48, ratio: 0.45, attack: 0.004, release: 0.08, makeup: 0.12)
+      volume 0.26
+      pan 0.12
+      play beat`---- x--- ---- ----` at bars(1..1)
+    }
+  }
+}
+
+// input B: the full sentence — ratchets, drags, answers across the field
+block MachineB : Machine {
+  block Clicks {
+    track Stick {
+      instrument Stick()
+      insert eq(low: 0.2, mid: 0.58, high: 0.58)
+      insert delay(time: 0.254, fdbk: 0.38, mix: 0.3)
+      volume 0.36
+      pan 0.3
+      play beat`-x-x ---x -xx- --x- ---x -x-- x--- x-xx` at bars(1..2)
+    }
+    track Block {
+      instrument Woodblock()
+      insert eq(low: 0.2, mid: 0.55, high: 0.58)
+      volume 0.3
+      pan -0.35
+      play beat`--x- x--- --x- -x-- ---- --x- x-x- -x--` at bars(1..2)
+    }
+    track Rim {
+      instrument Rim()
+      insert eq(low: 0.2, mid: 0.58, high: 0.55)
+      insert comp(thresh: 0.46, ratio: 0.48, attack: 0.004, release: 0.08, makeup: 0.14)
+      volume 0.32
+      pan 0.12
+      play beat`--.- x-.- ---- x--. --.- x--- .x-- x.x.` at bars(1..2)
+    }
+  }
+}
