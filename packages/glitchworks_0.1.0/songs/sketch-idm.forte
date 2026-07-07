@@ -1,97 +1,129 @@
-// Sketch: IDM — audition piece, NOT an album track. Breakbeat science +
-// Autechre-school programming: a drum phrase bounced whole and re-cut with
-// rolls (ratchets) and reversed slices; a pitch-bent sub that glides and
-// warbles; a sine lead swept continuously; everything carved by a sidechain
-// whose release breathes open across the track. Irregular by design.
-import { Kick808, SnareTight, HatClosed, HatOpen, Rim, Clap } from "../../essentials_0.6.0/instruments/drums.forte"
+// Sketch: IDM — audition piece, NOT an album track. Rebuilt around the
+// principle that groove lives in the HIGH+LOW interplay: a crisp snare
+// backbeat drives it, then glitch destabilizes the rests. Reverb tails are
+// cut mid-ring by gates and sidechains (impossible in a live take — that
+// unnatural cut IS the glitch). Upper melody + harmony on top, noise beds
+// carved hard underneath.
+import { Kick808, SnareTight, Snare908, HatClosed, HatOpen, Rim, Clap } from "../../essentials_0.6.0/instruments/drums.forte"
 import { SubWrap } from "../wrapped/bassx.forte"
-import { Blip } from "../instruments/clicks.forte"
+import { Dust, Hiss } from "../instruments/textures.forte"
+import { SawLead } from "../../essentials_0.6.0/instruments/leads.forte"
+import { GlassPad } from "../../essentials_0.6.0/instruments/pads.forte"
 
 song "Sketch IDM" {
-  desc "Audition sketch: chopped breaks with rolls, pitch-bent sub, swept lead, a breathing sidechain. Breakbeat/IDM. Not an album track."
+  desc "Audition sketch: snare-backbeat groove destabilized by glitch, reverb tails cut mid-ring, melody up top, noise carved under. Breakbeat/IDM. Not an album track."
   artist "Forte Essentials"
-  tempo 168bpm
+  tempo 170bpm
   swing 0.58
-  master 1.6
+  master 2.2
   key D minor
 
-  section peak  = bars(17..28)
-  section out   = bars(29..32)
-
-  // the break source: a busy syncopated kit, bounced to one asset
-  block Kit {
-    track K  { instrument Kick808(decay: 0.32, punch: 0.7) volume 0.95
-      play beat`x-- --x -x- --x` at bars(1..1) }
-    track S  { instrument SnareTight(snap: 0.75) volume 0.9
-      play beat`--- x-- --- x-x` at bars(1..1) }
-    track HC { instrument HatClosed volume 0.5
-      play beat`x-x -xx x-x xx-` at bars(1..1) }
-    track HO { instrument HatOpen volume 0.4
-      play beat`--x --- -x- ---` at bars(1..1) }
-    track R  { instrument Rim volume 0.42
-      play beat`-x- --- x-- -x-` at bars(1..1) }
+  // ---- LOW: kick + sub, the floor ----
+  block Kick {
+    track K { instrument Kick808(decay: 0.3, punch: 0.7) volume 0.92
+      play beat`x--- --x- x--- ----` at bars(1..32) }
   }
-  sample Brk = bounce(Kit, note: C3, beats: 4)
-
-  // trigger kick — the sidechain source, kept dry and steady-ish
-  block Trig {
-    track Kick { instrument Kick808(decay: 0.3, punch: 0.65) volume 0.9
-      play beat`x--- --x- x--- --x-` at bars(1..32) }
-  }
-
-  // the chopped break, re-cut with rolls (x*N) hidden in slice retriggers
-  block Chop {
-    track Cut {
-      instrument sampler(sample: Brk, slices: 16, sustain: 0.0, decay: 0.5)
-      insert transient(attack: 0.8, sustain: 0.35)
-      insert saturate(mode: "tape", drive: 0.4)
-      insert parcomp(amount: 0.5, drive: 0.55, color: 0.45)
-      volume 0.8
-      play notes`C3:0.25 _:0.25 D#3:0.25 C3:0.25 G3:0.25 _:0.25 F3:0.25 A3:0.25` at bars(1..8)
-      play notes`C3:0.25 C3:0.125 C3:0.125 D#3:0.25 _:0.25 G3:0.25 A3:0.25 _:0.25 F3:0.25` at bars(9..16)
-      play notes`C3:0.25 D#3:0.125 F3:0.125 G3:0.25 _:0.25 A3:0.25 C3:0.125 D3:0.125 _:0.25 F3:0.25 G3:0.25` at bars(17..28)
-      play notes`C3:0.25 _:0.75 G3:0.25 _:0.75 C3:0.5 _:1` at bars(29..32)
-    }
-  }
-  // a reversed, crushed slice layer for the IDM shimmer
-  block Ghost {
-    track Cut2 {
-      instrument sampler(sample: Brk, slices: 16, sustain: 0.0, decay: 0.3, reverse: "on")
-      insert crush(bits: 0.4, rate: 0.25, mix: 0.5)
-      insert delay(time: 0.19, fdbk: 0.4, mix: 0.35)
-      volume 0.45
-      play notes`_:0.5 A3:0.25 _:0.25 E3:0.25 _:0.75 C4:0.25 _:0.5` at bars(9..16)
-      play notes`B3:0.25 _:0.25 E3:0.25 _:0.25 A3:0.125 A3:0.125 _:0.5 D4:0.25 _:0.5` at bars(17..28)
-    }
-  }
-
-  // a sub that GLIDES and BENDS — pitch automation warps the held audio
   block Sub : SubWrap {
     track Sub {
-      insert duck(from: Trig, amount: 0.88, attack: 0.02, release: 0.12, shape: 0.7)
-      automate pitch from 0.5 to 0.5 over bars(1..8)
-      automate pitch from 0.5 to 0.42 over bars(9..16)
-      automate pitch from 0.5 to 0.5 over bars(17..28)
-      play notes`D1~:1.5 D1~:0.5 F1~:1 A0:1` at bars(3..8)
-      play notes`D1~:1 F1~:0.5 D1~:0.5 G1~:1 A0:1` at bars(9..16)
-      play notes`D1~:1.5 D1~:0.5 C1~:1 F1:1` at bars(17..28)
-    }
-  }
-  // a sine lead swept continuously — Autechre pitch-drift
-  block Lead {
-    track Melody {
-      instrument Blip(decay: 0.4)
-      insert saturate(mode: "tube", drive: 0.3)
-      insert duck(from: Trig, amount: 0.5, attack: 0.01, release: 0.1, shape: 0.5)
-      insert delay(time: 0.28, fdbk: 0.45, mix: 0.35)
-      volume 0.4
-      play notes`A4:1 _:1 D5:1 _:1` at bars(17..28)
+      insert duck(from: Kick, amount: 0.85, attack: 0.02, release: 0.12, shape: 0.7)
+      play notes`D1~:1.5 D1~:0.5 F1~:1 A0:1` at bars(5..16)
+      play notes`D1~:1 F1~:0.5 D1~:0.5 G1~:1 A0:1` at bars(17..28)
     }
   }
 
-  play Trig at bars(1..32)
-  play Chop at bars(1..32)
+  // ---- HIGH: the snare backbeat — the groove engine, then glitched ----
+  // a bright snare on 2 and 4 with reverb, then a ghost/roll layer whose
+  // rests get destabilized. The reverb is CUT by the next hit.
+  block Back {
+    track Snare {
+      instrument SnareTight(snap: 0.75)
+      insert eq(low: 0.3, mid: 0.6, high: 0.7)
+      insert reverb(size: 0.5, decay: 0.45, mix: 0.25)
+      insert transient(attack: 0.75, sustain: 0.4)
+      volume 1.0
+      play beat`---- x--- ---- x---` at bars(1..32)
+    }
+    track Clap {
+      instrument Clap
+      insert eq(low: 0.2, mid: 0.55, high: 0.8)
+      volume 0.6
+      play beat`---- x--- ---- x---` at bars(9..28)
+    }
+  }
+  // the glitch snare: a bounced snare hit, sliced and re-cut into unstable
+  // rolls and reversed stabs — the backbeat, destabilized
+  block Ghost {
+    track G {
+      instrument Snare908(tone: 0.6, snap: 0.75)
+      insert reverb(size: 0.4, decay: 0.4, mix: 0.3)
+      insert duck(from: Kick, amount: 0.6, attack: 0.01, release: 0.09, shape: 0.5)
+      volume 0.5
+      play beat`---- ---x --x- -x-x` at bars(9..16)
+      play humanize(beat`--x- x--x --xx -xx-`, time: 0.012, seed: 7) at bars(17..28)
+    }
+  }
+  block Hats {
+    track HC { instrument HatClosed volume 0.6
+      insert eq(low: 0.15, mid: 0.5, high: 0.85)
+      play beat`x-x- x-xx x-x- xx-x` at bars(5..28) }
+    track HO { instrument HatOpen volume 0.5
+      play beat`--x- ---- --x- --x-` at bars(13..28) }
+  }
+
+  // ---- UPPER: harmony stab, reverb tail cut mid-ring by a hard gate ----
+  block Stab {
+    track S {
+      instrument GlassPad
+      insert reverb(size: 0.72, decay: 0.7, mix: 0.42)
+      insert gate(depth: 0.95, beats: 0.125, duty: 0.4)
+      insert duck(from: Kick, amount: 0.55, attack: 0.01, release: 0.14, shape: 0.6)
+      volume 0.62
+      play notes`[D4 F4 A4]:2 _:2 [D4 G4 Bb4]:2 _:2` at bars(9..16)
+      play notes`[D4 F4 A4]:1.5 _:0.5 [C4 F4 A4]:1 [D4 G4 Bb4]:1 _:2` at bars(17..28)
+    }
+  }
+  // ---- UPPER: a lead melody, swept and delayed ----
+  block Lead {
+    track M {
+      instrument SawLead(cutoff: 0.85)
+      insert eq(low: 0.2, mid: 0.5, high: 0.7)
+      insert delay(time: 0.28, fdbk: 0.42, mix: 0.35)
+      insert duck(from: Kick, amount: 0.5, attack: 0.01, release: 0.1, shape: 0.5)
+      volume 0.6
+      play notes`A4:1 D5:0.5 F5:0.5 E5:1 _:1` at bars(17..24)
+      play notes`D5:1 A4:0.5 F4:0.5 D4:2` at bars(25..28)
+    }
+  }
+
+  // ---- NOISE: a crushed hiss bed and dust, carved hard by the kick ----
+  block NoiseBed {
+    track N {
+      instrument Hiss(body: 0.55)
+      insert crush(bits: 0.35, rate: 0.3, mix: 0.6)
+      insert duck(from: Kick, amount: 0.95, attack: 0.01, release: 0.16, shape: 0.6)
+      volume 0.3
+      play notes`D4:16` at bars(5..12)
+      play notes`D4:16` at bars(21..28)
+    }
+  }
+  block Grit {
+    track D {
+      instrument Dust(color: 0.75)
+      insert crush(bits: 0.45, rate: 0.2, mix: 0.5)
+      insert reverb(size: 0.5, decay: 0.5, mix: 0.3)
+      insert duck(from: Kick, amount: 0.7, attack: 0.01, release: 0.1, shape: 0.5)
+      volume 0.4
+      play humanize(beat`- x - x*3 - x - x*2`, time: 0.015, seed: 21) at bars(13..28)
+    }
+  }
+
+  play Kick at bars(1..32)
+  play Sub at bars(5..28)
+  play Back at bars(1..32)
   play Ghost at bars(9..28)
-  play Sub at bars(3..28)
+  play Hats at bars(5..28)
+  play Stab at bars(9..28)
   play Lead at bars(17..28)
+  play NoiseBed at bars(5..28)
+  play Grit at bars(13..28)
 }
