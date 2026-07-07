@@ -162,6 +162,8 @@ pub struct SongAst {
     pub lets: Vec<LetAst>,
     /// Body-level shared modulators: `let groove = lfo(...)`.
     pub mod_lets: Vec<ModLetAst>,
+    /// Bounce-to-sample: `sample Sub = bounce(BD808(decay: 0.9), note: C1, beats: 2)`.
+    pub sample_lets: Vec<SampleLetAst>,
     pub sections: Vec<SectionAst>,
     pub tracks: Vec<TrackAst>,
     pub returns: Vec<ReturnAst>,
@@ -169,6 +171,19 @@ pub struct SongAst {
     pub blocks: Vec<BlockAst>,
     /// Block placements on this body's timeline.
     pub places: Vec<PlaceAst>,
+}
+
+/// `sample Name = bounce(Call, note: C1, beats: 2)` — render an instrument
+/// hit offline into a deterministic audio asset, usable as a sampler source.
+#[derive(Clone, Debug)]
+pub struct SampleLetAst {
+    pub name: String,
+    pub call: Call,
+    /// Pitch name the bounce plays (and the sample's root). Default "C3".
+    pub note: String,
+    /// Length of the bounced note in beats. Default 2.0 (plus release tail).
+    pub beats: f64,
+    pub pos: Pos,
 }
 
 /// `section verse = bars(1..8)` — a named, reusable bar range.
