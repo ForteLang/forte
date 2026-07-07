@@ -17,7 +17,7 @@
 //! audio thread pre-boxed. `process`/`next` must not allocate; bounded pushes
 //! only (use [`push_bounded`]).
 
-use crate::dsp::effects::{Chorus, Compressor, Crush, Drive, Eq3, FdnReverb, Gate, Pump, StereoDelay, Stutter, Width};
+use crate::dsp::effects::{Chorus, Compressor, Crush, Drive, Eq3, Exciter, FdnReverb, Gate, ParComp, Pump, RingMod, Saturate, StereoDelay, Stutter, TapeStop, Transient, Width};
 use crate::dsp::filter::{FilterMode, Svf};
 use crate::dsp::grid::GridSynth;
 use crate::dsp::sampler::Sampler;
@@ -145,6 +145,12 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
         DeviceKind::Crush => Dsp::Audio(Box::new(Crush::new())),
         DeviceKind::Stutter => Dsp::Audio(Box::new(Stutter::new(sr))),
         DeviceKind::Gate => Dsp::Audio(Box::new(Gate::new(sr))),
+        DeviceKind::Saturate => Dsp::Audio(Box::new(Saturate::new(sr))),
+        DeviceKind::Transient => Dsp::Audio(Box::new(Transient::new(sr))),
+        DeviceKind::ParComp => Dsp::Audio(Box::new(ParComp::new(sr))),
+        DeviceKind::Exciter => Dsp::Audio(Box::new(Exciter::new(sr))),
+        DeviceKind::RingMod => Dsp::Audio(Box::new(RingMod::new(sr))),
+        DeviceKind::TapeStop => Dsp::Audio(Box::new(TapeStop::new(sr))),
     }
 }
 
@@ -651,6 +657,80 @@ impl AudioFx for Chorus {
             self.rate = p[0];
             self.depth = p[1];
             self.mix = p[2];
+        }
+    }
+}
+
+impl AudioFx for Saturate {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Saturate::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 4 {
+            self.mode = (p[0] * 2.0).round() as u8;
+            self.drive = p[1];
+            self.tone = p[2];
+            self.mix = p[3];
+        }
+    }
+}
+
+impl AudioFx for Transient {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Transient::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 2 {
+            self.attack = p[0];
+            self.sustain = p[1];
+        }
+    }
+}
+
+impl AudioFx for ParComp {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        ParComp::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 3 {
+            self.amount = p[0];
+            self.drive = p[1];
+            self.color = p[2];
+        }
+    }
+}
+
+impl AudioFx for Exciter {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Exciter::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 2 {
+            self.amount = p[0];
+            self.freq = p[1];
+        }
+    }
+}
+
+impl AudioFx for RingMod {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        RingMod::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 2 {
+            self.freq = p[0];
+            self.mix = p[1];
+        }
+    }
+}
+
+impl AudioFx for TapeStop {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        TapeStop::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if !p.is_empty() {
+            self.amount = p[0];
         }
     }
 }

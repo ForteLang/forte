@@ -480,3 +480,240 @@ impl Gate {
         (l * self.g, r * self.g)
     }
 }
+
+/// Saturation — the harmonic-richness workhorse. Three characters:
+/// 0 = tape (symmetric tanh, compresses peaks warmly), 1 = tube
+/// (asymmetric: adds even harmonics, "expensive" sheen), 2 = fuzz
+/// (hard-driven tanh, guitar-pedal aggression). `tone` darkens the result
+/// (one-pole lowpass) so heavy drive stays musical; `mix` blends parallel.
+pub struct Saturate {
+    sr: f32,
+    lp: (f32, f32),
+    pub mode: u8,
+    pub drive: f32, // 0..1
+    pub tone: f32,  // 0..1 → dark..open
+    pub mix: f32,
+}
+
+impl Saturate {
+    pub fn new(sr: f32) -> Self {
+        Self { sr, lp: (0.0, 0.0), mode: 0, drive: 0.4, tone: 0.7, mix: 1.0 }
+    }
+
+    #[inline]
+    fn shape(&self, x: f32) -> f32 {
+        let d = 1.0 + self.drive * 9.0;
+        match self.mode {
+            // tube: asymmetric — a touch of x² rectification before the tanh
+            1 => {
+                let y = x * d;
+                crate::dmath::tanh(y + 0.28 * y * y * if y > 0.0 { 1.0 } else { 0.4 }) / crate::dmath::tanh(d)
+            }
+            // fuzz: driven hard, normalized less — it BITES
+            2 => crate::dmath::tanh(x * d * 3.0) * 0.85,
+            // tape: symmetric soft clip, normalized so low drive ≈ unity
+            _ => crate::dmath::tanh(x * d) / crate::dmath::tanh(d),
+        }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let (mut wl, mut wr) = (self.shape(l), self.shape(r));
+        // tone: one-pole lowpass, 800 Hz (dark) .. 18 kHz (open)
+        let cutoff = 800.0 * crate::dmath::powf(22.5, self.tone.clamp(0.0, 1.0));
+        let a = (cutoff / self.sr * std::f32::consts::TAU).min(1.0);
+        self.lp.0 += (wl - self.lp.0) * a;
+        self.lp.1 += (wr - self.lp.1) * a;
+        wl = self.lp.0;
+        wr = self.lp.1;
+        let m = self.mix.clamp(0.0, 1.0);
+        (l * (1.0 - m) + wl * m, r * (1.0 - m) + wr * m)
+    }
+}
+
+/// Transient shaper: two envelope followers (fast/slow) split every hit
+/// into attack and sustain, each with its own gain. attack/sustain knobs
+/// are 0..1 with 0.5 = neutral (up to ±12 dB).
+pub struct Transient {
+    sr: f32,
+    fast: f32,
+    slow: f32,
+    pub attack: f32,  // 0..1, 0.5 neutral
+    pub sustain: f32, // 0..1, 0.5 neutral
+}
+
+impl Transient {
+    pub fn new(sr: f32) -> Self {
+        Self { sr, fast: 0.0, slow: 0.0, attack: 0.5, sustain: 0.5 }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let x = (l.abs() + r.abs()) * 0.5;
+        // ~1 ms and ~80 ms follower time constants (linear approximations)
+        let af = (1.0 / (0.001 * self.sr)).min(1.0);
+        let asl = (1.0 / (0.08 * self.sr)).min(1.0);
+        self.fast += (x - self.fast) * af;
+        self.slow += (x - self.slow) * asl;
+        // transient part = fast over slow; body = the rest
+        let t = (self.fast - self.slow).max(0.0);
+        let denom = self.fast.max(1e-6);
+        let t_frac = (t / denom).clamp(0.0, 1.0);
+        // ±12 dB at the knob extremes
+        let ag = crate::dmath::powf(10.0, (self.attack - 0.5) * 1.2);
+        let sg = crate::dmath::powf(10.0, (self.sustain - 0.5) * 1.2);
+        let g = ag * t_frac + sg * (1.0 - t_frac);
+        (l * g, r * g)
+    }
+}
+
+/// Parallel (New York) compression in one insert: a hard-compressed copy —
+/// fast attack/release, 8:1 over a low threshold, makeup, with a
+/// "smiley" tilt (`color`: lows+highs up on the wet bus) — blended under
+/// the dry signal by `amount`. Punch and glue without losing dynamics.
+pub struct ParComp {
+    sr: f32,
+    env: f32,
+    low: (f32, f32),
+    pub amount: f32, // wet blend 0..1
+    pub drive: f32,  // input gain into the crushed bus
+    pub color: f32,  // 0..1 smiley tilt on the wet bus
+}
+
+impl ParComp {
+    pub fn new(sr: f32) -> Self {
+        Self { sr, env: 0.0, low: (0.0, 0.0), amount: 0.35, drive: 0.5, color: 0.3 }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let g_in = 1.0 + self.drive * 7.0;
+        let (xl, xr) = (l * g_in, r * g_in);
+        let level = (xl.abs() + xr.abs()) * 0.5;
+        // fast follower: ~2 ms up, ~60 ms down
+        let up = (1.0 / (0.002 * self.sr)).min(1.0);
+        let down = (1.0 / (0.06 * self.sr)).min(1.0);
+        self.env += (level - self.env) * if level > self.env { up } else { down };
+        // 8:1 over −24 dBFS (0.063 linear)
+        const THRESH: f32 = 0.063;
+        let gr = if self.env > THRESH {
+            crate::dmath::powf(self.env / THRESH, -(1.0 - 1.0 / 8.0))
+        } else {
+            1.0
+        };
+        let makeup = 2.2;
+        let (mut wl, mut wr) = (xl * gr * makeup, xr * gr * makeup);
+        // smiley tilt: split lows with a one-pole, lift lows and the residue
+        let a = (180.0 / self.sr * std::f32::consts::TAU).min(1.0);
+        self.low.0 += (wl - self.low.0) * a;
+        self.low.1 += (wr - self.low.1) * a;
+        let c = self.color.clamp(0.0, 1.0) * 0.7;
+        wl += self.low.0 * c + (wl - self.low.0) * c * 0.6;
+        wr += self.low.1 * c + (wr - self.low.1) * c * 0.6;
+        // safety: the crushed bus must never explode
+        wl = crate::dmath::tanh(wl);
+        wr = crate::dmath::tanh(wr);
+        let m = self.amount.clamp(0.0, 1.0);
+        (l + wl * m, r + wr * m)
+    }
+}
+
+/// Exciter: high band → saturation → blended back on top. The "sparkle"
+/// convention — synthesized harmonics where the source has none.
+pub struct Exciter {
+    sr: f32,
+    lp: (f32, f32),
+    pub amount: f32,
+    pub freq: f32, // 0..1 → 1.5 kHz .. 9 kHz corner
+}
+
+impl Exciter {
+    pub fn new(sr: f32) -> Self {
+        Self { sr, lp: (0.0, 0.0), amount: 0.3, freq: 0.5 }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let corner = 1500.0 * crate::dmath::powf(6.0, self.freq.clamp(0.0, 1.0));
+        let a = (corner / self.sr * std::f32::consts::TAU).min(1.0);
+        self.lp.0 += (l - self.lp.0) * a;
+        self.lp.1 += (r - self.lp.1) * a;
+        let (hl, hr) = (l - self.lp.0, r - self.lp.1);
+        let m = self.amount.clamp(0.0, 1.0) * 1.5;
+        (
+            l + crate::dmath::tanh(hl * 4.0) * m,
+            r + crate::dmath::tanh(hr * 4.0) * m,
+        )
+    }
+}
+
+/// Ring modulator: multiply by a sine carrier — inharmonic, metallic,
+/// the classic "broken machine voice". Deterministic phase accumulator.
+pub struct RingMod {
+    sr: f32,
+    phase: f32,
+    pub freq: f32, // 0..1 → 20 Hz .. 4 kHz (log)
+    pub mix: f32,
+}
+
+impl RingMod {
+    pub fn new(sr: f32) -> Self {
+        Self { sr, phase: 0.0, freq: 0.4, mix: 0.5 }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let hz = 20.0 * crate::dmath::powf(200.0, self.freq.clamp(0.0, 1.0));
+        self.phase += hz / self.sr;
+        if self.phase >= 1.0 {
+            self.phase -= 1.0;
+        }
+        let c = crate::dmath::sin(self.phase * std::f32::consts::TAU);
+        let m = self.mix.clamp(0.0, 1.0);
+        (l * (1.0 - m) + l * c * m, r * (1.0 - m) + r * c * m)
+    }
+}
+
+/// Tape stop: `amount` 0 = bypass, rising toward 1 slows a buffered read
+/// head down to a halt — pitch falls with speed, exactly like power-cut
+/// vinyl/tape. Automate `tapestop.amount` from 0 to 1 over the last bar.
+pub struct TapeStop {
+    buf_l: Vec<f32>,
+    buf_r: Vec<f32>,
+    write: usize,
+    read: f64,
+    pub amount: f32,
+}
+
+impl TapeStop {
+    pub fn new(sr: f32) -> Self {
+        let cap = (sr * 4.0) as usize;
+        Self { buf_l: vec![0.0; cap], buf_r: vec![0.0; cap], write: 0, read: 0.0, amount: 0.0 }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let cap = self.buf_l.len();
+        self.buf_l[self.write] = l;
+        self.buf_r[self.write] = r;
+        self.write = (self.write + 1) % cap;
+        if self.amount <= 0.0001 {
+            // bypass: pin the read head to the write head (bit-exact dry)
+            self.read = self.write as f64;
+            return (l, r);
+        }
+        // playback rate falls to zero as amount → 1 (quadratic feels like tape)
+        let rate = (1.0 - self.amount.clamp(0.0, 1.0) as f64).powi(2);
+        self.read += rate;
+        while self.read >= cap as f64 {
+            self.read -= cap as f64;
+        }
+        let i = self.read.floor() as usize % cap;
+        let j = (i + 1) % cap;
+        let frac = (self.read - self.read.floor()) as f32;
+        (
+            self.buf_l[i] + (self.buf_l[j] - self.buf_l[i]) * frac,
+            self.buf_r[i] + (self.buf_r[j] - self.buf_r[i]) * frac,
+        )
+    }
+}

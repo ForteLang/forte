@@ -1684,7 +1684,8 @@ fn eval_lit(lit: &PatternLit, beats_per_bar: f64, beat_pitch: u8) -> Result<(Vec
 
 const INSTRUMENTS: &[&str] = &["sampler", "kit", "prisma", "mesh"];
 const EFFECTS: &[&str] =
-    &["filter", "eq", "drive", "delay", "reverb", "comp", "chorus", "pump", "width", "crush", "stutter", "gate"];
+    &["filter", "eq", "drive", "delay", "reverb", "comp", "chorus", "pump", "width", "crush",
+      "stutter", "gate", "saturate", "transient", "parcomp", "exciter", "ringmod", "tapestop"];
 
 /// Build an instrument device. Returns the device plus the root pitch that
 /// `beat` literals on this track trigger.
@@ -2201,6 +2202,16 @@ fn build_effect(
             "crush" => (DeviceKind::Crush, &[("bits", 0), ("rate", 1), ("mix", 2)], &[]),
             "stutter" => (DeviceKind::Stutter, &[("beats", 0), ("mix", 1)], &[]),
             "gate" => (DeviceKind::Gate, &[("depth", 0), ("beats", 1), ("duty", 2)], &[]),
+            "saturate" => (
+                DeviceKind::Saturate,
+                &[("drive", 1), ("tone", 2), ("mix", 3)],
+                &[("mode", 0, &["tape", "tube", "fuzz"])],
+            ),
+            "transient" => (DeviceKind::Transient, &[("attack", 0), ("sustain", 1)], &[]),
+            "parcomp" => (DeviceKind::ParComp, &[("amount", 0), ("drive", 1), ("color", 2)], &[]),
+            "exciter" => (DeviceKind::Exciter, &[("amount", 0), ("freq", 1)], &[]),
+            "ringmod" => (DeviceKind::RingMod, &[("freq", 0), ("mix", 1)], &[]),
+            "tapestop" => (DeviceKind::TapeStop, &[("amount", 0)], &[]),
             other => {
                 return Err(Diag::new(
                     "E-DEV-001",
