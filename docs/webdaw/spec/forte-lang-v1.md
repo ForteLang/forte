@@ -191,6 +191,12 @@ user-space code written in the device DSL of §4.5, used via ordinary `import`.
 | `crush` | bits, rate, mix — bit-depth (16→1 across 0..1) + sample-rate reduction (hold 1..64 samples). The lo-fi/glitch crunch |
 | `stutter` | beats, mix — tempo-synced buffer repeat: the last `beats` of dry signal loop while mix is up. Automate `stutter.mix` for glitch fills |
 | `gate` | depth, beats, duty — tempo-synced chopper (trance gate): open for `duty` of each cycle, closed by `depth` for the rest, 1 ms anti-click slew |
+| `saturate` | mode("tape"/"tube"/"fuzz"), drive, tone, mix — waveshaping saturation: tape = warm symmetric, tube = asymmetric even harmonics, fuzz = pedal aggression. `tone` darkens post-shape so heavy drive stays musical |
+| `transient` | attack, sustain (0.5 = neutral, ±12 dB) — fast/slow follower split: shape the hit and the body independently, before compression |
+| `parcomp` | amount, drive, color — parallel (New York) compression in one insert: a hard-compressed copy (8:1, fast, makeup, `color` = smiley tilt) blended UNDER the dry. Punch and glue without losing dynamics |
+| `exciter` | amount, freq — saturated high band mixed on top: synthesized sparkle where the source has none |
+| `ringmod` | freq (20 Hz..4 kHz log), mix — sine-carrier multiplication: inharmonic, metallic, the broken-machine voice |
+| `tapestop` | amount — 0 is a bit-exact bypass; automate toward 1 and a buffered read head slows to a halt, pitch falling like power-cut tape |
 | `width` | amount — M/S stereo width (0.5 is unity. Since insert is pre-pan, use on stereo sources)|
 
 All numeric knobs are normalized 0..1 (out of range is E-TYPE-002). volume 0..1, pan -1..1,

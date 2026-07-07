@@ -660,3 +660,47 @@ fn sampler_glide_and_slices_are_audio_domain_tools() {
     // bad slice counts are rejected
     assert!(!err_codes(&chop("C3:0.5").replace("slices: 8", "slices: 99")).is_empty());
 }
+
+#[test]
+fn pedal_effects_render_deterministically_and_change_the_sound() {
+    let song = |fx: &str| {
+        format!(
+            r#"song "FX" {{ tempo 120bpm
+              track T {{ instrument prisma(wave: "saw", cutoff: 0.5)
+                {fx}
+                play beat`x-x- x-x-` at bars(1..1) }} }}"#
+        )
+    };
+    let dry = fortelang::render_digest(&fortelang::compile_str(&song("")).unwrap(), 2.0);
+    for fx in [
+        r#"insert saturate(mode: "tape", drive: 0.6)"#,
+        r#"insert saturate(mode: "tube", drive: 0.5)"#,
+        r#"insert saturate(mode: "fuzz", drive: 0.7, tone: 0.4)"#,
+        "insert transient(attack: 0.9, sustain: 0.2)",
+        "insert parcomp(amount: 0.6, drive: 0.7, color: 0.5)",
+        "insert exciter(amount: 0.6)",
+        "insert ringmod(freq: 0.5, mix: 0.7)",
+        "insert tapestop(amount: 0.4)",
+    ] {
+        let p = fortelang::compile_str(&song(fx)).unwrap_or_else(|e| panic!("{fx}: {e:?}"));
+        let a = fortelang::render_digest(&p, 2.0);
+        let b = fortelang::render_digest(&p, 2.0);
+        assert_eq!(a.f32_digest, b.f32_digest, "{fx} must render bit-identically");
+        assert_ne!(a.f32_digest, dry.f32_digest, "{fx} must change the sound");
+        assert!(a.rms > 0.002, "{fx} must stay audible (rms {})", a.rms);
+        assert!(a.peak <= 1.0, "{fx} bounded by the limiter (peak {})", a.peak);
+    }
+    // tapestop at 0 must be bit-exact bypass
+    let z = fortelang::render_digest(
+        &fortelang::compile_str(&song("insert tapestop(amount: 0.0)")).unwrap(),
+        2.0,
+    );
+    assert_eq!(z.f32_digest, dry.f32_digest, "tapestop amount 0 must be a true bypass");
+    // the loudness convention chain compiles: eq -> saturate -> comp
+    let chain = song(
+        r#"insert eq(low: 0.6, mid: 0.45, high: 0.6)
+           insert saturate(mode: "tape", drive: 0.5)
+           insert comp(thresh: 0.4, ratio: 0.7, makeup: 0.3)"#,
+    );
+    assert!(fortelang::compile_str(&chain).is_ok(), "the eq->saturate->comp chain must compile");
+}

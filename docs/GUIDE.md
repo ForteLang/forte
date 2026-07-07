@@ -419,6 +419,16 @@ song "Name" {
     modulate reso   with random(rate: 0.3, amount: 0.2, smooth: 0.6) // S&H randomness (deterministic)
     modulate cutoff with adsr(a: 0.02, d: 0.4, s: 0.3, amount: 0.5)  // external envelope that opens on each note
     automate delay.mix from 0.0 to 0.5 over hook   // insert parameters can be targeted as `name.param`
+
+    // ---- The conventions that make records sound like records ----
+    // Chains are the instrument's second half. Canonical shapes:
+    //   eq → saturate → comp        make it loud and rich (the classic)
+    //   transient → eq → parcomp    drums that punch without losing air
+    //   saturate(fuzz) → comp       pedal excess crushed into tone
+    // insert saturate(mode: "tape", drive: 0.5)
+    // insert parcomp(amount: 0.4, color: 0.4)
+    // insert exciter(amount: 0.3)
+    // automate tapestop.amount from 0 to 1 over bars(16..16)  // the tape stop
   }
 }
 ```

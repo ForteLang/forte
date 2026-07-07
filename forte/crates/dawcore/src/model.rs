@@ -45,6 +45,18 @@ pub enum DeviceKind {
     Stutter,
     /// Tempo-synced pattern chopper (trance gate).
     Gate,
+    /// Saturation: tape/tube/fuzz waveshaping with tone control.
+    Saturate,
+    /// Transient shaper: independent attack/sustain gain.
+    Transient,
+    /// Parallel (New York) compression: crushed copy blended under the dry.
+    ParComp,
+    /// Exciter: saturated high band blended on top.
+    Exciter,
+    /// Ring modulator: sine-carrier multiplication.
+    RingMod,
+    /// Tape stop: buffered read head slowing to a halt (automatable).
+    TapeStop,
     /// A user-defined effect: a Grid graph fed by AudioIn (`device X : Effect`).
     MeshFx,
 }
@@ -70,7 +82,7 @@ impl DeviceStage {
 impl DeviceKind {
     /// Every device, in stage order. The browser and factories iterate this —
     /// adding a device here is the only registration step the UI needs.
-    pub const ALL: [DeviceKind; 19] = [
+    pub const ALL: [DeviceKind; 25] = [
         DeviceKind::Arpeggiator,
         DeviceKind::NoteTranspose,
         DeviceKind::NoteRepeat,
@@ -90,6 +102,12 @@ impl DeviceKind {
         DeviceKind::Crush,
         DeviceKind::Stutter,
         DeviceKind::Gate,
+        DeviceKind::Saturate,
+        DeviceKind::Transient,
+        DeviceKind::ParComp,
+        DeviceKind::Exciter,
+        DeviceKind::RingMod,
+        DeviceKind::TapeStop,
     ];
 
     pub fn label(self) -> &'static str {
@@ -113,6 +131,12 @@ impl DeviceKind {
             DeviceKind::Crush => "Crush",
             DeviceKind::Stutter => "Stutter",
             DeviceKind::Gate => "Gate",
+            DeviceKind::Saturate => "Saturate",
+            DeviceKind::Transient => "Transient",
+            DeviceKind::ParComp => "ParComp",
+            DeviceKind::Exciter => "Exciter",
+            DeviceKind::RingMod => "RingMod",
+            DeviceKind::TapeStop => "TapeStop",
             DeviceKind::MeshFx => "Mesh FX",
         }
     }
@@ -161,6 +185,12 @@ impl DeviceKind {
             DeviceKind::Crush => &["Bits", "Rate", "Mix"],
             DeviceKind::Stutter => &["Period", "Mix"],
             DeviceKind::Gate => &["Depth", "Period", "Duty"],
+            DeviceKind::Saturate => &["Mode", "Drive", "Tone", "Mix"],
+            DeviceKind::Transient => &["Attack", "Sustain"],
+            DeviceKind::ParComp => &["Amount", "Drive", "Color"],
+            DeviceKind::Exciter => &["Amount", "Freq"],
+            DeviceKind::RingMod => &["Freq", "Mix"],
+            DeviceKind::TapeStop => &["Amount"],
             DeviceKind::MeshFx => &[],
         }
     }
@@ -193,6 +223,12 @@ impl DeviceKind {
             // Period is seconds per repeat; the compiler overwrites it from tempo
             DeviceKind::Stutter => vec![0.25, 0.0],
             DeviceKind::Gate => vec![0.9, 0.25, 0.5],
+            DeviceKind::Saturate => vec![0.0, 0.4, 0.7, 1.0],
+            DeviceKind::Transient => vec![0.5, 0.5],
+            DeviceKind::ParComp => vec![0.35, 0.5, 0.3],
+            DeviceKind::Exciter => vec![0.3, 0.5],
+            DeviceKind::RingMod => vec![0.4, 0.5],
+            DeviceKind::TapeStop => vec![0.0],
             DeviceKind::MeshFx => Vec::new(),
         }
     }
