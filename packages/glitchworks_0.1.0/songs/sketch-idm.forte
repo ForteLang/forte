@@ -1,0 +1,97 @@
+// Sketch: IDM — audition piece, NOT an album track. Breakbeat science +
+// Autechre-school programming: a drum phrase bounced whole and re-cut with
+// rolls (ratchets) and reversed slices; a pitch-bent sub that glides and
+// warbles; a sine lead swept continuously; everything carved by a sidechain
+// whose release breathes open across the track. Irregular by design.
+import { Kick808, SnareTight, HatClosed, HatOpen, Rim, Clap } from "../../essentials_0.6.0/instruments/drums.forte"
+import { SubWrap } from "../wrapped/bassx.forte"
+import { Blip } from "../instruments/clicks.forte"
+
+song "Sketch IDM" {
+  desc "Audition sketch: chopped breaks with rolls, pitch-bent sub, swept lead, a breathing sidechain. Breakbeat/IDM. Not an album track."
+  artist "Forte Essentials"
+  tempo 168bpm
+  swing 0.58
+  master 1.6
+  key D minor
+
+  section peak  = bars(17..28)
+  section out   = bars(29..32)
+
+  // the break source: a busy syncopated kit, bounced to one asset
+  block Kit {
+    track K  { instrument Kick808(decay: 0.32, punch: 0.7) volume 0.95
+      play beat`x-- --x -x- --x` at bars(1..1) }
+    track S  { instrument SnareTight(snap: 0.75) volume 0.9
+      play beat`--- x-- --- x-x` at bars(1..1) }
+    track HC { instrument HatClosed volume 0.5
+      play beat`x-x -xx x-x xx-` at bars(1..1) }
+    track HO { instrument HatOpen volume 0.4
+      play beat`--x --- -x- ---` at bars(1..1) }
+    track R  { instrument Rim volume 0.42
+      play beat`-x- --- x-- -x-` at bars(1..1) }
+  }
+  sample Brk = bounce(Kit, note: C3, beats: 4)
+
+  // trigger kick — the sidechain source, kept dry and steady-ish
+  block Trig {
+    track Kick { instrument Kick808(decay: 0.3, punch: 0.65) volume 0.9
+      play beat`x--- --x- x--- --x-` at bars(1..32) }
+  }
+
+  // the chopped break, re-cut with rolls (x*N) hidden in slice retriggers
+  block Chop {
+    track Cut {
+      instrument sampler(sample: Brk, slices: 16, sustain: 0.0, decay: 0.5)
+      insert transient(attack: 0.8, sustain: 0.35)
+      insert saturate(mode: "tape", drive: 0.4)
+      insert parcomp(amount: 0.5, drive: 0.55, color: 0.45)
+      volume 0.8
+      play notes`C3:0.25 _:0.25 D#3:0.25 C3:0.25 G3:0.25 _:0.25 F3:0.25 A3:0.25` at bars(1..8)
+      play notes`C3:0.25 C3:0.125 C3:0.125 D#3:0.25 _:0.25 G3:0.25 A3:0.25 _:0.25 F3:0.25` at bars(9..16)
+      play notes`C3:0.25 D#3:0.125 F3:0.125 G3:0.25 _:0.25 A3:0.25 C3:0.125 D3:0.125 _:0.25 F3:0.25 G3:0.25` at bars(17..28)
+      play notes`C3:0.25 _:0.75 G3:0.25 _:0.75 C3:0.5 _:1` at bars(29..32)
+    }
+  }
+  // a reversed, crushed slice layer for the IDM shimmer
+  block Ghost {
+    track Cut2 {
+      instrument sampler(sample: Brk, slices: 16, sustain: 0.0, decay: 0.3, reverse: "on")
+      insert crush(bits: 0.4, rate: 0.25, mix: 0.5)
+      insert delay(time: 0.19, fdbk: 0.4, mix: 0.35)
+      volume 0.45
+      play notes`_:0.5 A3:0.25 _:0.25 E3:0.25 _:0.75 C4:0.25 _:0.5` at bars(9..16)
+      play notes`B3:0.25 _:0.25 E3:0.25 _:0.25 A3:0.125 A3:0.125 _:0.5 D4:0.25 _:0.5` at bars(17..28)
+    }
+  }
+
+  // a sub that GLIDES and BENDS — pitch automation warps the held audio
+  block Sub : SubWrap {
+    track Sub {
+      insert duck(from: Trig, amount: 0.88, attack: 0.02, release: 0.12, shape: 0.7)
+      automate pitch from 0.5 to 0.5 over bars(1..8)
+      automate pitch from 0.5 to 0.42 over bars(9..16)
+      automate pitch from 0.5 to 0.5 over bars(17..28)
+      play notes`D1~:1.5 D1~:0.5 F1~:1 A0:1` at bars(3..8)
+      play notes`D1~:1 F1~:0.5 D1~:0.5 G1~:1 A0:1` at bars(9..16)
+      play notes`D1~:1.5 D1~:0.5 C1~:1 F1:1` at bars(17..28)
+    }
+  }
+  // a sine lead swept continuously — Autechre pitch-drift
+  block Lead {
+    track Melody {
+      instrument Blip(decay: 0.4)
+      insert saturate(mode: "tube", drive: 0.3)
+      insert duck(from: Trig, amount: 0.5, attack: 0.01, release: 0.1, shape: 0.5)
+      insert delay(time: 0.28, fdbk: 0.45, mix: 0.35)
+      volume 0.4
+      play notes`A4:1 _:1 D5:1 _:1` at bars(17..28)
+    }
+  }
+
+  play Trig at bars(1..32)
+  play Chop at bars(1..32)
+  play Ghost at bars(9..28)
+  play Sub at bars(3..28)
+  play Lead at bars(17..28)
+}
