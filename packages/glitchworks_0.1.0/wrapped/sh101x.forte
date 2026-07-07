@@ -1,0 +1,28 @@
+// glitchworks/wrapped/sh101x — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { SH101Sub } from "packages/glitchworks_0.1.0/wrapped/sh101x.forte"
+//   block Line : SH101Sub { track Sub { play … at bars(1..4) } }
+import { SH101Bass, SH101Lead } from "../../essentials_0.6.0/instruments/sh101.forte"
+
+// SH101Sub — SH101Bass tail looped and repitched with glide — the 808-sub treatment.
+block SH101Sub {
+  sample SH101SubSrc = bounce(SH101Bass(), note: C1, beats: 2)
+  track Sub {
+    instrument sampler(sample: SH101SubSrc, glide: 0.12, sustain: 0.9, loop: "on", release: 0.25)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.8
+  }
+}
+
+// SH101Wire — SH101Lead fuzz-crushed and compressed — audio-domain acid.
+block SH101Wire {
+  sample SH101WireSrc = bounce(SH101Lead(), note: C3, beats: 1)
+  track Wire {
+    instrument sampler(sample: SH101WireSrc, glide: 0.06, sustain: 0.7, loop: "on")
+    insert saturate(mode: "fuzz", drive: 0.55, tone: 0.5)
+    insert comp(thresh: 0.4, ratio: 0.7, attack: 0.01, release: 0.12, makeup: 0.25)
+    volume 0.8
+  }
+}

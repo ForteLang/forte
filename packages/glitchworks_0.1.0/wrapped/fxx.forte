@@ -1,0 +1,65 @@
+// glitchworks/wrapped/fxx — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { ImpactKnock } from "packages/glitchworks_0.1.0/wrapped/fxx.forte"
+//   block Line : ImpactKnock { track Hit { play … at bars(1..4) } }
+import { Impact, NoiseCrash, Riser, Stab, Zap } from "../../essentials_0.6.0/instruments/fx.forte"
+
+// ImpactKnock — Impact transient-shaped, tape-saturated, NY-compressed — the produced hit.
+block ImpactKnock {
+  sample ImpactKnockSrc = bounce(Impact(), note: C1, beats: 2)
+  track Hit {
+    instrument sampler(sample: ImpactKnockSrc, sustain: 0.0, decay: 0.35)
+    insert transient(attack: 0.8, sustain: 0.35)
+    insert saturate(mode: "tape", drive: 0.5)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.35)
+    volume 0.8
+  }
+}
+
+// ZapRing — Zap ring-modulated into inharmonic metal, tube-warmed.
+block ZapRing {
+  sample ZapRingSrc = bounce(Zap(), note: C3, beats: 0.5)
+  track Metal {
+    instrument sampler(sample: ZapRingSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.6
+  }
+}
+
+// StabPress — Stab fuzz bite + parallel crush + sparkle — cuts through any mix.
+block StabPress {
+  sample StabPressSrc = bounce(Stab(), note: C3, beats: 1)
+  track Hit {
+    instrument sampler(sample: StabPressSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.7
+  }
+}
+
+// CrashVapor — NoiseCrash played backwards into a crushed reverb — the vapor texture.
+block CrashVapor {
+  sample CrashVaporSrc = bounce(NoiseCrash(), note: C3, beats: 3)
+  track Pad {
+    instrument sampler(sample: CrashVaporSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.5
+  }
+}
+
+// RiserChop — Riser sliced into 8 pads (root+n = slice n at original speed) — the MPC chop.
+block RiserChop {
+  sample RiserChopSrc = bounce(Riser(), note: C3, beats: 4)
+  track Chop {
+    instrument sampler(sample: RiserChopSrc, slices: 8, sustain: 0.0, decay: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.55
+  }
+}

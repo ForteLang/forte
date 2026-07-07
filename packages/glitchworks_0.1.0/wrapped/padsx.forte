@@ -1,0 +1,122 @@
+// glitchworks/wrapped/padsx — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { WarmVapor } from "packages/glitchworks_0.1.0/wrapped/padsx.forte"
+//   block Line : WarmVapor { track Pad { play … at bars(1..4) } }
+import { ChoirPad, DarkPad, DronePad, EightiesPad, GlassPad, HollowPad, ShimmerPad, StringPad, SweepPad, WarmPad } from "../../essentials_0.6.0/instruments/pads.forte"
+
+// WarmVapor — WarmPad played backwards into a crushed reverb — the vapor texture.
+block WarmVapor {
+  sample WarmVaporSrc = bounce(WarmPad(), note: C4, beats: 4)
+  track Pad {
+    instrument sampler(sample: WarmVaporSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.6
+  }
+}
+
+// StringDust — StringPad bit-dusted and tape-warmed — the lofi convention.
+block StringDust {
+  sample StringDustSrc = bounce(StringPad(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: StringDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.65
+  }
+}
+
+// GlassBloom — GlassPad excited highs and chorus width — expensive sheen.
+block GlassBloom {
+  sample GlassBloomSrc = bounce(GlassPad(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: GlassBloomSrc, sustain: 0.8, release: 0.35)
+    insert exciter(amount: 0.45, freq: 0.6)
+    insert chorus(rate: 0.25, depth: 0.4, mix: 0.35)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.6
+  }
+}
+
+// DarkRing — DarkPad ring-modulated into inharmonic metal, tube-warmed.
+block DarkRing {
+  sample DarkRingSrc = bounce(DarkPad(), note: C3, beats: 3)
+  track Pad {
+    instrument sampler(sample: DarkRingSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.55
+  }
+}
+
+// ShimmerReverse — ShimmerPad played backwards into a crushed reverb — the vapor texture.
+block ShimmerReverse {
+  sample ShimmerReverseSrc = bounce(ShimmerPad(), note: C5, beats: 3)
+  track Pad {
+    instrument sampler(sample: ShimmerReverseSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.5
+  }
+}
+
+// DroneWire — DronePad ring-modulated into inharmonic metal, tube-warmed.
+block DroneWire {
+  sample DroneWireSrc = bounce(DronePad(), note: C2, beats: 4)
+  track Pad {
+    instrument sampler(sample: DroneWireSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.55
+  }
+}
+
+// HollowDust — HollowPad bit-dusted and tape-warmed — the lofi convention.
+block HollowDust {
+  sample HollowDustSrc = bounce(HollowPad(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: HollowDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.6
+  }
+}
+
+// SweepGhost — SweepPad played backwards into a crushed reverb — the vapor texture.
+block SweepGhost {
+  sample SweepGhostSrc = bounce(SweepPad(), note: C4, beats: 4)
+  track Pad {
+    instrument sampler(sample: SweepGhostSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.55
+  }
+}
+
+// EightiesShine — EightiesPad excited highs and chorus width — expensive sheen.
+block EightiesShine {
+  sample EightiesShineSrc = bounce(EightiesPad(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: EightiesShineSrc, sustain: 0.8, release: 0.35)
+    insert exciter(amount: 0.45, freq: 0.6)
+    insert chorus(rate: 0.25, depth: 0.4, mix: 0.35)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.6
+  }
+}
+
+// ChoirVapor — ChoirPad played backwards into a crushed reverb — the vapor texture.
+block ChoirVapor {
+  sample ChoirVaporSrc = bounce(ChoirPad(), note: C4, beats: 3)
+  track Pad {
+    instrument sampler(sample: ChoirVaporSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.55
+  }
+}

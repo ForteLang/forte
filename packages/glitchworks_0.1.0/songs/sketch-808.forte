@@ -1,0 +1,46 @@
+// Sketch: the 808 idiom — audition piece, NOT an album track. The wrapped
+// Sub808 glides between pitches (audio repitch), Knock/Crack carry a trap
+// half-time beat, lofi keys sit dusty on top. 16 bars, one idea.
+import { Sub808Deep, Knock808, Crack808, Dust808Hat } from "../wrapped/drums808.forte"
+import { EPianoDust } from "../wrapped/keysx.forte"
+
+song "Sketch 808" {
+  desc "Audition sketch: glided 808 sub, trap half-time knock, dusty keys. Not an album track."
+  artist "Forte Essentials"
+  tempo 140bpm
+  master 2.2
+  key F minor
+
+  block Low : Sub808Deep {
+    track Sub {
+      play notes`F0~:1.5 F0~:0.5 Ab0~:1 F0:1` at bars(1..8)
+      play notes`F0~:1.5 C1~:0.5 Ab0~:1 F0:1` at bars(9..16)
+    }
+  }
+  block Beat : Knock808 {
+    track Hit {
+      play beat`x--- ---- --x- ----` at bars(1..8)
+      play beat`x--- --x- --x- ----` at bars(9..16)
+    }
+  }
+  block Snap : Crack808 {
+    track Hit { play beat`---- x--- ---- x---` at bars(1..16) }
+  }
+  block Hats : Dust808Hat {
+    track Hat {
+      play beat`x-x- x-x- x-xx x-x-` at bars(1..8)
+      play beat`x-x- xx-x x*3-x- x-x-` at bars(9..16)
+    }
+  }
+  block Keys : EPianoDust {
+    track Key {
+      play notes`[F3 Ab3 C4]:2 _:2 [Eb3 G3 Bb3]:2 _:2` at bars(9..16)
+    }
+  }
+
+  play Low at bars(1..16)
+  play Beat at bars(1..16)
+  play Snap at bars(3..16)
+  play Hats at bars(5..16)
+  play Keys at bars(9..16)
+}

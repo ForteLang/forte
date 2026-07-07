@@ -1,0 +1,29 @@
+// glitchworks/wrapped/tb303x — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { AcidChop } from "packages/glitchworks_0.1.0/wrapped/tb303x.forte"
+//   block Line : AcidChop { track Chop { play … at bars(1..4) } }
+import { Bass303, Square303 } from "../../essentials_0.6.0/instruments/tb303.forte"
+
+// AcidChop — Bass303 sliced into 8 pads (root+n = slice n at original speed) — the MPC chop.
+block AcidChop {
+  sample AcidChopSrc = bounce(Bass303(), note: C2, beats: 2)
+  track Chop {
+    instrument sampler(sample: AcidChopSrc, slices: 8, sustain: 0.0, decay: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.7
+  }
+}
+
+// SquareAcidDust — Square303 bit-dusted and tape-warmed — the lofi convention.
+block SquareAcidDust {
+  sample SquareAcidDustSrc = bounce(Square303(), note: C2, beats: 1)
+  track Key {
+    instrument sampler(sample: SquareAcidDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.7
+  }
+}

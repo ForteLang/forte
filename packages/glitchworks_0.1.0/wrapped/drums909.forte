@@ -1,0 +1,100 @@
+// glitchworks/wrapped/drums909 — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { Knock909 } from "packages/glitchworks_0.1.0/wrapped/drums909.forte"
+//   block Line : Knock909 { track Hit { play … at bars(1..4) } }
+import { BD909, CH909, CP909, LT909, OH909, RC909, SD909 } from "../../essentials_0.6.0/instruments/tr909.forte"
+
+// Knock909 — BD909 transient-shaped, tape-saturated, NY-compressed — the produced hit.
+block Knock909 {
+  sample Knock909Src = bounce(BD909(), note: C1, beats: 1)
+  track Hit {
+    instrument sampler(sample: Knock909Src, sustain: 0.0, decay: 0.35)
+    insert transient(attack: 0.8, sustain: 0.35)
+    insert saturate(mode: "tape", drive: 0.5)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.35)
+    volume 0.8
+  }
+}
+
+// Punch909Fuzz — BD909 fuzz-crushed and compressed — audio-domain acid.
+block Punch909Fuzz {
+  sample Punch909FuzzSrc = bounce(BD909(), note: C1, beats: 1)
+  track Hit {
+    instrument sampler(sample: Punch909FuzzSrc, glide: 0.06, sustain: 0.7, loop: "on")
+    insert saturate(mode: "fuzz", drive: 0.55, tone: 0.5)
+    insert comp(thresh: 0.4, ratio: 0.7, attack: 0.01, release: 0.12, makeup: 0.25)
+    volume 0.8
+  }
+}
+
+// Crack909 — SD909 fuzz bite + parallel crush + sparkle — cuts through any mix.
+block Crack909 {
+  sample Crack909Src = bounce(SD909(), note: D2, beats: 1)
+  track Hit {
+    instrument sampler(sample: Crack909Src, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.8
+  }
+}
+
+// Clap909Press — CP909 fuzz bite + parallel crush + sparkle — cuts through any mix.
+block Clap909Press {
+  sample Clap909PressSrc = bounce(CP909(), note: D#2, beats: 1)
+  track Hit {
+    instrument sampler(sample: Clap909PressSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.8
+  }
+}
+
+// Chop909Hat — CH909 sliced into 8 pads (root+n = slice n at original speed) — the MPC chop.
+block Chop909Hat {
+  sample Chop909HatSrc = bounce(CH909(), note: F#2, beats: 2)
+  track Chop {
+    instrument sampler(sample: Chop909HatSrc, slices: 8, sustain: 0.0, decay: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.6
+  }
+}
+
+// Open909Ghost — OH909 played backwards into a crushed reverb — the vapor texture.
+block Open909Ghost {
+  sample Open909GhostSrc = bounce(OH909(), note: A#2, beats: 1)
+  track Pad {
+    instrument sampler(sample: Open909GhostSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.55
+  }
+}
+
+// Ride909Ring — RC909 ring-modulated into inharmonic metal, tube-warmed.
+block Ride909Ring {
+  sample Ride909RingSrc = bounce(RC909(), note: D#3, beats: 2)
+  track Metal {
+    instrument sampler(sample: Ride909RingSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.55
+  }
+}
+
+// Tom909Sub — LT909 tail looped and repitched with glide — the 808-sub treatment.
+block Tom909Sub {
+  sample Tom909SubSrc = bounce(LT909(), note: C1, beats: 2)
+  track Sub {
+    instrument sampler(sample: Tom909SubSrc, glide: 0.12, sustain: 0.9, loop: "on", release: 0.25)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.8
+  }
+}

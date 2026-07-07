@@ -1,0 +1,97 @@
+// glitchworks/wrapped/bassx — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { SubWrap } from "packages/glitchworks_0.1.0/wrapped/bassx.forte"
+//   block Line : SubWrap { track Sub { play … at bars(1..4) } }
+import { DubBass, FMBass, GrowlBass, OctaveBass, PluckBass, ReeseBass, SubBass, UprightBass } from "../../essentials_0.6.0/instruments/bass.forte"
+
+// SubWrap — SubBass tail looped and repitched with glide — the 808-sub treatment.
+block SubWrap {
+  sample SubWrapSrc = bounce(SubBass(), note: C1, beats: 2)
+  track Sub {
+    instrument sampler(sample: SubWrapSrc, glide: 0.12, sustain: 0.9, loop: "on", release: 0.25)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.8
+  }
+}
+
+// ReeseWire — ReeseBass fuzz-crushed and compressed — audio-domain acid.
+block ReeseWire {
+  sample ReeseWireSrc = bounce(ReeseBass(), note: C2, beats: 2)
+  track Wire {
+    instrument sampler(sample: ReeseWireSrc, glide: 0.06, sustain: 0.7, loop: "on")
+    insert saturate(mode: "fuzz", drive: 0.55, tone: 0.5)
+    insert comp(thresh: 0.4, ratio: 0.7, attack: 0.01, release: 0.12, makeup: 0.25)
+    volume 0.8
+  }
+}
+
+// FMDust — FMBass bit-dusted and tape-warmed — the lofi convention.
+block FMDust {
+  sample FMDustSrc = bounce(FMBass(), note: C2, beats: 1)
+  track Key {
+    instrument sampler(sample: FMDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.7
+  }
+}
+
+// PluckChop — PluckBass sliced into 8 pads (root+n = slice n at original speed) — the MPC chop.
+block PluckChop {
+  sample PluckChopSrc = bounce(PluckBass(), note: C2, beats: 2)
+  track Chop {
+    instrument sampler(sample: PluckChopSrc, slices: 8, sustain: 0.0, decay: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.7
+  }
+}
+
+// GrowlFuzz — GrowlBass fuzz-crushed and compressed — audio-domain acid.
+block GrowlFuzz {
+  sample GrowlFuzzSrc = bounce(GrowlBass(), note: C2, beats: 1)
+  track Wire {
+    instrument sampler(sample: GrowlFuzzSrc, glide: 0.06, sustain: 0.7, loop: "on")
+    insert saturate(mode: "fuzz", drive: 0.55, tone: 0.5)
+    insert comp(thresh: 0.4, ratio: 0.7, attack: 0.01, release: 0.12, makeup: 0.25)
+    volume 0.8
+  }
+}
+
+// UprightTape — UprightBass bit-dusted and tape-warmed — the lofi convention.
+block UprightTape {
+  sample UprightTapeSrc = bounce(UprightBass(), note: C2, beats: 2)
+  track Key {
+    instrument sampler(sample: UprightTapeSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.75
+  }
+}
+
+// DubGlide — DubBass tail looped and repitched with glide — the 808-sub treatment.
+block DubGlide {
+  sample DubGlideSrc = bounce(DubBass(), note: C1, beats: 2)
+  track Sub {
+    instrument sampler(sample: DubGlideSrc, glide: 0.12, sustain: 0.9, loop: "on", release: 0.25)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.8
+  }
+}
+
+// OctaveRing — OctaveBass ring-modulated into inharmonic metal, tube-warmed.
+block OctaveRing {
+  sample OctaveRingSrc = bounce(OctaveBass(), note: C2, beats: 1)
+  track Metal {
+    instrument sampler(sample: OctaveRingSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.8
+  }
+}

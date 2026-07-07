@@ -1,0 +1,125 @@
+// glitchworks/wrapped/drums — essentials sources bounced to audio and
+// re-instrumentalized: sampler + convention chain in one block. Inherit
+// and add plays:
+//   import { KnockDeep } from "packages/glitchworks_0.1.0/wrapped/drums.forte"
+//   block Line : KnockDeep { track Hit { play … at bars(1..4) } }
+import { Clap, Crash, Kick808, Kick909, KickSub, Ride, Shaker, SnareBrush, SnareTight, Tom } from "../../essentials_0.6.0/instruments/drums.forte"
+
+// KnockDeep — Kick808 transient-shaped, tape-saturated, NY-compressed — the produced hit.
+block KnockDeep {
+  sample KnockDeepSrc = bounce(Kick808(), note: C1, beats: 1)
+  track Hit {
+    instrument sampler(sample: KnockDeepSrc, sustain: 0.0, decay: 0.35)
+    insert transient(attack: 0.8, sustain: 0.35)
+    insert saturate(mode: "tape", drive: 0.5)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.35)
+    volume 0.8
+  }
+}
+
+// SubKick — KickSub tail looped and repitched with glide — the 808-sub treatment.
+block SubKick {
+  sample SubKickSrc = bounce(KickSub(), note: C1, beats: 2)
+  track Sub {
+    instrument sampler(sample: SubKickSrc, glide: 0.12, sustain: 0.9, loop: "on", release: 0.25)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.8
+  }
+}
+
+// PunchKick — Kick909 fuzz bite + parallel crush + sparkle — cuts through any mix.
+block PunchKick {
+  sample PunchKickSrc = bounce(Kick909(), note: C1, beats: 1)
+  track Hit {
+    instrument sampler(sample: PunchKickSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.8
+  }
+}
+
+// CrackTight — SnareTight fuzz bite + parallel crush + sparkle — cuts through any mix.
+block CrackTight {
+  sample CrackTightSrc = bounce(SnareTight(), note: D2, beats: 1)
+  track Hit {
+    instrument sampler(sample: CrackTightSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.8
+  }
+}
+
+// BrushDust — SnareBrush bit-dusted and tape-warmed — the lofi convention.
+block BrushDust {
+  sample BrushDustSrc = bounce(SnareBrush(), note: D2, beats: 1)
+  track Hit {
+    instrument sampler(sample: BrushDustSrc, sustain: 0.75)
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.55)
+    insert saturate(mode: "tape", drive: 0.35, tone: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.7
+  }
+}
+
+// ClapStack — Clap fuzz bite + parallel crush + sparkle — cuts through any mix.
+block ClapStack {
+  sample ClapStackSrc = bounce(Clap(), note: D#2, beats: 1)
+  track Hit {
+    instrument sampler(sample: ClapStackSrc, sustain: 0.0, decay: 0.3)
+    insert transient(attack: 0.85, sustain: 0.3)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.6)
+    insert parcomp(amount: 0.55, drive: 0.65, color: 0.5)
+    insert exciter(amount: 0.25)
+    volume 0.8
+  }
+}
+
+// RideWire — Ride ring-modulated into inharmonic metal, tube-warmed.
+block RideWire {
+  sample RideWireSrc = bounce(Ride(), note: D#3, beats: 2)
+  track Metal {
+    instrument sampler(sample: RideWireSrc, sustain: 0.6)
+    insert ringmod(freq: 0.55, mix: 0.45)
+    insert saturate(mode: "tube", drive: 0.4)
+    insert delay(time: 0.22, fdbk: 0.3, mix: 0.2)
+    volume 0.5
+  }
+}
+
+// ShakerChop — Shaker sliced into 8 pads (root+n = slice n at original speed) — the MPC chop.
+block ShakerChop {
+  sample ShakerChopSrc = bounce(Shaker(), note: A2, beats: 2)
+  track Chop {
+    instrument sampler(sample: ShakerChopSrc, slices: 8, sustain: 0.0, decay: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.55
+  }
+}
+
+// TomBoom — Tom tail looped and repitched with glide — the 808-sub treatment.
+block TomBoom {
+  sample TomBoomSrc = bounce(Tom(), note: C1, beats: 2)
+  track Sub {
+    instrument sampler(sample: TomBoomSrc, glide: 0.12, sustain: 0.9, loop: "on", release: 0.25)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.8
+  }
+}
+
+// CrashBloom — Crash played backwards into a crushed reverb — the vapor texture.
+block CrashBloom {
+  sample CrashBloomSrc = bounce(Crash(), note: C3, beats: 3)
+  track Pad {
+    instrument sampler(sample: CrashBloomSrc, reverse: "on", sustain: 0.85, release: 0.4)
+    insert reverb(size: 0.7, decay: 0.65, mix: 0.4)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.35)
+    volume 0.5
+  }
+}
