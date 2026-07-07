@@ -115,3 +115,49 @@ impl OnePole {
         self.z1
     }
 }
+
+/// A tuned two-pole modal resonator: excited by an input (a noise burst or
+/// impulse), it RINGS at `freq` for a time set by `decay` — one vibrational
+/// mode of a drum, bell, plate or string. Stack several at inharmonic
+/// frequencies and you have physical-modeling percussion, no samples.
+/// Deterministic: pure difference equation.
+#[derive(Clone)]
+pub struct Resonator {
+    sr: f32,
+    b1: f32,
+    b2: f32,
+    a0: f32,
+    y1: f32,
+    y2: f32,
+}
+
+impl Resonator {
+    pub fn new(sr: f32) -> Self {
+        let mut r = Self { sr, b1: 0.0, b2: 0.0, a0: 0.0, y1: 0.0, y2: 0.0 };
+        r.set(440.0, 0.3);
+        r
+    }
+
+    /// `freq` in Hz, `ring` in seconds to −60 dB (the mode's decay time).
+    #[inline]
+    pub fn set(&mut self, freq: f32, ring: f32) {
+        // pole radius from the ring time: r = 10^(-3 / (ring * sr))
+        let ring = ring.max(0.002);
+        let radius = crate::dmath::exp(-6.9078 / (ring * self.sr)); // ln(1000)=6.9078
+        let radius = radius.clamp(0.0, 0.99995);
+        let theta = std::f32::consts::TAU * (freq.clamp(20.0, self.sr * 0.49)) / self.sr;
+        self.b1 = 2.0 * radius * crate::dmath::cos(theta);
+        self.b2 = -radius * radius;
+        // input gain ~ (1 - r²) keeps the resonant peak near unity regardless
+        // of ring length, so long and short modes sit at the same level
+        self.a0 = 1.0 - radius * radius;
+    }
+
+    #[inline]
+    pub fn process(&mut self, x: f32) -> f32 {
+        let y = self.a0 * x + self.b1 * self.y1 + self.b2 * self.y2;
+        self.y2 = self.y1;
+        self.y1 = y;
+        y
+    }
+}

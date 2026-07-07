@@ -485,3 +485,8 @@ Messages use musicians' vocabulary, are in Japanese, and carry positions. "What 
   (DECISION-S2), first-class expression of section repetition (DECISION-S3),
   full unit-type checking (Hz/dB/ms), explicit `route` routing,
   actual verification of ed25519 signatures. (The effect device DSL is implemented per §4.5)
+
+
+### 4.5.1 `resonator` (modal / physical modeling)
+
+`resonator(in:, freq:, ring:, fm:)` — a tuned two-pole modal resonator. Excited by `in` (a short noise burst or impulse) it RINGS at `freq` (0..1, mapped 30 Hz..18 kHz like a filter cutoff) for `ring` seconds (0..1 -> 3 ms..1.2 s to -60 dB). `fm` shifts the frequency up to +-4 octaves (pitch-drop envelopes = a drum head detuning). Stack several at inharmonic frequencies for drums, bells, plates and plucks — physical-modeling percussion with no samples. Deterministic (a pure difference equation).

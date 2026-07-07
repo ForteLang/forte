@@ -87,6 +87,12 @@ fn prim(name: &str) -> Option<Prim> {
             params: &[("cutoff", 0, 0.65), ("reso", 1, 0.2)],
             options: &[],
         },
+        "resonator" => Prim {
+            kind: GridModuleKind::Resonator,
+            inputs: &[("in", 0, None), ("fm", 1, None)],
+            params: &[("freq", 0, 0.5), ("ring", 1, 0.3)],
+            options: &[],
+        },
         "gain" => Prim {
             kind: GridModuleKind::Gain,
             inputs: &[("in", 0, None), ("mod", 1, None)],
