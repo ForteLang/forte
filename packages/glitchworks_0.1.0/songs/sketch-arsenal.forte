@@ -1,0 +1,151 @@
+// Sketch: arsenal — audition piece, NOT an album track, but ARRANGED like
+// one: every machine in chopworks at once, dense, with the groove refusing
+// to repeat itself. The kick is not a pattern — it is a LINE with fills
+// (ratchets, and bars where the kick eats itself as 60 ms choked
+// fragments). Eleven layers cover the spectrum: sub floor (pumped out of
+// the kick's way), chopped break, dragged snare, carved keys chords, a
+// ghost choir and its reversed answer, a scrubbed string record, an acid
+// line re-deciding itself, a pad that exists only where the break cuts,
+// a reversed crash swelling into the drop, a riser lifting bar 8, and a
+// hiss bed keeping the air analog. Ends with the whole production held as
+// a chord, pitch ridden down, power cut.
+//   bars 1-4   groove: kick line + break + sub + carved keys (bar-4 fill)
+//   bars 5-8   ghosts enter; bar-8: fragment roll + stutter + riser + crash
+//   bars 9-12  drop: acid + scrub + keyed pad join, keys gate opens
+//   bars 13-16 peak: break tightens, acid flips harder; bar 16 = the cut
+import { ScrubStrings, GhostChoir, AcidFlip, BreakMachine, KeysCarve, DustBassLoop, GlassKeyPad, KickFlip, MomentKit } from "../wrapped/chopworks.forte"
+import { SnareModal } from "../instruments/modal.forte"
+import { CrashBloom } from "../wrapped/drums.forte"
+import { Hiss } from "../instruments/textures.forte"
+
+song "Sketch Arsenal" {
+  desc "Audition sketch: the whole chopworks rack arranged dense — a kick line with fragment fills, eleven layers, a drop, a tightening peak and a power-cut ending. Not an album track."
+  artist "Forte Essentials"
+  tempo 90bpm
+  swing 0.56
+  master 1.2
+  key C minor
+
+  // ---- the kick line: groove + the bars where it breaks ----
+  block Drums : KickFlip {
+    track Main {
+      play beat`x--- ---- x-x- ----` at bars(1..3)
+      play beat`x--- --x- x-x- ---x*3` at bars(4..4)
+      play beat`x--- ---- x-x- ----` at bars(5..7)
+      play beat`x--- --x- x-x- ----` at bars(9..11)
+      play beat`x--- --x- x-x- x*4---` at bars(12..12)
+      play beat`x--- --x- x-x- ----` at bars(13..15)
+    }
+    track Chop {
+      play notes`_:3 D3:0.25 F3:0.25 C3:0.25 A3:0.25` at bars(4..4)
+      play notes`_:2 C3:0.25 D3:0.25 E3:0.25 F3:0.25 G3:0.25 A3:0.25 B3:0.25 C4:0.25` at bars(8..8)
+      play notes`_:3 G3:0.125 F3:0.125 E3:0.125 D3:0.125 C3:0.5` at bars(12..12)
+      play notes`C3:0.25 _:0.25 D3:0.25 _:0.25 F3:0.25 _:0.25 G3:0.25 _:0.25 A3:0.5 _:0.5 C3:0.25 D3:0.25 _:0.5` at bars(16..16)
+    }
+  }
+
+  // ---- the break: busy chop, stutter fill at 8, tightening at the peak ----
+  block Break : BreakMachine {
+    track Cut {
+      automate stutter.mix from 0.0 to 0.7 over bars(8..8)
+      automate stutter.mix from 0.7 to 0.0 over bars(9..9)
+      automate decay from 0.5 to 0.15 over bars(13..16)
+      play notes`C3:0.25 C#3:0.25 _:0.25 E3:0.25 G3:0.5 _:0.5 A#3:0.25 C3:0.25 D3:0.25 _:0.25 F3:0.5 _:0.5` at bars(1..8)
+      play notes`C3:0.25 D3:0.25 C#3:0.25 _:0.25 G3:0.25 G#3:0.25 _:0.5 A#3:0.25 _:0.25 C3:0.25 C#3:0.25 F3:0.25 _:0.25 D3:0.25 _:0.25` at bars(9..15)
+    }
+  }
+
+  // ---- the snare that drags behind the machine ----
+  block SnareTop {
+    track S {
+      instrument SnareModal(wires: 0.7, shell: 0.45)
+      insert saturate(mode: "fuzz", drive: 0.3, tone: 0.55)
+      insert parcomp(amount: 0.5, drive: 0.55, color: 0.45)
+      volume 0.8
+      play late(beat`---- x--- ---- x---`, by: 0.06) at bars(1..15)
+      play late(beat`---- ..-. ---- .-..`, by: 0.04) at bars(9..15)
+    }
+  }
+
+  // ---- the floor: sub pumped out of the kick's way ----
+  block Floor : DustBassLoop {
+    track Floor {
+      insert duck(from: Drums, amount: 0.85, attack: 0.02, release: 0.15, shape: 0.7)
+      play notes`C2~:8 D#2~:4 G1~:4` at bars(1..8)
+      play notes`C2~:8 A#1~:4 G1~:4` at bars(9..16)
+    }
+  }
+
+  // ---- carved keys: parallel-harmony chords, gate opening in the drop ----
+  block Keys : KeysCarve {
+    track Keys {
+      automate gate.duty from 0.3 to 0.65 over bars(9..12)
+      play notes`C3~:8 G#2~:4 A#2~:4` at bars(1..15)
+    }
+  }
+
+  // ---- the voice that was never sung, and its reversed answer ----
+  block Ghost : GhostChoir {
+    track Vox { play notes`_:1.5 C3:0.75 _:1.75 D3:0.5 _:3.5` at bars(5..16) }
+    track Answer { play notes`_:3 E3:0.5 _:0.5` at bars(7..16) }
+  }
+
+  // ---- the scrubbed record, 8ths riding the drop ----
+  block Air : ScrubStrings {
+    track Scrub { play beat`x-x- x-x- x-x- x-x-` at bars(9..16) }
+  }
+
+  // ---- the acid line re-deciding itself, harder at the peak ----
+  block Acid : AcidFlip {
+    track Acid {
+      automate flip.amount from 0.0 to 0.5 over bars(13..16)
+      play notes`C2:0.25 D2:0.25 _:0.25 D#2:0.25 G2:0.25 _:0.25 A2:0.25 C2:0.25 _:0.5 F2:0.25 D#2:0.25 _:1` at bars(9..16)
+    }
+  }
+
+  // ---- the pad that exists only where the break cuts (keyed sidechain) ----
+  block KeyPad : GlassKeyPad {
+    track Pad {
+      insert duck(from: Break, mode: "key", amount: 1.0, attack: 0.08, release: 0.18, shape: 0.7)
+      play notes`C3~:16` at bars(9..16)
+    }
+  }
+
+  // ---- transitions: reversed crash into the drop, riser lifting bar 8 ----
+  block Bloom : CrashBloom {
+    track Pad { play notes`_:2 C3~:2` at bars(8..8) }
+  }
+  block Lift : MomentKit {
+    track Rack {
+      insert tapestop(amount: 0.0)
+      play notes`_:1 C3~:3` at bars(8..8)
+      // the finale: the whole production held as a chord, pitch ridden
+      // down, power cut
+      play notes`[C4 G4]~:4` at bars(16..16)
+      automate pitch from 0.5 to 0.396 over bars(16..16)
+      automate tapestop.amount from 0.0 to 1.0 over bars(16..16)
+    }
+  }
+
+  // ---- the air ----
+  block Bed {
+    track H {
+      instrument Hiss(body: 0.35)
+      volume 0.15
+      play notes`C4~:16` at bars(1..16)
+    }
+  }
+
+  play Drums at bars(1..16)
+  play Break at bars(1..16)
+  play SnareTop at bars(1..16)
+  play Floor at bars(1..16)
+  play Keys at bars(1..16)
+  play Ghost at bars(1..16)
+  play Air at bars(1..16)
+  play Acid at bars(1..16)
+  play KeyPad at bars(1..16)
+  play Bloom at bars(1..16)
+  play Lift at bars(1..16)
+  play Bed at bars(1..16)
+}
