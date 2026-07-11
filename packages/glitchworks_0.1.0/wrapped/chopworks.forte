@@ -1,0 +1,256 @@
+// glitchworks/chopworks — CHOP MACHINES: sources bounced to audio and wired
+// into sampler instruments whose cut is ENGINEERED, not just played. The
+// difference from wrapped/*: every machine here has its chop parameters in
+// motion — modulate steps the sample window, automate tightens the decay,
+// a keyed duck carves a held pad with another track's pattern. This is the
+// audio-domain mixing-engineer's rack, as instruments.
+//
+// The engineering surface (all automate/modulate targets, case-insensitive):
+//   sampler:  start end pitch decay sustain release glide slices choke vary
+//   inserts:  <name>.<param>, e.g. gate.duty, stutter.mix, tapestop.amount,
+//             duck.amount, vinyl.wow, crush.mix …
+// Recipes (write these at the use site):
+//   automate decay from 0.6 to 0.08 over rise   // the cut TIGHTENS
+//   automate tapestop.amount from 0 to 1 over fill  // power-cut ending
+//   modulate pitch with steps(seq: "0.5 0.5 0.75 0.25", every: "1/4", amount: 0.5) as flip
+//   insert duck(from: Hats, mode: "key", amount: 1.0)  // pad exists only
+//   // where the hats hit — the sidechain CHOP (duck mode "duck" = the pump)
+//
+// Slice math: a bounce carries +2 beats of tail, so a 4-beat source chops
+// clean with end: 0.667, an 8-beat source with end: 0.8.
+// Scrub math: the window is [start, end] resolved at NOTE-ON — retrigger
+// (16ths) while start/end step TOGETHER, same seq offset by the window
+// width, or the window collapses.
+import { JunoStrings } from "../../essentials_0.6.0/instruments/juno60.forte"
+import { ChoirPad, GlassPad } from "../../essentials_0.6.0/instruments/pads.forte"
+import { Bass303 } from "../../essentials_0.6.0/instruments/tb303.forte"
+import { Kick808, SnareTight, HatClosed, HatOpen, Rim } from "../../essentials_0.6.0/instruments/drums.forte"
+import { TinePiano, UprightBass } from "../instruments/modal.forte"
+
+// ---- ScrubStrings — a string chord scrubbed like a hand on the platter ----
+// The record: one lush minor-9 strings chord. The machine: a small looped
+// window that STEPS across the record every 8th while you retrigger it.
+// Inherit and play 8th/16th retrigs; automate wide.amount for drama.
+block ScrubStrings {
+  sample ScrubStringsSrc = bounce(JunoStrings(), note: C3, beats: 4)
+  track Scrub {
+    // modulators ADD around the base (± amount), so: window position w =
+    // base ± 0.25 — the seq value is 2w, and running the SAME seq on start
+    // (base 0.25) and end (base 0.39) keeps the window width at 0.14
+    instrument sampler(sample: ScrubStringsSrc, start: 0.25, end: 0.39, loop: "on", sustain: 0.85, decay: 0.2, release: 0.06, choke: "on", vary: 0.08)
+    modulate start with steps(seq: "0.0 0.36 0.72 0.2 0.56 0.92 0.4 0.1", every: "1/8", amount: 0.25)
+    modulate end  with steps(seq: "0.0 0.36 0.72 0.2 0.56 0.92 0.4 0.1", every: "1/8", amount: 0.25)
+    insert vinyl(wow: 0.3, crackle: 0.25, hiss: 0.15, dust: 0.25)
+    insert saturate(mode: "tape", drive: 0.3)
+    volume 0.75
+  }
+}
+
+// ---- GhostChoir — the Burial move: a "voice" that was never sung ----------
+// A choir chord pitched DOWN a fourth in the audio domain (formants drag),
+// big vary so no two cuts match, crackle baked in. Play slice indices off
+// C3; the reverse ghost answers on a second track.
+block GhostChoir {
+  sample GhostChoirSrc = bounce(ChoirPad(), note: C3, beats: 4)
+  track Vox {
+    instrument sampler(sample: GhostChoirSrc, slices: 8, end: 0.667, choke: "on", vary: 0.3, pitch: 0.396, sustain: 0.0, decay: 0.55, release: 0.1)
+    insert vinyl(wow: 0.4, crackle: 0.4, hiss: 0.25, dust: 0.35)
+    insert reverb(size: 0.6, decay: 0.5, mix: 0.25)
+    volume 0.7
+  }
+  track Answer {
+    instrument sampler(sample: GhostChoirSrc, slices: 8, end: 0.667, choke: "on", vary: 0.35, pitch: 0.604, reverse: "on", sustain: 0.0, decay: 0.35)
+    insert crush(bits: 0.35, rate: 0.25, mix: 0.4)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.35)
+    volume 0.45
+  }
+}
+
+// ---- AcidFlip — a 303 line that keeps getting re-decided ------------------
+// The record: one bar of acid. The machine: 16 choked slices with the pad
+// PITCH stepping a pre-wired flip (named `flip`: automate flip.amount from
+// 0 to 0.5 over a rise and the line re-decides itself harder every bar).
+block AcidFlip {
+  sample AcidFlipSrc = bounce(Bass303(cutoff: 0.55, reso: 0.75, envmod: 0.6), note: C2, beats: 4)
+  track Acid {
+    instrument sampler(sample: AcidFlipSrc, slices: 16, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.4)
+    modulate pitch with steps(seq: "0.5 0.5 0.625 0.5 0.375 0.5 0.75 0.5", every: "1/8", amount: 0.0) as flip
+    insert saturate(mode: "fuzz", drive: 0.35, tone: 0.6)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    volume 0.8
+  }
+}
+
+// ---- BreakMachine — the busy bar, canned ----------------------------------
+// The record: a dense 1-bar kit phrase (accents and ghosts included). The
+// machine: 16 choked pads, drifting a few cents each hit. Play slice
+// indices off C3; automate decay downward to tighten the cut as a section
+// builds; push stutter.mix up for fills.
+block BreakMachine {
+  block BreakSrcPhrase {
+    track K { instrument Kick808(decay: 0.35) volume 0.95
+      play beat`x--- --x- --x- ----` at bars(1..1) }
+    track S { instrument SnareTight(snap: 0.7) volume 0.9
+      play late(beat`---- X--. ---- x-.X`, by: 0.03) at bars(1..1) }
+    track HC { instrument HatClosed volume 0.5
+      play humanize(beat`x-x- x-xx x-x- xx-x`, time: 0.01, vel: 16, seed: 9) at bars(1..1) }
+    track HO { instrument HatOpen volume 0.4
+      play beat`--x- ---- --x- ----` at bars(1..1) }
+    track R { instrument Rim volume 0.35
+      play beat`---- --x- ---- -x--` at bars(1..1) }
+  }
+  sample BreakMachineSrc = bounce(BreakSrcPhrase, note: C3, beats: 4)
+  track Cut {
+    instrument sampler(sample: BreakMachineSrc, slices: 16, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.5)
+    insert transient(attack: 0.75, sustain: 0.4)
+    insert saturate(mode: "tape", drive: 0.35)
+    insert stutter(beats: 0.25, mix: 0.0)
+    insert parcomp(amount: 0.5, drive: 0.55, color: 0.4)
+    volume 0.9
+  }
+}
+
+// ---- KeysCarve — comping keys carved by a gate you can steer --------------
+// The record: a tine-piano m9 chord. The machine: a held loop pushed
+// through a hard tempo gate — automate gate.duty (how much of each 16th
+// survives) and gate.depth live; that IS the chop, as a mixing move.
+block KeysCarve {
+  block KeysCarveSrcPhrase {
+    track P { instrument TinePiano(bell: 0.4) volume 0.85
+      play notes`[C3 D#3 G3 A#3 D4]:4` at bars(1..1) }
+  }
+  sample KeysCarveSrc = bounce(KeysCarveSrcPhrase, note: C3, beats: 4)
+  track Keys {
+    instrument sampler(sample: KeysCarveSrc, end: 0.667, loop: "on", sustain: 1.0, release: 0.12, vary: 0.06)
+    insert gate(depth: 0.95, beats: 0.25, duty: 0.4)
+    insert vinyl(wow: 0.25, crackle: 0.2, hiss: 0.12, dust: 0.2)
+    insert delay(time: 0.28, fdbk: 0.3, mix: 0.18)
+    volume 0.7
+  }
+}
+
+// ---- DustBassLoop — an upright bass note as a looped, breathing floor -----
+// The record: one long upright note. The machine: a tight loop repitched by
+// a slow LFO wobble (named `sway`), glide smoothing the joins — a bass that
+// never plays the same twice. Keyed-duck it from your kick at the use site.
+block DustBassLoop {
+  block DustBassSrcPhrase {
+    track B { instrument UprightBass(body: 0.6) volume 0.95
+      play notes`C2~:4` at bars(1..1) }
+  }
+  sample DustBassSrc = bounce(DustBassSrcPhrase, note: C2, beats: 4)
+  track Floor {
+    instrument sampler(sample: DustBassSrc, start: 0.02, end: 0.3, loop: "on", sustain: 1.0, release: 0.2, glide: 0.1, vary: 0.05)
+    modulate pitch with lfo(rate: 0.05, amount: 0.02, shape: "sine") as sway
+    insert saturate(mode: "tape", drive: 0.4)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
+    volume 0.85
+  }
+}
+
+// ---- GlassKeyPad — the pad half of the sidechain CHOP ---------------------
+// A held glass pad, vinyl-warmed, MEANT to be carved by a key track:
+//   block My : GlassKeyPad { track Pad {
+//     insert duck(from: <your hat/perc block>, mode: "key", amount: 1.0,
+//                 attack: 0.1, release: 0.3, shape: 0.7) } }
+// (duck.from resolves against the song's tracks, so the wiring lives at the
+// use site, not here.)
+block GlassKeyPad {
+  sample GlassKeyPadSrc = bounce(GlassPad(), note: C3, beats: 4)
+  track Pad {
+    instrument sampler(sample: GlassKeyPadSrc, end: 0.667, loop: "on", sustain: 1.0, release: 0.25, vary: 0.04)
+    insert vinyl(wow: 0.35, crackle: 0.25, hiss: 0.18, dust: 0.3)
+    insert width(amount: 0.85)
+    volume 0.7
+  }
+}
+
+// ---- MomentKit — a produced MOMENT as one playable instrument -------------
+// The Bitwig-rack move, in the bounce idiom. Three component sounds are
+// PRODUCED with full insert engineering (a JUNO pitch-riser through 20 ms
+// delay, a closing filter and reverb; a kick; a snare on an 80 ms echo),
+// each bounced alone AND all together. Then ONE kit plays them:
+//   C1 = the kick moment raw      C2 = the snare-echo moment raw
+//   C3 = the riser moment raw     any other key = the WHOLE moment,
+//   repitched from C4 in the audio domain — formants, echo tails and
+//   reverb drag along with the pitch, which no re-synthesis can fake.
+// `pitch` transposes the wrap layer LIVE: automate it and held notes bend.
+block MomentKit {
+  // -- component: the JUNO pitch riser, engineered --
+  block MomentRiserSrc {
+    track R {
+      // loop: the rising pitch reads up to 4x faster and would exhaust
+      // the data mid-note — looping keeps the riser alive all the way up
+      instrument sampler(sample: MomentJunoS, loop: "on", gain: 1.0, sustain: 1.0, release: 0.3)
+      modulate pitch with adsr(a: 0.6, d: 0.2, s: 1.0, amount: 0.5)
+      insert delay(time: 0.02, fdbk: 0.45, mix: 0.35)
+      insert filter(type: "lp", cutoff: 0.9, reso: 0.35)
+      automate filter.cutoff from 0.9 to 0.3 over bars(1..1)
+      insert reverb(size: 0.7, decay: 0.6, mix: 0.4)
+      volume 1.0
+      play notes`C3~:3` at bars(1..1)
+    }
+  }
+  sample MomentJunoS = bounce(JunoStrings(), note: C3, beats: 3)
+  // -- component: the kick, produced --
+  block MomentKickSrc {
+    track K {
+      instrument Kick808(decay: 0.4, punch: 0.6)
+      insert saturate(mode: "tape", drive: 0.45)
+      insert parcomp(amount: 0.5, drive: 0.6, color: 0.35)
+      volume 0.95
+      play beat`x--- ---- ---- ----` at bars(1..1)
+    }
+  }
+  // -- component: the snare on an 80 ms echo --
+  block MomentSnareSrc {
+    track S {
+      instrument SnareTight(snap: 0.7)
+      insert delay(time: 0.08, fdbk: 0.6, mix: 0.5)
+      insert saturate(mode: "fuzz", drive: 0.35, tone: 0.55)
+      insert exciter(amount: 0.25)
+      volume 0.95
+      play beat`x--- ---- ---- ----` at bars(1..1)
+    }
+  }
+  // -- the ensemble: all three AT ONCE — the moment itself --
+  block MomentAllSrc {
+    track R {
+      // loop: the rising pitch reads up to 4x faster and would exhaust
+      // the data mid-note — looping keeps the riser alive all the way up
+      instrument sampler(sample: MomentJunoS, loop: "on", gain: 1.0, sustain: 1.0, release: 0.3)
+      modulate pitch with adsr(a: 0.6, d: 0.2, s: 1.0, amount: 0.5)
+      insert delay(time: 0.02, fdbk: 0.45, mix: 0.35)
+      insert filter(type: "lp", cutoff: 0.9, reso: 0.35)
+      automate filter.cutoff from 0.9 to 0.3 over bars(1..1)
+      insert reverb(size: 0.7, decay: 0.6, mix: 0.4)
+      volume 1.0
+      play notes`C3~:3` at bars(1..1)
+    }
+    track K {
+      instrument Kick808(decay: 0.4, punch: 0.6)
+      insert saturate(mode: "tape", drive: 0.45)
+      insert parcomp(amount: 0.5, drive: 0.6, color: 0.35)
+      volume 0.95
+      play beat`x--- ---- ---- ----` at bars(1..1)
+    }
+    track S {
+      instrument SnareTight(snap: 0.7)
+      insert delay(time: 0.08, fdbk: 0.6, mix: 0.5)
+      insert saturate(mode: "fuzz", drive: 0.35, tone: 0.55)
+      insert exciter(amount: 0.25)
+      volume 0.95
+      play beat`x--- ---- ---- ----` at bars(1..1)
+    }
+  }
+  sample MomentKickS = bounce(MomentKickSrc, note: C1, beats: 2)
+  sample MomentSnareS = bounce(MomentSnareSrc, note: C2, beats: 2)
+  sample MomentRiserS = bounce(MomentRiserSrc, note: C3, beats: 4)
+  sample MomentAllS = bounce(MomentAllSrc, note: C4, beats: 4)
+  track Rack {
+    instrument kit(C1: MomentKickS, C2: MomentSnareS, C3: MomentRiserS, wrap: MomentAllS, sustain: 1.0, release: 0.35)
+    insert comp(thresh: 0.5, ratio: 0.5, makeup: 0.15)
+    volume 0.85
+  }
+}
+

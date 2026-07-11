@@ -177,7 +177,7 @@ impl DeviceKind {
                 "Gain", "Attack", "Decay", "Sustain", "Release", "Pitch", "Start", "End",
                 "Loop", "Reverse", "Glide", "Slices", "Choke", "Vary",
             ],
-            DeviceKind::Kit => &["Gain", "Attack", "Decay", "Sustain", "Release"],
+            DeviceKind::Kit => &["Gain", "Attack", "Decay", "Sustain", "Release", "Pitch"],
             DeviceKind::PolyMesh => &[],
             DeviceKind::Arpeggiator => &["Rate", "Octaves", "Mode"],
             DeviceKind::NoteTranspose => &["Semi"],
@@ -201,7 +201,7 @@ impl DeviceKind {
             DeviceKind::RingMod => &["Freq", "Mix"],
             DeviceKind::TapeStop => &["Amount"],
             DeviceKind::Vinyl => &["Wow", "Crackle", "Hiss", "Dust"],
-            DeviceKind::Duck => &["Amount", "Attack", "Release", "Shape"],
+            DeviceKind::Duck => &["Amount", "Attack", "Release", "Shape", "Mode"],
             DeviceKind::MeshFx => &[],
         }
     }
@@ -219,7 +219,8 @@ impl DeviceKind {
             DeviceKind::Sampler => {
                 vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             }
-            DeviceKind::Kit => vec![0.8, 0.01, 0.3, 1.0, 0.25],
+            // Pitch 0.5 = centre; transposes the WRAP layer only (±24 semi)
+            DeviceKind::Kit => vec![0.8, 0.01, 0.3, 1.0, 0.25, 0.5],
             DeviceKind::PolyMesh => Vec::new(),
             DeviceKind::Arpeggiator => vec![0.55, 0.0, 0.0], // 1/8, 1 octave, up
             DeviceKind::NoteTranspose => vec![0.5],          // centre = 0 semitones
@@ -247,8 +248,9 @@ impl DeviceKind {
             // A bare vinyl() is already a record: light warble, soft ticks,
             // a floor of hiss, a touch of rolloff
             DeviceKind::Vinyl => vec![0.25, 0.3, 0.15, 0.25],
-            // Amount 0.85 (deep duck), fast attack, medium release, curved shape
-            DeviceKind::Duck => vec![0.85, 0.3, 0.3, 0.6],
+            // Amount 0.85 (deep duck), fast attack, medium release, curved
+            // shape; Mode 0 = duck (pump), 1 = key (gate opens on triggers)
+            DeviceKind::Duck => vec![0.85, 0.3, 0.3, 0.6, 0.0],
             DeviceKind::MeshFx => Vec::new(),
         }
     }

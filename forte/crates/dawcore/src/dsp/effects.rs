@@ -737,6 +737,12 @@ pub struct Duck {
     pub attack: f32,  // seconds to reach the ducked floor
     pub release: f32, // seconds to recover to unity
     pub shape: f32,   // 0 = linear recovery, 1 = exponential (snappy)
+    /// keyed-gate mode: the polarity flips — SILENT by default, each
+    /// trigger slams the gate OPEN over `attack`, then it falls back to
+    /// the floor over `release`. Audio exists only where the key track
+    /// plays: the sidechain CHOP (pads carved by a hat pattern), where
+    /// plain duck mode is the sidechain PUMP.
+    pub key: bool,
     /// samples since the last trigger, for the envelope
     since: f32,
 }
@@ -753,6 +759,7 @@ impl Duck {
             attack: 0.02,
             release: 0.18,
             shape: 0.6,
+            key: false,
             since: f32::MAX,
         }
     }
@@ -793,7 +800,9 @@ impl Duck {
             };
             floor + (1.0 - floor) * curve
         };
-        self.gain = target;
+        // key mode mirrors the envelope: idle sits at the floor and the
+        // trigger opens toward unity instead of dipping away from it
+        self.gain = if self.key { 1.0 + floor - target } else { target };
         self.since += 1.0;
         self.counter = self.counter.wrapping_add(1);
         (l * self.gain, r * self.gain)

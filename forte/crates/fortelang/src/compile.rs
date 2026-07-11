@@ -175,13 +175,17 @@ pub fn compile(
         mini.tempo = p.tempo;
         mini.time_sig = p.time_sig;
         if let Some(block) = block_src {
+            // bounces resolved SO FAR are visible (declaration order), so a
+            // phrase bounce can itself play earlier bounces — resampling
+            // chains: bounce a source, wrap it, produce it, bounce the
+            // production, wrap THAT
             let tmp_env = Env {
                 beats_per_bar,
                 swing,
                 tempo: p.tempo,
                 assets,
                 user_devices: &user_devices,
-                bounces: &no_bounces,
+                bounces: &bounces,
             };
             let mut sub_stack = vec![block.name.clone()];
             let lowered = lower_body(
@@ -2048,49 +2052,74 @@ fn build_instrument(
         // kit(C2: kickTake, D2: snareTake, gain: 0.9)
         "kit" => {
             let mut dev = Device::new(DeviceKind::Kit);
+            // pad values and the wrap layer accept a recorded take OR a
+            // bounce-to-sample name — a pad can be a whole produced MOMENT
+            // (a block bounced with its insert chains), not just one hit
+            let resolve = |name: &str, pos: Pos| -> Result<SampleSource, Diag> {
+                if let Some(info) = assets.get(name) {
+                    return Ok(SampleSource::Asset(info.key.clone()));
+                }
+                if let Some((key, _root)) = bounces.get(name) {
+                    return Ok(SampleSource::Asset(key.clone()));
+                }
+                let mut names: Vec<&str> = assets
+                    .keys()
+                    .map(String::as_str)
+                    .chain(bounces.keys().map(String::as_str))
+                    .collect();
+                names.sort();
+                Err(Diag::new(
+                    "E-PROV-003",
+                    pos,
+                    format!(
+                        "'{name}' は import した録音でも bounce サンプルでもありません(あるもの: {})",
+                        if names.is_empty() { "なし".into() } else { names.join(", ") }
+                    ),
+                ))
+            };
             for (key, arg) in &call.args {
-                if let Ok(p) = music::parse_pitch(key, arg.pos()) {
+                if key == "wrap" {
+                    // the RACK fallback: every unmapped key plays this
+                    // sample repitched from its root; `pitch` bends it live
                     let Arg::Ident(name, pos) = arg else {
                         return Err(Diag::new(
                             "E-TYPE-004",
                             arg.pos(),
-                            format!("kit.{key} は import した録音の名前で指定します"),
+                            "kit.wrap は録音か bounce サンプルの名前で指定します".to_string(),
                         ));
                     };
-                    let Some(info) = assets.get(name) else {
-                        let mut names: Vec<&str> = assets.keys().map(String::as_str).collect();
-                        names.sort();
+                    dev.sample = resolve(name, *pos)?;
+                } else if let Ok(p) = music::parse_pitch(key, arg.pos()) {
+                    let Arg::Ident(name, pos) = arg else {
                         return Err(Diag::new(
-                            "E-PROV-003",
-                            *pos,
-                            format!(
-                                "録音アセット '{name}' が import されていません(あるもの: {})",
-                                names.join(", ")
-                            ),
+                            "E-TYPE-004",
+                            arg.pos(),
+                            format!("kit.{key} は録音か bounce サンプルの名前で指定します"),
                         ));
                     };
-                    dev.kit.push((p, SampleSource::Asset(info.key.clone())));
+                    dev.kit.push((p, resolve(name, *pos)?));
                 } else {
                     set_param(
                         &mut dev,
                         key,
                         arg,
-                        &[("gain", 0), ("attack", 1), ("decay", 2), ("sustain", 3), ("release", 4)],
+                        &[("gain", 0), ("attack", 1), ("decay", 2), ("sustain", 3),
+                          ("release", 4), ("pitch", 5)],
                         &[],
                         call,
                     )?;
                 }
             }
-            if dev.kit.is_empty() {
+            if dev.kit.is_empty() && dev.sample == SampleSource::None {
                 return Err(Diag::new(
                     "E-DEV-004",
                     call.pos,
-                    "kit には少なくとも 1 つのパッドが必要です(例: kit(C2: kickTake))",
+                    "kit には少なくとも 1 つのパッドか wrap が必要です(例: kit(C2: kickTake) / kit(wrap: MomentTake))",
                 ));
             }
             dev.kit.sort_by_key(|(p, _)| *p);
-            // beat literals trigger the lowest pad
-            let root = dev.kit[0].0;
+            // beat literals trigger the lowest pad (or C2 on a wrap-only kit)
+            let root = dev.kit.first().map(|(p, _)| *p).unwrap_or(48);
             Ok((dev, root))
         }
         "prisma" => {
@@ -2339,11 +2368,27 @@ fn build_duck(call: &Call) -> Result<(Device, String), Diag> {
             ("attack", Arg::Num(n, pos)) => dev.params[1] = validate01(*n, "duck.attack", *pos)?,
             ("release", Arg::Num(n, pos)) => dev.params[2] = validate01(*n, "duck.release", *pos)?,
             ("shape", Arg::Num(n, pos)) => dev.params[3] = validate01(*n, "duck.shape", *pos)?,
+            // mode "duck" = pump (dip on triggers), "key" = the sidechain
+            // CHOP: silent by default, the gate opens only on the key
+            // track's hits
+            ("mode", Arg::Str(s, pos)) => {
+                dev.params[4] = match s.to_ascii_lowercase().as_str() {
+                    "duck" => 0.0,
+                    "key" => 1.0,
+                    other => {
+                        return Err(Diag::new(
+                            "E-DUCK-001",
+                            *pos,
+                            format!("duck.mode に '{other}' は使えません(duck / key)"),
+                        ))
+                    }
+                };
+            }
             (other, arg) => {
                 return Err(Diag::new(
                     "E-DUCK-001",
                     arg.pos(),
-                    format!("duck() に '{other}' という引数はありません(from, amount, attack, release, shape)"),
+                    format!("duck() に '{other}' という引数はありません(from, amount, attack, release, shape, mode)"),
                 ))
             }
         }

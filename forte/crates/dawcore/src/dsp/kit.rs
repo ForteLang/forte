@@ -1,6 +1,13 @@
-//! Kit: a pitch → sample map (drum kit built from recorded takes). Each pad
-//! plays its sample at natural speed — no repitching — through the shared
-//! amplitude envelope. `kit(C2: kickTake, D2: snareTake, …)` in the language.
+//! Kit: a pitch → sample map (drum kit built from recorded takes or bounced
+//! composites). Each pad plays its sample at natural speed — no repitching —
+//! through the shared amplitude envelope. `kit(C2: kickTake, …)` in the
+//! language.
+//!
+//! The `wrap` layer turns a kit into a RACK: unmapped keys play the wrap
+//! sample repitched chromatically from its root (the sampler treatment of
+//! the whole composite), while mapped pads keep firing their raw component
+//! sounds. `pitch` transposes the wrap layer live — automate it and held
+//! wrap notes bend in the audio domain, formants and all.
 
 use std::sync::Arc;
 
@@ -17,6 +24,10 @@ struct KitVoice {
     env: Adsr,
     /// note-on velocity as gain (1.0 at velocity 100)
     vel: f32,
+    /// wrap-layer voice: repitched, follows live `transpose`
+    wrap: bool,
+    /// the kit's `transpose` at note-on (see Sampler::tp0)
+    tp0: f32,
 }
 
 impl KitVoice {
@@ -29,6 +40,8 @@ impl KitVoice {
             active: false,
             env: Adsr::new(sr),
             vel: 1.0,
+            wrap: false,
+            tp0: 0.0,
         }
     }
 }
@@ -42,11 +55,16 @@ pub struct KitSampler {
     clock: u64,
     /// exact pitch → sample (sorted by pitch at build time)
     pub map: Vec<(u8, Arc<Sample>)>,
+    /// the rack fallback: unmapped keys play this repitched from its root
+    pub wrap: Option<Arc<Sample>>,
     pub gain: f32,
     pub attack: f32,
     pub decay: f32,
     pub sustain: f32,
     pub release: f32,
+    /// extra transpose in semitones for the WRAP layer (param-controlled,
+    /// automatable — bends held wrap voices live)
+    pub transpose: f32,
 }
 
 impl KitSampler {
@@ -57,17 +75,33 @@ impl KitSampler {
             age: [0; KIT_VOICES],
             clock: 0,
             map: Vec::new(),
+            wrap: None,
             gain: 0.8,
             attack: 0.005,
             decay: 0.3,
             sustain: 1.0,
             release: 0.2,
+            transpose: 0.0,
         }
     }
 
     pub fn note_on(&mut self, note: u8, velocity: f32) {
-        // a pad only fires on its exact pitch — no repitching in a kit
-        let Some((_, sample)) = self.map.iter().find(|(p, _)| *p == note) else { return };
+        // a pad fires on its exact pitch at natural speed; any OTHER pitch
+        // falls through to the wrap layer, repitched from the wrap's root
+        let (sample, step, wrap) = match self.map.iter().find(|(p, _)| *p == note) {
+            Some((_, sample)) => {
+                let step = sample.sample_rate as f64 / self.sample_rate as f64;
+                (sample.clone(), step, false)
+            }
+            None => {
+                let Some(sample) = &self.wrap else { return };
+                let semis = note as f32 + self.transpose;
+                let ratio = super::voice::midi_to_freq(semis.round() as u8)
+                    / super::voice::midi_to_freq(sample.root);
+                let step = ratio as f64 * (sample.sample_rate as f64 / self.sample_rate as f64);
+                (sample.clone(), step, true)
+            }
+        };
         self.clock += 1;
         let mut idx = 0;
         let mut oldest = u64::MAX;
@@ -82,9 +116,11 @@ impl KitSampler {
             }
         }
         let v = &mut self.voices[idx];
-        v.sample = Some(sample.clone());
+        v.sample = Some(sample);
         v.pos = 0.0;
-        v.step = sample.sample_rate as f64 / self.sample_rate as f64;
+        v.step = step;
+        v.wrap = wrap;
+        v.tp0 = self.transpose;
         // reconstruct the 0..127 step so velocity 100 lands on exactly 1.0 —
         // songs without accents/ghosts stay bit-identical
         v.vel = ((velocity * 127.0 + 0.5) as u32 as f32 / 100.0).clamp(0.0, 1.27);
@@ -132,7 +168,15 @@ impl KitSampler {
             let b = data.get(i + 1).copied().unwrap_or(0.0);
             sum += (a + (b - a) * frac) * v.env.next() * v.vel;
 
-            v.pos += v.step;
+            // live transpose: automating `pitch` bends every held WRAP
+            // voice; equal to the note-on transpose multiplies by exactly
+            // 1.0, so untouched kits render bit-identically
+            let eff = if v.wrap && self.transpose != v.tp0 {
+                v.step * crate::dmath::powf(2.0, (self.transpose - v.tp0) / 12.0) as f64
+            } else {
+                v.step
+            };
+            v.pos += eff;
             if v.pos >= data.len() as f64 || !v.env.is_active() {
                 v.active = false;
             }

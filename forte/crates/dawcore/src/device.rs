@@ -122,6 +122,8 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
                 .filter_map(|(p, src)| resolve_sample(src).map(|s| (*p, s)))
                 .collect();
             k.map.sort_by_key(|(p, _)| *p);
+            // the rack fallback layer lives in the device's sample slot
+            k.wrap = resolve_sample(&dev.sample);
             Dsp::Inst(Box::new(k))
         }
         DeviceKind::PolyMesh => {
@@ -540,6 +542,9 @@ impl Instrument for crate::dsp::kit::KitSampler {
             self.sustain = p[3];
             self.release = 0.001 + p[4] * p[4] * 2.5;
         }
+        if p.len() >= 6 {
+            self.transpose = (p[5] - 0.5) * 48.0;
+        }
     }
     fn voices(&self) -> usize {
         self.active_voices()
@@ -769,6 +774,9 @@ impl AudioFx for Duck {
             self.attack = 0.0005 + p[1] * 0.05; // knob 0..1 → up to 50 ms slam
             self.release = 0.005 + p[2] * 0.6; // knob 0..1 → up to 600 ms recovery
             self.shape = p[3];
+        }
+        if p.len() >= 5 {
+            self.key = p[4] > 0.5;
         }
     }
 }

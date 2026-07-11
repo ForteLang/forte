@@ -1,0 +1,83 @@
+// Sketch: choprack — audition piece, NOT an album track. The chop as an
+// ENGINEERING act, not a performance: every movement here is a parameter
+// on automation, the way a mixing engineer rides a session.
+//   bars 1-8  BreakMachine groove — and its decay knob RAMPS DOWN over
+//             bars 5-8, so the same pattern's cuts tighten until only
+//             transients remain; stutter.mix rises for the bar-7 fill
+//   bars 1-8  DustBassLoop floor, pumped out of the groove's way (duck)
+//   bars 3-6  ScrubStrings — the sample window itself step-sequenced
+//             across the record while 8ths retrigger it; tapestop kills
+//             the platter on its way out
+//   bars 5-8  GlassKeyPad exists ONLY where the hats hit — duck mode
+//             "key", the sidechain CHOP — plus GhostChoir answering
+import { ScrubStrings, GhostChoir, BreakMachine, DustBassLoop, GlassKeyPad } from "../wrapped/chopworks.forte"
+import { HatClosed } from "../../essentials_0.6.0/instruments/drums.forte"
+
+song "Sketch Choprack" {
+  desc "Audition sketch: engineered chops — a tightening break, a scrubbed record, a pad carved by the hat pattern (keyed sidechain), automation as the instrument. Not an album track."
+  artist "Forte Essentials"
+  tempo 90bpm
+  swing 0.56
+  master 1.4
+  key C minor
+
+  // the groove: slice calls + the tightening ride + the bar-7 stutter fill
+  block Groove : BreakMachine {
+    track Cut {
+      automate decay from 0.55 to 0.1 over bars(5..8)
+      automate stutter.mix from 0.0 to 0.65 over bars(7..7)
+      automate stutter.mix from 0.65 to 0.0 over bars(8..8)
+      play notes`C3:0.25 C#3:0.25 _:0.25 E3:0.25 G3:0.5 _:0.5 A#3:0.25 C3:0.25 D3:0.25 _:0.25 F3:0.5 _:0.5` at bars(1..8)
+    }
+  }
+
+  // the floor: a bass that breathes, pumped by the groove
+  block Floor : DustBassLoop {
+    track Floor {
+      insert duck(from: Groove, amount: 0.8, attack: 0.02, release: 0.16, shape: 0.7)
+      play notes`C2~:8 D#2~:4 A#1~:4` at bars(1..8)
+    }
+  }
+
+  // the platter: 8th retrigs while the window walks the record, then the
+  // power gets cut on the way out
+  block Platter : ScrubStrings {
+    track Scrub {
+      insert tapestop(amount: 0.0)
+      // automate ranges are ABSOLUTE song bars: 6 = this block's last bar
+      automate tapestop.amount from 0.0 to 0.9 over bars(6..6)
+      play beat`x-x- x-x- x-x- x-x-` at bars(1..4)
+    }
+  }
+
+  // the key pattern that carves the pad (audible on purpose — you should
+  // hear WHY the pad moves)
+  block Hats {
+    track H {
+      instrument HatClosed
+      volume 0.4
+      play humanize(beat`x-x- xx-x -x-x x-xx`, time: 0.008, vel: 14, seed: 7) at bars(1..4)
+    }
+  }
+
+  // the carved pad: a held chord that exists only where the hats say so
+  block KeyPad : GlassKeyPad {
+    track Pad {
+      insert duck(from: Hats, mode: "key", amount: 1.0, attack: 0.1, release: 0.22, shape: 0.7)
+      play notes`C3~:16` at bars(1..4)
+    }
+  }
+
+  // the voice that was never sung, answering in the back half
+  block Ghost : GhostChoir {
+    track Vox { play notes`_:1.5 C3:0.75 _:1.75` at bars(1..4) }
+    track Answer { play notes`_:3 E3:0.5 _:0.5` at bars(3..4) }
+  }
+
+  play Groove at bars(1..8)
+  play Floor at bars(1..8)
+  play Platter at bars(3..6)
+  play Hats at bars(5..8)
+  play KeyPad at bars(5..8)
+  play Ghost at bars(5..8)
+}
