@@ -783,6 +783,58 @@ fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
 /// every successful recompile is swapped into the running engine without
 /// stopping the transport — listen, edit, listen (SYS-EDT-002 minimal form).
 #[cfg(not(target_family = "wasm"))]
+/// Terminal column count (stty, then $COLUMNS, then a safe default).
+fn term_cols() -> usize {
+    if let Ok(o) = std::process::Command::new("stty")
+        .arg("size")
+        .stdin(std::process::Stdio::inherit())
+        .output()
+    {
+        if let Ok(t) = String::from_utf8(o.stdout) {
+            if let Some(c) = t.split_whitespace().nth(1).and_then(|v| v.parse::<usize>().ok()) {
+                if c >= 20 {
+                    return c;
+                }
+            }
+        }
+    }
+    std::env::var("COLUMNS").ok().and_then(|v| v.parse().ok()).filter(|&c| c >= 20).unwrap_or(100)
+}
+
+/// Clamp a frame line to the terminal width counting VISIBLE chars only
+/// (ANSI escapes pass through). The in-place redraw moves the cursor up
+/// by the logical line count — one wrapped line (a long `desc`) breaks
+/// that math and the whole header scrolls away on every tick.
+fn clamp_visible(s: &str, max: usize) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut vis = 0usize;
+    let mut chars = s.chars();
+    let mut truncated = false;
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            out.push(c);
+            for c2 in chars.by_ref() {
+                out.push(c2);
+                if c2.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+            continue;
+        }
+        if vis + 1 >= max {
+            truncated = true;
+            break;
+        }
+        out.push(c);
+        vis += 1;
+    }
+    if truncated {
+        out.push('…');
+        out.push_str("\x1b[0m");
+    }
+    out
+}
+
 fn play(path: &str, for_secs: Option<f64>, from_bar: Option<u32>, block: Option<&str>) -> ExitCode {
     use dawcore::command::Command;
     use dawcore::model::Project;
@@ -830,6 +882,7 @@ block __Probe : {b} {{}}
     }
 
     const LANE_W: usize = 40;
+
 
     /// One frame of the in-place UI: header, per-track lanes with the
     /// playhead running through them (sounding tracks highlighted), status.
@@ -910,6 +963,7 @@ block __Probe : {b} {{}}
     };
     let mut audio = fortelang::audio::start();
     let tty = std::io::stdout().is_terminal();
+    let cols = if tty { term_cols() } else { usize::MAX };
     if audio.silent {
         eprintln!("audio: 出力デバイスなし — 無音バックエンドで走行します({})", audio.device_name);
     } else {
@@ -968,7 +1022,7 @@ block __Probe : {b} {{}}
                 }
                 out.push_str("\r\x1b[J");
                 for line in &frame {
-                    out.push_str(line);
+                    out.push_str(&clamp_visible(line, cols));
                     out.push('\n');
                 }
                 drawn = frame.len();
@@ -1053,6 +1107,7 @@ fn play_album(path: &str, verify: bool, for_secs: Option<f64>) -> ExitCode {
         eprintln!("audio: 出力デバイスなし — 無音バックエンドで走行します({})", audio.device_name);
     }
     let tty = std::io::stdout().is_terminal();
+    let cols = if tty { term_cols() } else { usize::MAX };
     let _raw = if tty { Some(fortelang::live::RawTerm::enter()) } else { None };
 
     let mm_ss = |s: f64| format!("{}:{:04.1}", (s / 60.0) as i64, s % 60.0);
@@ -1187,7 +1242,7 @@ fn play_album(path: &str, verify: bool, for_secs: Option<f64>) -> ExitCode {
                 }
                 out.push_str("\r\x1b[J");
                 for line in &frame {
-                    out.push_str(line);
+                    out.push_str(&clamp_visible(line, cols));
                     out.push('\n');
                 }
                 drawn = frame.len();
