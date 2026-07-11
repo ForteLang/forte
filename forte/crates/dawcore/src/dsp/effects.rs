@@ -824,9 +824,11 @@ pub struct Vinyl {
     write: usize,
     ph_wow: f32,
     ph_flut: f32,
-    // crackle: xorshift32 draws + a fast-decaying pop state
+    // crackle: xorshift32 draws + a fast-decaying pop state, band-limited
+    // so a pop reads as vinyl, not as a digital defect
     rng: u32,
     pop: f32,
+    pop_lp: f32,
     // hiss shaping + dust lowpass states
     hiss_lp: f32,
     lp: (f32, f32),
@@ -848,6 +850,7 @@ impl Vinyl {
             ph_flut: 0.25,
             rng: 0x2545_f491,
             pop: 0.0,
+            pop_lp: 0.0,
             hiss_lp: 0.0,
             lp: (0.0, 0.0),
             wow: 0.0,
@@ -897,7 +900,9 @@ impl Vinyl {
             (l, r)
         };
 
-        // ---- crackle: sparse ticks with a ~1 ms tail, mono like real dust ----
+        // ---- crackle: sparse ticks with a ~1 ms tail, mono like real dust.
+        // The pop runs through a ~3.5 kHz one-pole so it lands as a vinyl
+        // "puh", not a full-spectrum digital click ----
         if self.crackle > 0.0001 {
             let c = self.crackle.clamp(0.0, 1.0);
             let d = self.next_rand();
@@ -906,8 +911,10 @@ impl Vinyl {
                 self.pop = d.signum() * (0.15 + d.abs() * 0.5) * c;
             }
             self.pop *= 0.92;
-            ol += self.pop;
-            or += self.pop;
+            let a = 1.0 - crate::dmath::exp(-std::f32::consts::TAU * 3_500.0 / self.sr);
+            self.pop_lp += (self.pop - self.pop_lp) * a;
+            ol += self.pop_lp;
+            or += self.pop_lp;
         }
 
         // ---- hiss: the shaped noise floor ----

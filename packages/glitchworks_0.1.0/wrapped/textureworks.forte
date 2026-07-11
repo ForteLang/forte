@@ -66,7 +66,7 @@ block ChoirGrain {
   sample ChoirGrainS = bounce(ChoirGrainSrc, note: C3, beats: 4)
   track Vowel {
     instrument sampler(sample: ChoirGrainS, gain: 1.0, end: 0.667, stretch: 0.1, sustain: 1.0, release: 0.4, vary: 0.08)
-    insert vinyl(wow: 0.4, crackle: 0.3, hiss: 0.2, dust: 0.3)
+    insert vinyl(wow: 0.4, crackle: 0.08, hiss: 0.12, dust: 0.3)
     insert width(amount: 0.85)
     volume 0.75
     play notes`C3~:8` at bars(1..2)
@@ -139,7 +139,7 @@ block TapeAir {
   sample TapeAirS = bounce(TapeAirSrc, note: C4, beats: 4)
   track Air {
     instrument sampler(sample: TapeAirS, gain: 1.0, end: 0.667, loop: "on", sustain: 1.0, release: 0.5)
-    insert vinyl(wow: 0.3, crackle: 0.4, hiss: 0.3, dust: 0.4)
+    insert vinyl(wow: 0.3, crackle: 0.25, hiss: 0.25, dust: 0.4)
     insert gate(depth: 0.4, beats: 1, duty: 0.7)
     volume 0.3
     play notes`C4~:8` at bars(1..2)

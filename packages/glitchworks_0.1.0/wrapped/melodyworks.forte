@@ -22,10 +22,12 @@ block TineStabCut {
   sample TineStabCutS = bounce(TineStabCutSrc, note: C3, beats: 4)
   track Stabs {
     instrument sampler(sample: TineStabCutS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.4)
+    modulate pitch with random(rate: 0.08, amount: 0.03, smooth: 0.75) as swim
     insert delay(time: 0.28, fdbk: 0.3, mix: 0.2)
-    insert vinyl(wow: 0.25, crackle: 0.25, hiss: 0.12, dust: 0.25)
+    insert vinyl(wow: 0.25, crackle: 0.1, hiss: 0.1, dust: 0.25)
     volume 0.9
-    play notes`_:0.5 C3:0.5 _:1 C3:0.25 D3:0.25 _:1 C3:0.5 _:2.5 D#3:0.5 _:0.5 C3:0.5` at bars(1..2)
+    play notes`_:0.5 C3:0.5 _:1 C3:0.25 D3:0.25 _:1 C3:0.5 _:2.5 D#3:0.5 _:0.5 C3:0.5` at bars(1..3)
+    play notes`_:0.5 C3:0.25 C#3:0.25 _:0.75 D3:0.125 D#3:0.125 E3:0.25 _:0.75 F3:0.25 E3:0.25 D3:0.25 C3:0.25` at bars(4..4)
   }
 }
 
@@ -35,7 +37,7 @@ block GuitarChop {
     track G {
       instrument GuitarPluck(pick: 0.6)
       insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
-      insert vinyl(wow: 0.2, crackle: 0.25, hiss: 0.12, dust: 0.2)
+      insert vinyl(wow: 0.2, crackle: 0.1, hiss: 0.1, dust: 0.2)
       volume 0.95
       play humanize(notes`C3:0.25 _:0.25 C3:0.25 D#3:0.25 _:0.25 G3:0.25 F3:0.25 _:0.25 C3:0.25 _:0.25 A#2:0.25 C3:0.25 D#3:0.25 _:0.25 F3:0.25 G3:0.25`, time: 0.01, vel: 16, seed: 53) at bars(1..1)
     }
@@ -43,9 +45,11 @@ block GuitarChop {
   sample GuitarChopS = bounce(GuitarChopSrc, note: C3, beats: 4)
   track Chop {
     instrument sampler(sample: GuitarChopS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.18, sustain: 0.0, decay: 0.35)
+    modulate pitch with random(rate: 0.12, amount: 0.035, smooth: 0.65) as swim
     insert parcomp(amount: 0.5, drive: 0.55, color: 0.4)
     volume 0.9
-    play notes`C3:0.25 D3:0.25 _:0.25 F3:0.25 _:0.25 G3:0.25 A3:0.25 _:0.25 C3:0.25 _:0.5 D#3:0.25 F#3:0.25 _:0.25 B3:0.25 _:0.25` at bars(1..1)
+    play notes`C3:0.25 D3:0.25 _:0.25 F3:0.25 _:0.25 G3:0.25 A3:0.25 _:0.25 C3:0.25 _:0.5 D#3:0.25 F#3:0.25 _:0.25 B3:0.25 _:0.25` at bars(1..3)
+    play notes`C3:0.25 D3:0.125 D#3:0.125 _:0.25 F3:0.25 G3:0.125 G#3:0.125 A3:0.25 _:0.25 C3:0.25 B3:0.125 A#3:0.125 F#3:0.25 D#3:0.25 _:0.25 C3:0.25 G3:0.25 _:0.25 C3:0.25` at bars(4..4)
   }
 }
 
@@ -75,7 +79,7 @@ block StringStretch {
   sample StringStretchS = bounce(StringStretchSrc, note: C4, beats: 4)
   track Tape {
     instrument sampler(sample: StringStretchS, gain: 1.0, end: 0.667, stretch: 0.25, sustain: 1.0, release: 0.4, vary: 0.06)
-    insert vinyl(wow: 0.45, crackle: 0.3, hiss: 0.2, dust: 0.35)
+    insert vinyl(wow: 0.45, crackle: 0.1, hiss: 0.1, dust: 0.35)
     insert width(amount: 0.8)
     volume 0.85
     play notes`C4~:8` at bars(1..2)
@@ -116,7 +120,7 @@ block EPianoDust {
   track Dusty {
     instrument sampler(sample: EPianoDustS, gain: 1.0, end: 0.667, loop: "on", sustain: 1.0, release: 0.15, vary: 0.06)
     insert gate(depth: 0.9, beats: 0.25, duty: 0.45)
-    insert vinyl(wow: 0.35, crackle: 0.35, hiss: 0.2, dust: 0.35)
+    insert vinyl(wow: 0.35, crackle: 0.1, hiss: 0.1, dust: 0.35)
     volume 0.85
     play notes`C3~:6 A#2~:2` at bars(1..2)
   }
@@ -132,10 +136,11 @@ block VoxCutUp {
   track Cut {
     // pitched down a fourth, big vary: the Burial voice
     instrument sampler(sample: VoxCutUpS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.3, pitch: 0.396, sustain: 0.0, decay: 0.4)
-    insert vinyl(wow: 0.4, crackle: 0.35, hiss: 0.22, dust: 0.3)
+    insert vinyl(wow: 0.4, crackle: 0.1, hiss: 0.1, dust: 0.3)
     insert reverb(size: 0.65, decay: 0.55, mix: 0.3)
     volume 0.85
-    play notes`C4:0.25 _:0.25 D4:0.25 F4:0.25 _:0.5 G4:0.25 A4:0.25 _:0.5 C4:0.5 _:0.25 D#4:0.25 _:0.5` at bars(1..1)
+    play notes`C4:0.25 _:0.25 D4:0.25 F4:0.25 _:0.5 G4:0.25 A4:0.25 _:0.5 C4:0.5 _:0.25 D#4:0.25 _:0.5` at bars(1..3)
+    play notes`C4:0.25 D4:0.125 D#4:0.125 F4:0.25 _:0.25 G4:0.125 G#4:0.125 A4:0.25 A#4:0.25 _:0.25 C4:0.25 D#4:0.125 D4:0.125 _:0.25 F4:0.25 C4:0.25 _:0.75` at bars(4..4)
   }
 }
 
@@ -170,7 +175,8 @@ block SweepScrub {
     insert saturate(mode: "tape", drive: 0.3)
     insert width(amount: 0.75)
     volume 0.85
-    play beat`x-x- x-x- x-x- x-x-` at bars(1..2)
+    play beat`x-x- x-x- x-x- x-x-` at bars(1..3)
+    play beat`x-x- xx-x x-xx x*3x*3-` at bars(4..4)
   }
 }
 

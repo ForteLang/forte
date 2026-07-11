@@ -451,19 +451,25 @@ impl Sampler {
             }
             let (rs, re) = v.region;
             let span = (re - rs).max(1.0);
+            // region end: a looping voice wraps; a one-shot DECLICKS — the
+            // read head holds the boundary sample while a ~3 ms cut fades it
+            // out. Truncating mid-swing was an audible pop on every slice
+            // whose decay outlived it (i.e. most chops).
             if v.step >= 0.0 {
                 if v.pos >= re {
                     if v.looping {
                         v.pos -= span;
                     } else {
-                        v.active = false;
+                        v.pos = (re - 1.0).max(rs);
+                        v.env.cut();
                     }
                 }
             } else if v.pos < rs {
                 if v.looping {
                     v.pos += span;
                 } else {
-                    v.active = false;
+                    v.pos = rs;
+                    v.env.cut();
                 }
             }
             if !v.env.is_active() {
