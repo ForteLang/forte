@@ -469,9 +469,10 @@ impl Gate {
         let period_samples = self.period.max(0.01) * self.sr;
         let frac = self.pos / period_samples;
         let target = if frac < self.duty.clamp(0.02, 0.98) { 1.0 } else { 1.0 - self.depth };
-        // ~1 ms one-pole slew keeps the chop tight but unclicked
-        // (linear approx of 1 - e^(-1/(0.001*sr)) — deterministic, no libm)
-        let a = (1.0 / (0.001 * self.sr)).min(1.0);
+        // ~4 ms one-pole slew: still a hard chop to the ear, but the edge
+        // stops reading as a click on loud sustained material
+        // (linear approx of 1 - e^(-1/(0.004*sr)) — deterministic, no libm)
+        let a = (1.0 / (0.004 * self.sr)).min(1.0);
         self.g += (target - self.g) * a;
         self.pos += 1.0;
         if self.pos >= period_samples {

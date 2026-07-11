@@ -38,7 +38,7 @@ block ScrubStrings {
     // modulators ADD around the base (± amount), so: window position w =
     // base ± 0.25 — the seq value is 2w, and running the SAME seq on start
     // (base 0.25) and end (base 0.39) keeps the window width at 0.14
-    instrument sampler(sample: ScrubStringsSrc, start: 0.25, end: 0.39, loop: "on", sustain: 0.85, decay: 0.2, release: 0.06, choke: "on", vary: 0.08)
+    instrument sampler(attack: 0.06, sample: ScrubStringsSrc, start: 0.25, end: 0.39, loop: "on", sustain: 0.85, decay: 0.2, release: 0.06, choke: "on", vary: 0.08)
     modulate start with steps(seq: "0.0 0.36 0.72 0.2 0.56 0.92 0.4 0.1", every: "1/8", amount: 0.25)
     modulate end  with steps(seq: "0.0 0.36 0.72 0.2 0.56 0.92 0.4 0.1", every: "1/8", amount: 0.25)
     insert vinyl(wow: 0.3, crackle: 0.25, hiss: 0.15, dust: 0.25)
@@ -54,13 +54,13 @@ block ScrubStrings {
 block GhostChoir {
   sample GhostChoirSrc = bounce(ChoirPad(), note: C3, beats: 4)
   track Vox {
-    instrument sampler(sample: GhostChoirSrc, slices: 8, end: 0.667, choke: "on", vary: 0.3, pitch: 0.396, sustain: 0.0, decay: 0.55, release: 0.1)
+    instrument sampler(attack: 0.06, sample: GhostChoirSrc, slices: 8, end: 0.667, choke: "on", vary: 0.3, pitch: 0.396, sustain: 0.0, decay: 0.55, release: 0.1)
     insert vinyl(wow: 0.4, crackle: 0.4, hiss: 0.25, dust: 0.35)
     insert reverb(size: 0.6, decay: 0.5, mix: 0.25)
     volume 0.7
   }
   track Answer {
-    instrument sampler(sample: GhostChoirSrc, slices: 8, end: 0.667, choke: "on", vary: 0.35, pitch: 0.604, reverse: "on", sustain: 0.0, decay: 0.35)
+    instrument sampler(attack: 0.06, sample: GhostChoirSrc, slices: 8, end: 0.667, choke: "on", vary: 0.35, pitch: 0.604, reverse: "on", sustain: 0.0, decay: 0.35)
     insert crush(bits: 0.35, rate: 0.25, mix: 0.4)
     insert reverb(size: 0.7, decay: 0.6, mix: 0.35)
     volume 0.45
@@ -74,7 +74,7 @@ block GhostChoir {
 block AcidFlip {
   sample AcidFlipSrc = bounce(Bass303(cutoff: 0.55, reso: 0.75, envmod: 0.6), note: C2, beats: 4)
   track Acid {
-    instrument sampler(sample: AcidFlipSrc, slices: 16, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.4)
+    instrument sampler(attack: 0.06, sample: AcidFlipSrc, slices: 16, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.4)
     modulate pitch with steps(seq: "0.5 0.5 0.625 0.5 0.375 0.5 0.75 0.5", every: "1/8", amount: 0.0) as flip
     insert saturate(mode: "fuzz", drive: 0.35, tone: 0.6)
     insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
@@ -102,7 +102,7 @@ block BreakMachine {
   }
   sample BreakMachineSrc = bounce(BreakSrcPhrase, note: C3, beats: 4)
   track Cut {
-    instrument sampler(sample: BreakMachineSrc, slices: 16, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.5)
+    instrument sampler(attack: 0.06, sample: BreakMachineSrc, slices: 16, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.5)
     insert transient(attack: 0.75, sustain: 0.4)
     insert saturate(mode: "tape", drive: 0.35)
     insert stutter(beats: 0.25, mix: 0.0)
@@ -122,7 +122,7 @@ block KeysCarve {
   }
   sample KeysCarveSrc = bounce(KeysCarveSrcPhrase, note: C3, beats: 4)
   track Keys {
-    instrument sampler(sample: KeysCarveSrc, end: 0.667, loop: "on", sustain: 1.0, release: 0.12, vary: 0.06)
+    instrument sampler(attack: 0.06, sample: KeysCarveSrc, end: 0.667, loop: "on", sustain: 1.0, release: 0.12, vary: 0.06)
     insert gate(depth: 0.95, beats: 0.25, duty: 0.4)
     insert vinyl(wow: 0.25, crackle: 0.2, hiss: 0.12, dust: 0.2)
     insert delay(time: 0.28, fdbk: 0.3, mix: 0.18)
@@ -141,7 +141,7 @@ block DustBassLoop {
   }
   sample DustBassSrc = bounce(DustBassSrcPhrase, note: C2, beats: 4)
   track Floor {
-    instrument sampler(sample: DustBassSrc, start: 0.02, end: 0.3, loop: "on", sustain: 1.0, release: 0.2, glide: 0.1, vary: 0.05)
+    instrument sampler(attack: 0.06, sample: DustBassSrc, start: 0.02, end: 0.3, loop: "on", sustain: 1.0, release: 0.2, glide: 0.1, vary: 0.05)
     modulate pitch with lfo(rate: 0.05, amount: 0.02, shape: "sine") as sway
     insert saturate(mode: "tape", drive: 0.4)
     insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.2)
@@ -159,7 +159,7 @@ block DustBassLoop {
 block GlassKeyPad {
   sample GlassKeyPadSrc = bounce(GlassPad(), note: C3, beats: 4)
   track Pad {
-    instrument sampler(sample: GlassKeyPadSrc, end: 0.667, loop: "on", sustain: 1.0, release: 0.25, vary: 0.04)
+    instrument sampler(attack: 0.06, sample: GlassKeyPadSrc, end: 0.667, loop: "on", sustain: 1.0, release: 0.25, vary: 0.04)
     insert vinyl(wow: 0.35, crackle: 0.25, hiss: 0.18, dust: 0.3)
     insert width(amount: 0.85)
     volume 0.7
@@ -186,14 +186,14 @@ block KickFlip {
   }
   sample KickFlipSrc = bounce(KickFlipSrcPhrase, note: C3, beats: 1)
   track Main {
-    instrument sampler(sample: KickFlipSrc, sustain: 0.0, decay: 0.5, vary: 0.08)
+    instrument sampler(attack: 0.06, sample: KickFlipSrc, sustain: 0.0, decay: 0.5, vary: 0.08)
     insert transient(attack: 0.75, sustain: 0.4)
     volume 0.95
   }
   track Chop {
     // the 1-beat kick inside 3 beats of data: end 0.333 puts all 8 slices
     // on the kick itself — C3=attack, D3=body, up to G#3=tail
-    instrument sampler(sample: KickFlipSrc, slices: 8, end: 0.333, choke: "on", vary: 0.25, sustain: 0.0, decay: 0.3)
+    instrument sampler(attack: 0.06, sample: KickFlipSrc, slices: 8, end: 0.333, choke: "on", vary: 0.25, sustain: 0.0, decay: 0.3)
     insert saturate(mode: "fuzz", drive: 0.3, tone: 0.5)
     insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
     volume 0.85
@@ -229,7 +229,7 @@ block MomentKit {
     track R {
       // loop: the rising pitch reads up to 4x faster and would exhaust
       // the data mid-note — looping keeps the riser alive all the way up
-      instrument sampler(sample: MomentBrassS, loop: "on", gain: 1.0, sustain: 1.0, release: 0.3)
+      instrument sampler(attack: 0.06, sample: MomentBrassS, loop: "on", gain: 1.0, sustain: 1.0, release: 0.3)
       modulate pitch with adsr(a: 0.55, d: 0.2, s: 1.0, amount: 0.5)
       insert delay(time: 0.02, fdbk: 0.75, mix: 0.5)
       insert filter(type: "lp", cutoff: 0.9, reso: 0.55)
@@ -265,7 +265,7 @@ block MomentKit {
   // -- the ensemble: all three AT ONCE — the moment itself --
   block MomentAllSrc {
     track R {
-      instrument sampler(sample: MomentBrassS, loop: "on", gain: 1.0, sustain: 1.0, release: 0.3)
+      instrument sampler(attack: 0.06, sample: MomentBrassS, loop: "on", gain: 1.0, sustain: 1.0, release: 0.3)
       modulate pitch with adsr(a: 0.55, d: 0.2, s: 1.0, amount: 0.5)
       insert delay(time: 0.02, fdbk: 0.75, mix: 0.5)
       insert filter(type: "lp", cutoff: 0.9, reso: 0.55)

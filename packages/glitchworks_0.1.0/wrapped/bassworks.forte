@@ -4,7 +4,7 @@
 // identical, and the machine can re-decide the line (pitch steps, stretch,
 // gates) while it plays.
 import { Bass303, Square303 } from "../../essentials_0.6.0/instruments/tb303.forte"
-import { SH101Bass } from "../../essentials_0.6.0/instruments/sh101.forte"
+import { SH101Bass, SH101Zap } from "../../essentials_0.6.0/instruments/sh101.forte"
 import { Wobble } from "../../essentials_0.6.0/instruments/leads.forte"
 import { P5Brass } from "../../essentials_0.6.0/instruments/prophet5.forte"
 import { KickSub } from "../../essentials_0.6.0/instruments/drums.forte"
@@ -18,7 +18,7 @@ block AcidHalf {
   }
   sample AcidHalfS = bounce(AcidHalfSrc, note: C2, beats: 4)
   track Slow {
-    instrument sampler(sample: AcidHalfS, end: 0.667, stretch: 0.25, sustain: 1.0, release: 0.2, vary: 0.08)
+    instrument sampler(attack: 0.06, sample: AcidHalfS, end: 0.667, stretch: 0.25, sustain: 1.0, release: 0.2, vary: 0.08)
     modulate pitch with random(rate: 0.07, amount: 0.03, smooth: 0.8) as swim
     // bar 4: the tape lunges toward full speed and falls back
     automate stretch from 0.25 to 0.45 over bars(4..4)
@@ -38,7 +38,7 @@ block SquareRoll {
   }
   sample SquareRollS = bounce(SquareRollSrc, note: C2, beats: 4)
   track Roll {
-    instrument sampler(sample: SquareRollS, slices: 16, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.4)
+    instrument sampler(attack: 0.06, sample: SquareRollS, slices: 16, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.4)
     modulate pitch with steps(seq: "0.5 0.5 0.625 0.5 0.5 0.375 0.5 0.75", every: "1/8", amount: 0.15) as flip
     insert saturate(mode: "tape", drive: 0.4)
     volume 0.85
@@ -56,7 +56,7 @@ block SH101Drive {
   }
   sample SH101DriveS = bounce(SH101DriveSrc, note: C2, beats: 4)
   track Drive {
-    instrument sampler(sample: SH101DriveS, slices: 8, end: 0.667, choke: "on", vary: 0.1, sustain: 0.0, decay: 0.45)
+    instrument sampler(attack: 0.06, sample: SH101DriveS, slices: 8, end: 0.667, choke: "on", vary: 0.1, sustain: 0.0, decay: 0.45)
     modulate pitch with steps(seq: "0.5 0.5 0.75 0.5 0.5 0.75 0.5 0.625", every: "1/8", amount: 0.5) as jump
     insert drive(drive: 0.35)
     insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.15, makeup: 0.2)
@@ -79,7 +79,7 @@ block UprightWalk {
   }
   sample UprightWalkS = bounce(UprightWalkSrc, note: C2, beats: 4)
   track Walk {
-    instrument sampler(sample: UprightWalkS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.6)
+    instrument sampler(attack: 0.06, sample: UprightWalkS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.6)
     modulate pitch with random(rate: 0.06, amount: 0.025, smooth: 0.85) as swim
     insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.25)
     volume 0.95
@@ -96,7 +96,7 @@ block WobbleGate {
   }
   sample WobbleGateS = bounce(WobbleGateSrc, note: C2, beats: 4)
   track Carve {
-    instrument sampler(sample: WobbleGateS, end: 0.667, loop: "on", sustain: 1.0, release: 0.15, vary: 0.06)
+    instrument sampler(attack: 0.06, sample: WobbleGateS, end: 0.667, loop: "on", sustain: 1.0, release: 0.15, vary: 0.06)
     insert gate(depth: 0.95, beats: 0.25, duty: 0.45)
     modulate gate.duty with random(rate: 0.09, amount: 0.18, smooth: 0.6) as carve
     insert saturate(mode: "fuzz", drive: 0.35, tone: 0.5)
@@ -113,7 +113,7 @@ block SubPulse {
   }
   sample SubPulseS = bounce(SubPulseSrc, note: C1, beats: 4)
   track Pulse {
-    instrument sampler(sample: SubPulseS, end: 0.667, loop: "on", sustain: 1.0, release: 0.25, glide: 0.1)
+    instrument sampler(attack: 0.06, sample: SubPulseS, end: 0.667, loop: "on", sustain: 1.0, release: 0.25, glide: 0.1)
     modulate pitch with random(rate: 0.05, amount: 0.02, smooth: 0.85) as swim
     insert pump(amount: 0.7, beats: 1)
     insert saturate(mode: "tape", drive: 0.4)
@@ -134,7 +134,7 @@ block PickBass {
   }
   sample PickBassS = bounce(PickBassSrc, note: C2, beats: 4)
   track Funk {
-    instrument sampler(sample: PickBassS, slices: 16, end: 0.667, choke: "on", vary: 0.18, sustain: 0.0, decay: 0.3)
+    instrument sampler(attack: 0.06, sample: PickBassS, slices: 16, end: 0.667, choke: "on", vary: 0.18, sustain: 0.0, decay: 0.3)
     modulate pitch with random(rate: 0.1, amount: 0.03, smooth: 0.7) as swim
     insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
     volume 0.9
@@ -156,7 +156,7 @@ block BassStabEcho {
   }
   sample BassStabEchoS = bounce(BassStabEchoSrc, note: C2, beats: 4)
   track Dub {
-    instrument sampler(sample: BassStabEchoS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.6)
+    instrument sampler(attack: 0.06, sample: BassStabEchoS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.6)
     modulate pitch with random(rate: 0.08, amount: 0.03, smooth: 0.75) as swim
     insert parcomp(amount: 0.5, drive: 0.6, color: 0.35)
     insert reverb(size: 0.6, decay: 0.5, mix: 0.2)
@@ -165,3 +165,85 @@ block BassStabEcho {
     play notes`C2:0.5 D2:0.25 _:0.25 F2:0.5 _:0.5 C2:0.25 E2:0.25 G2:0.5 _:1` at bars(4..4)
   }
 }
+
+// ---- LaserBass — the zap as a bassline, re-aimed every eighth -------------
+block LaserBass {
+  block LaserBassSrc {
+    track Z { instrument SH101Zap volume 0.95
+      play notes`C2:0.5 _:3.5` at bars(1..1) }
+  }
+  sample LaserBassS = bounce(LaserBassSrc, note: C2, beats: 2)
+  track Beam {
+    instrument sampler(attack: 0.06, gain: 1.0, sample: LaserBassS, end: 0.5, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.45)
+    modulate pitch with steps(seq: "0.5 0.625 0.5 0.75 0.375 0.5 0.875 0.5", every: "1/8", amount: 0.2) as aim
+    insert filter(type: "lp", cutoff: 0.65, reso: 0.6)
+    insert saturate(mode: "fuzz", drive: 0.35, tone: 0.6)
+    volume 0.85
+    play notes`C2:0.5 C2:0.25 _:0.25 C3:0.5 C2:0.5 _:0.5 G2:0.25 C2:0.25 C2:0.5 _:0.5` at bars(1..3)
+    play notes`C2:0.25 C3:0.25 C2:0.25 D#3:0.25 C2:0.25 G2:0.25 C3:0.125 C2:0.125 F2:0.25 C2:0.25 _:0.25 C2:0.25 G2:0.25 D#2:0.25 C2:0.25 _:0.25` at bars(4..4)
+  }
+}
+
+// ---- OctaveHouse — the octaver-pedal house bass ----------------------------
+// One fat note, resampled; the LINE is the octave jump (the pedal), the
+// pump breathes once a beat like the house records it comes from.
+block OctaveHouse {
+  block OctaveHouseSrc {
+    track B { instrument SH101Bass
+      insert saturate(mode: "tube", drive: 0.4)
+      insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.15, makeup: 0.2)
+      volume 0.95
+      play notes`C2~:2 _:2` at bars(1..1) }
+  }
+  sample OctaveHouseS = bounce(OctaveHouseSrc, note: C2, beats: 2)
+  track Pedal {
+    instrument sampler(attack: 0.06, sample: OctaveHouseS, end: 0.5, choke: "on", vary: 0.1, sustain: 0.0, decay: 0.4)
+    modulate pitch with random(rate: 0.07, amount: 0.02, smooth: 0.85) as swim
+    insert pump(amount: 0.6, beats: 1)
+    insert saturate(mode: "tape", drive: 0.35)
+    volume 0.9
+    play notes`C2:0.5 C3:0.5 C2:0.5 C3:0.5 C2:0.5 C3:0.5 C2:0.5 C3:0.5` at bars(1..3)
+    play notes`C2:0.5 C3:0.5 D#2:0.5 D#3:0.5 F2:0.5 F3:0.5 G2:0.25 G3:0.25 A#2:0.25 A#3:0.25` at bars(4..4)
+  }
+}
+
+// ---- FuzzWahBass — a bass through the pedalboard ---------------------------
+// Fuzz first, then an LFO riding the filter like a wah rocked by a foot.
+block FuzzWahBass {
+  block FuzzWahBassSrc {
+    track G { instrument GuitarPluck(pick: 0.5) volume 0.95
+      play notes`C2~:2 _:2` at bars(1..1) }
+  }
+  sample FuzzWahBassS = bounce(FuzzWahBassSrc, note: C2, beats: 2)
+  track Pedalboard {
+    instrument sampler(attack: 0.06, sample: FuzzWahBassS, end: 0.5, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.5)
+    insert saturate(mode: "fuzz", drive: 0.55, tone: 0.6)
+    insert filter(type: "lp", cutoff: 0.5, reso: 0.55)
+    modulate filter.cutoff with lfo(rate: 0.3, amount: 0.3, shape: "sine") as wah
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.15, makeup: 0.2)
+    volume 0.9
+    play notes`C2:0.75 C2:0.25 D#2:0.5 C2:0.5 F2:0.75 D#2:0.25 C2:0.5 G2:0.25 F2:0.25` at bars(1..3)
+    play notes`C2:0.5 D#2:0.25 F2:0.25 G2:0.5 F2:0.25 D#2:0.25 C2:0.25 C2:0.25 A#1:0.5 C2:0.75 _:0.25` at bars(4..4)
+  }
+}
+
+// ---- SubDeep — the quiet floor: a pure sub that MOVES ----------------------
+block SubDeep {
+  block SubDeepSrc {
+    track K { instrument KickSub volume 0.95
+      play notes`C1~:4` at bars(1..1) }
+  }
+  sample SubDeepS = bounce(SubDeepSrc, note: C1, beats: 4)
+  track Deep {
+    instrument sampler(attack: 0.1, sample: SubDeepS, end: 0.667, loop: "on", sustain: 1.0, release: 0.35, glide: 0.18)
+    modulate pitch with random(rate: 0.04, amount: 0.015, smooth: 0.9) as swim
+    // bar 4: the floor dives a fourth and slides back
+    automate pitch from 0.5 to 0.396 over bars(4..4)
+    automate pitch from 0.396 to 0.5 over bars(5..5)
+    insert saturate(mode: "tape", drive: 0.3)
+    insert comp(thresh: 0.5, ratio: 0.55, attack: 0.03, release: 0.2, makeup: 0.15)
+    volume 0.85
+    play notes`C1~:6 D#1~:2 C1~:4 A#0~:2 C1~:2` at bars(1..4)
+  }
+}
+

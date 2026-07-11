@@ -4,6 +4,8 @@
 // instead of a stack of instruments.
 import { Hiss, Dust, ColdTone } from "../instruments/textures.forte"
 import { NoiseCrash, Zap, Impact } from "../../essentials_0.6.0/instruments/fx.forte"
+import { Whistle } from "../../essentials_0.6.0/instruments/leads.forte"
+import { GuitarPluck } from "../instruments/modal.forte"
 import { Crash } from "../../essentials_0.6.0/instruments/drums.forte"
 import { ChoirPad } from "../../essentials_0.6.0/instruments/pads.forte"
 
@@ -15,7 +17,7 @@ block CrashRise {
   }
   sample CrashRiseS = bounce(CrashRiseSrc, note: C3, beats: 4)
   track Door {
-    instrument sampler(sample: CrashRiseS, gain: 1.0, end: 0.667, reverse: "on", stretch: 0.3, sustain: 1.0, release: 0.2, vary: 0.1)
+    instrument sampler(attack: 0.06, sample: CrashRiseS, gain: 1.0, end: 0.667, reverse: "on", stretch: 0.3, sustain: 1.0, release: 0.2, vary: 0.1)
     insert reverb(size: 0.7, decay: 0.6, mix: 0.3)
     volume 0.8
     // lands exactly on the next bar line
@@ -32,7 +34,7 @@ block NoiseWall {
   sample NoiseWallS = bounce(NoiseWallSrc, note: C3, beats: 4)
   track Wall {
     // stretch 0.05: two seconds of noise become a near-static wall
-    instrument sampler(sample: NoiseWallS, gain: 1.0, end: 0.667, stretch: 0.05, sustain: 1.0, release: 0.3, vary: 0.05)
+    instrument sampler(attack: 0.06, sample: NoiseWallS, gain: 1.0, end: 0.667, stretch: 0.05, sustain: 1.0, release: 0.3, vary: 0.05)
     insert gate(depth: 0.9, beats: 0.5, duty: 0.55)
     insert filter(type: "lp", cutoff: 0.6, reso: 0.3)
     volume 0.6
@@ -48,7 +50,7 @@ block DustRattle {
   }
   sample DustRattleS = bounce(DustRattleSrc, note: C3, beats: 4)
   track Rattle {
-    instrument sampler(sample: DustRattleS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.35, sustain: 0.0, decay: 0.25)
+    instrument sampler(attack: 0.06, sample: DustRattleS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.35, sustain: 0.0, decay: 0.25)
     insert exciter(amount: 0.25)
     volume 0.8
     play notes`C3:0.25 E3:0.25 _:0.25 G3:0.25 _:0.25 A3:0.25 C#3:0.25 _:0.25 D3:0.25 _:0.25 F#3:0.25 B3:0.25 _:0.5 G#3:0.25 D#3:0.25` at bars(1..1)
@@ -65,7 +67,7 @@ block ChoirGrain {
   }
   sample ChoirGrainS = bounce(ChoirGrainSrc, note: C3, beats: 4)
   track Vowel {
-    instrument sampler(sample: ChoirGrainS, gain: 1.0, end: 0.667, stretch: 0.1, sustain: 1.0, release: 0.4, vary: 0.08)
+    instrument sampler(attack: 0.06, sample: ChoirGrainS, gain: 1.0, end: 0.667, stretch: 0.1, sustain: 1.0, release: 0.4, vary: 0.08)
     insert vinyl(wow: 0.4, crackle: 0.08, hiss: 0.12, dust: 0.3)
     insert width(amount: 0.85)
     volume 0.75
@@ -81,7 +83,7 @@ block ZapArp {
   }
   sample ZapArpS = bounce(ZapArpSrc, note: C4, beats: 4)
   track Bleep {
-    instrument sampler(sample: ZapArpS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.25, sustain: 0.0, decay: 0.3)
+    instrument sampler(attack: 0.06, sample: ZapArpS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.25, sustain: 0.0, decay: 0.3)
     modulate pitch with steps(seq: "0.5 0.625 0.5 0.75 0.5 0.375 0.625 0.5", every: "1/8", amount: 0.3) as scatter
     insert delay(time: 0.19, fdbk: 0.4, mix: 0.25)
     volume 0.7
@@ -101,12 +103,12 @@ block ImpactStamp {
   }
   sample ImpactStampS = bounce(ImpactStampSrc, note: C2, beats: 2)
   track Stamp {
-    instrument sampler(sample: ImpactStampS, gain: 1.0, sustain: 0.0, decay: 0.6, vary: 0.1)
+    instrument sampler(attack: 0.06, sample: ImpactStampS, gain: 1.0, sustain: 0.0, decay: 0.6, vary: 0.1)
     volume 0.85
     play notes`C2:1 _:7` at bars(1..2)
   }
   track Shadow {
-    instrument sampler(sample: ImpactStampS, gain: 1.0, end: 0.5, reverse: "on", sustain: 1.0, release: 0.2)
+    instrument sampler(attack: 0.06, sample: ImpactStampS, gain: 1.0, end: 0.5, reverse: "on", sustain: 1.0, release: 0.2)
     insert crush(bits: 0.4, rate: 0.25, mix: 0.35)
     volume 0.5
     play notes`_:6.5 C2~:1.5` at bars(1..2)
@@ -121,7 +123,7 @@ block ColdPulse {
   }
   sample ColdPulseS = bounce(ColdPulseSrc, note: C5, beats: 4)
   track Morse {
-    instrument sampler(sample: ColdPulseS, gain: 1.0, end: 0.667, loop: "on", sustain: 1.0, release: 0.1, vary: 0.04)
+    instrument sampler(attack: 0.06, sample: ColdPulseS, gain: 1.0, end: 0.667, loop: "on", sustain: 1.0, release: 0.1, vary: 0.04)
     insert gate(depth: 0.97, beats: 0.25, duty: 0.3)
     insert width(amount: 0.9)
     insert delay(time: 0.33, fdbk: 0.3, mix: 0.2)
@@ -138,10 +140,98 @@ block TapeAir {
   }
   sample TapeAirS = bounce(TapeAirSrc, note: C4, beats: 4)
   track Air {
-    instrument sampler(sample: TapeAirS, gain: 1.0, end: 0.667, loop: "on", sustain: 1.0, release: 0.5)
+    instrument sampler(attack: 0.06, sample: TapeAirS, gain: 1.0, end: 0.667, loop: "on", sustain: 1.0, release: 0.5)
     insert vinyl(wow: 0.3, crackle: 0.25, hiss: 0.25, dust: 0.4)
     insert gate(depth: 0.4, beats: 1, duty: 0.7)
     volume 0.3
     play notes`C4~:8` at bars(1..2)
   }
 }
+
+// ---- PowerWall — the guitar wall: fuzzed power chord, gate-chugged ---------
+block PowerWall {
+  block PowerWallSrc {
+    track G {
+      instrument GuitarPluck(pick: 0.7)
+      insert saturate(mode: "fuzz", drive: 0.7, tone: 0.5)
+      insert parcomp(amount: 0.6, drive: 0.7, color: 0.4)
+      volume 0.95
+      play notes`[C2 G2 C3]~:4` at bars(1..1)
+    }
+  }
+  sample PowerWallS = bounce(PowerWallSrc, note: C2, beats: 4)
+  track Chug {
+    instrument sampler(attack: 0.06, sample: PowerWallS, end: 0.667, loop: "on", sustain: 1.0, release: 0.12, vary: 0.08)
+    insert gate(depth: 0.92, beats: 0.5, duty: 0.55)
+    // the wall opens across bar 4 and slams shut again
+    automate gate.duty from 0.55 to 0.95 over bars(4..4)
+    automate gate.duty from 0.95 to 0.55 over bars(5..5)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.55)
+    insert width(amount: 0.75)
+    volume 0.85
+    play notes`C2~:8 D#2~:4 C2~:4` at bars(1..4)
+  }
+}
+
+// ---- RainField — rain on a window, from noise and nothing else -------------
+block RainField {
+  block RainFieldSrc {
+    track D { instrument Dust(color: 0.45) volume 0.9
+      play beat`euclid(13, 16)` at bars(1..1) }
+  }
+  sample RainFieldS = bounce(RainFieldSrc, note: C3, beats: 4)
+  track Wash {
+    // frozen to a hush: the dust becomes weather
+    instrument sampler(attack: 0.2, sample: RainFieldS, end: 0.667, stretch: 0.06, sustain: 1.0, release: 0.6, vary: 0.05)
+    insert filter(type: "lp", cutoff: 0.55, reso: 0.15)
+    insert width(amount: 0.8)
+    volume 0.45
+    play notes`C3~:16` at bars(1..4)
+  }
+  track Drops {
+    instrument sampler(attack: 0.03, sample: RainFieldS, slices: 16, end: 0.667, choke: "on", vary: 0.45, sustain: 0.0, decay: 0.2)
+    modulate pitch with random(rate: 0.3, amount: 0.08, smooth: 0.4) as scatter
+    volume 0.35
+    play notes`C3:0.25 _:0.75 E3:0.25 _:0.5 G3:0.25 _:0.5 A#3:0.25 _:0.25 D3:0.25 _:0.75` at bars(1..4)
+  }
+}
+
+// ---- BirdSong — morning birds over the field --------------------------------
+block BirdSong {
+  block BirdSongSrc {
+    track W { instrument Whistle volume 0.85
+      play notes`C6:0.25 _:0.25 E6:0.125 D6:0.125 _:0.5 G6:0.25 _:1 A6:0.125 G6:0.125 _:1.25` at bars(1..1) }
+  }
+  sample BirdSongS = bounce(BirdSongSrc, note: C6, beats: 4)
+  track Chirp {
+    instrument sampler(attack: 0.03, sample: BirdSongS, slices: 16, end: 0.667, choke: "on", vary: 0.4, sustain: 0.0, decay: 0.3)
+    modulate pitch with random(rate: 0.35, amount: 0.1, smooth: 0.3) as warble
+    insert exciter(amount: 0.3)
+    insert delay(time: 0.31, fdbk: 0.25, mix: 0.2)
+    insert reverb(size: 0.75, decay: 0.6, mix: 0.35)
+    volume 0.95
+    play notes`C6:0.25 _:1.25 E6:0.125 F6:0.125 _:0.75 G6:0.25 _:1.25` at bars(1..2)
+    play notes`_:0.75 A6:0.125 G6:0.125 _:1.5 C6:0.25 D6:0.125 C6:0.125 _:1` at bars(3..4)
+  }
+}
+
+// ---- StreetAir — the city outside the window --------------------------------
+block StreetAir {
+  block StreetAirSrc {
+    track H { instrument Hiss(body: 0.2) volume 0.9
+      play notes`C3~:4` at bars(1..1) }
+    track T { instrument ColdTone(beatrate: 0.5) volume 0.25
+      play notes`C2~:4` at bars(1..1) }
+  }
+  sample StreetAirS = bounce(StreetAirSrc, note: C3, beats: 4)
+  track Outside {
+    instrument sampler(attack: 0.25, sample: StreetAirS, end: 0.667, loop: "on", sustain: 1.0, release: 0.6, vary: 0.04)
+    modulate pitch with random(rate: 0.03, amount: 0.02, smooth: 0.92) as drift
+    insert vinyl(wow: 0.25, crackle: 0.06, hiss: 0.25, dust: 0.45)
+    insert gate(depth: 0.25, beats: 1, duty: 0.75)
+    insert width(amount: 0.85)
+    volume 0.9
+    play notes`C3~:16` at bars(1..4)
+  }
+}
+

@@ -7,7 +7,8 @@ import { TinePiano, Vibraphone, GuitarPluck, BowedStrings } from "../instruments
 import { Bell, EPiano, Glass } from "../../essentials_0.6.0/instruments/keys.forte"
 import { JunoBrass } from "../../essentials_0.6.0/instruments/juno60.forte"
 import { P5Sweep } from "../../essentials_0.6.0/instruments/prophet5.forte"
-import { VoxLead, Pluck } from "../../essentials_0.6.0/instruments/leads.forte"
+import { VoxLead, Pluck, BitLead, GlideLead } from "../../essentials_0.6.0/instruments/leads.forte"
+import { EightiesPad } from "../../essentials_0.6.0/instruments/pads.forte"
 
 // ---- TineStabCut — offbeat tine stabs with the tails cut off --------------
 block TineStabCut {
@@ -21,7 +22,7 @@ block TineStabCut {
   }
   sample TineStabCutS = bounce(TineStabCutSrc, note: C3, beats: 4)
   track Stabs {
-    instrument sampler(sample: TineStabCutS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.4)
+    instrument sampler(attack: 0.06, sample: TineStabCutS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.4)
     modulate pitch with random(rate: 0.08, amount: 0.03, smooth: 0.75) as swim
     insert delay(time: 0.28, fdbk: 0.3, mix: 0.2)
     insert vinyl(wow: 0.25, crackle: 0.1, hiss: 0.1, dust: 0.25)
@@ -44,7 +45,7 @@ block GuitarChop {
   }
   sample GuitarChopS = bounce(GuitarChopSrc, note: C3, beats: 4)
   track Chop {
-    instrument sampler(sample: GuitarChopS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.18, sustain: 0.0, decay: 0.35)
+    instrument sampler(attack: 0.06, sample: GuitarChopS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.18, sustain: 0.0, decay: 0.35)
     modulate pitch with random(rate: 0.12, amount: 0.035, smooth: 0.65) as swim
     insert parcomp(amount: 0.5, drive: 0.55, color: 0.4)
     volume 0.9
@@ -62,7 +63,7 @@ block VibesFreeze {
   sample VibesFreezeS = bounce(VibesFreezeSrc, note: C4, beats: 4)
   track Halo {
     // stretch 0.15 = the run takes ~3x its time, grains blooming
-    instrument sampler(sample: VibesFreezeS, gain: 1.0, end: 0.667, stretch: 0.15, sustain: 1.0, release: 0.4, vary: 0.08)
+    instrument sampler(attack: 0.06, sample: VibesFreezeS, gain: 1.0, end: 0.667, stretch: 0.15, sustain: 1.0, release: 0.4, vary: 0.08)
     insert width(amount: 0.85)
     insert reverb(size: 0.7, decay: 0.6, mix: 0.35)
     volume 0.8
@@ -78,7 +79,7 @@ block StringStretch {
   }
   sample StringStretchS = bounce(StringStretchSrc, note: C4, beats: 4)
   track Tape {
-    instrument sampler(sample: StringStretchS, gain: 1.0, end: 0.667, stretch: 0.25, sustain: 1.0, release: 0.4, vary: 0.06)
+    instrument sampler(attack: 0.06, sample: StringStretchS, gain: 1.0, end: 0.667, stretch: 0.25, sustain: 1.0, release: 0.4, vary: 0.06)
     insert vinyl(wow: 0.45, crackle: 0.1, hiss: 0.1, dust: 0.35)
     insert width(amount: 0.8)
     volume 0.85
@@ -94,12 +95,12 @@ block BellFlip {
   }
   sample BellFlipS = bounce(BellFlipSrc, note: C4, beats: 4)
   track Box {
-    instrument sampler(sample: BellFlipS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.2, sustain: 0.0, decay: 0.5)
+    instrument sampler(attack: 0.06, sample: BellFlipS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.2, sustain: 0.0, decay: 0.5)
     volume 0.8
     play notes`C4:0.5 E4:0.5 _:0.5 G4:0.5 _:1 D4:0.5 F4:0.5` at bars(1..2)
   }
   track Mirror {
-    instrument sampler(sample: BellFlipS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.25, reverse: "on", sustain: 0.0, decay: 0.4)
+    instrument sampler(attack: 0.06, sample: BellFlipS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.25, reverse: "on", sustain: 0.0, decay: 0.4)
     insert reverb(size: 0.6, decay: 0.55, mix: 0.3)
     volume 0.55
     play notes`_:5 F4:0.5 _:1.5 A4:0.5 _:0.5` at bars(1..2)
@@ -118,7 +119,7 @@ block EPianoDust {
   }
   sample EPianoDustS = bounce(EPianoDustSrc, note: C3, beats: 4)
   track Dusty {
-    instrument sampler(sample: EPianoDustS, gain: 1.0, end: 0.667, loop: "on", sustain: 1.0, release: 0.15, vary: 0.06)
+    instrument sampler(attack: 0.06, sample: EPianoDustS, gain: 1.0, end: 0.667, loop: "on", sustain: 1.0, release: 0.15, vary: 0.06)
     insert gate(depth: 0.9, beats: 0.25, duty: 0.45)
     insert vinyl(wow: 0.35, crackle: 0.1, hiss: 0.1, dust: 0.35)
     volume 0.85
@@ -135,7 +136,7 @@ block VoxCutUp {
   sample VoxCutUpS = bounce(VoxCutUpSrc, note: C4, beats: 4)
   track Cut {
     // pitched down a fourth, big vary: the Burial voice
-    instrument sampler(sample: VoxCutUpS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.3, pitch: 0.396, sustain: 0.0, decay: 0.4)
+    instrument sampler(attack: 0.06, sample: VoxCutUpS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.3, pitch: 0.396, sustain: 0.0, decay: 0.4)
     insert vinyl(wow: 0.4, crackle: 0.1, hiss: 0.1, dust: 0.3)
     insert reverb(size: 0.65, decay: 0.55, mix: 0.3)
     volume 0.85
@@ -152,7 +153,7 @@ block JunoBrassHits {
   }
   sample JunoBrassHitsS = bounce(JunoBrassHitsSrc, note: C3, beats: 4)
   track Hits {
-    instrument sampler(sample: JunoBrassHitsS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.45)
+    instrument sampler(attack: 0.06, sample: JunoBrassHitsS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.45)
     insert exciter(amount: 0.3)
     insert parcomp(amount: 0.5, drive: 0.55, color: 0.45)
     volume 0.9
@@ -169,7 +170,7 @@ block SweepScrub {
   sample SweepScrubS = bounce(SweepScrubSrc, note: C3, beats: 4)
   track Scrub {
     // co-modulated window: same seq on start (base .25) and end (base .37)
-    instrument sampler(sample: SweepScrubS, gain: 1.0, start: 0.25, end: 0.37, loop: "on", sustain: 0.85, decay: 0.2, release: 0.06, choke: "on", vary: 0.1)
+    instrument sampler(attack: 0.06, sample: SweepScrubS, gain: 1.0, start: 0.25, end: 0.37, loop: "on", sustain: 0.85, decay: 0.2, release: 0.06, choke: "on", vary: 0.1)
     modulate start with steps(seq: "0.0 0.4 0.8 0.24 0.6 0.96 0.44 0.14", every: "1/8", amount: 0.25)
     modulate end  with steps(seq: "0.0 0.4 0.8 0.24 0.6 0.96 0.44 0.14", every: "1/8", amount: 0.25)
     insert saturate(mode: "tape", drive: 0.3)
@@ -188,9 +189,95 @@ block PluckArp {
   }
   sample PluckArpS = bounce(PluckArpSrc, note: C4, beats: 4)
   track Reorder {
-    instrument sampler(sample: PluckArpS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.3)
+    instrument sampler(attack: 0.06, sample: PluckArpS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.3)
     insert delay(time: 0.25, fdbk: 0.35, mix: 0.22)
     volume 0.85
     play notes`C4:0.25 F4:0.25 D4:0.25 A4:0.25 C4:0.25 G#4:0.25 E4:0.25 B4:0.25 C4:0.25 A#4:0.25 F#4:0.25 C5:0.25 D#4:0.25 A4:0.25 G4:0.25 D4:0.25` at bars(1..1)
   }
 }
+
+// ---- ViolinSolo — a solo violin phrase, then the sampler's opinion of it ---
+block ViolinSolo {
+  block ViolinSoloSrc {
+    track V { instrument BowedStrings(section: 0.3) volume 0.95
+      play humanize(notes`G4~:1.5 A#4:0.5 C5~:1 A#4:0.5 G4:0.5 F4~:1.5 D#4:0.5 F4~:2`, time: 0.03, vel: 10, seed: 71) at bars(1..2) }
+  }
+  sample ViolinSoloS = bounce(ViolinSoloSrc, note: C4, beats: 8)
+  track Solo {
+    instrument sampler(attack: 0.08, gain: 1.0, sample: ViolinSoloS, slices: 8, end: 0.8, choke: "on", vary: 0.12, sustain: 0.6, decay: 0.6, release: 0.25)
+    modulate pitch with random(rate: 0.06, amount: 0.02, smooth: 0.85) as swim
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.3)
+    insert vinyl(wow: 0.3, crackle: 0.08, hiss: 0.1, dust: 0.25)
+    volume 0.85
+    play notes`C4~:2 D4~:1.5 F4:0.5 E4~:2 C4~:1 D4~:1` at bars(1..3)
+    play notes`C4:0.75 D4:0.25 F4:0.5 G4~:1 E4:0.5 D4:0.5 C4:0.5` at bars(4..4)
+  }
+}
+
+// ---- ChipArp — the pico-pico machine ----------------------------------------
+block ChipArp {
+  block ChipArpSrc {
+    track B { instrument BitLead volume 0.9
+      play notes`C4:0.25 D#4:0.25 G4:0.25 C5:0.25 G4:0.25 D#4:0.25 A#4:0.25 G4:0.25 C4:0.25 F4:0.25 G#4:0.25 C5:0.25 G#4:0.25 F4:0.25 D4:0.25 F4:0.25` at bars(1..1) }
+  }
+  sample ChipArpS = bounce(ChipArpSrc, note: C4, beats: 4)
+  track Pico {
+    instrument sampler(attack: 0.03, gain: 1.0, sample: ChipArpS, slices: 16, end: 0.667, choke: "on", vary: 0.2, sustain: 0.0, decay: 0.3)
+    modulate pitch with steps(seq: "0.5 0.5 0.625 0.5 0.75 0.5 0.375 0.625", every: "1/8", amount: 0.2) as scatter
+    insert crush(bits: 0.45, rate: 0.35, mix: 0.4)
+    insert delay(time: 0.19, fdbk: 0.35, mix: 0.25)
+    volume 0.75
+    play notes`C4:0.25 D4:0.25 F4:0.25 C4:0.25 G4:0.25 C4:0.25 A#4:0.25 G4:0.25 C4:0.25 D#4:0.25 C4:0.25 F#4:0.25 G4:0.25 C4:0.25 B4:0.25 C5:0.25` at bars(1..3)
+    play notes`C4:0.125 D4:0.125 F4:0.125 G4:0.125 C4:0.25 _:0.25 A#4:0.125 G4:0.125 F4:0.125 D#4:0.125 C4:0.25 _:0.25 G4:0.125 F#4:0.125 F4:0.125 D#4:0.125 D4:0.125 C4:0.125 B3:0.125 C4:0.125 _:0.5 C4:0.25 G3:0.25` at bars(4..4)
+  }
+}
+
+// ---- BraindanceKeys — the ambient half of the breakbeat record --------------
+// Warm detuned pad chords on the wrong tape speed, a plaintive glide lead
+// far away — the SAW mood, waiting for a slicer beat underneath.
+block BraindanceKeys {
+  block BraindanceKeysSrc {
+    track P { instrument EightiesPad volume 0.9
+      play notes`[C3 D#3 G3 A#3]~:4 [G#2 C3 D#3 G3]~:4` at bars(1..2) }
+  }
+  sample BraindanceKeysS = bounce(BraindanceKeysSrc, note: C3, beats: 8)
+  track Warm {
+    instrument sampler(attack: 0.15, sample: BraindanceKeysS, end: 0.8, stretch: 0.35, sustain: 1.0, release: 0.5, vary: 0.05)
+    modulate pitch with random(rate: 0.05, amount: 0.018, smooth: 0.9) as swim
+    insert vinyl(wow: 0.35, crackle: 0.08, hiss: 0.12, dust: 0.3)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.75, decay: 0.65, mix: 0.35)
+    volume 0.75
+    play notes`C3~:16` at bars(1..4)
+  }
+  track Faraway {
+    instrument GlideLead
+    insert filter(type: "lp", cutoff: 0.55, reso: 0.2)
+    insert delay(time: 0.375, fdbk: 0.4, mix: 0.3)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.45)
+    volume 0.45
+    play notes`_:2 G4~:1.5 A#4~:0.5 _:1 F4~:2 _:1 D#4~:1.5 C4~:2 _:4.5` at bars(1..4)
+  }
+}
+
+// ---- PianoLoop — the upright that never existed, looped off its record -----
+block PianoLoop {
+  block PianoLoopSrc {
+    track E { instrument EPiano(tine: 0.25)
+      insert saturate(mode: "tape", drive: 0.3)
+      volume 0.9
+      play humanize(notes`C3:0.75 [D#3 G3]:0.25 A#2:1 [C3 D#3]:0.75 G2:0.25 [A#2 D3]:1`, time: 0.02, vel: 12, seed: 79) at bars(1..1) }
+    track B { instrument Bell(decay: 0.35) volume 0.35
+      play humanize(notes`C4:0.75 G4:0.25 A#3:1 D#4:0.75 G3:0.25 D4:1`, time: 0.02, vel: 12, seed: 79) at bars(1..1) }
+  }
+  sample PianoLoopS = bounce(PianoLoopSrc, note: C3, beats: 4)
+  track Loop {
+    instrument sampler(attack: 0.06, sample: PianoLoopS, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.4, decay: 0.6, release: 0.2)
+    modulate pitch with random(rate: 0.07, amount: 0.025, smooth: 0.85) as swim
+    insert vinyl(wow: 0.35, crackle: 0.1, hiss: 0.12, dust: 0.3)
+    volume 0.9
+    play notes`C3:1 D3:1 E3:0.5 F3:0.5 G3:1` at bars(1..3)
+    play notes`C3:0.75 D3:0.25 E3:0.5 G3:0.25 F3:0.25 D3:0.5 E3:0.5 C3:0.5 G3:0.5` at bars(4..4)
+  }
+}
+

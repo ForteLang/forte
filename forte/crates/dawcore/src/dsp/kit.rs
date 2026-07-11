@@ -177,7 +177,13 @@ impl KitSampler {
                 v.step
             };
             v.pos += eff;
-            if v.pos >= data.len() as f64 || !v.env.is_active() {
+            // data end: DECLICK instead of truncating — a bounce that still
+            // rings at its cutoff (an echo tail) would pop otherwise
+            if v.pos >= data.len() as f64 {
+                v.pos = (data.len() as f64 - 1.0).max(0.0);
+                v.env.cut();
+            }
+            if !v.env.is_active() {
                 v.active = false;
             }
         }
