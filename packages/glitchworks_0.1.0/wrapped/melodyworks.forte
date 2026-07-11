@@ -25,7 +25,7 @@ block TineStabCut {
     instrument sampler(attack: 0.06, sample: TineStabCutS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.4)
     modulate pitch with random(rate: 0.08, amount: 0.03, smooth: 0.75) as swim
     insert delay(time: 0.28, fdbk: 0.3, mix: 0.2)
-    insert vinyl(wow: 0.25, crackle: 0.1, hiss: 0.1, dust: 0.25)
+    insert vinyl(wow: 0.25, crackle: 0.06, hiss: 0.05, dust: 0.25)
     volume 0.9
     play notes`_:0.5 C3:0.5 _:1 C3:0.25 D3:0.25 _:1 C3:0.5 _:2.5 D#3:0.5 _:0.5 C3:0.5` at bars(1..3)
     play notes`_:0.5 C3:0.25 C#3:0.25 _:0.75 D3:0.125 D#3:0.125 E3:0.25 _:0.75 F3:0.25 E3:0.25 D3:0.25 C3:0.25` at bars(4..4)
@@ -38,7 +38,7 @@ block GuitarChop {
     track G {
       instrument GuitarPluck(pick: 0.6)
       insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
-      insert vinyl(wow: 0.2, crackle: 0.1, hiss: 0.1, dust: 0.2)
+      insert vinyl(wow: 0.2, crackle: 0.06, hiss: 0.05, dust: 0.2)
       volume 0.95
       play humanize(notes`C3:0.25 _:0.25 C3:0.25 D#3:0.25 _:0.25 G3:0.25 F3:0.25 _:0.25 C3:0.25 _:0.25 A#2:0.25 C3:0.25 D#3:0.25 _:0.25 F3:0.25 G3:0.25`, time: 0.01, vel: 16, seed: 53) at bars(1..1)
     }
@@ -80,7 +80,7 @@ block StringStretch {
   sample StringStretchS = bounce(StringStretchSrc, note: C4, beats: 4)
   track Tape {
     instrument sampler(attack: 0.06, sample: StringStretchS, gain: 1.0, end: 0.667, stretch: 0.25, sustain: 1.0, release: 0.4, vary: 0.06)
-    insert vinyl(wow: 0.45, crackle: 0.1, hiss: 0.1, dust: 0.35)
+    insert vinyl(wow: 0.45, crackle: 0.06, hiss: 0.05, dust: 0.35)
     insert width(amount: 0.8)
     volume 0.85
     play notes`C4~:8` at bars(1..2)
@@ -121,7 +121,7 @@ block EPianoDust {
   track Dusty {
     instrument sampler(attack: 0.06, sample: EPianoDustS, gain: 1.0, end: 0.667, loop: "on", sustain: 1.0, release: 0.15, vary: 0.06)
     insert gate(depth: 0.9, beats: 0.25, duty: 0.45)
-    insert vinyl(wow: 0.35, crackle: 0.1, hiss: 0.1, dust: 0.35)
+    insert vinyl(wow: 0.35, crackle: 0.06, hiss: 0.05, dust: 0.35)
     volume 0.85
     play notes`C3~:6 A#2~:2` at bars(1..2)
   }
@@ -137,7 +137,7 @@ block VoxCutUp {
   track Cut {
     // pitched down a fourth, big vary: the Burial voice
     instrument sampler(attack: 0.06, sample: VoxCutUpS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.3, pitch: 0.396, sustain: 0.0, decay: 0.4)
-    insert vinyl(wow: 0.4, crackle: 0.1, hiss: 0.1, dust: 0.3)
+    insert vinyl(wow: 0.4, crackle: 0.06, hiss: 0.05, dust: 0.3)
     insert reverb(size: 0.65, decay: 0.55, mix: 0.3)
     volume 0.85
     play notes`C4:0.25 _:0.25 D4:0.25 F4:0.25 _:0.5 G4:0.25 A4:0.25 _:0.5 C4:0.5 _:0.25 D#4:0.25 _:0.5` at bars(1..3)
@@ -244,7 +244,7 @@ block BraindanceKeys {
   track Warm {
     instrument sampler(attack: 0.15, sample: BraindanceKeysS, end: 0.8, stretch: 0.35, sustain: 1.0, release: 0.5, vary: 0.05)
     modulate pitch with random(rate: 0.05, amount: 0.018, smooth: 0.9) as swim
-    insert vinyl(wow: 0.35, crackle: 0.08, hiss: 0.12, dust: 0.3)
+    insert vinyl(wow: 0.35, crackle: 0.05, hiss: 0.06, dust: 0.3)
     insert width(amount: 0.85)
     insert reverb(size: 0.75, decay: 0.65, mix: 0.35)
     volume 0.75
@@ -274,7 +274,7 @@ block PianoLoop {
   track Loop {
     instrument sampler(attack: 0.06, sample: PianoLoopS, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.4, decay: 0.6, release: 0.2)
     modulate pitch with random(rate: 0.07, amount: 0.025, smooth: 0.85) as swim
-    insert vinyl(wow: 0.35, crackle: 0.1, hiss: 0.12, dust: 0.3)
+    insert vinyl(wow: 0.35, crackle: 0.06, hiss: 0.052, dust: 0.3)
     volume 0.9
     play notes`C3:1 D3:1 E3:0.5 F3:0.5 G3:1` at bars(1..3)
     play notes`C3:0.75 D3:0.25 E3:0.5 G3:0.25 F3:0.25 D3:0.5 E3:0.5 C3:0.5 G3:0.5` at bars(4..4)
