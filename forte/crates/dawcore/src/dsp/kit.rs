@@ -65,6 +65,10 @@ pub struct KitSampler {
     /// extra transpose in semitones for the WRAP layer (param-controlled,
     /// automatable — bends held wrap voices live)
     pub transpose: f32,
+    /// per-trigger variation 0..1 (same semantics as the sampler's `vary`):
+    /// deterministic micro-drift of pitch and level keyed to the trigger
+    /// counter — pads stop machine-gunning
+    pub vary: f32,
 }
 
 impl KitSampler {
@@ -82,6 +86,7 @@ impl KitSampler {
             sustain: 1.0,
             release: 0.2,
             transpose: 0.0,
+            vary: 0.0,
         }
     }
 
@@ -103,15 +108,17 @@ impl KitSampler {
             }
         };
         self.clock += 1;
+        // steal the QUIETEST voice, not the oldest — inaudible steals
         let mut idx = 0;
-        let mut oldest = u64::MAX;
+        let mut quietest = f32::MAX;
         for (i, v) in self.voices.iter().enumerate() {
             if !v.active {
                 idx = i;
                 break;
             }
-            if self.age[i] < oldest {
-                oldest = self.age[i];
+            let s = v.env.level() * v.vel;
+            if s < quietest {
+                quietest = s;
                 idx = i;
             }
         }
@@ -124,6 +131,23 @@ impl KitSampler {
         // reconstruct the 0..127 step so velocity 100 lands on exactly 1.0 —
         // songs without accents/ghosts stay bit-identical
         v.vel = ((velocity * 127.0 + 0.5) as u32 as f32 / 100.0).clamp(0.0, 1.27);
+        let vary_amt = self.vary.clamp(0.0, 1.0);
+        if vary_amt > 0.0 {
+            let mut h = (self.clock as u32)
+                .wrapping_mul(0x9e37_79b9)
+                .wrapping_add((note as u32).wrapping_mul(0x85eb_ca6b))
+                .max(1);
+            h ^= h << 13;
+            h ^= h >> 17;
+            h ^= h << 5;
+            let r1 = (h as f32 / u32::MAX as f32) * 2.0 - 1.0;
+            h ^= h << 13;
+            h ^= h >> 17;
+            h ^= h << 5;
+            let r2 = (h as f32 / u32::MAX as f32) * 2.0 - 1.0;
+            v.step *= crate::dmath::powf(2.0, r1 * vary_amt * 0.35 / 12.0) as f64;
+            v.vel = (v.vel * (1.0 + r2 * vary_amt * 0.12)).clamp(0.0, 1.27);
+        }
         v.note = note;
         v.active = true;
         v.env.set(self.attack, self.decay, self.sustain, self.release);

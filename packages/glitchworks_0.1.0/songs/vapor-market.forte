@@ -9,7 +9,7 @@ song "Vapor Market" {
   artist "Forte Essentials"
   tempo 106bpm
   swing 0.58
-  master 1.15
+  master 1.7
   key E minor
 
   play BassStabEcho(volume: 0.85) at bars(1..13)

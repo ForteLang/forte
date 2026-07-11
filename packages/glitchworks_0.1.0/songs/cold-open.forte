@@ -7,7 +7,7 @@ song "Cold Open" {
   artist "Forte Essentials"
   tempo 76bpm
   swing 0.5
-  master 1.2
+  master 2.0
   key A minor
 
   play SlowWave at bars(1..9)

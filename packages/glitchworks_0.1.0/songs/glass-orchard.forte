@@ -7,7 +7,7 @@ song "Glass Orchard" {
   artist "Forte Essentials"
   tempo 96bpm
   swing 0.5
-  master 1.2
+  master 2.0
   key C minor
 
   play EnsembleChoir at bars(1..12)

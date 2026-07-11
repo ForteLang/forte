@@ -548,6 +548,9 @@ impl Instrument for crate::dsp::kit::KitSampler {
         if p.len() >= 6 {
             self.transpose = (p[5] - 0.5) * 48.0;
         }
+        if p.len() >= 7 {
+            self.vary = p[6];
+        }
     }
     fn voices(&self) -> usize {
         self.active_voices()

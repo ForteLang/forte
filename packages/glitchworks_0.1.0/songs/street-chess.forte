@@ -10,7 +10,7 @@ song "Street Chess" {
   artist "Forte Essentials"
   tempo 104bpm
   swing 0.6
-  master 1.15
+  master 1.4
   key G minor
 
   play UprightWalk(volume: 0.85) at bars(1..13)

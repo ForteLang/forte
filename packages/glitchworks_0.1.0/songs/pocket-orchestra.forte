@@ -7,7 +7,7 @@ song "Pocket Orchestra" {
   artist "Forte Essentials"
   tempo 96bpm
   swing 0.57
-  master 1.2
+  master 2.1
   key G minor
 
   play EnsembleDusk at bars(1..12)

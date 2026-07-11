@@ -9,7 +9,7 @@ song "Paper Birds" {
   artist "Forte Essentials"
   tempo 84bpm
   swing 0.55
-  master 1.2
+  master 1.5
   key F minor
 
   play RainField at bars(1..10)

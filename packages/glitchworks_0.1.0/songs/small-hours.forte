@@ -7,7 +7,7 @@ song "Small Hours" {
   artist "Forte Essentials"
   tempo 72bpm
   swing 0.5
-  master 1.25
+  master 2.1
   key C minor
 
   play EnsembleChoir at bars(1..9)

@@ -2104,7 +2104,7 @@ fn build_instrument(
                         key,
                         arg,
                         &[("gain", 0), ("attack", 1), ("decay", 2), ("sustain", 3),
-                          ("release", 4), ("pitch", 5)],
+                          ("release", 4), ("pitch", 5), ("vary", 6)],
                         &[],
                         call,
                     )?;

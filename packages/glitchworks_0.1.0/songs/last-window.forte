@@ -9,7 +9,7 @@ song "Last Window" {
   artist "Forte Essentials"
   tempo 68bpm
   swing 0.5
-  master 1.25
+  master 1.7
   key D minor
 
   play SlowWave at bars(1..8)

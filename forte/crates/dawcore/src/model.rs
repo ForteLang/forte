@@ -177,7 +177,7 @@ impl DeviceKind {
                 "Gain", "Attack", "Decay", "Sustain", "Release", "Pitch", "Start", "End",
                 "Loop", "Reverse", "Glide", "Slices", "Choke", "Vary", "Stretch",
             ],
-            DeviceKind::Kit => &["Gain", "Attack", "Decay", "Sustain", "Release", "Pitch"],
+            DeviceKind::Kit => &["Gain", "Attack", "Decay", "Sustain", "Release", "Pitch", "Vary"],
             DeviceKind::PolyMesh => &[],
             DeviceKind::Arpeggiator => &["Rate", "Octaves", "Mode"],
             DeviceKind::NoteTranspose => &["Semi"],
@@ -220,8 +220,9 @@ impl DeviceKind {
             DeviceKind::Sampler => {
                 vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             }
-            // Pitch 0.5 = centre; transposes the WRAP layer only (±24 semi)
-            DeviceKind::Kit => vec![0.8, 0.01, 0.3, 1.0, 0.25, 0.5],
+            // Pitch 0.5 = centre; transposes the WRAP layer only (±24 semi);
+            // Vary = per-trigger pitch/level drift (anti machine-gun)
+            DeviceKind::Kit => vec![0.8, 0.01, 0.3, 1.0, 0.25, 0.5, 0.0],
             DeviceKind::PolyMesh => Vec::new(),
             DeviceKind::Arpeggiator => vec![0.55, 0.0, 0.0], // 1/8, 1 octave, up
             DeviceKind::NoteTranspose => vec![0.5],          // centre = 0 semitones

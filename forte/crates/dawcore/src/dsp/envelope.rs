@@ -69,6 +69,13 @@ impl Adsr {
         self.stage != Stage::Idle
     }
 
+    /// Current envelope level — lets voice allocators steal the QUIETEST
+    /// voice instead of the oldest, so a steal is inaudible instead of a
+    /// click.
+    pub fn level(&self) -> f32 {
+        self.level
+    }
+
     /// One-pole time constant: reach ~63% of target per `time` seconds.
     #[inline]
     fn rate(&self, time: f32) -> f32 {

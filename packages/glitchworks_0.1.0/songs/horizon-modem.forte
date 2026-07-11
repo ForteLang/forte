@@ -8,7 +8,7 @@ song "Horizon Modem" {
   artist "Forte Essentials"
   tempo 112bpm
   swing 0.54
-  master 1.15
+  master 1.6
   key D minor
 
   play SubPulse(volume: 0.8) at bars(1..14)

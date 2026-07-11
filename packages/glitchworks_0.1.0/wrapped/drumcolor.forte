@@ -95,7 +95,7 @@ block SnareRainbow {
   }
   // beat 4: the color voice rotates — echo, body, crush, rim run
   track Color {
-    instrument kit(C#3: SnrEcho, D3: SnrCrush, D#3: SnrBody, E3: SnrRim, sustain: 1.0, release: 0.3)
+    instrument kit(C#3: SnrEcho, D3: SnrCrush, D#3: SnrBody, E3: SnrRim, vary: 0.15, sustain: 1.0, release: 0.3)
     insert parcomp(amount: 0.45, drive: 0.55, color: 0.4)
     volume 0.9
     play late(notes`_:3 C#3!:0.5 _:0.5`, by: 0.05) at bars(1..1)
@@ -167,7 +167,7 @@ block KickStack {
   sample KikSpit = bounce(KikSpitSrc, note: D1, beats: 1)
 
   track Feet {
-    instrument kit(C1: KikStack, C#1: KikBoom, D1: KikSpit, sustain: 1.0, release: 0.25)
+    instrument kit(C1: KikStack, C#1: KikBoom, D1: KikSpit, vary: 0.1, sustain: 1.0, release: 0.25)
     insert parcomp(amount: 0.5, drive: 0.6, color: 0.3)
     volume 0.95
     play notes`C1:0.5 _:1 D1:0.5 C1:0.5 _:1.5` at bars(1..1)

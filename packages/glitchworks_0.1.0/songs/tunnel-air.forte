@@ -7,7 +7,7 @@ song "Tunnel Air" {
   artist "Forte Essentials"
   tempo 86bpm
   swing 0.54
-  master 1.2
+  master 1.45
   key G minor
 
   play GlideBrass at bars(1..11)

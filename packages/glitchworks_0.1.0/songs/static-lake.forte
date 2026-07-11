@@ -8,7 +8,7 @@ song "Static Lake" {
   artist "Forte Essentials"
   tempo 76bpm
   swing 0.5
-  master 1.2
+  master 1.7
   key E minor
 
   play FreezeChoirHard at bars(1..9)

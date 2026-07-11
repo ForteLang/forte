@@ -2,8 +2,8 @@
 // sine blips and noise textures for IDM / glitch / microhouse, built to be
 // pushed through crush / stutter / gate.
 block Glitchworks {
-  desc "Clicks & cuts: click percussion, blips and noise textures for glitch and IDM — built for crush/stutter/gate and the polymeter/euclid groove vocabulary."
-  tags "glitch, idm, clicks-and-cuts, microhouse, percussion, 0.1.0"
+  desc "The glitch album toolkit: sampler machines (choke chops, granular stretch, glides, scrub windows, keyed sidechain), ensembles bounced and re-cut as one grain, body-first drums, and a songbook of thirty-second pieces — everything resampled, everything in motion."
+  tags "glitch, idm, sampler, granular, chop, glide, braindance, ambient, 0.1.0"
   artist "Forte Essentials"
   license "CC-BY-NC-SA-4.0"
   version "0.1.0"

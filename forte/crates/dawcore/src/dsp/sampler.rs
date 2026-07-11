@@ -220,15 +220,18 @@ impl Sampler {
             if self.choke {
                 self.choke_voices();
             }
+            // steal the QUIETEST voice, not the oldest — an inaudible voice
+            // can vanish without a click
             let mut best = 0;
-            let mut oldest = u64::MAX;
+            let mut quietest = f32::MAX;
             for (i, v) in self.voices.iter().enumerate() {
                 if !v.active {
                     best = i;
                     break;
                 }
-                if self.age[i] < oldest {
-                    oldest = self.age[i];
+                let s = v.env.level() * v.vel;
+                if s < quietest {
+                    quietest = s;
                     best = i;
                 }
             }
@@ -292,15 +295,17 @@ impl Sampler {
         if self.choke {
             self.choke_voices();
         }
+        // steal the QUIETEST voice, not the oldest (see the slice branch)
         let mut idx = 0;
-        let mut oldest = u64::MAX;
+        let mut quietest = f32::MAX;
         for (i, v) in self.voices.iter().enumerate() {
             if !v.active {
                 idx = i;
                 break;
             }
-            if self.age[i] < oldest {
-                oldest = self.age[i];
+            let s = v.env.level() * v.vel;
+            if s < quietest {
+                quietest = s;
                 idx = i;
             }
         }
