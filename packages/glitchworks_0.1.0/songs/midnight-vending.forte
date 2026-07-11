@@ -1,0 +1,19 @@
+// midnight-vending — a funk machine after hours: the glued funk grain,
+// muted pluck bass, tine stabs with their tails cut, a wooden clock.
+import { EnsembleFunk, WoodTick } from "../wrapped/glitchset.forte"
+import { PickBass } from "../wrapped/bassworks.forte"
+import { TineStabCut } from "../wrapped/melodyworks.forte"
+
+song "Midnight Vending" {
+  desc "The glued funk grain, muted pluck bass, cut tine stabs, a wooden clock after hours."
+  artist "Forte Essentials"
+  tempo 116bpm
+  swing 0.58
+  master 1.15
+  key E minor
+
+  play PickBass(volume: 0.85) at bars(1..14)
+  play EnsembleFunk(volume: 0.9) at bars(3..14)
+  play WoodTick(volume: 0.6) at bars(5..13)
+  play TineStabCut(volume: 0.75) at bars(7..14)
+}

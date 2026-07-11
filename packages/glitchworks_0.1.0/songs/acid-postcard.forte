@@ -1,0 +1,18 @@
+// acid-postcard — one acid line that never retriggers, only slides;
+// a low kit under it, bleeps answering, a frozen choir holding the sky.
+import { GlideAcid, LowKit, FreezeChoirHard } from "../wrapped/glitchset.forte"
+import { ZapArp } from "../wrapped/textureworks.forte"
+
+song "Acid Postcard" {
+  desc "An acid line that only slides, a low kit, bleeps, a frozen choir sky."
+  artist "Forte Essentials"
+  tempo 132bpm
+  swing 0.54
+  master 1.15
+  key A minor
+
+  play FreezeChoirHard(volume: 0.7) at bars(1..16)
+  play LowKit at bars(3..16)
+  play GlideAcid at bars(5..16)
+  play ZapArp(volume: 0.6) at bars(9..14)
+}

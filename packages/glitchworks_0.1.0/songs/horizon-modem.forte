@@ -1,0 +1,18 @@
+// horizon-modem — a voice sliding over a pulsing sub, dust ticking,
+// strings on the stutter lever answering from the far side.
+import { GlideVox, DustClock, StutterStrings } from "../wrapped/glitchset.forte"
+import { SubPulse } from "../wrapped/bassworks.forte"
+
+song "Horizon Modem" {
+  desc "A sliding voice over a pulsing sub, dust ticking, stuttered strings on the far side."
+  artist "Forte Essentials"
+  tempo 112bpm
+  swing 0.54
+  master 1.15
+  key D minor
+
+  play SubPulse(volume: 0.8) at bars(1..14)
+  play GlideVox(volume: 0.8) at bars(3..14)
+  play DustClock(volume: 0.55) at bars(5..13)
+  play StutterStrings(volume: 0.6) at bars(8..14)
+}

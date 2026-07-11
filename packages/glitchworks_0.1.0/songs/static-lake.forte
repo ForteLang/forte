@@ -1,0 +1,18 @@
+// static-lake — the frozen choir as water, drips as fish, a sub sliding
+// underneath, morse from the far shore.
+import { FreezeChoirHard, CaveDrip, GlideSub } from "../wrapped/glitchset.forte"
+import { ColdPulse } from "../wrapped/textureworks.forte"
+
+song "Static Lake" {
+  desc "A frozen choir as water, drips as fish, a sliding sub beneath, morse from the far shore."
+  artist "Forte Essentials"
+  tempo 76bpm
+  swing 0.5
+  master 1.2
+  key E minor
+
+  play FreezeChoirHard at bars(1..9)
+  play GlideSub(volume: 0.8) at bars(2..9)
+  play CaveDrip(volume: 0.6) at bars(3..9)
+  play ColdPulse(volume: 0.45) at bars(5..8)
+}

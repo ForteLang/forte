@@ -1,0 +1,17 @@
+// pocket-orchestra — the dusk ensemble conducted by a wooden clock,
+// brass leaning in, a bent bell taking the encore.
+import { EnsembleDusk, GlideBrass, WoodTick, GlideBell } from "../wrapped/glitchset.forte"
+
+song "Pocket Orchestra" {
+  desc "The dusk ensemble under a wooden clock, brass leaning in, a bent bell for the encore."
+  artist "Forte Essentials"
+  tempo 96bpm
+  swing 0.57
+  master 1.2
+  key G minor
+
+  play EnsembleDusk at bars(1..12)
+  play WoodTick(volume: 0.6) at bars(2..11)
+  play GlideBrass(volume: 0.7) at bars(4..12)
+  play GlideBell(volume: 0.7) at bars(8..12)
+}

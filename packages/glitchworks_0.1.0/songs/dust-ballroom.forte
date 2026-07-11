@@ -1,0 +1,19 @@
+// dust-ballroom — a brushed shuffle in an empty hall, the dusk ensemble
+// answering, a bent bell on the chandelier, a sub keeping the floor.
+import { EnsembleDusk, GlideBell } from "../wrapped/glitchset.forte"
+import { BrushShuffle } from "../wrapped/grooveworks.forte"
+import { SubDeep } from "../wrapped/bassworks.forte"
+
+song "Dust Ballroom" {
+  desc "A brushed shuffle in an empty hall, the dusk ensemble answering, a bent bell above."
+  artist "Forte Essentials"
+  tempo 98bpm
+  swing 0.62
+  master 1.15
+  key F minor
+
+  play BrushShuffle(volume: 0.7) at bars(1..12)
+  play SubDeep(volume: 0.8) at bars(2..12)
+  play EnsembleDusk(volume: 0.85) at bars(3..12)
+  play GlideBell(volume: 0.65) at bars(7..12)
+}

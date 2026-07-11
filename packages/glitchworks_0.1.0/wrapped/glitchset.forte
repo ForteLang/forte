@@ -1,0 +1,548 @@
+// glitchworks/glitchset — the album toolkit. Twenty-four machines built for
+// one purpose: a glitch ALBUM. Three families, and one law learned the hard
+// way (a noise-burst snare reads as a loud hi-hat and cheapens everything —
+// so the drums here are BODY first, noise last):
+//   GLIDE    — wrapped audio sliding between held notes (the 303/808 tie,
+//              on sampled sound: formants and tails bend with the slide)
+//   ENSEMBLE — several instruments bounced TOGETHER, chopped as one —
+//              the chord, the bass and the percussion glued in one grain
+//   MACHINES — window-walkers, freezers, re-cutters, backspins, dark kits
+import { Bass303 } from "../../essentials_0.6.0/instruments/tb303.forte"
+import { SH101Bass } from "../../essentials_0.6.0/instruments/sh101.forte"
+import { P5Brass, P5Strings } from "../../essentials_0.6.0/instruments/prophet5.forte"
+import { JunoStrings, JunoBrass } from "../../essentials_0.6.0/instruments/juno60.forte"
+import { Bell, EPiano, Glass } from "../../essentials_0.6.0/instruments/keys.forte"
+import { VoxLead, BitLead, Pluck, SquareLead, Whistle } from "../../essentials_0.6.0/instruments/leads.forte"
+import { ChoirPad, GlassPad, EightiesPad } from "../../essentials_0.6.0/instruments/pads.forte"
+import { Zap } from "../../essentials_0.6.0/instruments/fx.forte"
+import { KickSub, Rim, Stick, Snap, Tom, TomFloor, Clap, HatPedal } from "../../essentials_0.6.0/instruments/drums.forte"
+import { KickModal, SnareModal, RideModal, UprightBass, TinePiano, Vibraphone, GuitarPluck, BowedStrings } from "../instruments/modal.forte"
+import { Dust, Hiss } from "../instruments/textures.forte"
+
+// ============================ GLIDE FAMILY ==================================
+
+// GlideSub — the sub that never retriggers: every note slides
+block GlideSub {
+  block GlideSubSrc {
+    track K { instrument KickSub volume 0.95
+      play notes`C1~:4` at bars(1..1) }
+  }
+  sample GlideSubS = bounce(GlideSubSrc, note: C1, beats: 4)
+  track Slide {
+    instrument sampler(attack: 0.1, gain: 1.0, sample: GlideSubS, end: 0.667, loop: "on", sustain: 1.0, release: 0.3, glide: 0.14)
+    insert saturate(mode: "tape", drive: 0.3)
+    volume 0.85
+    play notes`C1~:2 D#1~:1 C1~:2 G1~:1 F1~:1 C1~:1` at bars(1..2)
+    play notes`C1~:1.5 A#0~:1.5 C1~:2 D#1~:0.5 F1~:0.5 G1~:1 C1~:1` at bars(3..4)
+  }
+}
+
+// GlideVox — a voice that slides between syllables it never sang
+block GlideVox {
+  block GlideVoxSrc {
+    track V { instrument VoxLead volume 0.9
+      play notes`C4~:4` at bars(1..1) }
+  }
+  sample GlideVoxS = bounce(GlideVoxSrc, note: C4, beats: 4)
+  track Slide {
+    instrument sampler(attack: 0.08, gain: 1.0, sample: GlideVoxS, end: 0.667, loop: "on", sustain: 1.0, release: 0.25, glide: 0.1, vary: 0.06)
+    insert reverb(size: 0.6, decay: 0.5, mix: 0.25)
+    volume 0.8
+    play notes`C4~:1.5 D#4~:0.5 F4~:1 D4~:1 C4~:2 A#3~:1 C4~:1` at bars(1..2)
+  }
+}
+
+// GlideStrings — a string section on a pitch wheel
+block GlideStrings {
+  block GlideStringsSrc {
+    track S { instrument BowedStrings(section: 0.5) volume 0.9
+      play notes`[C4 G4]~:4` at bars(1..1) }
+  }
+  sample GlideStringsS = bounce(GlideStringsSrc, note: C4, beats: 4)
+  track Slide {
+    instrument sampler(attack: 0.15, gain: 1.0, sample: GlideStringsS, end: 0.667, loop: "on", sustain: 1.0, release: 0.4, glide: 0.2, vary: 0.05)
+    insert width(amount: 0.8)
+    volume 0.8
+    play notes`C4~:3 A#3~:1 C4~:2 D#4~:1.5 D4~:0.5` at bars(1..2)
+  }
+}
+
+// GlideAcid — the true 303 slide, on AUDIO: accents bark, ties bend
+block GlideAcid {
+  block GlideAcidSrc {
+    track A { instrument Bass303(cutoff: 0.62, reso: 0.82, envmod: 0.7) volume 0.9
+      play notes`C2~:4` at bars(1..1) }
+  }
+  sample GlideAcidS = bounce(GlideAcidSrc, note: C2, beats: 4)
+  track Line {
+    instrument sampler(attack: 0.03, gain: 1.0, sample: GlideAcidS, end: 0.667, loop: "on", sustain: 1.0, release: 0.1, glide: 0.08, vary: 0.08)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.55)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    volume 0.85
+    play notes`C2!:0.25 C2~:0.25 D#2~:0.5 C2:0.25 _:0.25 G2!~:0.5 F2~:0.5 C2:0.25 C2:0.25 A#1~:0.5 C2!:0.5` at bars(1..1)
+    play notes`C2!:0.25 C2~:0.25 F2~:0.5 D#2:0.25 _:0.25 G#2!~:0.75 G2~:0.75 C2!:0.5 _:0.5` at bars(2..2)
+  }
+}
+
+// GlideBell — a music box bent by hand on the platter
+block GlideBell {
+  block GlideBellSrc {
+    track B { instrument Bell(decay: 0.7) volume 0.9
+      play notes`C5~:4` at bars(1..1) }
+  }
+  sample GlideBellS = bounce(GlideBellSrc, note: C5, beats: 4)
+  track Bent {
+    instrument sampler(attack: 0.05, gain: 1.0, sample: GlideBellS, end: 0.667, loop: "on", sustain: 1.0, release: 0.3, glide: 0.16, vary: 0.08)
+    insert delay(time: 0.32, fdbk: 0.35, mix: 0.25)
+    volume 0.7
+    play notes`C5~:1 G4~:1 A#4~:1.5 C5~:0.5 D#5~:1.5 C5~:2.5` at bars(1..2)
+  }
+}
+
+// GlideBrass — slow brass swells that lean into each other
+block GlideBrass {
+  block GlideBrassSrc {
+    track B { instrument P5Brass(blow: 0.55) volume 0.9
+      play notes`[C3 G3]~:4` at bars(1..1) }
+  }
+  sample GlideBrassS = bounce(GlideBrassSrc, note: C3, beats: 4)
+  track Lean {
+    instrument sampler(attack: 0.12, gain: 1.0, sample: GlideBrassS, end: 0.667, loop: "on", sustain: 1.0, release: 0.35, glide: 0.22, vary: 0.05)
+    insert filter(type: "lp", cutoff: 0.6, reso: 0.25)
+    insert width(amount: 0.75)
+    volume 0.8
+    play notes`C3~:2.5 D#3~:1.5 C3~:2 A#2~:2` at bars(1..2)
+  }
+}
+
+// ========================== ENSEMBLE FAMILY =================================
+
+// EnsembleDusk — piano, upright and vibes struck TOGETHER, chopped as one
+block EnsembleDusk {
+  block EnsembleDuskSrc {
+    track P { instrument TinePiano(bell: 0.4) volume 0.85
+      play notes`[C3 D#3 G3 A#3]:1.5 _:2.5` at bars(1..1) }
+    track U { instrument UprightBass(body: 0.55) volume 0.9
+      play notes`C2:1.5 _:2.5` at bars(1..1) }
+    track V { instrument Vibraphone(mallet: 0.35) volume 0.5
+      play notes`G4:1.5 _:2.5` at bars(1..1) }
+  }
+  sample EnsembleDuskS = bounce(EnsembleDuskSrc, note: C3, beats: 4)
+  track Chop {
+    instrument sampler(attack: 0.05, gain: 1.0, sample: EnsembleDuskS, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.4, decay: 0.6, release: 0.2)
+    modulate pitch with random(rate: 0.07, amount: 0.025, smooth: 0.85) as swim
+    volume 0.9
+    play notes`C3:1 _:0.5 D3:0.5 C3:0.75 E3:0.25 _:0.5 F3:0.5` at bars(1..3)
+    play notes`C3:0.75 D3:0.25 E3:0.5 F3:0.25 G3:0.25 C3:0.5 D3:0.5 _:1` at bars(4..4)
+  }
+}
+
+// EnsembleChoir — choir, strings and a bell frozen into one breath
+block EnsembleChoir {
+  block EnsembleChoirSrc {
+    track C { instrument ChoirPad volume 0.85
+      play notes`[C3 G3 C4]~:4` at bars(1..1) }
+    track S { instrument BowedStrings(section: 0.45) volume 0.6
+      play notes`[G3 D4]~:4` at bars(1..1) }
+    track B { instrument Bell(decay: 0.5) volume 0.3
+      play notes`C5:0.5 _:3.5` at bars(1..1) }
+  }
+  sample EnsembleChoirS = bounce(EnsembleChoirSrc, note: C3, beats: 4)
+  track Breath {
+    instrument sampler(attack: 0.2, gain: 1.0, sample: EnsembleChoirS, end: 0.667, stretch: 0.12, sustain: 1.0, release: 0.5, vary: 0.05)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.75, decay: 0.65, mix: 0.35)
+    volume 0.75
+    play notes`C3~:8` at bars(1..2)
+  }
+}
+
+// EnsembleFunk — guitar, bass-pluck and clap glued into one funk grain
+block EnsembleFunk {
+  block EnsembleFunkSrc {
+    track G { instrument GuitarPluck(pick: 0.6) volume 0.85
+      play humanize(notes`C3:0.25 _:0.25 C3:0.25 D#3:0.25 _:0.25 G3:0.25 F3:0.25 _:0.25 C3:0.25 _:0.25 A#2:0.25 C3:0.25 D#3:0.25 _:0.25 F3:0.25 _:0.25`, time: 0.01, vel: 16, seed: 83) at bars(1..1) }
+    track B { instrument GuitarPluck(pick: 0.35) volume 0.9
+      play notes`C2:0.5 _:0.5 C2:0.25 _:0.75 D#2:0.5 _:0.5 F2:0.5 _:0.5` at bars(1..1) }
+    track C { instrument Clap volume 0.4
+      play beat`---- x--- ---- x---` at bars(1..1) }
+  }
+  sample EnsembleFunkS = bounce(EnsembleFunkSrc, note: C3, beats: 4)
+  track Grain {
+    instrument sampler(attack: 0.04, gain: 1.0, sample: EnsembleFunkS, slices: 16, end: 0.667, choke: "on", vary: 0.2, sustain: 0.0, decay: 0.4)
+    modulate pitch with random(rate: 0.1, amount: 0.03, smooth: 0.7) as swim
+    insert parcomp(amount: 0.5, drive: 0.55, color: 0.4)
+    volume 0.9
+    play notes`C3:0.25 D3:0.25 _:0.25 F3:0.25 G3:0.25 _:0.25 A3:0.25 C3:0.25 _:0.5 D#3:0.25 F#3:0.25 _:0.25 B3:0.25 C3:0.25 _:0.25` at bars(1..3)
+    play notes`C3:0.25 D3:0.125 D#3:0.125 F3:0.25 _:0.25 G3:0.25 A3:0.125 A#3:0.125 B3:0.25 _:0.25 C3:0.25 G3:0.25 D#3:0.25 C3:0.25 _:0.25 F3:0.25 _:0.5` at bars(4..4)
+  }
+}
+
+// EnsembleBrass — two brasses and a sub, one stab, eight pads
+block EnsembleBrass {
+  block EnsembleBrassSrc {
+    track J { instrument JunoBrass volume 0.85
+      play notes`[C3 G3 C4]:0.75 _:3.25` at bars(1..1) }
+    track P { instrument P5Brass(blow: 0.6) volume 0.7
+      play notes`[C3 D#3]:0.75 _:3.25` at bars(1..1) }
+    track K { instrument KickSub volume 0.6
+      play notes`C1:0.75 _:3.25` at bars(1..1) }
+  }
+  sample EnsembleBrassS = bounce(EnsembleBrassSrc, note: C3, beats: 4)
+  track Stab {
+    instrument sampler(attack: 0.04, gain: 1.0, sample: EnsembleBrassS, slices: 8, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.5)
+    insert exciter(amount: 0.25)
+    insert parcomp(amount: 0.5, drive: 0.55, color: 0.45)
+    volume 0.9
+    play notes`C3:0.75 _:0.75 C3:0.5 _:1 D3:0.5 _:0.5` at bars(1..3)
+    play notes`C3:0.5 _:0.5 D3:0.375 D#3:0.375 _:0.25 C3:0.5 E3:0.5 _:1 F3:0.5 _:0.5` at bars(4..4)
+  }
+}
+
+// EnsembleChip — three chip voices as one broken cartridge
+block EnsembleChip {
+  block EnsembleChipSrc {
+    track B { instrument BitLead volume 0.8
+      play notes`C4:0.25 D#4:0.25 G4:0.25 C5:0.25 G4:0.25 D#4:0.25 A#4:0.25 G4:0.25 C4:0.25 F4:0.25 G#4:0.25 C5:0.25 G#4:0.25 F4:0.25 D4:0.25 F4:0.25` at bars(1..1) }
+    track Q { instrument SquareLead volume 0.4
+      play notes`C3:0.5 _:1.5 G3:0.5 _:1.5` at bars(1..1) }
+    track Z { instrument Zap volume 0.5
+      play beat`x--- --x- ---- x---` at bars(1..1) }
+  }
+  sample EnsembleChipS = bounce(EnsembleChipSrc, note: C4, beats: 4)
+  track Cartridge {
+    instrument sampler(attack: 0.03, gain: 1.0, sample: EnsembleChipS, slices: 16, end: 0.667, choke: "on", vary: 0.22, sustain: 0.0, decay: 0.3)
+    modulate pitch with steps(seq: "0.5 0.5 0.625 0.5 0.75 0.5 0.375 0.5", every: "1/8", amount: 0.15) as scatter
+    insert crush(bits: 0.45, rate: 0.3, mix: 0.35)
+    insert delay(time: 0.21, fdbk: 0.3, mix: 0.2)
+    volume 0.75
+    play notes`C4:0.25 D4:0.25 F4:0.25 _:0.25 G4:0.25 C4:0.25 _:0.25 A#4:0.25 C4:0.25 D#4:0.25 _:0.25 F#4:0.25 G4:0.25 _:0.25 B4:0.25 C5:0.25` at bars(1..1)
+  }
+}
+
+// EnsembleGlass — glass keys inside a glass pad, shimmer-chopped
+block EnsembleGlass {
+  block EnsembleGlassSrc {
+    track K { instrument Glass(shimmer: 0.5) volume 0.8
+      play notes`[C4 G4]:1 _:1 [D#4 A#4]:1 _:1` at bars(1..1) }
+    track P { instrument GlassPad volume 0.6
+      play notes`[C3 G3]~:4` at bars(1..1) }
+  }
+  sample EnsembleGlassS = bounce(EnsembleGlassSrc, note: C4, beats: 4)
+  track Shimmer {
+    instrument sampler(attack: 0.06, gain: 1.0, sample: EnsembleGlassS, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.5, decay: 0.5, release: 0.25)
+    modulate pitch with random(rate: 0.08, amount: 0.03, smooth: 0.8) as swim
+    insert width(amount: 0.85)
+    insert delay(time: 0.375, fdbk: 0.35, mix: 0.25)
+    volume 0.75
+    play notes`C4:1 _:0.5 E4:0.5 D4:1 _:0.5 F4:0.5` at bars(1..2)
+  }
+}
+
+// ========================= MACHINES AND KITS ================================
+
+// WindowWalkDusk — the ensemble as a record, the window walking it
+block WindowWalkDusk {
+  block WindowWalkDuskSrc {
+    track P { instrument TinePiano(bell: 0.35) volume 0.85
+      play notes`[C3 D#3 G3]~:2 [A#2 D3 F3]~:2` at bars(1..1) }
+    track U { instrument UprightBass(body: 0.5) volume 0.8
+      play notes`C2~:2 A#1~:2` at bars(1..1) }
+  }
+  sample WindowWalkDuskS = bounce(WindowWalkDuskSrc, note: C3, beats: 4)
+  track Walk {
+    instrument sampler(attack: 0.05, gain: 1.0, sample: WindowWalkDuskS, start: 0.25, end: 0.37, loop: "on", sustain: 0.9, decay: 0.3, release: 0.08, choke: "on", vary: 0.08)
+    modulate start with steps(seq: "0.0 0.36 0.7 0.2 0.52 0.9 0.4 0.12", every: "1/8", amount: 0.25)
+    modulate end  with steps(seq: "0.0 0.36 0.7 0.2 0.52 0.9 0.4 0.12", every: "1/8", amount: 0.25)
+    volume 0.8
+    play beat`x-x- x-x- x-x- x-x-` at bars(1..2)
+  }
+}
+
+// FreezeChoirHard — the vowel wall: freeze at 3 %, carved by a soft gate
+block FreezeChoirHard {
+  block FreezeChoirHardSrc {
+    track C { instrument ChoirPad volume 0.9
+      play notes`[C3 D#3 G3 C4]~:4` at bars(1..1) }
+  }
+  sample FreezeChoirHardS = bounce(FreezeChoirHardSrc, note: C3, beats: 4)
+  track Wall {
+    instrument sampler(attack: 0.25, gain: 1.0, sample: FreezeChoirHardS, end: 0.667, stretch: 0.03, sustain: 1.0, release: 0.6, vary: 0.04)
+    insert gate(depth: 0.5, beats: 1, duty: 0.65)
+    insert width(amount: 0.9)
+    volume 0.7
+    play notes`C3~:8` at bars(1..2)
+  }
+}
+
+// ReCutPiano — a piano bar re-cut differently every bar
+block ReCutPiano {
+  block ReCutPianoSrc {
+    track E { instrument EPiano(tine: 0.3)
+      insert saturate(mode: "tape", drive: 0.3)
+      volume 0.9
+      play humanize(notes`C3:0.75 [D#3 G3]:0.25 A#2:1 [C3 F3]:0.75 G2:0.25 [A#2 D3]:1`, time: 0.02, vel: 12, seed: 89) at bars(1..1) }
+  }
+  sample ReCutPianoS = bounce(ReCutPianoSrc, note: C3, beats: 4)
+  track ReCut {
+    instrument sampler(attack: 0.05, gain: 1.0, sample: ReCutPianoS, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.5, decay: 0.6, release: 0.2)
+    modulate pitch with random(rate: 0.06, amount: 0.02, smooth: 0.85) as swim
+    volume 0.9
+    play notes`C3:1 D3:1 E3:0.5 F3:0.5 G3:1` at bars(1..1)
+    play notes`C3:0.75 D3:0.25 F3:1 E3:0.5 G3:0.5 C3:1` at bars(2..2)
+    play notes`E3:1 D3:0.5 C3:0.5 G3:0.75 F3:0.25 D3:1` at bars(3..3)
+    play notes`C3:0.5 D3:0.5 E3:0.25 F3:0.25 G3:0.5 F3:0.5 E3:0.5 D3:0.5 C3:0.5` at bars(4..4)
+  }
+}
+
+// StutterStrings — strings with the repeat lever, pumped by its own arc
+block StutterStrings {
+  block StutterStringsSrc {
+    track S { instrument JunoStrings volume 0.9
+      play notes`[C3 G3 D#4]~:4` at bars(1..1) }
+  }
+  sample StutterStringsS = bounce(StutterStringsSrc, note: C3, beats: 4)
+  track Lever {
+    instrument sampler(attack: 0.1, gain: 1.0, sample: StutterStringsS, end: 0.667, loop: "on", sustain: 1.0, release: 0.3, vary: 0.05)
+    insert stutter(beats: 0.25, mix: 0.0)
+    automate stutter.mix from 0.0 to 0.6 over bars(2..2)
+    automate stutter.mix from 0.6 to 0.0 over bars(3..3)
+    automate stutter.mix from 0.0 to 0.75 over bars(4..4)
+    automate stutter.mix from 0.75 to 0.0 over bars(5..5)
+    insert width(amount: 0.8)
+    volume 0.75
+    play notes`C3~:8 A#2~:4 C3~:4` at bars(1..4)
+  }
+}
+
+// BackspinPerc — percussion moments spun backwards into the next downbeat
+block BackspinPerc {
+  block BackspinPercSrc {
+    track T { instrument Tom volume 0.9
+      play beat`x-x- x--- ---- ----` at bars(1..1) }
+    track R { instrument Rim volume 0.6
+      play beat`--x- -x-- ---- ----` at bars(1..1) }
+  }
+  sample BackspinPercS = bounce(BackspinPercSrc, note: C3, beats: 2)
+  track Spin {
+    instrument sampler(attack: 0.05, gain: 1.0, sample: BackspinPercS, reverse: "on", end: 0.5, sustain: 1.0, release: 0.1, vary: 0.15)
+    volume 0.7
+    play notes`_:3 C3~:1` at bars(1..2)
+    play notes`_:2.5 C3~:0.75 D3~:0.75` at bars(3..4)
+  }
+}
+
+// TapeDropKeys — a keys phrase whose power dies every fourth bar
+block TapeDropKeys {
+  block TapeDropKeysSrc {
+    track K { instrument TinePiano(bell: 0.45) volume 0.9
+      play notes`[C3 G3]:1 [D#3 A#3]:1 [F3 C4]:1 [D#3 A#3]:1` at bars(1..1) }
+  }
+  sample TapeDropKeysS = bounce(TapeDropKeysSrc, note: C3, beats: 4)
+  track Power {
+    instrument sampler(attack: 0.05, gain: 1.0, sample: TapeDropKeysS, end: 0.667, loop: "on", sustain: 1.0, release: 0.2, vary: 0.08)
+    insert tapestop(amount: 0.0)
+    automate tapestop.amount from 0.0 to 0.85 over bars(4..4)
+    automate tapestop.amount from 0.85 to 0.0 over bars(5..5)
+    volume 0.85
+    play notes`C3~:8 D3~:4 C3~:4` at bars(1..4)
+  }
+}
+
+// BodyBeat — the dark kit: modal body, rim and a stacked kick — NO noise
+// snare anywhere. The backbeat is a wooden shell, and it keeps re-editing
+// itself the way the loud kits never earned.
+block BodyBeat {
+  block BodyBeatKikSrc {
+    track Sub { instrument KickSub volume 0.85
+      play beat`x--- ---- ---- ----` at bars(1..1) }
+    track Punch { instrument KickModal(ring: 0.4, knock: 0.35)
+      insert saturate(mode: "tape", drive: 0.45)
+      volume 0.9
+      play beat`x--- ---- ---- ----` at bars(1..1) }
+  }
+  sample BodyBeatKik = bounce(BodyBeatKikSrc, note: C1, beats: 1)
+  block BodyBeatSnrSrc {
+    track S { instrument SnareModal(wires: 0.15, shell: 0.9)
+      insert saturate(mode: "tube", drive: 0.35)
+      insert eq(low: 0.65, mid: 0.55, high: 0.3)
+      insert reverb(size: 0.5, decay: 0.45, mix: 0.3)
+      volume 0.95
+      play beat`x--- ---- ---- ----` at bars(1..1) }
+  }
+  sample BodyBeatSnr = bounce(BodyBeatSnrSrc, note: C3, beats: 2)
+  track Feet {
+    instrument sampler(attack: 0.05, gain: 1.0, sample: BodyBeatKik, sustain: 0.0, decay: 0.5, vary: 0.1)
+    volume 0.95
+    play beat`x--- ---- x-x- ----` at bars(1..3)
+    play beat`x--- --x- x-x- -x--` at bars(4..4)
+  }
+  track Shell {
+    instrument sampler(attack: 0.04, gain: 1.0, sample: BodyBeatSnr, choke: "on", vary: 0.18, sustain: 1.0, release: 0.06)
+    modulate pitch with random(rate: 0.08, amount: 0.025, smooth: 0.8) as swim
+    volume 0.8
+    play late(notes`_:1 C3~:0.3 _:2.7`, by: 0.055) at bars(1..1)
+    play late(notes`_:1 A#2~:0.45 _:2.55`, by: 0.05) at bars(2..2)
+    play late(notes`_:1 C3~:0.12 _:1.63 D3~:0.25 _:1`, by: 0.055) at bars(3..3)
+    play late(notes`_:1 C3~:0.35 _:1.4 A#2~:0.25 C3~:0.25 _:0.75`, by: 0.045) at bars(4..4)
+  }
+  track Wood {
+    instrument sampler(attack: 0.04, gain: 1.0, sample: BodyBeatSnr, slices: 8, end: 0.5, choke: "on", vary: 0.3, sustain: 0.0, decay: 0.25)
+    volume 0.4
+    play notes`_:2.25 D3:0.25 _:1.5` at bars(1..3)
+    play notes`_:2.25 D3:0.125 E3:0.125 _:0.75 F3:0.25 C3:0.25 _:0.25` at bars(4..4)
+  }
+}
+
+// TomGroove — the kit is toms, the melody is the groove
+block TomGroove {
+  block TomGrooveSrc {
+    track T { instrument Tom volume 0.9
+      play beat`x--- ---- ---- ----` at bars(1..1) }
+    track TF { instrument TomFloor volume 0.9
+      play beat`--x- ---- ---- ----` at bars(1..1) }
+  }
+  sample TomGrooveS = bounce(TomGrooveSrc, note: C3, beats: 1)
+  track Roll {
+    instrument sampler(attack: 0.04, gain: 1.0, sample: TomGrooveS, slices: 4, end: 0.333, choke: "on", vary: 0.2, sustain: 0.0, decay: 0.5)
+    modulate pitch with steps(seq: "0.5 0.625 0.5 0.375 0.625 0.5 0.75 0.5", every: "1/4", amount: 0.2) as bend
+    insert saturate(mode: "tube", drive: 0.35)
+    volume 0.85
+    play notes`C3:0.5 _:0.5 D3:0.5 C3:0.25 _:0.75 C3:0.5 D3:0.5 _:0.5` at bars(1..3)
+    play notes`C3:0.375 D3:0.375 C3:0.25 D3:0.25 C3:0.25 _:0.5 C3:0.25 D3:0.25 C3:0.25 D3:0.25 _:1` at bars(4..4)
+  }
+}
+
+// WoodTick — rims and sticks as clockwork, quiet and dry
+block WoodTick {
+  block WoodTickSrc {
+    track R { instrument Rim volume 0.8
+      play beat`x--- ---- ---- ----` at bars(1..1) }
+    track S { instrument Stick volume 0.8
+      play beat`--x- ---- ---- ----` at bars(1..1) }
+    track N { instrument Snap volume 0.5
+      play beat`---x ---- ---- ----` at bars(1..1) }
+  }
+  sample WoodTickS = bounce(WoodTickSrc, note: C3, beats: 1)
+  track Clock {
+    instrument sampler(attack: 0.03, gain: 1.0, sample: WoodTickS, slices: 4, end: 0.333, choke: "on", vary: 0.25, sustain: 0.0, decay: 0.3)
+    modulate pitch with random(rate: 0.12, amount: 0.04, smooth: 0.6) as swim
+    volume 0.6
+    play notes`C3:0.25 _:0.5 D3:0.25 _:0.25 C#3:0.25 _:0.5 C3:0.25 _:0.25 D3:0.25 _:0.5 C3:0.25 _:0.5` at bars(1..3)
+    play notes`C3:0.25 D3:0.25 _:0.25 C#3:0.25 C3:0.125 D3:0.125 _:0.5 C3:0.25 _:0.25 D3:0.125 C#3:0.125 _:0.25 C3:0.25 _:1` at bars(4..4)
+  }
+}
+
+// LowKit — kick and sub only, the fragment fills carrying the top
+block LowKit {
+  block LowKitSrc {
+    track K { instrument KickModal(ring: 0.5, knock: 0.3)
+      insert saturate(mode: "tape", drive: 0.4)
+      volume 0.95
+      play beat`x--- ---- ---- ----` at bars(1..1) }
+    track S { instrument KickSub volume 0.7
+      play beat`x--- ---- ---- ----` at bars(1..1) }
+  }
+  sample LowKitS = bounce(LowKitSrc, note: C1, beats: 1)
+  track Low {
+    instrument sampler(attack: 0.05, gain: 1.0, sample: LowKitS, sustain: 0.0, decay: 0.55, vary: 0.12)
+    volume 0.95
+    play beat`x--- --x- ---- x---` at bars(1..3)
+    play beat`x--- --x- -x-- x-x-` at bars(4..4)
+  }
+  track Top {
+    instrument sampler(attack: 0.04, gain: 1.0, sample: LowKitS, slices: 8, end: 0.333, choke: "on", vary: 0.3, sustain: 0.0, decay: 0.25)
+    insert filter(type: "hp", cutoff: 0.45, reso: 0.2)
+    volume 0.6
+    play notes`_:1.75 E1:0.125 F1:0.125 _:2` at bars(2..2)
+    play notes`_:3 D1:0.25 E1:0.25 F1:0.25 G1:0.25` at bars(4..4)
+  }
+}
+
+// HeartSub — the heartbeat: a soft double-thump sub, brushed with air
+block HeartSub {
+  block HeartSubSrc {
+    track K { instrument KickSub volume 0.9
+      play beat`x-x- ---- ---- ----` at bars(1..1) }
+  }
+  sample HeartSubS = bounce(HeartSubSrc, note: C1, beats: 2)
+  track Beat {
+    instrument sampler(attack: 0.08, gain: 1.0, sample: HeartSubS, end: 0.5, sustain: 1.0, release: 0.3, vary: 0.08, glide: 0.1)
+    insert filter(type: "lp", cutoff: 0.35, reso: 0.2)
+    volume 0.8
+    play notes`C1~:1 _:3` at bars(1..1)
+    play notes`C1~:1 _:2 A#0~:0.5 _:0.5` at bars(2..2)
+  }
+}
+
+// CaveDrip — single drops into a long dark delay
+block CaveDrip {
+  block CaveDripSrc {
+    track Z { instrument Zap volume 0.7
+      play notes`C3:0.25 _:3.75` at bars(1..1) }
+    track P { instrument Pluck volume 0.6
+      play notes`_:2 G4:0.25 _:1.75` at bars(1..1) }
+  }
+  sample CaveDripS = bounce(CaveDripSrc, note: C3, beats: 4)
+  track Drip {
+    instrument sampler(attack: 0.04, gain: 1.0, sample: CaveDripS, slices: 8, end: 0.667, choke: "on", vary: 0.35, sustain: 0.0, decay: 0.5)
+    modulate pitch with random(rate: 0.2, amount: 0.07, smooth: 0.4) as scatter
+    insert delay(time: 0.51, fdbk: 0.55, mix: 0.4)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.35)
+    volume 0.6
+    play notes`C3:0.25 _:2.75 E3:0.25 _:0.75` at bars(1..2)
+  }
+}
+
+// DustClock — the quiet grain metronome for ambient sides
+block DustClock {
+  block DustClockSrc {
+    track D { instrument Dust(color: 0.5) volume 0.85
+      play beat`x--- x--- x--- x---` at bars(1..1) }
+  }
+  sample DustClockS = bounce(DustClockSrc, note: C3, beats: 4)
+  track Tick {
+    instrument sampler(attack: 0.03, gain: 1.0, sample: DustClockS, slices: 16, end: 0.667, choke: "on", vary: 0.4, sustain: 0.0, decay: 0.2)
+    modulate pitch with random(rate: 0.25, amount: 0.06, smooth: 0.4) as scatter
+    volume 0.5
+    play notes`C3:0.25 _:0.75 E3:0.25 _:0.75 C3:0.25 _:0.75 G3:0.25 _:0.75` at bars(1..2)
+  }
+}
+
+// FarBell — one bell note, far away, answered by its own reverse
+block FarBell {
+  block FarBellSrc {
+    track B { instrument Bell(decay: 0.75) volume 0.9
+      play notes`C5:1 _:3` at bars(1..1) }
+  }
+  sample FarBellS = bounce(FarBellSrc, note: C5, beats: 4)
+  track Far {
+    instrument sampler(attack: 0.08, gain: 1.0, sample: FarBellS, end: 0.667, sustain: 1.0, release: 0.4, vary: 0.1)
+    insert delay(time: 0.42, fdbk: 0.4, mix: 0.3)
+    insert reverb(size: 0.8, decay: 0.7, mix: 0.4)
+    volume 0.6
+    play notes`C5~:1.5 _:2.5` at bars(1..2)
+  }
+  track Answer {
+    instrument sampler(attack: 0.1, gain: 1.0, sample: FarBellS, reverse: "on", end: 0.667, sustain: 1.0, release: 0.3, vary: 0.12)
+    insert reverb(size: 0.75, decay: 0.65, mix: 0.4)
+    volume 0.45
+    play notes`_:5 C5~:1.5 _:1.5` at bars(1..2)
+  }
+}
+
+// SlowWave — an eighties pad breathing at 6 % speed, the album floor
+block SlowWave {
+  block SlowWaveSrc {
+    track P { instrument EightiesPad volume 0.9
+      play notes`[C3 D#3 G3]~:2 [A#2 D3 F3]~:2` at bars(1..1) }
+  }
+  sample SlowWaveS = bounce(SlowWaveSrc, note: C3, beats: 4)
+  track Floor {
+    instrument sampler(attack: 0.3, gain: 1.0, sample: SlowWaveS, end: 0.667, stretch: 0.06, sustain: 1.0, release: 0.6, vary: 0.04)
+    modulate pitch with random(rate: 0.04, amount: 0.015, smooth: 0.92) as drift
+    insert width(amount: 0.85)
+    volume 0.7
+    play notes`C3~:16` at bars(1..4)
+  }
+}

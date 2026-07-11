@@ -1,0 +1,19 @@
+// paper-piano — the upright that never existed, vibes smeared over it,
+// birds outside, a heartbeat keeping the room warm.
+import { HeartSub } from "../wrapped/glitchset.forte"
+import { PianoLoop, VibesFreeze } from "../wrapped/melodyworks.forte"
+import { BirdSong } from "../wrapped/textureworks.forte"
+
+song "Paper Piano" {
+  desc "The upright that never existed, smeared vibes, birds outside, a warm heartbeat."
+  artist "Forte Essentials"
+  tempo 78bpm
+  swing 0.56
+  master 1.25
+  key A minor
+
+  play PianoLoop at bars(1..10)
+  play HeartSub at bars(2..10)
+  play VibesFreeze(volume: 0.7) at bars(4..10)
+  play BirdSong(volume: 0.7) at bars(6..10)
+}

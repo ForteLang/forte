@@ -1,0 +1,19 @@
+// tin-orbit — octaver house around a walked window, bleeps in orbit,
+// the low kit holding the center of mass.
+import { WindowWalkDusk, LowKit } from "../wrapped/glitchset.forte"
+import { OctaveHouse } from "../wrapped/bassworks.forte"
+import { ZapArp } from "../wrapped/textureworks.forte"
+
+song "Tin Orbit" {
+  desc "Octaver house around a walked window, bleeps in orbit, a low kit at the center of mass."
+  artist "Forte Essentials"
+  tempo 130bpm
+  swing 0.52
+  master 1.15
+  key C minor
+
+  play LowKit at bars(1..16)
+  play OctaveHouse(volume: 0.55) at bars(2..16)
+  play WindowWalkDusk(volume: 0.8) at bars(5..16)
+  play ZapArp(volume: 0.55) at bars(9..15)
+}

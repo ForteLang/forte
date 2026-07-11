@@ -1,0 +1,17 @@
+// tunnel-air — brass leaning through a tunnel: glide swells, a low kit
+// far ahead, drips, the frozen choir as the light at the end.
+import { GlideBrass, LowKit, CaveDrip, FreezeChoirHard } from "../wrapped/glitchset.forte"
+
+song "Tunnel Air" {
+  desc "Brass swells leaning through a tunnel, a low kit far ahead, drips, a frozen light."
+  artist "Forte Essentials"
+  tempo 86bpm
+  swing 0.54
+  master 1.2
+  key G minor
+
+  play GlideBrass at bars(1..11)
+  play CaveDrip(volume: 0.65) at bars(2..11)
+  play LowKit(volume: 0.8) at bars(4..10)
+  play FreezeChoirHard(volume: 0.6) at bars(6..11)
+}

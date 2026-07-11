@@ -1,0 +1,19 @@
+// warm-copper — the pedalboard bass against a wooden shell, brass hits
+// with exciter sheen, strings on the stutter lever.
+import { BodyBeat, StutterStrings } from "../wrapped/glitchset.forte"
+import { FuzzWahBass } from "../wrapped/bassworks.forte"
+import { JunoBrassHits } from "../wrapped/melodyworks.forte"
+
+song "Warm Copper" {
+  desc "Wah-pedal bass against a wooden shell, sheened brass hits, strings on the stutter lever."
+  artist "Forte Essentials"
+  tempo 122bpm
+  swing 0.56
+  master 1.1
+  key F minor
+
+  play BodyBeat at bars(1..15)
+  play FuzzWahBass(volume: 0.75) at bars(2..15)
+  play JunoBrassHits(volume: 0.75) at bars(5..14)
+  play StutterStrings(volume: 0.65) at bars(9..15)
+}

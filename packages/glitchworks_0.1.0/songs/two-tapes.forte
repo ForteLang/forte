@@ -1,0 +1,17 @@
+// two-tapes — one deck plays keys that lose power every fourth bar,
+// the other an acid line at half speed; dust ticks between them.
+import { TapeDropKeys, DustClock } from "../wrapped/glitchset.forte"
+import { AcidHalf } from "../wrapped/bassworks.forte"
+
+song "Two Tapes" {
+  desc "Keys losing power every fourth bar over a half-speed acid line, dust between the decks."
+  artist "Forte Essentials"
+  tempo 88bpm
+  swing 0.56
+  master 1.2
+  key D minor
+
+  play TapeDropKeys at bars(1..11)
+  play AcidHalf(volume: 0.8) at bars(3..11)
+  play DustClock(volume: 0.55) at bars(5..10)
+}

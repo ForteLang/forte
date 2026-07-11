@@ -1,0 +1,17 @@
+// glass-orchard — a choir-string breath, strings on a pitch wheel, a bell
+// bent by hand, dust ticking like pollen.
+import { EnsembleChoir, GlideStrings, GlideBell, DustClock } from "../wrapped/glitchset.forte"
+
+song "Glass Orchard" {
+  desc "A choir-string breath, strings on a pitch wheel, a hand-bent bell, dust like pollen."
+  artist "Forte Essentials"
+  tempo 96bpm
+  swing 0.5
+  master 1.2
+  key C minor
+
+  play EnsembleChoir at bars(1..12)
+  play GlideStrings(volume: 0.8) at bars(3..12)
+  play DustClock(volume: 0.6) at bars(5..11)
+  play GlideBell(volume: 0.75) at bars(7..12)
+}
