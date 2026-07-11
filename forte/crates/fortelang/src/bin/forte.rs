@@ -779,9 +779,6 @@ fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Live playback with hot reload: the song loops while the file is watched;
-/// every successful recompile is swapped into the running engine without
-/// stopping the transport — listen, edit, listen (SYS-EDT-002 minimal form).
 #[cfg(not(target_family = "wasm"))]
 /// Terminal column count (stty, then $COLUMNS, then a safe default).
 fn term_cols() -> usize {
@@ -801,6 +798,7 @@ fn term_cols() -> usize {
     std::env::var("COLUMNS").ok().and_then(|v| v.parse().ok()).filter(|&c| c >= 20).unwrap_or(100)
 }
 
+#[cfg(not(target_family = "wasm"))]
 /// Clamp a frame line to the terminal width counting VISIBLE chars only
 /// (ANSI escapes pass through). The in-place redraw moves the cursor up
 /// by the logical line count — one wrapped line (a long `desc`) breaks
@@ -835,6 +833,10 @@ fn clamp_visible(s: &str, max: usize) -> String {
     out
 }
 
+/// Live playback with hot reload: the song loops while the file is watched;
+/// every successful recompile is swapped into the running engine without
+/// stopping the transport — listen, edit, listen (SYS-EDT-002 minimal form).
+#[cfg(not(target_family = "wasm"))]
 fn play(path: &str, for_secs: Option<f64>, from_bar: Option<u32>, block: Option<&str>) -> ExitCode {
     use dawcore::command::Command;
     use dawcore::model::Project;
