@@ -1,45 +1,42 @@
 // Sketch: momentkit — audition piece, NOT an album track. ONE instrument
-// that contains a whole production: a JUNO pitch-riser through 20 ms delay,
-// a closing filter and reverb; a kick; a snare on an 80 ms echo — each
-// bounced alone and all bounced together.
-//   bars 1-4  the COMPONENTS played raw off their pads: C1 kick moment,
-//             C2 snare-echo moment, C3 the riser
-//   bars 5-8  the WHOLE moment as a melody — every note replays the full
-//             production repitched from C4 in the audio domain (the echo
-//             tails and reverb bend WITH the note), and in bar 8 the rack's
-//             pitch knob rides down −6 semitones under held notes
-// The question for the ear: does one key = one produced WORLD?
+// that contains a whole production, effects first: a resampled Prophet
+// chord rising +24 semitones through a 20 ms metal comb, a closing
+// resonant filter and a long reverb; a produced kick; a snare on a
+// dub-depth crushed 80 ms echo. No other instrument plays in this sketch —
+// the rack is the beat, the melody, the harmony and the ending.
+//   bars 1-2  the COMPONENTS as a beat: C1 kick moment, C2 snare-echo
+//             moment, the C3 riser swelling into bar 3
+//   bars 3-6  the WHOLE production as music — held wrap notes and a
+//             stacked chord, every note dragging its comb, echo tails and
+//             reverb to the new pitch
+//   bars 7-8  one held chord of the entire moment while the rack's pitch
+//             knob rides down and a tape stop cuts the power
 import { MomentKit } from "../wrapped/chopworks.forte"
-import { HatClosed } from "../../essentials_0.6.0/instruments/drums.forte"
 
 song "Sketch Momentkit" {
-  desc "Audition sketch: a produced moment (riser+kick+snare-echo) as one playable rack — components on pads, the whole production repitched as a melody, pitch ridden live. Not an album track."
+  desc "Audition sketch: a produced moment (comb riser + kick + crushed echo snare) as one playable rack — components as the beat, the production as melody and chord, pitch and tapestop ridden live. Not an album track."
   artist "Forte Essentials"
   tempo 90bpm
-  swing 0.55
+  swing 0.56
   master 1.4
   key C minor
 
   block Rack : MomentKit {
     track Rack {
-      // bars 1-4: the components, as a beat
-      play notes`C1:0.5 _:0.5 C2:0.75 _:0.25 C1:0.5 C1:0.5 C2:0.5 _:0.5` at bars(1..4)
-      play notes`C3~:3 _:1` at bars(3..4)
-      // bars 5-8: the whole moment, as a melody
-      play notes`C4:0.75 D#4:0.75 G4:0.5 F4~:1 A#3~:1` at bars(5..8)
-      // bar 8: ride the wrap pitch down under the held notes
-      automate pitch from 0.5 to 0.375 over bars(8..8)
-    }
-  }
-
-  block Time {
-    track H {
-      instrument HatClosed
-      volume 0.3
-      play humanize(beat`x-x- x-x- x-x- x-x-`, time: 0.008, vel: 12, seed: 4) at bars(1..8)
+      insert tapestop(amount: 0.0)
+      // bars 1-2: the components ARE the beat
+      play notes`C1:0.5 _:0.5 C2:0.75 _:0.25 C1:0.5 _:0.25 C1:0.25 C2:0.5 _:0.5` at bars(1..2)
+      play notes`_:2 C3~:2` at bars(2..2)
+      // bars 3-6: the beat keeps running under the wrap
+      play notes`C1:0.5 _:1 C2:0.5 _:1 C1:0.5 C2:0.5` at bars(3..6)
+      // the whole production, repitched as a line then stacked as a chord
+      play notes`C4~:1.5 D#4:0.5 G4~:2 [C4 D#4 G4]~:2 F4~:1 D4:1` at bars(3..6)
+      // bars 7-8: one held world; pitch rides down; the power gets cut
+      play notes`[C4 G4]~:8` at bars(7..8)
+      automate pitch from 0.5 to 0.396 over bars(7..8)
+      automate tapestop.amount from 0.0 to 1.0 over bars(8..8)
     }
   }
 
   play Rack at bars(1..8)
-  play Time at bars(1..8)
 }

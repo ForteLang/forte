@@ -24,6 +24,7 @@
 import { JunoStrings } from "../../essentials_0.6.0/instruments/juno60.forte"
 import { ChoirPad, GlassPad } from "../../essentials_0.6.0/instruments/pads.forte"
 import { Bass303 } from "../../essentials_0.6.0/instruments/tb303.forte"
+import { P5Brass } from "../../essentials_0.6.0/instruments/prophet5.forte"
 import { Kick808, SnareTight, HatClosed, HatOpen, Rim } from "../../essentials_0.6.0/instruments/drums.forte"
 import { TinePiano, UprightBass } from "../instruments/modal.forte"
 
@@ -165,33 +166,46 @@ block GlassKeyPad {
   }
 }
 
+
 // ---- MomentKit — a produced MOMENT as one playable instrument -------------
-// The Bitwig-rack move, in the bounce idiom. Three component sounds are
-// PRODUCED with full insert engineering (a JUNO pitch-riser through 20 ms
-// delay, a closing filter and reverb; a kick; a snare on an 80 ms echo),
-// each bounced alone AND all together. Then ONE kit plays them:
+// The Bitwig-rack move, in the bounce idiom, effects FIRST: nothing in this
+// instrument is a raw oscillator. A Prophet brass CHORD is bounced, then
+// resampled into a pitch riser whose 20 ms delay is cranked into an audible
+// metal comb, squeezed by a closing resonant filter into a long reverb; a
+// produced kick; a snare on a dub-depth 80 ms echo, bit-crushed. Each is
+// bounced alone AND all together, and ONE kit plays them:
 //   C1 = the kick moment raw      C2 = the snare-echo moment raw
-//   C3 = the riser moment raw     any other key = the WHOLE moment,
-//   repitched from C4 in the audio domain — formants, echo tails and
-//   reverb drag along with the pitch, which no re-synthesis can fake.
+//   C3 = the riser moment raw     any other key = the WHOLE production,
+//   repitched from C4 in the audio domain — comb, echo tails and reverb
+//   bend WITH the note, which no re-synthesis can fake.
 // `pitch` transposes the wrap layer LIVE: automate it and held notes bend.
 block MomentKit {
-  // -- component: the JUNO pitch riser, engineered --
+  // stage 0: the raw chord (bounced so the riser can RESAMPLE it — bounces
+  // resolve in declaration order, so this line stays above the others)
+  sample MomentBrassS = bounce(MomentBrassSrc, note: C3, beats: 2)
+  block MomentBrassSrc {
+    track B {
+      instrument P5Brass(blow: 0.7)
+      volume 0.95
+      play notes`[C3 G3 C4]~:2` at bars(1..1)
+    }
+  }
+  // -- component: the riser — resampled chord, rising +24 semi, 20 ms comb,
+  //    closing resonant filter, long reverb --
   block MomentRiserSrc {
     track R {
       // loop: the rising pitch reads up to 4x faster and would exhaust
       // the data mid-note — looping keeps the riser alive all the way up
-      instrument sampler(sample: MomentJunoS, loop: "on", gain: 1.0, sustain: 1.0, release: 0.3)
-      modulate pitch with adsr(a: 0.6, d: 0.2, s: 1.0, amount: 0.5)
-      insert delay(time: 0.02, fdbk: 0.45, mix: 0.35)
-      insert filter(type: "lp", cutoff: 0.9, reso: 0.35)
-      automate filter.cutoff from 0.9 to 0.3 over bars(1..1)
-      insert reverb(size: 0.7, decay: 0.6, mix: 0.4)
+      instrument sampler(sample: MomentBrassS, loop: "on", gain: 1.0, sustain: 1.0, release: 0.3)
+      modulate pitch with adsr(a: 0.55, d: 0.2, s: 1.0, amount: 0.5)
+      insert delay(time: 0.02, fdbk: 0.75, mix: 0.5)
+      insert filter(type: "lp", cutoff: 0.9, reso: 0.55)
+      automate filter.cutoff from 0.9 to 0.28 over bars(1..1)
+      insert reverb(size: 0.75, decay: 0.65, mix: 0.45)
       volume 1.0
-      play notes`C3~:3` at bars(1..1)
+      play notes`C3~:3 _:1` at bars(1..1)
     }
   }
-  sample MomentJunoS = bounce(JunoStrings(), note: C3, beats: 3)
   // -- component: the kick, produced --
   block MomentKickSrc {
     track K {
@@ -202,43 +216,45 @@ block MomentKit {
       play beat`x--- ---- ---- ----` at bars(1..1)
     }
   }
-  // -- component: the snare on an 80 ms echo --
+  // -- component: the snare on a dub-depth 80 ms echo, crushed --
   block MomentSnareSrc {
     track S {
-      instrument SnareTight(snap: 0.7)
-      insert delay(time: 0.08, fdbk: 0.6, mix: 0.5)
-      insert saturate(mode: "fuzz", drive: 0.35, tone: 0.55)
-      insert exciter(amount: 0.25)
-      volume 0.95
+      instrument SnareTight(snap: 0.75)
+      insert delay(time: 0.08, fdbk: 0.68, mix: 0.55)
+      insert crush(bits: 0.4, rate: 0.25, mix: 0.35)
+      insert parcomp(amount: 0.6, drive: 0.65, color: 0.45)
+      insert exciter(amount: 0.3)
+      insert reverb(size: 0.5, decay: 0.4, mix: 0.2)
+      volume 1.0
       play beat`x--- ---- ---- ----` at bars(1..1)
     }
   }
   // -- the ensemble: all three AT ONCE — the moment itself --
   block MomentAllSrc {
     track R {
-      // loop: the rising pitch reads up to 4x faster and would exhaust
-      // the data mid-note — looping keeps the riser alive all the way up
-      instrument sampler(sample: MomentJunoS, loop: "on", gain: 1.0, sustain: 1.0, release: 0.3)
-      modulate pitch with adsr(a: 0.6, d: 0.2, s: 1.0, amount: 0.5)
-      insert delay(time: 0.02, fdbk: 0.45, mix: 0.35)
-      insert filter(type: "lp", cutoff: 0.9, reso: 0.35)
-      automate filter.cutoff from 0.9 to 0.3 over bars(1..1)
-      insert reverb(size: 0.7, decay: 0.6, mix: 0.4)
+      instrument sampler(sample: MomentBrassS, loop: "on", gain: 1.0, sustain: 1.0, release: 0.3)
+      modulate pitch with adsr(a: 0.55, d: 0.2, s: 1.0, amount: 0.5)
+      insert delay(time: 0.02, fdbk: 0.75, mix: 0.5)
+      insert filter(type: "lp", cutoff: 0.9, reso: 0.55)
+      automate filter.cutoff from 0.9 to 0.28 over bars(1..1)
+      insert reverb(size: 0.75, decay: 0.65, mix: 0.45)
       volume 1.0
-      play notes`C3~:3` at bars(1..1)
+      play notes`C3~:3 _:1` at bars(1..1)
     }
     track K {
       instrument Kick808(decay: 0.4, punch: 0.6)
       insert saturate(mode: "tape", drive: 0.45)
       insert parcomp(amount: 0.5, drive: 0.6, color: 0.35)
-      volume 0.95
+      volume 0.8
       play beat`x--- ---- ---- ----` at bars(1..1)
     }
     track S {
-      instrument SnareTight(snap: 0.7)
-      insert delay(time: 0.08, fdbk: 0.6, mix: 0.5)
-      insert saturate(mode: "fuzz", drive: 0.35, tone: 0.55)
-      insert exciter(amount: 0.25)
+      instrument SnareTight(snap: 0.75)
+      insert delay(time: 0.08, fdbk: 0.68, mix: 0.55)
+      insert crush(bits: 0.4, rate: 0.25, mix: 0.35)
+      insert parcomp(amount: 0.6, drive: 0.65, color: 0.45)
+      insert exciter(amount: 0.3)
+      insert reverb(size: 0.5, decay: 0.4, mix: 0.2)
       volume 0.95
       play beat`x--- ---- ---- ----` at bars(1..1)
     }
@@ -248,9 +264,8 @@ block MomentKit {
   sample MomentRiserS = bounce(MomentRiserSrc, note: C3, beats: 4)
   sample MomentAllS = bounce(MomentAllSrc, note: C4, beats: 4)
   track Rack {
-    instrument kit(C1: MomentKickS, C2: MomentSnareS, C3: MomentRiserS, wrap: MomentAllS, sustain: 1.0, release: 0.35)
+    instrument kit(C1: MomentKickS, C2: MomentSnareS, C3: MomentRiserS, wrap: MomentAllS, gain: 0.9, sustain: 1.0, release: 0.4)
     insert comp(thresh: 0.5, ratio: 0.5, makeup: 0.15)
     volume 0.85
   }
 }
-
