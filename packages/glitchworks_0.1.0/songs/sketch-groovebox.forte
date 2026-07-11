@@ -1,22 +1,24 @@
-// Sketch: groovebox — audition piece, NOT an album track. Third cut. The
-// first two died the same death: a snare that never changed. This one is
-// built on drumcolor — the snare is SEVEN produced colors on a rotating
-// backbeat, the kick is a stack in three weights with fragment fills, and
-// SlicerBeat re-decides its slice order every bar. On top: the expanded
-// palette — an octaver house bass handing over to a fuzz-wah pedalboard,
-// a piano loop that never existed, a violin answering, chip bleeps,
-// braindance warmth, rain and birds outside the window at the end.
-//   bars 1-4   drumcolor groove + octaver bass + piano loop + street air
-//   bars 5-8   slicer joins, wah bass takes over, violin answers
-//   bars 9-12  full: chip arp, braindance pad, power wall on the turn
-//   bars 13-16 strip back to rain, birds, sub and the seven snares
-import { SnareRainbow, KickStack, SlicerBeat } from "../wrapped/drumcolor.forte"
+// Sketch: groovebox — audition piece, NOT an album track. Fifth cut, one
+// rule learned from the fourth: the snare-edit machine only reads if it is
+// the ONLY snare in the room. The previous cut buried SnareRainbow under
+// SlicerBeat, whose bounced phrase carries its own static backbeat — the
+// ear locked onto that and called the whole thing monotonous. Here
+// SnareRainbow is the sole snare voice for all sixteen bars, front and
+// center: the beat-2 gate/pitch edits, the rotating beat-4 colors, the
+// headless cuts, the smear leaning over the barline, the reversed
+// pre-echoes. Sixteenth energy comes from HatWork (no snare inside).
+//   bars 1-4   snare edits + stacked kick + octaver bass + piano + street
+//   bars 5-8   hats join, wah bass takes over, violin answers
+//   bars 9-12  chip arp + braindance warmth, power wall on the turn
+//   bars 13-16 strip to rain, birds, sub — the snare edits stay exposed
+import { SnareRainbow, KickStack } from "../wrapped/drumcolor.forte"
+import { HatWork } from "../wrapped/grooveworks.forte"
 import { OctaveHouse, FuzzWahBass, SubDeep } from "../wrapped/bassworks.forte"
 import { PianoLoop, ViolinSolo, ChipArp, BraindanceKeys } from "../wrapped/melodyworks.forte"
 import { RainField, BirdSong, StreetAir, PowerWall, TapeAir } from "../wrapped/textureworks.forte"
 
 song "Sketch Groovebox" {
-  desc "Audition sketch: seven snare colors on a rotating backbeat, stacked kicks, a self-re-slicing beat, octaver-to-wah bass, piano/violin/chip/braindance on top, rain and birds at the end. Not an album track."
+  desc "Audition sketch: the snare-edit machine as the only snare in the room — gate/pitch edits, rotating colors, smears and reversed pre-echoes over stacked kicks, octaver-to-wah bass, piano/violin/chip/braindance, ending in rain and birds. Not an album track."
   artist "Forte Essentials"
   tempo 90bpm
   swing 0.56
@@ -26,19 +28,22 @@ song "Sketch Groovebox" {
   play TapeAir at bars(1..12)
   play StreetAir at bars(1..4)
 
-  play SnareRainbow at bars(1..16)
-  play KickStack at bars(1..12)
-  play SlicerBeat at bars(5..12)
+  // the drums: ONE snare voice, ONE kick voice, hats for the 16ths
+  play SnareRainbow(volume: 1.0) at bars(1..16)
+  play KickStack at bars(1..16)
+  play HatWork(volume: 0.7) at bars(5..12)
 
-  play OctaveHouse at bars(1..4)
-  play FuzzWahBass at bars(5..8)
+  // the bass relay
+  play OctaveHouse(volume: 0.55) at bars(1..4)
+  play FuzzWahBass(volume: 0.7) at bars(5..8)
   play SubDeep at bars(9..16)
 
-  play PianoLoop at bars(1..8)
-  play ViolinSolo at bars(5..8)
-  play ChipArp at bars(9..12)
-  play BraindanceKeys at bars(9..16)
-  play PowerWall at bars(12..12)
+  // the music, kept out of the snare's lane
+  play PianoLoop(volume: 0.8) at bars(1..8)
+  play ViolinSolo(volume: 0.75) at bars(5..8)
+  play ChipArp(volume: 0.7) at bars(9..12)
+  play BraindanceKeys(volume: 0.8) at bars(9..16)
+  play PowerWall(volume: 0.8) at bars(12..12)
 
   play RainField at bars(13..16)
   play BirdSong at bars(13..16)
