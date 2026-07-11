@@ -1,0 +1,153 @@
+// glitchworks/bassworks — BASS GROOVES, ready to drop: every block is a
+// bass source produced, bounced and already playing a line. The low end
+// obeys the same laws as the drums here: cuts leave rests, no two notes
+// identical, and the machine can re-decide the line (pitch steps, stretch,
+// gates) while it plays.
+import { Bass303, Square303 } from "../../essentials_0.6.0/instruments/tb303.forte"
+import { SH101Bass } from "../../essentials_0.6.0/instruments/sh101.forte"
+import { Wobble } from "../../essentials_0.6.0/instruments/leads.forte"
+import { P5Brass } from "../../essentials_0.6.0/instruments/prophet5.forte"
+import { KickSub } from "../../essentials_0.6.0/instruments/drums.forte"
+import { UprightBass, GuitarPluck } from "../instruments/modal.forte"
+
+// ---- AcidHalf — an acid line at half speed, still in key ------------------
+block AcidHalf {
+  block AcidHalfSrc {
+    track A { instrument Bass303(cutoff: 0.6, reso: 0.8, envmod: 0.65) volume 0.9
+      play notes`C2!:0.25 C2~:0.25 D#2:0.25 C2:0.25 G2!~:0.5 C2:0.25 A#1:0.25 C2!:0.25 C3~:0.25 C2:0.5 F2:0.25 D#2:0.25 C2:0.5` at bars(1..1) }
+  }
+  sample AcidHalfS = bounce(AcidHalfSrc, note: C2, beats: 4)
+  track Slow {
+    instrument sampler(sample: AcidHalfS, end: 0.667, stretch: 0.25, sustain: 1.0, release: 0.2, vary: 0.08)
+    insert saturate(mode: "fuzz", drive: 0.4, tone: 0.55)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    volume 0.85
+    play notes`C2~:8` at bars(1..2)
+  }
+}
+
+// ---- SquareRoll — a square 303 that keeps rolling over itself -------------
+block SquareRoll {
+  block SquareRollSrc {
+    track Q { instrument Square303(cutoff: 0.55, reso: 0.7) volume 0.9
+      play notes`C2:0.5 C2:0.25 D#2:0.25 G2:0.5 F2:0.5 C2:0.5 A#1:0.5 C2:0.5 D2:0.5` at bars(1..1) }
+  }
+  sample SquareRollS = bounce(SquareRollSrc, note: C2, beats: 4)
+  track Roll {
+    instrument sampler(sample: SquareRollS, slices: 16, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.4)
+    modulate pitch with steps(seq: "0.5 0.5 0.625 0.5 0.5 0.375 0.5 0.75", every: "1/8", amount: 0.0) as flip
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.85
+    play notes`C2:0.25 D2:0.25 _:0.25 F2:0.25 C2:0.25 _:0.25 G2:0.25 A2:0.25 C2:0.5 _:0.5 D#2:0.25 C#2:0.25 _:0.5` at bars(1..2)
+    play notes`_:3.5 A#2:0.125 G#2:0.125 F2:0.125 D2:0.125` at bars(2..2)
+  }
+}
+
+// ---- SH101Drive — driven 101 eighths that jump the octave -----------------
+block SH101Drive {
+  block SH101DriveSrc {
+    track B { instrument SH101Bass volume 0.9
+      play notes`C2:0.5 C2:0.5 C2:0.5 C2:0.5 C2:0.5 C2:0.5 C2:0.5 C2:0.5` at bars(1..1) }
+  }
+  sample SH101DriveS = bounce(SH101DriveSrc, note: C2, beats: 4)
+  track Drive {
+    instrument sampler(sample: SH101DriveS, slices: 8, end: 0.667, choke: "on", vary: 0.1, sustain: 0.0, decay: 0.45)
+    modulate pitch with steps(seq: "0.5 0.5 0.75 0.5 0.5 0.75 0.5 0.625", every: "1/8", amount: 0.5) as jump
+    insert drive(drive: 0.35)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.15, makeup: 0.2)
+    volume 0.85
+    play notes`C2:0.5 D2:0.5 C2:0.5 E2:0.5 C2:0.5 F2:0.5 C2:0.5 G2:0.5` at bars(1..1)
+  }
+}
+
+// ---- UprightWalk — a walking bass re-walked by the sampler ----------------
+block UprightWalk {
+  block UprightWalkSrc {
+    track U {
+      instrument UprightBass(body: 0.55)
+      insert comp(thresh: 0.5, ratio: 0.5, makeup: 0.15)
+      insert vinyl(wow: 0.3, crackle: 0.3, hiss: 0.18, dust: 0.3)
+      volume 0.95
+      play humanize(notes`C2:1 D#2:1 F2:1 G2:1`, time: 0.02, vel: 12, seed: 41) at bars(1..1)
+    }
+  }
+  sample UprightWalkS = bounce(UprightWalkSrc, note: C2, beats: 4)
+  track Walk {
+    instrument sampler(sample: UprightWalkS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.6)
+    insert comp(thresh: 0.45, ratio: 0.6, attack: 0.02, release: 0.18, makeup: 0.25)
+    volume 0.95
+    play notes`C2:1 E2:1 C2:0.5 D2:0.5 G2:0.5 F2:0.5 C2:1 E2:0.75 D2:0.25 A2:1 G2:0.5 F2:0.5` at bars(1..2)
+  }
+}
+
+// ---- WobbleGate — an LFO bass carved by a gate you can steer --------------
+block WobbleGate {
+  block WobbleGateSrc {
+    track W { instrument Wobble volume 0.9
+      play notes`C2~:4` at bars(1..1) }
+  }
+  sample WobbleGateS = bounce(WobbleGateSrc, note: C2, beats: 4)
+  track Carve {
+    instrument sampler(sample: WobbleGateS, end: 0.667, loop: "on", sustain: 1.0, release: 0.15, vary: 0.06)
+    insert gate(depth: 0.95, beats: 0.25, duty: 0.45)
+    insert saturate(mode: "fuzz", drive: 0.35, tone: 0.5)
+    volume 0.85
+    play notes`C2~:6 D#2~:2` at bars(1..2)
+  }
+}
+
+// ---- SubPulse — a sub floor that pumps on its own -------------------------
+block SubPulse {
+  block SubPulseSrc {
+    track K { instrument KickSub volume 0.95
+      play notes`C1~:4` at bars(1..1) }
+  }
+  sample SubPulseS = bounce(SubPulseSrc, note: C1, beats: 4)
+  track Pulse {
+    instrument sampler(sample: SubPulseS, end: 0.667, loop: "on", sustain: 1.0, release: 0.25, glide: 0.1)
+    insert pump(amount: 0.7, beats: 1)
+    insert saturate(mode: "tape", drive: 0.4)
+    volume 0.85
+    play notes`C1~:6 G1~:2 C1~:4 A#0~:4` at bars(1..4)
+  }
+}
+
+// ---- PickBass — muted funk plucks, chopped tighter than played ------------
+block PickBass {
+  block PickBassSrc {
+    track P {
+      instrument GuitarPluck(pick: 0.4)
+      insert saturate(mode: "tube", drive: 0.3)
+      volume 0.95
+      play humanize(notes`C2:0.25 C2:0.25 _:0.25 C2:0.25 D#2:0.25 _:0.25 C2:0.25 F2:0.25 C2:0.25 _:0.25 G2:0.25 C2:0.25 _:0.25 A#2:0.25 C2:0.25 _:0.25`, time: 0.01, vel: 18, seed: 47) at bars(1..1)
+    }
+  }
+  sample PickBassS = bounce(PickBassSrc, note: C2, beats: 4)
+  track Funk {
+    instrument sampler(sample: PickBassS, slices: 16, end: 0.667, choke: "on", vary: 0.18, sustain: 0.0, decay: 0.3)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.9
+    play notes`C2:0.25 _:0.25 D2:0.25 E2:0.25 _:0.25 G2:0.25 C2:0.25 _:0.25 A2:0.25 C2:0.25 _:0.5 F2:0.25 D#2:0.25 _:0.5` at bars(1..1)
+  }
+}
+
+// ---- BassStabEcho — dub stabs answering themselves ------------------------
+block BassStabEcho {
+  block BassStabEchoSrc {
+    track B {
+      instrument P5Brass(blow: 0.45)
+      insert delay(time: 0.09, fdbk: 0.6, mix: 0.5)
+      insert filter(type: "lp", cutoff: 0.5, reso: 0.3)
+      volume 0.9
+      play notes`[C2 G2]:0.5 _:3.5` at bars(1..1)
+    }
+  }
+  sample BassStabEchoS = bounce(BassStabEchoSrc, note: C2, beats: 4)
+  track Dub {
+    instrument sampler(sample: BassStabEchoS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.6)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.35)
+    insert reverb(size: 0.6, decay: 0.5, mix: 0.2)
+    volume 0.95
+    play notes`C2:1 _:1 D2:0.5 _:0.5 C2:0.5 _:0.5 F2:1 _:1 C2:0.5 E2:0.5 _:1` at bars(1..2)
+  }
+}

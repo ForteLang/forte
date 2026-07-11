@@ -518,6 +518,9 @@ impl Instrument for Sampler {
             self.choke = p[12] > 0.5;
             self.vary = p[13];
         }
+        if p.len() >= 15 {
+            self.stretch = p[14];
+        }
     }
     fn voices(&self) -> usize {
         self.active_voices()

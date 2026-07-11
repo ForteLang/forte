@@ -1,0 +1,190 @@
+// glitchworks/melodyworks — MELODIC CHOPS, ready to drop: chords, stabs,
+// guitars, voices and strings produced, bounced and already playing. The
+// pop rule this file exists for: digital grooves read as MUSIC when
+// something analog-shaped (a guitar, a voice, strings, a dusty piano)
+// moves inside them. Every block here is that something, pre-chopped.
+import { TinePiano, Vibraphone, GuitarPluck, BowedStrings } from "../instruments/modal.forte"
+import { Bell, EPiano, Glass } from "../../essentials_0.6.0/instruments/keys.forte"
+import { JunoBrass } from "../../essentials_0.6.0/instruments/juno60.forte"
+import { P5Sweep } from "../../essentials_0.6.0/instruments/prophet5.forte"
+import { VoxLead, Pluck } from "../../essentials_0.6.0/instruments/leads.forte"
+
+// ---- TineStabCut — offbeat tine stabs with the tails cut off --------------
+block TineStabCut {
+  block TineStabCutSrc {
+    track T {
+      instrument TinePiano(bell: 0.45)
+      insert saturate(mode: "tube", drive: 0.3)
+      volume 0.95
+      play notes`[C3 D#3 G3 A#3]:1 _:3` at bars(1..1)
+    }
+  }
+  sample TineStabCutS = bounce(TineStabCutSrc, note: C3, beats: 4)
+  track Stabs {
+    instrument sampler(sample: TineStabCutS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.4)
+    insert delay(time: 0.28, fdbk: 0.3, mix: 0.2)
+    insert vinyl(wow: 0.25, crackle: 0.25, hiss: 0.12, dust: 0.25)
+    volume 0.9
+    play notes`_:0.5 C3:0.5 _:1 C3:0.25 D3:0.25 _:1 C3:0.5 _:2.5 D#3:0.5 _:0.5 C3:0.5` at bars(1..2)
+  }
+}
+
+// ---- GuitarChop — the funk guitar, recut with rests -----------------------
+block GuitarChop {
+  block GuitarChopSrc {
+    track G {
+      instrument GuitarPluck(pick: 0.6)
+      insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+      insert vinyl(wow: 0.2, crackle: 0.25, hiss: 0.12, dust: 0.2)
+      volume 0.95
+      play humanize(notes`C3:0.25 _:0.25 C3:0.25 D#3:0.25 _:0.25 G3:0.25 F3:0.25 _:0.25 C3:0.25 _:0.25 A#2:0.25 C3:0.25 D#3:0.25 _:0.25 F3:0.25 G3:0.25`, time: 0.01, vel: 16, seed: 53) at bars(1..1)
+    }
+  }
+  sample GuitarChopS = bounce(GuitarChopSrc, note: C3, beats: 4)
+  track Chop {
+    instrument sampler(sample: GuitarChopS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.18, sustain: 0.0, decay: 0.35)
+    insert parcomp(amount: 0.5, drive: 0.55, color: 0.4)
+    volume 0.9
+    play notes`C3:0.25 D3:0.25 _:0.25 F3:0.25 _:0.25 G3:0.25 A3:0.25 _:0.25 C3:0.25 _:0.5 D#3:0.25 F#3:0.25 _:0.25 B3:0.25 _:0.25` at bars(1..1)
+  }
+}
+
+// ---- VibesFreeze — a vibraphone run smeared into a halo -------------------
+block VibesFreeze {
+  block VibesFreezeSrc {
+    track V { instrument Vibraphone(mallet: 0.35) volume 0.9
+      play humanize(notes`C4:0.5 D#4:0.5 G4:0.5 A#4:0.5 C5:0.5 A#4:0.5 G4:0.5 D#4:0.5`, time: 0.015, vel: 12, seed: 59) at bars(1..1) }
+  }
+  sample VibesFreezeS = bounce(VibesFreezeSrc, note: C4, beats: 4)
+  track Halo {
+    // stretch 0.15 = the run takes ~3x its time, grains blooming
+    instrument sampler(sample: VibesFreezeS, gain: 1.0, end: 0.667, stretch: 0.15, sustain: 1.0, release: 0.4, vary: 0.08)
+    insert width(amount: 0.85)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.35)
+    volume 0.8
+    play notes`C4~:12 _:4` at bars(1..4)
+  }
+}
+
+// ---- StringStretch — a string section on the wrong tape speed -------------
+block StringStretch {
+  block StringStretchSrc {
+    track S { instrument BowedStrings(section: 0.55) volume 0.9
+      play notes`[C4 G4]~:2 [A#3 F4]~:2` at bars(1..1) }
+  }
+  sample StringStretchS = bounce(StringStretchSrc, note: C4, beats: 4)
+  track Tape {
+    instrument sampler(sample: StringStretchS, gain: 1.0, end: 0.667, stretch: 0.25, sustain: 1.0, release: 0.4, vary: 0.06)
+    insert vinyl(wow: 0.45, crackle: 0.3, hiss: 0.2, dust: 0.35)
+    insert width(amount: 0.8)
+    volume 0.85
+    play notes`C4~:8` at bars(1..2)
+  }
+}
+
+// ---- BellFlip — a music box that plays itself backwards -------------------
+block BellFlip {
+  block BellFlipSrc {
+    track B { instrument Bell(decay: 0.6) volume 0.9
+      play notes`C4:0.5 G4:0.5 D#4:0.5 A#4:0.5 C5:0.5 G4:0.5 F4:0.5 D#4:0.5` at bars(1..1) }
+  }
+  sample BellFlipS = bounce(BellFlipSrc, note: C4, beats: 4)
+  track Box {
+    instrument sampler(sample: BellFlipS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.2, sustain: 0.0, decay: 0.5)
+    volume 0.8
+    play notes`C4:0.5 E4:0.5 _:0.5 G4:0.5 _:1 D4:0.5 F4:0.5` at bars(1..2)
+  }
+  track Mirror {
+    instrument sampler(sample: BellFlipS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.25, reverse: "on", sustain: 0.0, decay: 0.4)
+    insert reverb(size: 0.6, decay: 0.55, mix: 0.3)
+    volume 0.55
+    play notes`_:5 F4:0.5 _:1.5 A4:0.5 _:0.5` at bars(1..2)
+  }
+}
+
+// ---- EPianoDust — lofi keys carved out of a held chord --------------------
+block EPianoDust {
+  block EPianoDustSrc {
+    track E {
+      instrument EPiano(tine: 0.4)
+      insert saturate(mode: "tape", drive: 0.35)
+      volume 0.95
+      play notes`[C3 D#3 G3 A#3 D4]~:4` at bars(1..1)
+    }
+  }
+  sample EPianoDustS = bounce(EPianoDustSrc, note: C3, beats: 4)
+  track Dusty {
+    instrument sampler(sample: EPianoDustS, gain: 1.0, end: 0.667, loop: "on", sustain: 1.0, release: 0.15, vary: 0.06)
+    insert gate(depth: 0.9, beats: 0.25, duty: 0.45)
+    insert vinyl(wow: 0.35, crackle: 0.35, hiss: 0.2, dust: 0.35)
+    volume 0.85
+    play notes`C3~:6 A#2~:2` at bars(1..2)
+  }
+}
+
+// ---- VoxCutUp — a voice microsampled into syllables that never existed ----
+block VoxCutUp {
+  block VoxCutUpSrc {
+    track V { instrument VoxLead volume 0.9
+      play notes`C4~:1 D#4~:1 G4~:1 F4~:1` at bars(1..1) }
+  }
+  sample VoxCutUpS = bounce(VoxCutUpSrc, note: C4, beats: 4)
+  track Cut {
+    // pitched down a fourth, big vary: the Burial voice
+    instrument sampler(sample: VoxCutUpS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.3, pitch: 0.396, sustain: 0.0, decay: 0.4)
+    insert vinyl(wow: 0.4, crackle: 0.35, hiss: 0.22, dust: 0.3)
+    insert reverb(size: 0.65, decay: 0.55, mix: 0.3)
+    volume 0.85
+    play notes`C4:0.25 _:0.25 D4:0.25 F4:0.25 _:0.5 G4:0.25 A4:0.25 _:0.5 C4:0.5 _:0.25 D#4:0.25 _:0.5` at bars(1..1)
+  }
+}
+
+// ---- JunoBrassHits — the 80s stab, exciter sheen, chopped -----------------
+block JunoBrassHits {
+  block JunoBrassHitsSrc {
+    track J { instrument JunoBrass volume 0.95
+      play notes`[C3 G3 C4]:0.75 _:3.25` at bars(1..1) }
+  }
+  sample JunoBrassHitsS = bounce(JunoBrassHitsSrc, note: C3, beats: 4)
+  track Hits {
+    instrument sampler(sample: JunoBrassHitsS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.45)
+    insert exciter(amount: 0.3)
+    insert parcomp(amount: 0.5, drive: 0.55, color: 0.45)
+    volume 0.9
+    play notes`C3:0.5 _:1 C3:0.25 D3:0.25 _:0.75 C3:0.25 _:1 F3:0.5 _:2 D#3:0.5 _:0.75 C3:0.25` at bars(1..2)
+  }
+}
+
+// ---- SweepScrub — a poly-mod sweep with the window on a sequencer ---------
+block SweepScrub {
+  block SweepScrubSrc {
+    track P { instrument P5Sweep volume 0.9
+      play notes`[C3 G3]~:4` at bars(1..1) }
+  }
+  sample SweepScrubS = bounce(SweepScrubSrc, note: C3, beats: 4)
+  track Scrub {
+    // co-modulated window: same seq on start (base .25) and end (base .37)
+    instrument sampler(sample: SweepScrubS, gain: 1.0, start: 0.25, end: 0.37, loop: "on", sustain: 0.85, decay: 0.2, release: 0.06, choke: "on", vary: 0.1)
+    modulate start with steps(seq: "0.0 0.4 0.8 0.24 0.6 0.96 0.44 0.14", every: "1/8", amount: 0.25)
+    modulate end  with steps(seq: "0.0 0.4 0.8 0.24 0.6 0.96 0.44 0.14", every: "1/8", amount: 0.25)
+    insert saturate(mode: "tape", drive: 0.3)
+    insert width(amount: 0.75)
+    volume 0.85
+    play beat`x-x- x-x- x-x- x-x-` at bars(1..2)
+  }
+}
+
+// ---- PluckArp — a plucked arp re-ordered by the pads -----------------------
+block PluckArp {
+  block PluckArpSrc {
+    track P { instrument Pluck volume 0.9
+      play notes`C4:0.25 D#4:0.25 G4:0.25 C5:0.25 A#4:0.25 G4:0.25 D#4:0.25 C4:0.25 F4:0.25 G#4:0.25 C5:0.25 D#5:0.25 C5:0.25 G#4:0.25 F4:0.25 D4:0.25` at bars(1..1) }
+  }
+  sample PluckArpS = bounce(PluckArpSrc, note: C4, beats: 4)
+  track Reorder {
+    instrument sampler(sample: PluckArpS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.3)
+    insert delay(time: 0.25, fdbk: 0.35, mix: 0.22)
+    volume 0.85
+    play notes`C4:0.25 F4:0.25 D4:0.25 A4:0.25 C4:0.25 G#4:0.25 E4:0.25 B4:0.25 C4:0.25 A#4:0.25 F#4:0.25 C5:0.25 D#4:0.25 A4:0.25 G4:0.25 D4:0.25` at bars(1..1)
+  }
+}

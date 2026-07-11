@@ -1,0 +1,247 @@
+// glitchworks/grooveworks — GROOVES, ready to drop: every block here is a
+// drum/percussion source PRODUCED (insert chains), bounced, chopped and
+// already playing a groove. `play SnareFlip at bars(1..8)` just works;
+// inherit a block to replace its patterns. All of them obey the house
+// rules: choke cuts leave rests, vary keeps hits off the photocopier,
+// fills break the pattern, the swing comes from the song.
+//
+// Slice math reminder: a bounce carries +2 beats of tail — 4-beat source →
+// end: 0.667, 2-beat → 0.5, 1-beat → 0.333. Slice n = bounce note + n.
+import { Kick808, Kick909, Kick606, KickSub, SnareTight, Snare908, SnareBrush, HatClosed, HatOpen, HatPedal, Rim, Stick, Clap, Snap, Tom, TomFloor, Ride, Crash, Shaker, Cowbell } from "../../essentials_0.6.0/instruments/drums.forte"
+import { KickModal, SnareModal, RideModal } from "../instruments/modal.forte"
+
+// ---- SnareFlip — the backbeat that sometimes eats itself ------------------
+block SnareFlip {
+  block SnareFlipSrc {
+    track S {
+      instrument SnareTight(snap: 0.72)
+      insert delay(time: 0.08, fdbk: 0.55, mix: 0.4)
+      insert saturate(mode: "fuzz", drive: 0.35, tone: 0.55)
+      insert parcomp(amount: 0.55, drive: 0.6, color: 0.45)
+      volume 0.95
+      play beat`x--- ---- ---- ----` at bars(1..1)
+    }
+  }
+  sample SnareFlipS = bounce(SnareFlipSrc, note: C3, beats: 1)
+  track Main {
+    instrument sampler(sample: SnareFlipS, gain: 1.0, sustain: 0.0, decay: 0.5, vary: 0.1)
+    volume 0.9
+    play late(beat`---- x--- ---- x---`, by: 0.06) at bars(1..2)
+  }
+  track Chop {
+    instrument sampler(sample: SnareFlipS, gain: 1.0, slices: 8, end: 0.333, choke: "on", vary: 0.25, sustain: 0.0, decay: 0.3)
+    volume 0.8
+    play notes`_:7 D3:0.25 F3:0.25 C3:0.25 G3:0.25` at bars(1..2)
+  }
+}
+
+// ---- HatWork — sixteenths that never repeat -------------------------------
+block HatWork {
+  block HatWorkSrc {
+    track HC { instrument HatClosed volume 0.6
+      play beat`x-x- x-x- x-x- x-x-` at bars(1..1) }
+    track HO { instrument HatOpen(decay: 0.3) volume 0.5
+      play beat`--x- ---- --x- ----` at bars(1..1) }
+  }
+  sample HatWorkS = bounce(HatWorkSrc, note: C3, beats: 4)
+  track Hats {
+    instrument sampler(sample: HatWorkS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.3, sustain: 0.0, decay: 0.3)
+    insert saturate(mode: "tape", drive: 0.35)
+    insert exciter(amount: 0.25)
+    volume 0.95
+    play notes`C3:0.25 D3:0.25 C#3:0.25 E3:0.25 C3:0.25 F3:0.25 D3:0.25 G3:0.25 C3:0.25 D#3:0.25 C#3:0.25 A3:0.25 C3:0.25 D3:0.25 F#3:0.25 B3:0.25` at bars(1..2)
+    play notes`_:3.5 C4:0.125 B3:0.125 A3:0.125 G3:0.125` at bars(2..2)
+  }
+}
+
+// ---- BrushShuffle — brushed snare shuffle, dusted -------------------------
+block BrushShuffle {
+  block BrushShuffleSrc {
+    track B { instrument SnareBrush volume 0.9
+      play beat`x-x- x-x- x-x- x-x-` at bars(1..1) }
+    track R { instrument Rim volume 0.5
+      play beat`---- x--- ---- x---` at bars(1..1) }
+  }
+  sample BrushShuffleS = bounce(BrushShuffleSrc, note: C3, beats: 4)
+  track Shuffle {
+    instrument sampler(sample: BrushShuffleS, gain: 1.0, slices: 8, end: 0.667, choke: "on", vary: 0.2, sustain: 0.0, decay: 0.45)
+    insert parcomp(amount: 0.55, drive: 0.6, color: 0.4)
+    insert vinyl(wow: 0.25, crackle: 0.3, hiss: 0.15, dust: 0.3)
+    volume 0.95
+    play notes`C3:0.5 D3:0.5 _:0.5 E3:0.5 C3:0.5 F3:0.25 F#3:0.25 _:0.5 G3:0.5` at bars(1..1)
+  }
+}
+
+// ---- TomTalk — toms in conversation, pitch re-deciding itself -------------
+block TomTalk {
+  block TomTalkSrc {
+    track T { instrument Tom volume 0.9
+      play beat`x--- -x-- ---- ----` at bars(1..1) }
+    track TF { instrument TomFloor volume 0.9
+      play beat`---- ---- x--- -x--` at bars(1..1) }
+  }
+  sample TomTalkS = bounce(TomTalkSrc, note: C3, beats: 4)
+  track Talk {
+    instrument sampler(sample: TomTalkS, slices: 8, end: 0.667, choke: "on", vary: 0.2, sustain: 0.0, decay: 0.45)
+    modulate pitch with steps(seq: "0.5 0.625 0.5 0.375 0.5 0.75 0.5 0.25", every: "1/4", amount: 0.2) as bend
+    insert saturate(mode: "tube", drive: 0.35)
+    volume 0.85
+    play notes`C3:0.5 _:0.5 E3:0.5 D3:0.25 _:0.25 G3:0.5 _:0.5 F3:0.25 C3:0.25 _:0.5` at bars(1..1)
+  }
+}
+
+// ---- RideGrain — a cymbal at half speed, shimmering wrong -----------------
+block RideGrain {
+  block RideGrainSrc {
+    track R { instrument RideModal(wash: 0.4) volume 0.8
+      play beat`x--- x--- x--- x---` at bars(1..1) }
+  }
+  sample RideGrainS = bounce(RideGrainSrc, note: C3, beats: 4)
+  track Grain {
+    // stretch 0.25 = the four ride hits smeared across two bars, in key
+    instrument sampler(sample: RideGrainS, gain: 1.0, end: 0.667, stretch: 0.25, sustain: 1.0, release: 0.3, vary: 0.1)
+    insert exciter(amount: 0.3)
+    insert width(amount: 0.8)
+    insert reverb(size: 0.6, decay: 0.5, mix: 0.25)
+    volume 0.9
+    play notes`C3~:8` at bars(1..2)
+  }
+}
+
+// ---- ClapRun — claps that trip over themselves ----------------------------
+block ClapRun {
+  block ClapRunSrc {
+    track C { instrument Clap volume 0.9
+      play beat`x--- ---- ---- ----` at bars(1..1) }
+    track SN { instrument Snap volume 0.6
+      play beat`--x- ---- ---- ----` at bars(1..1) }
+  }
+  sample ClapRunS = bounce(ClapRunSrc, note: C3, beats: 1)
+  track Run {
+    instrument sampler(sample: ClapRunS, gain: 1.0, sustain: 0.0, decay: 0.4, vary: 0.2, choke: "on")
+    insert parcomp(amount: 0.55, drive: 0.6, color: 0.45)
+    insert exciter(amount: 0.3)
+    volume 0.95
+    play beat`---- x--- ---- x*3-` at bars(1..2)
+    play beat`---- ---- ---- --x*4` at bars(2..2)
+  }
+}
+
+// ---- PercModal — a hand-percussion section that swings --------------------
+block PercModal {
+  block PercModalSrc {
+    track CB { instrument Cowbell volume 0.55
+      play beat`x--- --x- ---- x---` at bars(1..1) }
+    track ST { instrument Stick volume 0.7
+      play beat`--x- x--- -x-- --x-` at bars(1..1) }
+    track SH { instrument Shaker volume 0.6
+      play beat`x-x- x-x- x-x- x-x-` at bars(1..1) }
+  }
+  sample PercModalS = bounce(PercModalSrc, note: C3, beats: 4)
+  track Perc {
+    instrument sampler(sample: PercModalS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.25, sustain: 0.0, decay: 0.35)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    insert saturate(mode: "tape", drive: 0.3)
+    volume 0.95
+    play notes`C3:0.25 E3:0.25 _:0.25 G3:0.25 C#3:0.25 _:0.25 A3:0.25 D3:0.25 _:0.5 F3:0.25 B3:0.25 C3:0.25 _:0.25 D#3:0.25 G#3:0.25` at bars(1..1)
+  }
+}
+
+// ---- AmenTwo — the busy break, second pressing ----------------------------
+block AmenTwo {
+  block AmenTwoSrc {
+    track K { instrument Kick808(decay: 0.35) volume 0.95
+      play beat`x--- --x- --x- ----` at bars(1..1) }
+    track S { instrument Snare908(snap: 0.7) volume 0.9
+      play late(beat`---- X--. ---- x-.X`, by: 0.03) at bars(1..1) }
+    track HC { instrument HatClosed volume 0.5
+      play humanize(beat`x-x- x-xx x-x- xx-x`, time: 0.01, vel: 16, seed: 23) at bars(1..1) }
+    track RD { instrument Ride volume 0.35
+      play beat`x--- x--- x--- x---` at bars(1..1) }
+  }
+  sample AmenTwoS = bounce(AmenTwoSrc, note: C3, beats: 4)
+  track Cut {
+    instrument sampler(sample: AmenTwoS, slices: 16, end: 0.667, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.5)
+    insert transient(attack: 0.75, sustain: 0.4)
+    insert saturate(mode: "tape", drive: 0.35)
+    insert stutter(beats: 0.25, mix: 0.0)
+    insert parcomp(amount: 0.5, drive: 0.55, color: 0.4)
+    volume 0.9
+    play notes`C3:0.25 C#3:0.25 _:0.25 D#3:0.25 G3:0.5 _:0.5 A3:0.25 C3:0.25 _:0.25 D3:0.25 F3:0.25 A#3:0.25 C3:0.25 _:0.25` at bars(1..2)
+    play notes`_:3 B3:0.25 A#3:0.25 G3:0.25 D#3:0.25` at bars(2..2)
+  }
+}
+
+// ---- HalfBreak — the busy break at half speed, doom pressure --------------
+block HalfBreak {
+  block HalfBreakSrc {
+    track K { instrument Kick808(decay: 0.35) volume 0.95
+      play beat`x--- --x- --x- ----` at bars(1..1) }
+    track S { instrument Snare908(snap: 0.7) volume 0.9
+      play late(beat`---- X--. ---- x-.X`, by: 0.03) at bars(1..1) }
+    track HC { instrument HatClosed volume 0.5
+      play humanize(beat`x-x- x-xx x-x- xx-x`, time: 0.01, vel: 16, seed: 23) at bars(1..1) }
+  }
+  sample HalfBreakS = bounce(HalfBreakSrc, note: C3, beats: 4)
+  track Doom {
+    instrument sampler(sample: HalfBreakS, end: 0.667, stretch: 0.25, sustain: 1.0, release: 0.25, vary: 0.1)
+    insert saturate(mode: "tape", drive: 0.45)
+    insert crush(bits: 0.35, rate: 0.2, mix: 0.3)
+    volume 0.85
+    play notes`C3~:8` at bars(1..2)
+  }
+}
+
+// ---- KickRumble — a 606 kick driven into a rolling floor ------------------
+block KickRumble {
+  block KickRumbleSrc {
+    track K {
+      instrument Kick606
+      insert saturate(mode: "fuzz", drive: 0.5, tone: 0.5)
+      insert parcomp(amount: 0.6, drive: 0.65, color: 0.35)
+      volume 0.95
+      play beat`x--- ---- ---- ----` at bars(1..1)
+    }
+  }
+  sample KickRumbleS = bounce(KickRumbleSrc, note: C3, beats: 1)
+  track Roll {
+    instrument sampler(sample: KickRumbleS, slices: 8, end: 0.333, choke: "on", vary: 0.2, sustain: 0.0, decay: 0.35)
+    volume 0.9
+    play notes`C3:0.5 _:0.5 C3:0.5 D3:0.25 E3:0.25 C3:0.5 _:0.5 C3:0.25 D3:0.25 F3:0.25 G3:0.25` at bars(1..1)
+  }
+}
+
+// ---- ShakerSwing — sixteenth shaker with human wrists ---------------------
+block ShakerSwing {
+  block ShakerSwingSrc {
+    track SH { instrument Shaker volume 0.8
+      play humanize(beat`x-x- x-x- x-x- x-x-`, time: 0.012, vel: 20, seed: 31) at bars(1..1) }
+  }
+  sample ShakerSwingS = bounce(ShakerSwingSrc, note: C3, beats: 4)
+  track Sway {
+    instrument sampler(sample: ShakerSwingS, gain: 1.0, slices: 16, end: 0.667, choke: "on", vary: 0.35, sustain: 0.0, decay: 0.3)
+    insert parcomp(amount: 0.6, drive: 0.65, color: 0.45)
+    insert exciter(amount: 0.3)
+    volume 0.95
+    play notes`C3:0.25 D3:0.25 E3:0.25 F3:0.25 G3:0.25 A3:0.25 A#3:0.25 B3:0.25 C3:0.25 D3:0.25 D#3:0.25 F3:0.25 G3:0.25 G#3:0.25 A3:0.25 C4:0.25` at bars(1..1)
+  }
+}
+
+// ---- ModalBackbeat — the modal kit's laid-back two and four ---------------
+block ModalBackbeat {
+  block ModalBackbeatSrc {
+    track K { instrument KickModal(ring: 0.4, knock: 0.4) volume 0.9
+      play beat`x--- ---- x-x- ----` at bars(1..1) }
+    track S { instrument SnareModal(wires: 0.7, shell: 0.5) volume 0.85
+      play late(beat`---- x--- ---- x--.`, by: 0.05) at bars(1..1) }
+  }
+  sample ModalBackbeatS = bounce(ModalBackbeatSrc, note: C3, beats: 4)
+  track Beat {
+    instrument sampler(sample: ModalBackbeatS, slices: 16, end: 0.667, choke: "on", vary: 0.12, sustain: 0.0, decay: 0.5)
+    insert saturate(mode: "tape", drive: 0.4)
+    insert parcomp(amount: 0.5, drive: 0.6, color: 0.4)
+    volume 0.9
+    play notes`C3:0.5 _:0.5 E3:0.5 _:0.5 G3:0.5 _:0.25 C#3:0.25 A#3:0.5 _:0.5` at bars(1..2)
+    play notes`_:3.25 D3:0.25 C3:0.25 F3:0.25` at bars(2..2)
+  }
+}

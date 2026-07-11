@@ -144,3 +144,28 @@ device GuitarPluck : Instrument {
   node sum  = mix(a: mix(a: s1, b: hi), b: gain(in: bodym, level: 0.35))
   out gain(in: shaper(in: sum, drive: 0.18, mode: "tanh"), mod: life, level: 0.9)
 }
+
+// BowedStrings — the missing violin: a SUSTAINED excitation (the bow) into
+// keytracked string modes. No strike here — the resonators keep their
+// steady-state normalization because the bow never stops feeding them.
+// A 5 Hz vibrato (±35 cents) rides the string modes, the fixed body mode
+// stays put (a violin body does not vibrate with the vibrato), and the
+// waveshaper gives back the level a narrowband resonance eats plus the
+// rosin grit. Slow attack: this is a section pad, not a stab.
+device BowedStrings : Instrument {
+  param section = 0.5 in 0.0..1.0   // upper-partial ensemble level
+
+  node bow  = adsr(a: 0.4, d: 0.2, s: 0.85, r: 0.5)
+  node exc  = gain(in: svf(in: noise(), cutoff: 0.55, reso: 0.2), mod: bow, level: 1.0)
+  node vib  = lfo(rate: 0.42, shape: "sine")
+  node s1   = resonator(in: exc, freq: 0.5, ring: 0.55, key: "on", fm: gain(in: vib, level: 0.008))
+  node s2   = resonator(in: exc, freq: 0.625, ring: 0.4, key: "on", fm: gain(in: vib, level: 0.008))
+  node s3   = resonator(in: exc, freq: 0.698, ring: 0.3, key: "on")
+  node body = resonator(in: exc, freq: 0.36, ring: 0.1)
+  node hi   = mix(a: s2, b: gain(in: s3, level: 0.7))
+  node blend = mix(a: s1, b: gain(in: hi, level: section))
+  node strings = mix(a: blend, b: gain(in: body, level: 0.4))
+  node hot  = shaper(in: mix(a: strings, b: strings), drive: 0.35, mode: "tanh")
+  out gain(in: hot, mod: bow, level: 0.7)
+}
+

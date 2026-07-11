@@ -1,0 +1,44 @@
+// Sketch: groovebox — audition piece, NOT an album track. Zero new sound
+// design here: every layer is a stock block from grooveworks / bassworks /
+// melodyworks / textureworks dropped in with ONE line each. This is the
+// point of the library — grooves as vocabulary. Twenty lines of arrangement,
+// sixteen bars, a lofi opening that hardens into a broken-beat drop.
+//   bars 1-8   brush shuffle + upright walk + tine stabs, hats and shaker
+//              stacking up, a reversed cymbal opening the door
+//   bars 9-16  the busy break + pumping sub + funk guitar chops + the
+//              cut-up voice, strings on the wrong tape speed, morse and
+//              bleeps at the peak, an impact stamping the way out
+import { BrushShuffle, HatWork, ShakerSwing, AmenTwo, ModalBackbeat } from "../wrapped/grooveworks.forte"
+import { UprightWalk, SubPulse } from "../wrapped/bassworks.forte"
+import { TineStabCut, GuitarChop, VoxCutUp, StringStretch, VibesFreeze } from "../wrapped/melodyworks.forte"
+import { TapeAir, CrashRise, ZapArp, ImpactStamp, ColdPulse } from "../wrapped/textureworks.forte"
+
+song "Sketch Groovebox" {
+  desc "Audition sketch: sixteen bars arranged entirely from stock groove blocks — one line per layer. The library IS the band. Not an album track."
+  artist "Forte Essentials"
+  tempo 90bpm
+  swing 0.56
+  master 1.1
+  key C minor
+
+  // ---- side A: the dusty room ----
+  play TapeAir at bars(1..16)
+  play BrushShuffle at bars(1..8)
+  play UprightWalk at bars(1..8)
+  play TineStabCut at bars(3..8)
+  play HatWork at bars(5..8)
+  play ShakerSwing at bars(7..8)
+  play CrashRise at bars(8..8)
+
+  // ---- side B: the machines take the session ----
+  play ImpactStamp at bars(9..10)
+  play AmenTwo at bars(9..16)
+  play SubPulse at bars(9..16)
+  play GuitarChop at bars(9..16)
+  play VoxCutUp at bars(11..16)
+  play StringStretch at bars(13..16)
+  play ZapArp at bars(13..16)
+  play ColdPulse at bars(15..16)
+  play VibesFreeze at bars(15..16)
+  play ImpactStamp at bars(15..16)
+}

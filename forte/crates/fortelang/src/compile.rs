@@ -2031,7 +2031,7 @@ fn build_instrument(
                         &[
                             ("gain", 0), ("attack", 1), ("decay", 2), ("sustain", 3),
                             ("release", 4), ("pitch", 5), ("start", 6), ("end", 7),
-                            ("glide", 10), ("vary", 13),
+                            ("glide", 10), ("vary", 13), ("stretch", 14),
                         ],
                         &[("loop", 8, &["off", "on"]), ("reverse", 9, &["off", "on"]),
                           ("choke", 12, &["off", "on"])],

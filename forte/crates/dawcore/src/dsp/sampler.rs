@@ -48,6 +48,15 @@ struct SampleVoice {
     /// note-on velocity as gain (1.0 at velocity 100, so accents lift and
     /// ghosts duck around the nominal level)
     vel: f32,
+    /// granular stretch voice (decided at note-on): `pos` becomes the
+    /// TIMELINE (advancing at the stretch speed) and two 50 %-overlapped
+    /// triangle-windowed grains read from it at the PITCH step — time and
+    /// pitch decoupled, the modern-sampler move the plain path can't do
+    stretched: bool,
+    ga_read: f64,
+    ga_age: u32,
+    gb_read: f64,
+    gb_age: u32,
 }
 
 impl SampleVoice {
@@ -65,9 +74,19 @@ impl SampleVoice {
             note: 0,
             active: false,
             env: Adsr::new(sr),
+            stretched: false,
+            ga_read: 0.0,
+            ga_age: 0,
+            gb_read: 0.0,
+            gb_age: 0,
         }
     }
 }
+
+/// Grain length in OUTPUT samples (~50 ms): long enough to keep pitch
+/// intact, short enough that stretched transients smear the way the
+/// classic hardware stretch does — the artifact IS the aesthetic.
+const GRAIN_OUT: u32 = 2400;
 
 const SAMPLER_VOICES: usize = 16;
 
@@ -108,6 +127,13 @@ pub struct Sampler {
     /// no two hits are bit-identical — kills the machine-gun effect that
     /// makes repeated samples read as MIDI
     pub vary: f32,
+    /// granular time-stretch: 0 = off (plain playback, bit-identical to
+    /// before this existed). Otherwise the knob is the TIMELINE speed
+    /// (0.5 = original tempo, 0.25 = half, 1.0 = double) while the note
+    /// only sets grain PITCH — time and pitch decoupled. Automatable and
+    /// read live: ride it toward 0.02 and the sound grinds into a granular
+    /// freeze WITHOUT the pitch falling (the anti-tapestop).
+    pub stretch: f32,
 }
 
 impl Sampler {
@@ -132,6 +158,7 @@ impl Sampler {
             slices: 0,
             choke: false,
             vary: 0.0,
+            stretch: 0.0,
         }
     }
 
@@ -225,6 +252,15 @@ impl Sampler {
             }
             v.note = note;
             v.active = true;
+            v.stretched = self.stretch > 0.0001;
+            if v.stretched {
+                // grains read at the slice's natural rate from a timeline
+                // that moves at the stretch speed
+                v.ga_read = v.pos;
+                v.ga_age = 0;
+                v.gb_read = v.pos;
+                v.gb_age = GRAIN_OUT / 2;
+            }
             v.env.set(self.attack, self.decay, self.sustain, self.release);
             v.env.trigger();
             self.age[best] = self.clock;
@@ -300,6 +336,13 @@ impl Sampler {
         }
         v.note = note;
         v.active = true;
+        v.stretched = self.stretch > 0.0001;
+        if v.stretched {
+            v.ga_read = v.pos;
+            v.ga_age = 0;
+            v.gb_read = v.pos;
+            v.gb_age = GRAIN_OUT / 2;
+        }
         v.env.set(self.attack, self.decay, self.sustain, self.release);
         v.env.trigger();
         self.age[idx] = self.clock;
@@ -334,19 +377,27 @@ impl Sampler {
             return 0.0;
         }
         let mut sum = 0.0f32;
+        // live stretch speed for grain voices (in source samples per output
+        // sample): knob 0.5 = original tempo. Read every sample so riding
+        // the knob toward ~0.02 grinds held voices into a granular freeze.
+        let tl_step = if let Some(sample) = &self.sample {
+            self.stretch.clamp(0.0, 1.0) as f64 * 2.0
+                * (sample.sample_rate as f64 / self.sample_rate as f64)
+        } else {
+            0.0
+        };
         for v in &mut self.voices {
             if !v.active {
                 continue;
             }
-            // linear interpolation
-            let i = v.pos.floor() as usize;
-            let frac = (v.pos - i as f64) as f32;
-            let a = data.get(i).copied().unwrap_or(0.0);
-            let b = data.get(i + 1).copied().unwrap_or(0.0);
-            let s = a + (b - a) * frac;
-
-            let amp = v.env.next();
-            sum += s * amp * v.vel;
+            #[inline]
+            fn read(data: &[f32], pos: f64) -> f32 {
+                let i = pos.floor() as usize;
+                let frac = (pos - i as f64) as f32;
+                let a = data.get(i).copied().unwrap_or(0.0);
+                let b = data.get(i + 1).copied().unwrap_or(0.0);
+                a + (b - a) * frac
+            }
 
             if v.step_factor != 1.0 {
                 v.step *= v.step_factor;
@@ -366,7 +417,38 @@ impl Sampler {
             } else {
                 v.step * crate::dmath::powf(2.0, (self.transpose - v.tp0) / 12.0) as f64
             };
-            v.pos += eff;
+
+            let amp = v.env.next();
+            if v.stretched {
+                // two 50 %-overlapped triangle-windowed grains read at the
+                // PITCH step from a timeline (`pos`) moving at the STRETCH
+                // speed — time and pitch decoupled
+                let g = GRAIN_OUT as f32;
+                let wa = 1.0 - (2.0 * v.ga_age as f32 / g - 1.0).abs();
+                let wb = 1.0 - (2.0 * v.gb_age as f32 / g - 1.0).abs();
+                let sa = read(data, v.ga_read);
+                let sb = read(data, v.gb_read);
+                sum += (sa * wa + sb * wb) * amp * v.vel;
+                // grains always read forward at the pitch rate; `reverse`
+                // lives in the timeline direction instead
+                let gstep = eff.abs();
+                v.ga_read += gstep;
+                v.gb_read += gstep;
+                v.ga_age += 1;
+                v.gb_age += 1;
+                if v.ga_age >= GRAIN_OUT {
+                    v.ga_read = v.pos;
+                    v.ga_age = 0;
+                }
+                if v.gb_age >= GRAIN_OUT {
+                    v.gb_read = v.pos;
+                    v.gb_age = 0;
+                }
+                v.pos += if v.step < 0.0 { -tl_step } else { tl_step };
+            } else {
+                sum += read(data, v.pos) * amp * v.vel;
+                v.pos += eff;
+            }
             let (rs, re) = v.region;
             let span = (re - rs).max(1.0);
             if v.step >= 0.0 {
