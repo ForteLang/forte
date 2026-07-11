@@ -91,7 +91,14 @@ fn prim(name: &str) -> Option<Prim> {
             kind: GridModuleKind::Resonator,
             inputs: &[("in", 0, None), ("fm", 1, None)],
             params: &[("freq", 0, 0.5), ("ring", 1, 0.3)],
-            options: &[],
+            // key: "on" retunes freq around the PLAYED NOTE (0.5 = the note,
+            // ±4 octaves, each 0.125 = one octave) — melodic physical
+            // modeling: strings, tines, bells that follow the score.
+            // strike: "on" normalizes for BURST excitation (a struck ring
+            // peaks near unity however long it rings) — physical modeling
+            // wants this; the default suits sustained/filter-like use.
+            options: &[("key", 2, &["off", "on"], &[0.0, 1.0]),
+                       ("strike", 3, &["off", "on"], &[0.0, 1.0])],
         },
         "gain" => Prim {
             kind: GridModuleKind::Gain,

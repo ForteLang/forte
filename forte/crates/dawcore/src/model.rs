@@ -57,6 +57,8 @@ pub enum DeviceKind {
     RingMod,
     /// Tape stop: buffered read head slowing to a halt (automatable).
     TapeStop,
+    /// Analog-media patina: wow/flutter, crackle, hiss, dust lowpass.
+    Vinyl,
     /// Sidechain ducker keyed to another track's hits (compiler bakes the
     /// swung trigger times) — the glitch groove engine.
     Duck,
@@ -85,7 +87,7 @@ impl DeviceStage {
 impl DeviceKind {
     /// Every device, in stage order. The browser and factories iterate this —
     /// adding a device here is the only registration step the UI needs.
-    pub const ALL: [DeviceKind; 26] = [
+    pub const ALL: [DeviceKind; 27] = [
         DeviceKind::Arpeggiator,
         DeviceKind::NoteTranspose,
         DeviceKind::NoteRepeat,
@@ -111,6 +113,7 @@ impl DeviceKind {
         DeviceKind::Exciter,
         DeviceKind::RingMod,
         DeviceKind::TapeStop,
+        DeviceKind::Vinyl,
         DeviceKind::Duck,
     ];
 
@@ -141,6 +144,7 @@ impl DeviceKind {
             DeviceKind::Exciter => "Exciter",
             DeviceKind::RingMod => "RingMod",
             DeviceKind::TapeStop => "TapeStop",
+            DeviceKind::Vinyl => "Vinyl",
             DeviceKind::Duck => "Duck",
             DeviceKind::MeshFx => "Mesh FX",
         }
@@ -171,7 +175,7 @@ impl DeviceKind {
             ],
             DeviceKind::Sampler => &[
                 "Gain", "Attack", "Decay", "Sustain", "Release", "Pitch", "Start", "End",
-                "Loop", "Reverse", "Glide", "Slices",
+                "Loop", "Reverse", "Glide", "Slices", "Choke", "Vary",
             ],
             DeviceKind::Kit => &["Gain", "Attack", "Decay", "Sustain", "Release"],
             DeviceKind::PolyMesh => &[],
@@ -196,6 +200,7 @@ impl DeviceKind {
             DeviceKind::Exciter => &["Amount", "Freq"],
             DeviceKind::RingMod => &["Freq", "Mix"],
             DeviceKind::TapeStop => &["Amount"],
+            DeviceKind::Vinyl => &["Wow", "Crackle", "Hiss", "Dust"],
             DeviceKind::Duck => &["Amount", "Attack", "Release", "Shape"],
             DeviceKind::MeshFx => &[],
         }
@@ -209,7 +214,11 @@ impl DeviceKind {
             }
             // Pitch 0.5 == centre (no transpose); ±24 semitones across the range.
             // Start/End trim the play region; Loop/Reverse are 0/1 switches.
-            DeviceKind::Sampler => vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            // Choke: a new trigger hard-cuts running voices (MPC pad);
+            // Vary: deterministic per-hit pitch/level drift (anti machine-gun)
+            DeviceKind::Sampler => {
+                vec![0.8, 0.02, 0.3, 0.9, 0.2, 0.5, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            }
             DeviceKind::Kit => vec![0.8, 0.01, 0.3, 1.0, 0.25],
             DeviceKind::PolyMesh => Vec::new(),
             DeviceKind::Arpeggiator => vec![0.55, 0.0, 0.0], // 1/8, 1 octave, up
@@ -235,6 +244,9 @@ impl DeviceKind {
             DeviceKind::Exciter => vec![0.3, 0.5],
             DeviceKind::RingMod => vec![0.4, 0.5],
             DeviceKind::TapeStop => vec![0.0],
+            // A bare vinyl() is already a record: light warble, soft ticks,
+            // a floor of hiss, a touch of rolloff
+            DeviceKind::Vinyl => vec![0.25, 0.3, 0.15, 0.25],
             // Amount 0.85 (deep duck), fast attack, medium release, curved shape
             DeviceKind::Duck => vec![0.85, 0.3, 0.3, 0.6],
             DeviceKind::MeshFx => Vec::new(),
@@ -365,7 +377,7 @@ impl GridModuleKind {
             GridModuleKind::Lfo => &["Rate", "Shape"],
             GridModuleKind::Adsr => &["A", "D", "S", "R"],
             GridModuleKind::Filter => &["Cutoff", "Reso"],
-            GridModuleKind::Resonator => &["Freq", "Ring"],
+            GridModuleKind::Resonator => &["Freq", "Ring", "Key", "Strike"],
             GridModuleKind::Shaper => &["Drive", "Mode"],
             GridModuleKind::Gain => &["Level"],
             _ => &[],
@@ -378,7 +390,7 @@ impl GridModuleKind {
             GridModuleKind::Lfo => vec![0.3, 0.0],
             GridModuleKind::Adsr => vec![0.05, 0.3, 0.6, 0.25],
             GridModuleKind::Filter => vec![0.65, 0.2],
-            GridModuleKind::Resonator => vec![0.5, 0.3],
+            GridModuleKind::Resonator => vec![0.5, 0.3, 0.0, 0.0],
             GridModuleKind::Shaper => vec![0.3, 0.1], // tanh
             GridModuleKind::Gain => vec![0.8],
             _ => Vec::new(),

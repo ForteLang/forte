@@ -1,0 +1,76 @@
+// Sketch: chopshop — audition piece, NOT an album track. The MPC treatment
+// of the trio take: the WHOLE pressed performance (crackle and all) bounced
+// to one audio asset, sliced into 16 pads, and re-cut with choke ON — every
+// new pad hard-cuts the last, and the silence the cut leaves behind is the
+// groove. vary drifts each hit a few cents so no two chops are identical
+// (the anti-machine-gun). Under it: a straight boom-bap spine — kick on the
+// grid, the snare sample dragging 40 ms late (the Dilla drag), a sub that
+// ducks out of the kick's way. Digital drums, analog corpse, hard cuts:
+// the lineage is SP-1200 -> MPC -> the chop.
+import { TrioTake } from "../phrases/trio.forte"
+import { KickModal, SnareModal } from "../instruments/modal.forte"
+import { SubWrap } from "../wrapped/bassx.forte"
+
+song "Sketch Chopshop" {
+  desc "Audition sketch: the trio take bounced whole and choke-chopped — pads cut pads, rests are the groove, boom-bap spine under. Not an album track."
+  artist "Forte Essentials"
+  tempo 90bpm
+  swing 0.56
+  master 1.4
+  key E minor
+
+  // the record: two swung bars of trio, vinyl baked in (8 beats + 2 tail,
+  // so end: 0.8 puts the 16 slice boundaries exactly on half-beats)
+  sample Take = bounce(TrioTake, note: C3, beats: 8)
+
+  // the chop: slice indices are semitones up from C3 (slice 0)
+  block Chop {
+    track Pads {
+      instrument sampler(sample: Take, slices: 16, end: 0.8, choke: "on", vary: 0.15, sustain: 0.0, decay: 0.5)
+      insert transient(attack: 0.7, sustain: 0.45)
+      insert saturate(mode: "tape", drive: 0.35)
+      insert parcomp(amount: 0.5, drive: 0.55, color: 0.4)
+      volume 0.9
+      // bar A: lean on the downbeat slices, carve rests mid-bar
+      play notes`C3:0.5 D3:0.5 _:0.5 E3:0.25 F3:0.25 G3:0.5 _:0.5 A3:0.5 C3:0.25 _:0.25` at bars(1..4)
+      // bar B: the flip — same record, backwards logic, harder cuts
+      play notes`A#3:0.25 A3:0.25 _:0.5 G3:0.5 C3:0.5 _:0.25 D#3:0.25 C4:0.5 _:0.5 D3:0.25 C3:0.25` at bars(5..8)
+    }
+    track Ghost {
+      instrument sampler(sample: Take, slices: 16, end: 0.8, choke: "on", vary: 0.2, sustain: 0.0, decay: 0.2, reverse: "on")
+      insert crush(bits: 0.35, rate: 0.2, mix: 0.35)
+      volume 0.4
+      play notes`_:1.75 B3:0.25 _:1.5 F3:0.25 _:0.25` at bars(3..8)
+    }
+  }
+
+  // the spine: modal drums as the beatmaker's own hits
+  block Spine {
+    track Kick {
+      instrument KickModal(ring: 0.45, knock: 0.45)
+      insert saturate(mode: "tape", drive: 0.4)
+      insert parcomp(amount: 0.5, drive: 0.6, color: 0.35)
+      volume 0.95
+      play beat`x--- --x- ---- x---` at bars(1..8)
+    }
+    track Snare {
+      instrument SnareModal(wires: 0.7, shell: 0.45)
+      insert saturate(mode: "fuzz", drive: 0.3, tone: 0.55)
+      insert parcomp(amount: 0.5, drive: 0.55, color: 0.45)
+      volume 0.85
+      // the backbeat drags 40 ms behind the machine kick — the drunk feel
+      play late(beat`---- x--- ---- x--.`, by: 0.06) at bars(1..8)
+    }
+  }
+
+  block Sub : SubWrap {
+    track Sub {
+      insert duck(from: Spine, amount: 0.85, attack: 0.02, release: 0.14, shape: 0.7)
+      play notes`E1~:2 E1~:1 G1:1` at bars(3..8)
+    }
+  }
+
+  play Chop at bars(1..8)
+  play Spine at bars(1..8)
+  play Sub at bars(3..8)
+}

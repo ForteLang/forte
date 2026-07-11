@@ -123,6 +123,7 @@ Chord qualities: (unmarked = major), `m`, `min`, `7`, `maj7`, `m7`, `min7`, `dim
 | `arp(p, rate: 0.5, style: "up\|down\|updown")` | rate is 0<r≤1 bar | Cycles through chord tones at oct4, vel 95 |
 | `cycle(p, span: 1.5)` | p = beat/notes literal (or let). `span` in beats, 0<span≤128 — **required** (E-PAT-004) | Polymeter: the pattern's period is `span` instead of one bar. A beat literal's steps divide the span; the clip tiles at that period and phases against the meter |
 | `humanize(p, time: 0.02, vel: 10, seed: 1)` | p = any literal. `time` ≤ 0.5 beats, `vel` ≤ 60 | Seeded xorshift jitter of note timing and velocity. Deterministic: the same seed renders bit-identically on every machine |
+| `late(p, by: 0.04)` | p = any literal. `by` in beats, −0.25..0.25 | Constant micro-shift of every note: + drags behind the grid (the laid-back snare), − pushes ahead (the driving hat). No randomness; nest with humanize() for drag + scatter |
 
 ### 4.5 Device DSL (defining instruments and effects in code)
 
@@ -167,7 +168,7 @@ anyone can plug their own recording into a published instrument.
 
 | instrument | Parameters |
 | --- | --- |
-| `sampler(sample: "Kick"\|"Snare"\|"Hat"\|<bounce name>)` | gain, attack, decay, sustain, release, pitch, start, end, loop("off"/"on"), reverse("off"/"on"), glide (0..1 → 0..0.5 s of mono/legato slide between overlapping notes — the 808/303 slide), slices (2..32: chop the region into pads; root+n plays slice n at ORIGINAL speed — the MPC chop) |
+| `sampler(sample: "Kick"\|"Snare"\|"Hat"\|<bounce name>)` | gain, attack, decay, sustain, release, pitch, start, end, loop("off"/"on"), reverse("off"/"on"), glide (0..1 → 0..0.5 s of mono/legato slide between overlapping notes — the 808/303 slide), slices (2..32: chop the region into pads; root+n plays slice n at ORIGINAL speed — the MPC chop), choke("off"/"on": every new trigger hard-cuts all running voices with a ~3 ms fade — the MPC mono pad; the cut and the rest it leaves is the groove), vary (0..1: deterministic per-hit pitch/level drift, ±35 cents / ±12 % at 1.0, keyed to the trigger counter — no two hits identical, kills the machine-gun tell) |
 | `sampler(take: <imported recording>, root: A3)` | Same as above. A recorded take becomes an instrument: `root` is the note name (C2..C6) at which the take was performed; playing that note gives the original sound, others are repitched chromatically |
 | `sampler(…, start: 0.25, end: 0.6, loop: "on", reverse: "on")` | Sound design: `start`/`end` set the playback range (as a 0..1 fraction), `loop: "on"` loops the range while the note is held (short ranges become sustained tones), `reverse: "on"` plays in reverse. All are fixed at note-on time, preserving determinism |
 | `kit(C2: kickTake, D2: snareTake, …)` | gain, attack, decay, sustain, release. Note-name keys assign recorded takes to pads (only an exactly matching pitch sounds; original-speed playback, no repitching). A `beat` literal strikes the lowest-pitched pad |
@@ -197,6 +198,7 @@ user-space code written in the device DSL of §4.5, used via ordinary `import`.
 | `exciter` | amount, freq — saturated high band mixed on top: synthesized sparkle where the source has none |
 | `ringmod` | freq (20 Hz..4 kHz log), mix — sine-carrier multiplication: inharmonic, metallic, the broken-machine voice |
 | `tapestop` | amount — 0 is a bit-exact bypass; automate toward 1 and a buffered read head slows to a halt, pitch falling like power-cut tape |
+| `vinyl` | wow, crackle, hiss, dust — the analog-media patina that makes digital sources read as RECORDINGS: `wow` = slow ±pitch drift + 6.5 Hz flutter (the warped record), `crackle` = sparse deterministic ticks/pops, `hiss` = shaped surface-noise floor, `dust` = darkening lowpass (worn-pressing rolloff). Each stage gates on its knob; all-zero = bit-exact bypass. Defaults are already a record: `insert vinyl()` |
 | `duck(from: Kick, amount, attack, release, shape)` | Sidechain ducker — the glitch groove engine. `from:` names another track; the compiler bakes that track's (swung) hit times and this insert slams its input's gain down by `amount` (1 = to silence) over `attack`, then recovers over `release` (`shape` 0 linear, 1 snappy). The unnatural cuts and the space between them ARE the groove. Deterministic (baked triggers). Missing source is E-DUCK-002 |
 | `width` | amount — M/S stereo width (0.5 is unity. Since insert is pre-pan, use on stereo sources)|
 
@@ -489,4 +491,9 @@ Messages use musicians' vocabulary, are in Japanese, and carry positions. "What 
 
 ### 4.5.1 `resonator` (modal / physical modeling)
 
-`resonator(in:, freq:, ring:, fm:)` — a tuned two-pole modal resonator. Excited by `in` (a short noise burst or impulse) it RINGS at `freq` (0..1, mapped 30 Hz..18 kHz like a filter cutoff) for `ring` seconds (0..1 -> 3 ms..1.2 s to -60 dB). `fm` shifts the frequency up to +-4 octaves (pitch-drop envelopes = a drum head detuning). Stack several at inharmonic frequencies for drums, bells, plates and plucks — physical-modeling percussion with no samples. Deterministic (a pure difference equation).
+`resonator(in:, freq:, ring:, fm:, key:, strike:)` — a tuned two-pole modal resonator. Excited by `in` (a short noise burst or impulse) it RINGS at `freq` (0..1, mapped 30 Hz..18 kHz like a filter cutoff) for `ring` seconds (0..1 -> 3 ms..1.2 s to -60 dB). `fm` shifts the frequency up to +-4 octaves (pitch-drop envelopes = a drum head detuning). Stack several at inharmonic frequencies for drums, bells, plates and plucks — physical-modeling percussion with no samples. Deterministic (a pure difference equation).
+
+Two options unlock melodic physical modeling:
+
+- `key: "on"` — the mode follows the PLAYED NOTE: `freq` becomes a note-relative ratio (0.5 = the note itself, each 0.125 = one octave, so 0.625 = 2nd partial, 0.698 = 3rd, 0.75 = 4th). Strings, tines, bars and bells that track the score; leave it off for fixed body modes (a guitar body does not move with the note — that immovable resonance is what reads as "an instrument").
+- `strike: "on"` — input normalization for BURST excitation: the ring of an impulse peaks near unity regardless of ring length or frequency. Without it the default steady-state normalization (resonant peak of a sustained input ≈ unity) swallows a short excitation almost entirely on long rings. Struck physical modeling wants `strike: "on"`; filter-like use of a sustained signal wants the default.

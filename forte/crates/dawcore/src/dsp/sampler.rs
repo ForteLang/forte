@@ -99,6 +99,15 @@ pub struct Sampler {
     /// the incoming note picks the slice (root = slice 0, root+1 = slice 1,
     /// wrapping) and plays it at ORIGINAL speed — the MPC chop
     pub slices: u8,
+    /// choke: every new trigger hard-cuts all running voices (~3 ms fade) —
+    /// the MPC mono pad. The unnatural cut and the silence it leaves IS the
+    /// groove; without it overlapping slices smear into legato mush.
+    pub choke: bool,
+    /// per-trigger variation 0..1: deterministic micro-drift of pitch
+    /// (±35 cents at 1.0) and level (±12%) keyed to the trigger counter, so
+    /// no two hits are bit-identical — kills the machine-gun effect that
+    /// makes repeated samples read as MIDI
+    pub vary: f32,
 }
 
 impl Sampler {
@@ -121,6 +130,37 @@ impl Sampler {
             reverse: false,
             glide: 0.0,
             slices: 0,
+            choke: false,
+            vary: 0.0,
+        }
+    }
+
+    /// Per-trigger drift for `vary`: two deterministic −1..1 draws keyed to
+    /// the trigger counter and note (xorshift32, same family as the noise
+    /// node) — the same song renders the same bits everywhere.
+    fn vary_draws(&self, note: u8) -> (f32, f32) {
+        let mut h = (self.clock as u32)
+            .wrapping_mul(0x9e37_79b9)
+            .wrapping_add((note as u32).wrapping_mul(0x85eb_ca6b))
+            .max(1);
+        h ^= h << 13;
+        h ^= h >> 17;
+        h ^= h << 5;
+        let r1 = (h as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        h ^= h << 13;
+        h ^= h >> 17;
+        h ^= h << 5;
+        let r2 = (h as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        (r1, r2)
+    }
+
+    /// choke: hard-cut every running voice before the new trigger starts
+    fn choke_voices(&mut self) {
+        for v in &mut self.voices {
+            if v.active {
+                v.env.cut();
+                v.gate = false;
+            }
         }
     }
 
@@ -132,8 +172,12 @@ impl Sampler {
     }
 
     pub fn note_on(&mut self, note: u8, velocity: f32) {
-        let Some(sample) = &self.sample else { return };
+        let Some(sample) = self.sample.clone() else { return };
         self.clock += 1;
+        // vary: draws are taken even when the amount is 0 so the code path
+        // stays branch-light; they only touch the voice when vary_amt > 0
+        let vary_amt = self.vary.clamp(0.0, 1.0);
+        let (r1, r2) = self.vary_draws(note);
         // slice mode: the note picks a chunk of the region, played at
         // original speed — the unnatural cut is the instrument
         if self.slices > 0 {
@@ -146,6 +190,9 @@ impl Sampler {
             let idx = (played - sample.root as i32).rem_euclid(self.slices as i32) as f64;
             let w = (re - rs) / n;
             let (ss, se) = (rs + idx * w, rs + (idx + 1.0) * w);
+            if self.choke {
+                self.choke_voices();
+            }
             let mut best = 0;
             let mut oldest = u64::MAX;
             for (i, v) in self.voices.iter().enumerate() {
@@ -171,6 +218,11 @@ impl Sampler {
             v.gate = true;
             v.tp0 = self.transpose;
             v.vel = ((velocity * 127.0 + 0.5) as u32 as f32 / 100.0).clamp(0.0, 1.27);
+            if vary_amt > 0.0 {
+                v.step *= crate::dmath::powf(2.0, r1 * vary_amt * 0.35 / 12.0) as f64;
+                v.step_target = v.step;
+                v.vel = (v.vel * (1.0 + r2 * vary_amt * 0.12)).clamp(0.0, 1.27);
+            }
             v.note = note;
             v.active = true;
             v.env.set(self.attack, self.decay, self.sustain, self.release);
@@ -200,6 +252,9 @@ impl Sampler {
                 v.note = note;
                 return;
             }
+        }
+        if self.choke {
+            self.choke_voices();
         }
         let mut idx = 0;
         let mut oldest = u64::MAX;
@@ -238,6 +293,11 @@ impl Sampler {
         // reconstruct the 0..127 step so velocity 100 lands on exactly 1.0 —
         // songs without accents/ghosts stay bit-identical
         v.vel = ((velocity * 127.0 + 0.5) as u32 as f32 / 100.0).clamp(0.0, 1.27);
+        if vary_amt > 0.0 {
+            v.step *= crate::dmath::powf(2.0, r1 * vary_amt * 0.35 / 12.0) as f64;
+            v.step_target = v.step;
+            v.vel = (v.vel * (1.0 + r2 * vary_amt * 0.12)).clamp(0.0, 1.27);
+        }
         v.note = note;
         v.active = true;
         v.env.set(self.attack, self.decay, self.sustain, self.release);

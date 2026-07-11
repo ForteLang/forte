@@ -1726,6 +1726,39 @@ fn eval_pattern(
                     }
                     return Ok((notes, len, "humanize".into(), lit.kind != "beat"));
                 }
+                // late(beat`…`, by: 0.04) — constant micro-shift of every
+                // note: + drags behind the grid (the Dilla snare), − pushes
+                // ahead (the driving hat). Deterministic, no randomness;
+                // combine with humanize() for drag + scatter.
+                "late" => {
+                    let mut by = 0.0f64;
+                    for (key, arg) in args {
+                        match (key.as_str(), arg) {
+                            ("by", Arg::Num(n, apos)) => {
+                                if !(-0.25..=0.25).contains(n) {
+                                    return Err(Diag::new(
+                                        "E-PAT-004",
+                                        *apos,
+                                        format!("by {n} は -0.25..0.25 拍にしてください"),
+                                    ));
+                                }
+                                by = *n;
+                            }
+                            (other, arg) => {
+                                return Err(Diag::new(
+                                    "E-PAT-002",
+                                    arg.pos(),
+                                    format!("late() に '{other}' という引数はありません(by)"),
+                                ))
+                            }
+                        }
+                    }
+                    let (mut notes, len) = eval_lit(lit, beats_per_bar, beat_pitch)?;
+                    for n in &mut notes {
+                        n.start = (n.start + by).max(0.0).min(len - 0.01);
+                    }
+                    return Ok((notes, len, "late".into(), lit.kind != "beat"));
+                }
                 _ => {}
             }
             if lit.kind != "prog" {
@@ -1769,7 +1802,7 @@ fn eval_pattern(
                     return Err(Diag::new(
                         "E-PAT-002",
                         *pos,
-                        format!("パターン関数 '{other}' はありません(chords / arp / bass / cycle / humanize)"),
+                        format!("パターン関数 '{other}' はありません(chords / arp / bass / cycle / humanize / late)"),
                     ))
                 }
             };
@@ -1818,7 +1851,8 @@ fn eval_lit(lit: &PatternLit, beats_per_bar: f64, beat_pitch: u8) -> Result<(Vec
 const INSTRUMENTS: &[&str] = &["sampler", "kit", "prisma", "mesh"];
 const EFFECTS: &[&str] =
     &["filter", "eq", "drive", "delay", "reverb", "comp", "chorus", "pump", "width", "crush",
-      "stutter", "gate", "saturate", "transient", "parcomp", "exciter", "ringmod", "tapestop"];
+      "stutter", "gate", "saturate", "transient", "parcomp", "exciter", "ringmod", "tapestop",
+      "vinyl"];
 
 /// Build an instrument device. Returns the device plus the root pitch that
 /// `beat` literals on this track trigger.
@@ -1993,9 +2027,10 @@ fn build_instrument(
                         &[
                             ("gain", 0), ("attack", 1), ("decay", 2), ("sustain", 3),
                             ("release", 4), ("pitch", 5), ("start", 6), ("end", 7),
-                            ("glide", 10),
+                            ("glide", 10), ("vary", 13),
                         ],
-                        &[("loop", 8, &["off", "on"]), ("reverse", 9, &["off", "on"])],
+                        &[("loop", 8, &["off", "on"]), ("reverse", 9, &["off", "on"]),
+                          ("choke", 12, &["off", "on"])],
                         call,
                     )?,
                 }
@@ -2391,6 +2426,11 @@ fn build_effect(
             "exciter" => (DeviceKind::Exciter, &[("amount", 0), ("freq", 1)], &[]),
             "ringmod" => (DeviceKind::RingMod, &[("freq", 0), ("mix", 1)], &[]),
             "tapestop" => (DeviceKind::TapeStop, &[("amount", 0)], &[]),
+            "vinyl" => (
+                DeviceKind::Vinyl,
+                &[("wow", 0), ("crackle", 1), ("hiss", 2), ("dust", 3)],
+                &[],
+            ),
             other => {
                 return Err(Diag::new(
                     "E-DEV-001",

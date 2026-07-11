@@ -1,0 +1,146 @@
+// glitchworks/modal — bodies that RING. Every voice here is a noise burst
+// or strike driving tuned modal resonators (physical modeling), because the
+// thing that makes a sound read as "recorded" instead of "MIDI" is a body:
+// a struck object whose modes keep ringing after the excitation is gone,
+// with the strike noise buried INSIDE the resonance.
+//
+// The melodic voices keytrack (resonator key: "on" — freq 0.5 = the played
+// note, each 0.125 = one octave, so 0.625 = 2nd partial, 0.75 = 4th).
+// Higher partials get shorter rings, as on a real string. Velocity opens
+// the excitation filter, so hard hits are brighter, not just louder.
+//
+// This is the "sampled jazz musicians" palette built from air: write swung,
+// humanized phrases with these, stamp vinyl() on the bus, bounce the whole
+// phrase and chop it — the crate-digger workflow with no crate.
+// Usage: import { UprightBass, TinePiano, KickModal } from "packages/glitchworks_0.1.0/instruments/modal.forte"
+
+// ---- kit ------------------------------------------------------------------
+
+// KickModal — a beater hitting a drum head: thump mode at ~55 Hz with a
+// pitch drop (the head tightening under the blow) plus a felt-beater knock.
+device KickModal : Instrument {
+  param ring = 0.4 in 0.1..1.0
+  param knock = 0.4 in 0.0..1.0
+
+  node life = adsr(a: 0.001, d: 0.5, s: 0.0, r: 0.45)
+  node burst = adsr(a: 0.001, d: 0.012, s: 0.0, r: 0.008)
+  node hit  = gain(in: noise(), mod: burst, level: 1.0)
+  node penv = adsr(a: 0.001, d: 0.05, s: 0.0, r: 0.02)      // head detune drop
+  node head = resonator(in: hit, freq: 0.095, ring: ring, fm: gain(in: penv, level: 0.18), strike: "on")
+  node kenv = adsr(a: 0.001, d: 0.02, s: 0.0, r: 0.01)
+  node kn   = gain(in: svf(in: noise(), cutoff: 0.45, reso: 0.3), mod: kenv, level: knock)
+  node sum  = mix(a: shaper(in: head, drive: 0.3, mode: "tanh"), b: kn)
+  out gain(in: sum, mod: life, level: 1.0)
+}
+
+// SnareModal — a wooden shell (two modes, 180/330 Hz) plus the wire rattle;
+// velocity opens the wire brightness, so ghosts are dark and soft.
+device SnareModal : Instrument {
+  param wires = 0.6 in 0.0..1.0
+  param shell = 0.5 in 0.0..1.0
+
+  node life = adsr(a: 0.001, d: 0.35, s: 0.0, r: 0.3)
+  node burst = adsr(a: 0.001, d: 0.01, s: 0.0, r: 0.006)
+  node hit  = gain(in: noise(), mod: burst, level: 1.0)
+  node m1   = resonator(in: hit, freq: 0.28, ring: 0.16, strike: "on")
+  node m2   = resonator(in: hit, freq: 0.375, ring: 0.1, strike: "on")
+  node body = gain(in: mix(a: m1, b: gain(in: m2, level: 0.7)), level: shell)
+  node wenv = adsr(a: 0.001, d: 0.11, s: 0.0, r: 0.07)
+  node wnz  = svf(in: noise(), cutoff: 0.62, reso: 0.25, mod: gain(in: note.vel, level: 0.25))
+  node wire = gain(in: wnz, mod: wenv, level: wires)
+  out gain(in: mix(a: body, b: wire), mod: life, level: 0.9)
+}
+
+// RideModal — five inharmonic metal modes rung by a stick tip. The mode
+// stack never lands on a harmonic series, which is exactly why it reads as
+// metal and not as a synth tone.
+device RideModal : Instrument {
+  param wash = 0.35 in 0.0..1.0
+
+  node life = adsr(a: 0.001, d: 0.8, s: 0.0, r: 0.7)
+  node burst = adsr(a: 0.001, d: 0.006, s: 0.0, r: 0.004)
+  node hit  = gain(in: noise(), mod: burst, level: 1.0)
+  node m1   = resonator(in: hit, freq: 0.513, ring: 0.72, strike: "on")
+  node m2   = resonator(in: hit, freq: 0.577, ring: 0.6, strike: "on")
+  node m3   = resonator(in: hit, freq: 0.685, ring: 0.5, strike: "on")
+  node m4   = resonator(in: hit, freq: 0.748, ring: 0.4, strike: "on")
+  node m5   = resonator(in: hit, freq: 0.8, ring: 0.3, strike: "on")
+  node pair1 = mix(a: m1, b: gain(in: m2, level: 0.8))
+  node pair2 = mix(a: m3, b: gain(in: m4, level: 0.6))
+  node bell  = mix(a: pair1, b: mix(a: pair2, b: gain(in: m5, level: 0.4)))
+  node wenv = adsr(a: 0.002, d: 0.5, s: 0.0, r: 0.4)
+  node air  = gain(in: svf(in: noise(), cutoff: 0.85, reso: 0.15), mod: wenv, level: wash)
+  out gain(in: mix(a: bell, b: air), mod: life, level: 0.22)
+}
+
+// ---- the session players ---------------------------------------------------
+
+// UprightBass — a finger pluck into a keytracked string (partials 1 and 2)
+// plus the fixed wooden body hum around 110 Hz that does NOT move with the
+// note: that immovable body is what a real instrument has and a synth
+// patch doesn't.
+device UprightBass : Instrument {
+  param body = 0.5 in 0.0..1.0
+
+  node life = adsr(a: 0.001, d: 0.7, s: 0.0, r: 0.5)
+  node pluckenv = adsr(a: 0.001, d: 0.018, s: 0.0, r: 0.01)
+  node pluck = gain(in: svf(in: noise(), cutoff: 0.35, reso: 0.2, mod: gain(in: note.vel, level: 0.2)), mod: pluckenv, level: 1.0)
+  node s1   = resonator(in: pluck, freq: 0.5, ring: 0.62, key: "on", strike: "on")
+  node s2   = resonator(in: pluck, freq: 0.625, ring: 0.35, key: "on", strike: "on")
+  node wood = resonator(in: pluck, freq: 0.203, ring: 0.12, strike: "on")
+  node strings = mix(a: s1, b: gain(in: s2, level: 0.5))
+  node sum  = mix(a: strings, b: gain(in: wood, level: body))
+  node thump = adsr(a: 0.001, d: 0.015, s: 0.0, r: 0.01)
+  node fingr = gain(in: svf(in: noise(), cutoff: 0.2, reso: 0.1), mod: thump, level: 0.5)
+  out gain(in: shaper(in: mix(a: sum, b: fingr), drive: 0.2, mode: "tanh"), mod: life, level: 1.0)
+}
+
+// TinePiano — a hammer striking a keytracked tine: fundamental rings long,
+// the bell partial (~4f) rings short, and the strike THUD sits under both.
+// The modal version of a Rhodes: the attack noise lives inside the
+// resonance, which no oscillator crossfade can fake.
+device TinePiano : Instrument {
+  param bell = 0.35 in 0.0..1.0
+
+  node life = adsr(a: 0.001, d: 0.75, s: 0.2, r: 0.4)
+  node strike = adsr(a: 0.001, d: 0.01, s: 0.0, r: 0.006)
+  node ham  = gain(in: svf(in: noise(), cutoff: 0.5, reso: 0.2, mod: gain(in: note.vel, level: 0.3)), mod: strike, level: 1.0)
+  node tine = resonator(in: ham, freq: 0.5, ring: 0.7, key: "on", strike: "on")
+  node ping = resonator(in: ham, freq: 0.75, ring: 0.25, key: "on", strike: "on")
+  node thud = resonator(in: ham, freq: 0.28, ring: 0.06, strike: "on")
+  node top  = mix(a: tine, b: gain(in: ping, level: bell))
+  node sum  = mix(a: top, b: gain(in: thud, level: 0.4))
+  out gain(in: shaper(in: sum, drive: 0.15, mode: "tanh"), mod: life, level: 0.9)
+}
+
+// Vibraphone — keytracked bar (fundamental + the marimba-family 4th
+// partial) with a long soft ring; mallet felt keeps the attack round.
+device Vibraphone : Instrument {
+  param mallet = 0.3 in 0.0..1.0
+
+  node life = adsr(a: 0.001, d: 0.9, s: 0.0, r: 0.7)
+  node strike = adsr(a: 0.002, d: 0.014, s: 0.0, r: 0.008)
+  node soft = gain(in: svf(in: noise(), cutoff: 0.3, reso: 0.15, mod: gain(in: note.vel, level: 0.25)), mod: strike, level: 1.0)
+  node bar  = resonator(in: soft, freq: 0.5, ring: 0.85, key: "on", strike: "on")
+  node p4   = resonator(in: soft, freq: 0.75, ring: 0.3, key: "on", strike: "on")
+  node sum  = mix(a: bar, b: gain(in: p4, level: mallet))
+  out gain(in: sum, mod: life, level: 0.8)
+}
+
+// GuitarPluck — a pick into a keytracked string, three partials with the
+// highs dying first, and a small tight body mode. Palm-muted funk chucks
+// come free: play short ghost notes and the life envelope cuts the ring.
+device GuitarPluck : Instrument {
+  param pick = 0.5 in 0.0..1.0
+
+  node life = adsr(a: 0.001, d: 0.55, s: 0.0, r: 0.35)
+  node pk   = adsr(a: 0.001, d: 0.008, s: 0.0, r: 0.005)
+  node exc  = gain(in: svf(in: noise(), cutoff: 0.55, reso: 0.2, mod: gain(in: note.vel, level: 0.3)), mod: pk, level: 1.0)
+  node s1   = resonator(in: exc, freq: 0.5, ring: 0.5, key: "on", strike: "on")
+  node s2   = resonator(in: exc, freq: 0.625, ring: 0.3, key: "on", strike: "on")
+  node s3   = resonator(in: exc, freq: 0.698, ring: 0.18, key: "on", strike: "on")
+  node hi   = mix(a: gain(in: s2, level: 0.6), b: gain(in: s3, level: pick))
+  node bodym = resonator(in: exc, freq: 0.297, ring: 0.09, strike: "on")
+  node sum  = mix(a: mix(a: s1, b: hi), b: gain(in: bodym, level: 0.35))
+  out gain(in: shaper(in: sum, drive: 0.18, mode: "tanh"), mod: life, level: 0.9)
+}

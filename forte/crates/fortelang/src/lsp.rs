@@ -190,7 +190,7 @@ const DOCS: &[(&str, &str, &str)] = &[
     ("lfo", "DSP: LFO `lfo(rate: 0.3, shape: \"sine\")`", "dsp"),
     ("adsr", "DSP: エンベロープ `adsr(a,d,s,r, gate: note.gate)`", "dsp"),
     ("svf", "DSP: フィルタ `svf(in:, cutoff:, reso:, mod:)`", "dsp"),
-    ("resonator", "DSP: モーダル共振器 `resonator(in:, freq:, ring:)`(叩くと鳴る=物理モデリング)", "dsp"),
+    ("resonator", "DSP: モーダル共振器 `resonator(in:, freq:, ring:, key:)`(叩くと鳴る=物理モデリング。key: \"on\" でノート追従)", "dsp"),
     ("gain", "DSP: ゲイン `gain(in:, level:, mod:)`", "dsp"),
     ("mix", "DSP: 2 入力加算 `mix(a:, b:)`", "dsp"),
 ];

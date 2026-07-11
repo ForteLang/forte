@@ -1,0 +1,97 @@
+// glitchworks/phrases/trio — a PERFORMANCE as vocabulary. Sampling was never
+// one note at a time: the records the world's ears were raised on are
+// phrases — a bassist, a pianist and a drummer playing TOGETHER, their
+// timing leaning on each other. This is that take, built from air: the
+// modal players (bodies that ring), swung 0.62 at the root song's tempo,
+// humanized so no two hits share timing or velocity, the snare dragging
+// 60 ms behind the grid, the whole take pressed to vinyl.
+//
+// Use it whole (play TrioTake), or bounce it and chop:
+//   import { TrioTake } from "packages/glitchworks_0.1.0/phrases/trio.forte"
+//   sample Take = bounce(TrioTake, note: C3, beats: 8)
+//   // the bounce carries +2 beats of tail: end: 0.8 makes 16 slices land
+//   // exactly on the phrase's half-beats
+//   instrument sampler(sample: Take, slices: 16, end: 0.8, choke: "on")
+import { KickModal, SnareModal, RideModal, UprightBass, TinePiano, Vibraphone } from "../instruments/modal.forte"
+
+// TrioTake — two bars of Em jazz trio, pressed to vinyl. The patina is
+// INSIDE the take on purpose: chop it and the crackle gets chopped with
+// the audio, exactly like a sampled record.
+block TrioTake {
+  track Bass {
+    instrument UprightBass(body: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.5, makeup: 0.15)
+    insert vinyl(wow: 0.3, crackle: 0.35, hiss: 0.2, dust: 0.3)
+    volume 0.9
+    play humanize(notes`E2:1 G2:1 A2:1 B2:1 E2:1 D2:1 A1:1 B1:1`, time: 0.025, vel: 12, seed: 3) at bars(1..2)
+  }
+  track Keys {
+    instrument TinePiano(bell: 0.4)
+    insert saturate(mode: "tube", drive: 0.25)
+    insert vinyl(wow: 0.3, crackle: 0.35, hiss: 0.2, dust: 0.3)
+    volume 0.7
+    play humanize(notes`_:0.75 [E3 G3 B3 D4]:0.5 _:2.75 [C3 E3 G3 B3]:0.5 _:1.5 [A2 C3 G3]:0.75 _:1.25`, time: 0.03, vel: 10, seed: 11) at bars(1..2)
+  }
+  track Vibe {
+    instrument Vibraphone(mallet: 0.35)
+    insert vinyl(wow: 0.3, crackle: 0.35, hiss: 0.2, dust: 0.3)
+    volume 0.5
+    play humanize(notes`_:2 B4:0.5 _:1.5 G4:0.75 _:0.75 E4:0.5 _:2`, time: 0.03, vel: 12, seed: 21) at bars(1..2)
+  }
+  track Kick {
+    instrument KickModal(ring: 0.35, knock: 0.3)
+    insert vinyl(wow: 0.3, crackle: 0.35, hiss: 0.2, dust: 0.3)
+    volume 0.7
+    // feathered: ghosts only, felt more than heard
+    play beat`.--- ---- .-.- ----` at bars(1..2)
+  }
+  track Snare {
+    instrument SnareModal(wires: 0.65, shell: 0.5)
+    insert vinyl(wow: 0.3, crackle: 0.35, hiss: 0.2, dust: 0.3)
+    volume 0.75
+    // ghost comping with the accents DRAGGING behind the grid
+    play late(beat`---- ..-. -x-- ..-X`, by: 0.06) at bars(1..2)
+  }
+  track Ride {
+    instrument RideModal(wash: 0.3)
+    insert vinyl(wow: 0.3, crackle: 0.35, hiss: 0.2, dust: 0.3)
+    volume 0.6
+    play humanize(beat`x--- X-x- x--- X-x-`, time: 0.015, vel: 14, seed: 5) at bars(1..2)
+  }
+}
+
+// TrioTakeDry — the same performance before the pressing, for A/B listening.
+block TrioTakeDry {
+  track Bass {
+    instrument UprightBass(body: 0.55)
+    insert comp(thresh: 0.5, ratio: 0.5, makeup: 0.15)
+    volume 0.9
+    play humanize(notes`E2:1 G2:1 A2:1 B2:1 E2:1 D2:1 A1:1 B1:1`, time: 0.025, vel: 12, seed: 3) at bars(1..2)
+  }
+  track Keys {
+    instrument TinePiano(bell: 0.4)
+    insert saturate(mode: "tube", drive: 0.25)
+    volume 0.7
+    play humanize(notes`_:0.75 [E3 G3 B3 D4]:0.5 _:2.75 [C3 E3 G3 B3]:0.5 _:1.5 [A2 C3 G3]:0.75 _:1.25`, time: 0.03, vel: 10, seed: 11) at bars(1..2)
+  }
+  track Vibe {
+    instrument Vibraphone(mallet: 0.35)
+    volume 0.5
+    play humanize(notes`_:2 B4:0.5 _:1.5 G4:0.75 _:0.75 E4:0.5 _:2`, time: 0.03, vel: 12, seed: 21) at bars(1..2)
+  }
+  track Kick {
+    instrument KickModal(ring: 0.35, knock: 0.3)
+    volume 0.7
+    play beat`.--- ---- .-.- ----` at bars(1..2)
+  }
+  track Snare {
+    instrument SnareModal(wires: 0.65, shell: 0.5)
+    volume 0.75
+    play late(beat`---- ..-. -x-- ..-X`, by: 0.06) at bars(1..2)
+  }
+  track Ride {
+    instrument RideModal(wash: 0.3)
+    volume 0.6
+    play humanize(beat`x--- X-x- x--- X-x-`, time: 0.015, vel: 14, seed: 5) at bars(1..2)
+  }
+}

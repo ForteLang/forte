@@ -286,13 +286,23 @@ fn eval_node(
         }
         GridModuleKind::Resonator => {
             if let NodeState::Resonator(r) = state {
-                // freq maps like cutoff (30 Hz..~18 kHz); the Freq input
-                // shifts up to ±4 octaves (pitch envelopes = drum body drop)
-                let base = 30.0 * crate::dmath::powf(600.0, params[0].clamp(0.0, 1.0));
+                // key off: freq maps like cutoff (30 Hz..~18 kHz).
+                // key on: the mode follows the PLAYED NOTE — freq becomes a
+                // note-relative ratio (0.5 = the note, each 0.125 = one
+                // octave, so 0.625 = 2nd partial, 0.75 = 4th) — melodic
+                // physical modeling. The Fm input still shifts ±4 octaves.
+                let keyed = params.get(2).copied().unwrap_or(0.0) > 0.5;
+                let base = if keyed {
+                    note.0.max(0.1)
+                        * crate::dmath::powf(2.0, (params[0].clamp(0.0, 1.0) - 0.5) * 8.0)
+                } else {
+                    30.0 * crate::dmath::powf(600.0, params[0].clamp(0.0, 1.0))
+                };
                 let freq = base * crate::dmath::powf(2.0, ins[1] * 4.0);
                 // ring: 0..1 → 3 ms..1.2 s to −60 dB
                 let ring = 0.003 + params[1].clamp(0.0, 1.0) * 1.2;
-                r.set(freq, ring);
+                let strike = params.get(3).copied().unwrap_or(0.0) > 0.5;
+                r.set(freq, ring, strike);
                 out[0] = r.process(ins[0]);
             }
         }

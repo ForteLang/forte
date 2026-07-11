@@ -1,0 +1,22 @@
+// Sketch: session — audition piece, NOT an album track. THE SOURCE, before
+// any sampler touches it: a jazz trio phrase performed by the modal players
+// (bodies that ring — upright bass, tine piano, vibes, a brushed-feel kit),
+// swung, humanized (no two hits share timing or velocity), the snare
+// dragging behind the grid. Four bars dry, then the same take pressed to
+// vinyl (wow, crackle, hiss, dust). The question this sketch asks the ear:
+// does it read as a RECORDING of players, or as MIDI? Everything downstream
+// (the chop, the glitch) inherits its life from this take.
+import { TrioTake, TrioTakeDry } from "../phrases/trio.forte"
+
+song "Sketch Session" {
+  desc "Audition sketch: modal jazz trio — humanized, swung, laid-back snare; 4 bars dry, 4 bars pressed to vinyl. The crate-digger's source, built from air. Not an album track."
+  artist "Forte Essentials"
+  tempo 88bpm
+  swing 0.62
+  master 1.4
+  key E minor
+
+  // A/B for the ear: the performance, then the pressing
+  play TrioTakeDry at bars(1..4)
+  play TrioTake at bars(5..8)
+}

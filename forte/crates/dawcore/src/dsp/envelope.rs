@@ -54,6 +54,16 @@ impl Adsr {
         }
     }
 
+    /// Hard cut: force a ~3 ms release regardless of the configured time.
+    /// The sampler's choke — fast enough to BE the cut, slow enough not to
+    /// click. The rest it leaves behind is the groove.
+    pub fn cut(&mut self) {
+        if self.stage != Stage::Idle {
+            self.release = 0.003;
+            self.stage = Stage::Release;
+        }
+    }
+
     pub fn is_active(&self) -> bool {
         self.stage != Stage::Idle
     }

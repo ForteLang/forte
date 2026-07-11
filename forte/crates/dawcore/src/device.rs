@@ -17,7 +17,7 @@
 //! audio thread pre-boxed. `process`/`next` must not allocate; bounded pushes
 //! only (use [`push_bounded`]).
 
-use crate::dsp::effects::{Chorus, Compressor, Crush, Drive, Duck, Eq3, Exciter, FdnReverb, Gate, ParComp, Pump, RingMod, Saturate, StereoDelay, Stutter, TapeStop, Transient, Width};
+use crate::dsp::effects::{Chorus, Compressor, Crush, Drive, Duck, Eq3, Exciter, FdnReverb, Gate, ParComp, Pump, RingMod, Saturate, StereoDelay, Stutter, TapeStop, Transient, Vinyl, Width};
 use crate::dsp::filter::{FilterMode, Svf};
 use crate::dsp::grid::GridSynth;
 use crate::dsp::sampler::Sampler;
@@ -151,6 +151,7 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
         DeviceKind::Exciter => Dsp::Audio(Box::new(Exciter::new(sr))),
         DeviceKind::RingMod => Dsp::Audio(Box::new(RingMod::new(sr))),
         DeviceKind::TapeStop => Dsp::Audio(Box::new(TapeStop::new(sr))),
+        DeviceKind::Vinyl => Dsp::Audio(Box::new(Vinyl::new(sr))),
         DeviceKind::Duck => {
             let mut d = Duck::new(sr);
             d.set_triggers(&dev.sidechain);
@@ -511,6 +512,10 @@ impl Instrument for Sampler {
             // knob is 0..1 → 0..32 slices (0 = slice mode off)
             self.slices = (p[11] * 32.0).round() as u8;
         }
+        if p.len() >= 14 {
+            self.choke = p[12] > 0.5;
+            self.vary = p[13];
+        }
     }
     fn voices(&self) -> usize {
         self.active_voices()
@@ -725,6 +730,20 @@ impl AudioFx for RingMod {
         if p.len() >= 2 {
             self.freq = p[0];
             self.mix = p[1];
+        }
+    }
+}
+
+impl AudioFx for Vinyl {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Vinyl::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 4 {
+            self.wow = p[0];
+            self.crackle = p[1];
+            self.hiss = p[2];
+            self.dust = p[3];
         }
     }
 }

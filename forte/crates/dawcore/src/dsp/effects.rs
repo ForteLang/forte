@@ -799,3 +799,130 @@ impl Duck {
         (l * self.gain, r * self.gain)
     }
 }
+
+/// Vinyl — the analog-media patina. Digital sources read as MIDI because
+/// nothing between the hits moves or breathes; a record does four things a
+/// DAC never does, and this stamps all four on a bus: `wow` (slow ±pitch
+/// drift + 6.5 Hz flutter, the warped-record warble), `crackle` (sparse
+/// deterministic ticks and pops), `hiss` (shaped surface noise floor) and
+/// `dust` (a darkening lowpass, the worn-pressing rolloff). Every stage is
+/// gated on its knob, so an all-zero vinyl is a bit-exact bypass.
+pub struct Vinyl {
+    sr: f32,
+    // wow/flutter: a short buffer read through a moving fractional head
+    buf_l: Vec<f32>,
+    buf_r: Vec<f32>,
+    write: usize,
+    ph_wow: f32,
+    ph_flut: f32,
+    // crackle: xorshift32 draws + a fast-decaying pop state
+    rng: u32,
+    pop: f32,
+    // hiss shaping + dust lowpass states
+    hiss_lp: f32,
+    lp: (f32, f32),
+    pub wow: f32,
+    pub crackle: f32,
+    pub hiss: f32,
+    pub dust: f32,
+}
+
+impl Vinyl {
+    pub fn new(sr: f32) -> Self {
+        let cap = (sr * 0.05) as usize; // 50 ms is plenty for the deepest wow
+        Self {
+            sr,
+            buf_l: vec![0.0; cap],
+            buf_r: vec![0.0; cap],
+            write: 0,
+            ph_wow: 0.0,
+            ph_flut: 0.25,
+            rng: 0x2545_f491,
+            pop: 0.0,
+            hiss_lp: 0.0,
+            lp: (0.0, 0.0),
+            wow: 0.0,
+            crackle: 0.0,
+            hiss: 0.0,
+            dust: 0.0,
+        }
+    }
+
+    #[inline]
+    fn next_rand(&mut self) -> f32 {
+        self.rng ^= self.rng << 13;
+        self.rng ^= self.rng >> 17;
+        self.rng ^= self.rng << 5;
+        (self.rng as f32 / u32::MAX as f32) * 2.0 - 1.0
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let cap = self.buf_l.len();
+        self.buf_l[self.write] = l;
+        self.buf_r[self.write] = r;
+        self.write = (self.write + 1) % cap;
+
+        // ---- wow/flutter: both channels share one head (the platter moves
+        // the whole record, not each channel) ----
+        let (mut ol, mut or) = if self.wow > 0.0001 {
+            let w = self.wow.clamp(0.0, 1.0);
+            self.ph_wow = (self.ph_wow + 0.5 / self.sr).fract(); // 0.5 Hz wow
+            self.ph_flut = (self.ph_flut + 6.5 / self.sr).fract(); // 6.5 Hz flutter
+            // peak deviation ≈ 12 cents of wow + 2 cents of flutter at 1.0
+            let a_wow = 0.007 * self.sr / (std::f32::consts::TAU * 0.5);
+            let a_flut = 0.0012 * self.sr / (std::f32::consts::TAU * 6.5);
+            let m = crate::dmath::sin(self.ph_wow * std::f32::consts::TAU) * a_wow * w
+                + crate::dmath::sin(self.ph_flut * std::f32::consts::TAU) * a_flut * w;
+            // center the head deep enough that modulation never overtakes it
+            let center = a_wow + a_flut + 4.0;
+            let read = (self.write as f32 + cap as f32) - 1.0 - center + m;
+            let i = read.floor() as usize % cap;
+            let j = (i + 1) % cap;
+            let frac = read - read.floor();
+            (
+                self.buf_l[i] + (self.buf_l[j] - self.buf_l[i]) * frac,
+                self.buf_r[i] + (self.buf_r[j] - self.buf_r[i]) * frac,
+            )
+        } else {
+            (l, r)
+        };
+
+        // ---- crackle: sparse ticks with a ~1 ms tail, mono like real dust ----
+        if self.crackle > 0.0001 {
+            let c = self.crackle.clamp(0.0, 1.0);
+            let d = self.next_rand();
+            // probability rises with the square of the knob: sparse → frying
+            if d.abs() > 1.0 - c * c * 0.0004 {
+                self.pop = d.signum() * (0.15 + d.abs() * 0.5) * c;
+            }
+            self.pop *= 0.92;
+            ol += self.pop;
+            or += self.pop;
+        }
+
+        // ---- hiss: the shaped noise floor ----
+        if self.hiss > 0.0001 {
+            let n = self.next_rand();
+            // one-pole lowpass ~6 kHz softens white noise into tape/surface hiss
+            let a = 1.0 - crate::dmath::exp(-std::f32::consts::TAU * 6000.0 / self.sr);
+            self.hiss_lp += (n - self.hiss_lp) * a;
+            let h = self.hiss_lp * self.hiss.clamp(0.0, 1.0) * 0.012;
+            ol += h;
+            or += h;
+        }
+
+        // ---- dust: the worn-pressing rolloff ----
+        if self.dust > 0.0001 {
+            let d = self.dust.clamp(0.0, 1.0);
+            let fc = 1_500.0 + 16_500.0 * (1.0 - d) * (1.0 - d);
+            let a = 1.0 - crate::dmath::exp(-std::f32::consts::TAU * fc / self.sr);
+            self.lp.0 += (ol - self.lp.0) * a;
+            self.lp.1 += (or - self.lp.1) * a;
+            ol = self.lp.0;
+            or = self.lp.1;
+        }
+
+        (ol, or)
+    }
+}
