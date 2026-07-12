@@ -1,34 +1,46 @@
-// glitch-18 — tape debt: keys that lose power at every fourth bar and pay
-// a little more interest each time — brushed shuffle, an upright walking,
-// the snare edited hit by hit; the last stop is never paid back.
+// glitch-18 — tape debt: the lounge (dying keys, brushed shuffle, walking
+// upright, rainbow snare) bounced to one record played on a deck that
+// keeps losing power — cuts, then brownouts, then whole beats of nothing.
+// The debt is finally collected in full.
 import { TapeDropKeys } from "../../wrapped/glitchset.forte"
 import { BrushShuffle } from "../../wrapped/grooveworks.forte"
 import { UprightWalk } from "../../wrapped/bassworks.forte"
 import { SnareRainbow } from "../../wrapped/drumcolor.forte"
 
 song "Glitch 18 — Tape Debt" {
-  desc "Keys losing power at every turn and paying more interest each time; brushes, an upright, a hit-by-hit snare."
+  desc "The lounge bounced to one record on a deck losing power: cuts, brownouts, whole beats of nothing, the debt collected in full."
   artist "Forte Essentials"
   tempo 96bpm
   swing 0.6
-  master 1.15
+  master 2.0
   key F minor
 
-  block Power : TapeDropKeys {
-    track Power {
+  block Mix {
+    play BrushShuffle at bars(1..4)
+    play UprightWalk(volume: 0.9) at bars(1..4)
+    play TapeDropKeys(volume: 0.9) at bars(1..4)
+    play SnareRainbow(volume: 0.75) at bars(1..4)
+  }
+  sample MixS = bounce(Mix, note: C3, beats: 16)
+
+  block Cutter {
+    track Cut {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: MixS, slices: 16, end: 0.889, choke: "on", sustain: 1.0, release: 0.06, vary: 0.07)
+      modulate pitch with random(rate: 0.05, amount: 0.015, smooth: 0.85) as swim
+      insert tapestop(amount: 0.0)
       automate tapestop.amount from 0.0 to 0.6 over bars(4..4)
       automate tapestop.amount from 0.6 to 0.0 over bars(5..5)
       automate tapestop.amount from 0.0 to 0.8 over bars(8..8)
       automate tapestop.amount from 0.8 to 0.0 over bars(9..9)
       automate tapestop.amount from 0.0 to 1.0 over bars(12..12)
-      play notes`C3~:8 D3~:4 C3~:4` at bars(1..4)
-      play notes`C3~:8 A#2~:4 C3~:4` at bars(5..8)
-      play notes`C3~:8 D3~:4 C3~:4` at bars(9..12)
+      volume 0.95
+      play notes`C3~:1 _:0.5 C#3~:0.75 _:0.25 D3~:1 _:0.5` at bars(1..3)
+      play notes`C3~:0.75 _:0.25 C#3~:0.5 _:0.5 D#3~:0.5 _:1.5` at bars(4..4)
+      play notes`E3~:1 _:0.5 F3~:0.5 _:0.5 F#3~:0.75 _:0.75` at bars(5..7)
+      play notes`E3~:0.5 _:0.5 F3~:0.25 F3~:0.25 _:0.5 G3~:0.5 _:1.5` at bars(8..8)
+      play notes`G#3~:1 _:0.5 A3~:0.5 _:0.75 A#3~:0.5 _:0.75` at bars(9..11)
+      play notes`C3~:1 _:0.5 C3~:0.5 C3~:2` at bars(12..12)
     }
   }
-
-  play BrushShuffle at bars(1..12)
-  play UprightWalk(volume: 0.9) at bars(1..12)
-  play Power(volume: 0.9) at bars(1..12)
-  play SnareRainbow(volume: 0.75) at bars(5..11)
+  play Cutter at bars(1..12)
 }

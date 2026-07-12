@@ -1,55 +1,66 @@
-// glitch-19 — scrub wars: two records fighting over the same turntable —
-// the poly-mod sweep and the dusk ensemble trade two-bar windows, each
-// walked by its own sequencer, over a kick line and a re-aimed laser.
+// glitch-19 — scrub wars: TWO records cut from the same session — the
+// sweep-scrub side and the kick-line side — fighting over one turntable.
+// Forward cuts against backward cuts, and the needle lifted clean off
+// between rounds.
 import { SweepScrub } from "../../wrapped/melodyworks.forte"
 import { WindowWalkDusk } from "../../wrapped/glitchset.forte"
 import { KickFlip } from "../../wrapped/chopworks.forte"
 import { LaserBass } from "../../wrapped/bassworks.forte"
 
 song "Glitch 19 — Scrub Wars" {
-  desc "Two records fighting over one turntable: sweep and dusk ensemble trading scrubbed windows over a kick line."
+  desc "Two records from one session fighting over one turntable: forward cuts vs backward cuts, the needle lifted between rounds."
   artist "Forte Essentials"
   tempo 116bpm
   swing 0.55
-  master 0.95
+  master 1.8
   key C minor
 
-  block Drums : KickFlip {
-    track Main {
-      play beat`x--- ---- x-x- ----` at bars(1..3)
-      play beat`x--- --x- x-x- ---x*3` at bars(4..4)
-      play beat`x--- ---- x-x- ----` at bars(5..7)
-      play beat`x--- --x- x-x- x*4---` at bars(8..8)
-      play beat`x--- --x- x-x- ----` at bars(9..15)
+  // record A: the sweep side
+  block MixA {
+    block Drums : KickFlip {
+      track Main {
+        play beat`x--- ---- x-x- ----` at bars(1..3)
+        play beat`x--- --x- x-x- ---x*3` at bars(4..4)
+      }
     }
-    track Chop {
-      play notes`_:3 D3:0.25 F3:0.25 C3:0.25 A3:0.25` at bars(8..8)
-      play notes`_:2 C3:0.25 D3:0.25 E3:0.25 F3:0.25 G3:0.25 A3:0.25 B3:0.25 C4:0.25` at bars(16..16)
+    play Drums at bars(1..4)
+    play SweepScrub(volume: 0.9) at bars(1..4)
+    play LaserBass(volume: 0.8) at bars(1..4)
+  }
+  sample MixAS = bounce(MixA, note: C3, beats: 16)
+
+  // record B: the dusk side
+  block MixB {
+    play WindowWalkDusk at bars(1..4)
+    play LaserBass(volume: 0.75) at bars(1..4)
+  }
+  sample MixBS = bounce(MixB, note: C3, beats: 16)
+
+  block Cutter {
+    track SideA {
+      instrument sampler(attack: 0.04, gain: 1.0, sample: MixAS, slices: 16, end: 0.889, choke: "on", sustain: 1.0, release: 0.05, vary: 0.08)
+      modulate pitch with random(rate: 0.06, amount: 0.015, smooth: 0.8) as swim
+      volume 0.95
+      play notes`C3~:0.75 _:0.25 C#3~:0.5 _:0.5 D3~:0.5 _:0.5 D#3~:0.5 _:0.5` at bars(1..2)
+      play notes`E3~:0.5 _:0.5 F3~:0.25 F3~:0.25 _:0.5 F#3~:0.5 _:1.5` at bars(3..4)
+      play notes`G#3~:0.75 _:0.25 A3~:0.5 _:0.5 A#3~:0.5 _:0.5 B3~:0.25 _:0.75` at bars(5..6)
+      play notes`C4~:0.25 C4~:0.25 _:0.5 C#4~:0.25 _:0.75 D4~:0.5 _:1.5` at bars(7..8)
+      play notes`C3~:0.5 _:0.5 C#3~:0.25 _:0.75 E3~:0.5 _:0.5 G3~:0.25 _:0.75` at bars(9..10)
+      play notes`C3~:0.125 C3~:0.125 C3~:0.125 C3~:0.125 _:0.5 E3~:0.25 _:0.75 G#3~:0.5 _:1.5` at bars(11..12)
+      play notes`C4~:0.5 _:0.5 D4~:0.5 _:0.5 D#4~:0.25 _:0.5 C4~:0.25 _:1` at bars(13..15)
+      play notes`C3~:0.5 _:0.5 C3~:0.25 _:0.75 C3~:2` at bars(16..16)
+    }
+    track SideB {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: MixBS, slices: 16, end: 0.889, choke: "on", sustain: 1.0, release: 0.05, vary: 0.08, reverse: "on")
+      volume 0.8
+      play notes`_:2 C3~:0.5 _:0.5 D3~:0.5 _:0.5` at bars(2..2)
+      play notes`_:2 E3~:0.5 _:0.5 F3~:0.25 _:0.75` at bars(4..4)
+      play notes`_:1.5 G#3~:0.5 _:1 A3~:0.5 _:0.5` at bars(6..6)
+      play notes`_:2 C4~:0.5 _:0.5 C#4~:0.5 _:0.5` at bars(8..8)
+      play notes`_:1 C3~:0.5 _:1 E3~:0.5 _:1` at bars(10..10)
+      play notes`_:1.5 G3~:0.5 _:0.5 F3~:0.5 _:1` at bars(12..12)
+      play notes`_:2 C3~:0.5 _:0.5 D3~:0.5 _:0.5` at bars(14..14)
     }
   }
-
-  // record one: the sweep, scrubbed on the odd pairs
-  block RecordA : SweepScrub {
-    track Scrub {
-      play beat`x-x- x-x- x-x- x-x-` at bars(1..2)
-      play beat`x-x- x-x- x-x- x-x-` at bars(5..6)
-      play beat`x-x- x-x- x-x- x-x-` at bars(9..10)
-      play beat`x-x- xx-x x-xx x*3x*3-` at bars(13..14)
-    }
-  }
-
-  // record two: the dusk ensemble, walked on the even pairs
-  block RecordB : WindowWalkDusk {
-    track Walk {
-      play beat`x-x- x-x- x-x- x-x-` at bars(3..4)
-      play beat`x-x- x-x- x-x- x-x-` at bars(7..8)
-      play beat`x-x- x-x- x-x- x-x-` at bars(11..12)
-      play beat`x-xx x-x- xx-x x-x-` at bars(15..16)
-    }
-  }
-
-  play Drums at bars(1..16)
-  play LaserBass(volume: 0.8) at bars(2..16)
-  play RecordA(volume: 0.85) at bars(1..16)
-  play RecordB(volume: 0.85) at bars(1..16)
+  play Cutter at bars(1..16)
 }

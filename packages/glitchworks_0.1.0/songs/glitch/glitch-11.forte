@@ -1,38 +1,56 @@
-// glitch-11 — cutting room choir: the vowel wall frozen at 3 % and CARVED
-// — the gate's duty cycle is the melody here, opening and closing over
-// drops falling into a long dark delay, the floor sliding underneath.
-import { FreezeChoirHard, CaveDrip } from "../../wrapped/glitchset.forte"
+// glitch-11 — cutting room choir: the choir room (frozen vowel wall, cave
+// drops, deep floor, clockwork) bounced to one record — then CARVED: a
+// hard tempo gate chews the whole record while the cuts leave longer and
+// longer silences. The vowel hangs at the end.
+import { FreezeChoirHard, CaveDrip, WoodTick } from "../../wrapped/glitchset.forte"
 import { SubDeep } from "../../wrapped/bassworks.forte"
-import { WoodTick } from "../../wrapped/glitchset.forte"
 
 song "Glitch 11 — Cutting Room Choir" {
-  desc "The vowel wall frozen and carved — the gate's duty cycle is the melody, over cave drops and a sliding floor."
+  desc "The choir room bounced to one record and carved by a hard gate, cuts leaving longer silences; the vowel hangs at the end."
   artist "Forte Essentials"
   tempo 100bpm
   swing 0.55
-  master 1.6
+  master 3.4
   key C minor
 
-  block Wall : FreezeChoirHard {
-    track Wall {
-      automate gate.duty from 0.65 to 0.25 over bars(3..4)
-      automate gate.duty from 0.25 to 0.65 over bars(5..5)
-      automate gate.duty from 0.65 to 0.2 over bars(7..8)
-      automate gate.duty from 0.2 to 0.75 over bars(9..9)
-      automate gate.duty from 0.75 to 0.15 over bars(11..12)
-      // the freeze deepens at the very end — the vowel hangs
-      automate stretch from 0.03 to 0.012 over bars(12..12)
-      play notes`C3~:8` at bars(1..2)
-      play notes`D#3~:8` at bars(3..4)
-      play notes`C3~:8` at bars(5..6)
-      play notes`A#2~:8` at bars(7..8)
-      play notes`C3~:8` at bars(9..10)
-      play notes`G3~:8` at bars(11..12)
+  block Mix {
+    play FreezeChoirHard at bars(1..4)
+    play SubDeep(volume: 0.85) at bars(1..4)
+    play CaveDrip(volume: 0.8) at bars(1..4)
+    play WoodTick(volume: 0.55) at bars(1..4)
+  }
+  sample MixS = bounce(Mix, note: C3, beats: 16)
+
+  block Cutter {
+    track Cut {
+      instrument sampler(attack: 0.06, gain: 1.0, sample: MixS, slices: 16, end: 0.889, choke: "on", sustain: 1.0, release: 0.06, vary: 0.06)
+      modulate pitch with random(rate: 0.04, amount: 0.012, smooth: 0.9) as swim
+      // the gate chews everything that passes; its duty is the melody
+      insert gate(depth: 0.95, beats: 0.25, duty: 0.9)
+      automate gate.duty from 0.9 to 0.35 over bars(3..4)
+      automate gate.duty from 0.35 to 0.9 over bars(5..5)
+      automate gate.duty from 0.9 to 0.25 over bars(7..8)
+      automate gate.duty from 0.25 to 0.75 over bars(9..9)
+      automate gate.duty from 0.75 to 0.2 over bars(11..11)
+      volume 0.95
+      play notes`C3~:2 _:0.5 C#3~:1 _:0.5` at bars(1..1)
+      play notes`E3~:1.5 _:0.5 F3~:1.5 _:0.5` at bars(2..2)
+      play notes`G#3~:2 _:1 A#3~:1` at bars(3..3)
+      play notes`C4~:1.5 _:0.5 D4~:1 _:1` at bars(4..4)
+      play notes`C3~:1 _:1 E3~:1 _:1` at bars(5..5)
+      play notes`F3~:1.5 _:1 G3~:0.5 _:1` at bars(6..6)
+      play notes`G#3~:2 _:1 B3~:0.5 _:0.5` at bars(7..7)
+      play notes`C4~:1 _:0.75 C#4~:0.25 _:1 D#4~:0.5 _:0.5` at bars(8..8)
+      play notes`C3~:1.5 _:1 C#3~:0.5 _:1` at bars(9..9)
+      play notes`E3~:1 _:1.5 F#3~:0.5 _:1` at bars(10..10)
+      play notes`G#3~:1 _:1 A3~:0.5 _:1.5` at bars(11..11)
+    }
+    track Freeze {
+      instrument sampler(attack: 0.1, gain: 1.0, sample: MixS, end: 0.889, stretch: 0.5, sustain: 1.0, release: 0.5)
+      automate stretch from 0.5 to 0.015 over bars(12..12)
+      volume 0.85
+      play notes`C3~:4` at bars(12..12)
     }
   }
-
-  play Wall at bars(1..12)
-  play SubDeep(volume: 0.85) at bars(1..12)
-  play CaveDrip(volume: 0.8) at bars(3..12)
-  play WoodTick(volume: 0.55) at bars(5..10)
+  play Cutter at bars(1..12)
 }

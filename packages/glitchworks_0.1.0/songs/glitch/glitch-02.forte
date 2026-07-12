@@ -1,33 +1,51 @@
-// glitch-02 — window walker: a dusk ensemble treated as a record and
-// SCRUBBED, the window jumping every eighth; an upright walks underneath,
-// clockwork rims argue, and every fourth bar the percussion spins backwards.
+// glitch-02 — window walker: the dusk ensemble, upright, rims and claps
+// are bounced to ONE record — and the song walks a window over it. Every
+// rest is the whole room going quiet; the turns spin what's left backwards.
 import { WindowWalkDusk, WoodTick, BackspinPerc } from "../../wrapped/glitchset.forte"
 import { UprightWalk } from "../../wrapped/bassworks.forte"
 import { ClapRun } from "../../wrapped/grooveworks.forte"
 
 song "Glitch 02 — Window Walker" {
-  desc "A dusk ensemble scrubbed as a record, an upright walking under it, percussion spinning backwards at the turns."
+  desc "The dusk record chopped with a walking window: every rest silences the whole room, the turns run backwards."
   artist "Forte Essentials"
   tempo 118bpm
   swing 0.57
-  master 2.1
+  master 3.9
   key C minor
 
-  block Walk : WindowWalkDusk {
-    track Walk {
-      automate decay from 0.3 to 0.12 over bars(13..16)
-      insert stutter(beats: 0.125, mix: 0.0)
-      automate stutter.mix from 0.0 to 0.6 over bars(8..8)
-      automate stutter.mix from 0.6 to 0.0 over bars(9..9)
-      automate stutter.mix from 0.0 to 0.8 over bars(16..16)
-      play beat`x-x- x-x- x-x- x-x-` at bars(1..12)
-      play beat`x-xx x-x- xx-x x-x-` at bars(13..16)
+  block Mix {
+    play WindowWalkDusk at bars(1..4)
+    play UprightWalk(volume: 0.9) at bars(1..4)
+    play WoodTick(volume: 0.7) at bars(1..4)
+    play ClapRun(volume: 0.6) at bars(1..4)
+    play BackspinPerc(volume: 0.75) at bars(1..4)
+  }
+  sample MixS = bounce(Mix, note: C3, beats: 16)
+
+  block Cutter {
+    track Cut {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: MixS, slices: 16, end: 0.889, choke: "on", sustain: 1.0, release: 0.05, vary: 0.07)
+      modulate pitch with random(rate: 0.05, amount: 0.015, smooth: 0.85) as swim
+      volume 0.95
+      play notes`C3~:1 C#3~:0.5 _:0.5 D3~:0.75 _:0.25 D#3~:1` at bars(1..1)
+      play notes`E3~:0.75 _:0.25 F3~:1 F#3~:0.5 _:0.5 G3~:0.5 _:0.5` at bars(2..2)
+      play notes`G#3~:1 A3~:0.5 _:0.5 A#3~:0.75 _:0.25 B3~:0.5 _:0.5` at bars(3..3)
+      play notes`C4~:0.5 _:0.5 C#4~:0.5 _:0.5 D4~:0.25 D4~:0.25 _:0.5 D#4~:0.5 _:0.5` at bars(4..4)
+      play notes`C3~:0.5 _:0.5 E3~:0.5 _:0.5 G#3~:0.5 _:0.5 C4~:0.25 _:0.75` at bars(5..5)
+      play notes`C#3~:0.25 _:0.25 F3~:0.25 _:0.25 A3~:0.25 _:0.75 C#4~:0.5 _:1.5` at bars(6..6)
+      play notes`D3~:0.5 _:0.25 F#3~:0.25 _:0.5 A#3~:0.5 _:1 D4~:0.5 _:0.5` at bars(7..7)
+      play notes`C3~:0.125 C3~:0.125 C3~:0.125 C3~:0.125 _:0.5 E3~:0.25 E3~:0.25 _:0.5 G#3~:0.25 _:0.75 C4~:1` at bars(8..8)
+      play notes`C3~:0.75 _:0.25 C#3~:0.5 _:0.5 D3~:0.25 _:0.75 D#3~:1` at bars(9..11)
+      play notes`E3~:0.25 _:0.25 F3~:0.125 _:0.375 F#3~:0.25 _:0.75 G3~:0.5 _:1.5` at bars(12..12)
+      play notes`C3~:0.5 _:0.5 E3~:0.5 _:0.5 G#3~:0.25 _:0.75 C4~:0.5 _:0.5` at bars(13..15)
+    }
+    // the turn: what's left of the record, spun backwards into the end
+    track Turn {
+      instrument sampler(attack: 0.06, gain: 1.0, sample: MixS, reverse: "on", end: 0.889, sustain: 1.0, release: 0.1, vary: 0.1)
+      volume 0.7
+      play notes`_:3 C3~:1` at bars(8..8)
+      play notes`_:2 C3~:2` at bars(16..16)
     }
   }
-
-  play Walk at bars(1..16)
-  play UprightWalk(volume: 0.9) at bars(3..16)
-  play WoodTick(volume: 0.7) at bars(5..16)
-  play ClapRun(volume: 0.6) at bars(9..16)
-  play BackspinPerc(volume: 0.75) at bars(4..16)
+  play Cutter at bars(1..16)
 }

@@ -1,34 +1,41 @@
-// glitch-07 — acid receipt: the true 303 slide on AUDIO — accents bark,
-// ties bend, the stutter lever trips the line at the turn, and at the end
-// the whole lane is pitch-ridden down a fourth and cut.
+// glitch-07 — acid receipt: the acid lane (audio-domain 303, stacked kick,
+// tripping claps) bounced to one record and driven in eighth-note cuts —
+// every hole is the whole rave stopping; the lane rides down a fourth
+// at the close.
 import { GlideAcid } from "../../wrapped/glitchset.forte"
 import { KickStack } from "../../wrapped/drumcolor.forte"
 import { ClapRun } from "../../wrapped/grooveworks.forte"
 
 song "Glitch 07 — Acid Receipt" {
-  desc "Audio-domain 303: barking accents, bending ties, a stutter trip at the turn, the lane ridden down a fourth at the end."
+  desc "The acid lane bounced to one record, driven in eighth cuts — every hole stops the whole rave; it rides down at the close."
   artist "Forte Essentials"
   tempo 128bpm
   swing 0.54
-  master 0.85
+  master 1.6
   key C minor
 
-  block Line : GlideAcid {
-    track Line {
-      insert stutter(beats: 0.25, mix: 0.0)
-      automate stutter.mix from 0.0 to 0.6 over bars(8..8)
-      automate stutter.mix from 0.6 to 0.0 over bars(9..9)
-      automate stutter.mix from 0.0 to 0.7 over bars(12..12)
-      automate stutter.mix from 0.7 to 0.0 over bars(13..13)
+  block Mix {
+    play KickStack at bars(1..4)
+    play GlideAcid(volume: 0.9) at bars(1..4)
+    play ClapRun(volume: 0.7) at bars(1..4)
+  }
+  sample MixS = bounce(Mix, note: C3, beats: 16)
+
+  block Cutter {
+    track Cut {
+      instrument sampler(attack: 0.04, gain: 1.0, sample: MixS, slices: 16, end: 0.889, choke: "on", sustain: 1.0, release: 0.04, vary: 0.07)
+      modulate pitch with random(rate: 0.06, amount: 0.015, smooth: 0.8) as swim
       automate pitch from 0.5 to 0.396 over bars(16..16)
-      play notes`C2!:0.25 C2~:0.25 D#2~:0.5 C2:0.25 _:0.25 G2!~:0.5 F2~:0.5 C2:0.25 C2:0.25 A#1~:0.5 C2!:0.5` at bars(1..7)
-      play notes`C2!:0.25 C2~:0.25 F2~:0.5 D#2:0.25 _:0.25 G#2!~:0.75 G2~:0.75 C2!:0.5 _:0.5` at bars(8..8)
-      play notes`C2!:0.25 C2~:0.25 D#2~:0.5 C2:0.25 _:0.25 G2!~:0.5 F2~:0.5 C2:0.25 C2:0.25 A#1~:0.5 C2!:0.5` at bars(9..15)
-      play notes`C2!:0.25 C2~:0.25 F2~:0.5 D#2:0.25 _:0.25 G#2!~:0.75 G2~:0.75 C2!~:1` at bars(16..16)
+      volume 0.95
+      play notes`C3~:0.5 _:0.5 C#3~:0.5 _:0.5 D3~:0.5 _:0.5 D#3~:0.25 _:0.75` at bars(1..3)
+      play notes`C3~:0.5 _:0.5 C#3~:0.25 C#3~:0.25 _:0.5 D3~:0.25 _:0.25 D#3~:0.125 D#3~:0.125 D#3~:0.125 D#3~:0.125 _:1` at bars(4..4)
+      play notes`E3~:0.5 _:0.5 F3~:0.5 _:0.5 F#3~:0.5 _:0.5 G3~:0.5 _:0.5` at bars(5..7)
+      play notes`E3~:0.25 E3~:0.25 _:0.5 F3~:0.25 F3~:0.25 _:0.5 F#3~:0.25 _:0.25 G3~:0.125 G3~:0.125 G3~:0.125 G3~:0.125 _:1` at bars(8..8)
+      play notes`G#3~:0.5 _:0.5 A3~:0.5 _:0.5 A#3~:0.5 _:0.5 B3~:0.5 _:0.5` at bars(9..11)
+      play notes`G#3~:0.25 _:0.25 A3~:0.25 _:0.25 A#3~:0.25 A#3~:0.25 _:0.5 B3~:0.25 _:0.25 C4~:0.25 _:1.25` at bars(12..12)
+      play notes`C4~:0.5 _:0.5 C#4~:0.5 _:0.5 D4~:0.5 _:0.5 D#4~:0.5 _:0.5` at bars(13..15)
+      play notes`C3~:1 _:0.5 C3~:0.5 C3~:2` at bars(16..16)
     }
   }
-
-  play KickStack at bars(1..16)
-  play Line(volume: 0.9) at bars(2..16)
-  play ClapRun(volume: 0.7) at bars(5..16)
+  play Cutter at bars(1..16)
 }

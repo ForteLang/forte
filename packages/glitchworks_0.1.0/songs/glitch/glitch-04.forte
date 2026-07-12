@@ -1,47 +1,53 @@
-// glitch-04 — half heart: the busy break slowed to a doom crawl that
-// lunges at every turn, a sub that dives a fourth, the vowel wall carved
-// by a gate — and at the end the whole break freezes mid-air.
+// glitch-04 — half heart: the doom break, diving sub, vowel wall and
+// rainbow snare bounced to one slab — then cut with LONG gates and longer
+// silences, halftime holes you could fall into. The slab freezes mid-air
+// at the end.
 import { HalfBreak } from "../../wrapped/grooveworks.forte"
 import { SubDeep } from "../../wrapped/bassworks.forte"
 import { FreezeChoirHard } from "../../wrapped/glitchset.forte"
 import { SnareRainbow } from "../../wrapped/drumcolor.forte"
 
 song "Glitch 04 — Half Heart" {
-  desc "The busy break at doom speed lunging at the turns, a diving sub, a gated vowel wall — the break freezes mid-air at the end."
+  desc "The doom slab cut with long gates and longer silences — halftime holes you could fall into; it freezes mid-air at the end."
   artist "Forte Essentials"
   tempo 92bpm
   swing 0.55
-  master 1.35
+  master 2.3
   key C minor
 
-  block Doom : HalfBreak {
-    track Doom {
-      automate stretch from 0.25 to 0.5 over bars(4..4)
-      automate stretch from 0.5 to 0.25 over bars(5..5)
-      automate stretch from 0.25 to 0.5 over bars(8..8)
-      automate stretch from 0.5 to 0.25 over bars(9..9)
-      // the ending: the break slows into a granular freeze, no pitch fall
-      automate stretch from 0.25 to 0.02 over bars(12..12)
-      play notes`C3~:8 D3~:2 C3~:6` at bars(1..4)
-      play notes`C3~:8 A#2~:2 C3~:6` at bars(5..8)
-      play notes`C3~:8 D3~:2 C3~:4 C3~:2` at bars(9..12)
+  block Mix {
+    play HalfBreak at bars(1..4)
+    play SubDeep(volume: 0.9) at bars(1..4)
+    play FreezeChoirHard(volume: 0.75) at bars(1..4)
+    play SnareRainbow(volume: 0.85) at bars(1..4)
+  }
+  sample MixS = bounce(Mix, note: C3, beats: 16)
+
+  block Cutter {
+    track Cut {
+      instrument sampler(attack: 0.06, gain: 1.0, sample: MixS, slices: 16, end: 0.889, choke: "on", sustain: 1.0, release: 0.06, vary: 0.07)
+      modulate pitch with random(rate: 0.04, amount: 0.015, smooth: 0.9) as swim
+      volume 0.95
+      // halftime: long gates, then the hole
+      play notes`C3~:1.5 _:0.5 C#3~:1 _:1` at bars(1..1)
+      play notes`E3~:1.5 _:0.5 F3~:0.75 _:1.25` at bars(2..2)
+      play notes`G#3~:2 _:1 A#3~:0.5 _:0.5` at bars(3..3)
+      play notes`C4~:1 _:0.5 D4~:0.5 _:0.75 D#4~:0.25 D#4~:0.25 _:0.75` at bars(4..4)
+      play notes`C3~:1.5 _:0.5 D3~:0.5 _:1.5` at bars(5..5)
+      play notes`_:1 E3~:1 _:1 G3~:0.5 _:0.5` at bars(6..6)
+      play notes`G#3~:1.25 _:0.75 A3~:0.25 _:0.25 A#3~:0.5 _:1` at bars(7..7)
+      play notes`C4~:0.5 _:0.5 C4~:0.25 C4~:0.25 _:0.5 C#4~:0.5 _:1.5` at bars(8..8)
+      play notes`C3~:1.5 _:1 C#3~:0.5 _:1` at bars(9..9)
+      play notes`E3~:0.75 _:0.75 F3~:0.25 _:1.25 F#3~:0.5 _:0.5` at bars(10..10)
+      play notes`G#3~:0.5 _:0.5 A3~:0.25 _:0.75 C3~:0.25 _:0.25 C#3~:0.25 _:1.25` at bars(11..11)
+    }
+    // the end: the record slows into a granular hang — no pitch fall
+    track Freeze {
+      instrument sampler(attack: 0.1, gain: 1.0, sample: MixS, end: 0.889, stretch: 0.5, sustain: 1.0, release: 0.4)
+      automate stretch from 0.5 to 0.02 over bars(12..12)
+      volume 0.9
+      play notes`C3~:4` at bars(12..12)
     }
   }
-
-  block Wall : FreezeChoirHard {
-    track Wall {
-      automate gate.duty from 0.65 to 0.3 over bars(9..12)
-      play notes`C3~:8` at bars(1..2)
-      play notes`D#3~:8` at bars(3..4)
-      play notes`C3~:8` at bars(5..6)
-      play notes`A#2~:8` at bars(7..8)
-      play notes`C3~:8` at bars(9..10)
-      play notes`C3~:8` at bars(11..12)
-    }
-  }
-
-  play Doom at bars(1..12)
-  play SubDeep(volume: 0.9) at bars(1..12)
-  play Wall(volume: 0.75) at bars(3..12)
-  play SnareRainbow(volume: 0.85) at bars(5..11)
+  play Cutter at bars(1..12)
 }

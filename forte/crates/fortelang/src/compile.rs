@@ -125,10 +125,13 @@ pub fn compile(
     // deterministic engine, so the asset is bit-identical everywhere)
     let no_bounces: HashMap<String, (String, u8)> = HashMap::new();
     let mut bounces: HashMap<String, (String, u8)> = HashMap::new();
-    // collect from the root AND every block (imported wrapped-instrument
+    // collect from every block AND the root (imported wrapped-instrument
     // libraries declare their samples inside their blocks); one flat
-    // namespace, curated packages keep names unique
-    let mut all_sample_lets: Vec<&SampleLetAst> = root.sample_lets.iter().collect();
+    // namespace, curated packages keep names unique. The root's own
+    // sample_lets come LAST: a song-level bounce may place whole machine
+    // blocks, so every machine-internal sample must already be resolved —
+    // this is what lets a song bounce its own full MIX and chop the result
+    let mut all_sample_lets: Vec<&SampleLetAst> = Vec::new();
     fn collect_sample_lets<'a>(blocks: &'a [BlockAst], out: &mut Vec<&'a SampleLetAst>) {
         for b in blocks {
             out.extend(b.body.sample_lets.iter());
@@ -137,6 +140,7 @@ pub fn compile(
     }
     collect_sample_lets(&file.blocks, &mut all_sample_lets);
     collect_sample_lets(&root.blocks, &mut all_sample_lets);
+    all_sample_lets.extend(root.sample_lets.iter());
     // every block by name, for `bounce(BlockName)` phrase resampling
     let mut all_blocks: Vec<&BlockAst> = Vec::new();
     fn collect_blocks<'a>(blocks: &'a [BlockAst], out: &mut Vec<&'a BlockAst>) {

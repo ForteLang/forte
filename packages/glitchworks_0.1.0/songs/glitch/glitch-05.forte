@@ -1,50 +1,48 @@
-// glitch-05 — amen ledger: jungle arithmetic. The busy break re-cut
-// differently every pass with the stutter lever at the turns, an 808 sub
-// that only ever SLIDES, and a pitched-down voice cut into syllables
-// that never existed. The last four bars tighten until only cuts remain.
+// glitch-05 — amen ledger: the jungle (break, sliding 808, impossible
+// syllables) bounced to one record and re-cut at 160 — sixteenth gates,
+// machine-gun retrigs, and rests that hit like a door slamming.
 import { AmenTwo } from "../../wrapped/grooveworks.forte"
 import { GlideSub } from "../../wrapped/glitchset.forte"
 import { VoxCutUp } from "../../wrapped/melodyworks.forte"
 
 song "Glitch 05 — Amen Ledger" {
-  desc "Jungle arithmetic: the break re-cut every pass, an 808 sub that only slides, a voice in impossible syllables."
+  desc "The jungle bounced to one record and re-cut at 160: sixteenth gates, machine-gun retrigs, rests slamming like doors."
   artist "Forte Essentials"
   tempo 160bpm
   swing 0.52
-  master 1.0
+  master 1.8
   key C minor
 
-  block Break : AmenTwo {
+  block Mix {
+    play AmenTwo at bars(1..4)
+    play GlideSub(volume: 0.9) at bars(1..4)
+    play VoxCutUp(volume: 0.8) at bars(1..4)
+  }
+  sample MixS = bounce(Mix, note: C3, beats: 16)
+
+  block Cutter {
     track Cut {
-      automate stutter.mix from 0.0 to 0.65 over bars(8..8)
-      automate stutter.mix from 0.65 to 0.0 over bars(9..9)
-      automate stutter.mix from 0.0 to 0.75 over bars(16..16)
-      automate stutter.mix from 0.75 to 0.0 over bars(17..17)
-      automate decay from 0.5 to 0.12 over bars(17..20)
-      play notes`C3:0.25 C#3:0.25 _:0.25 D#3:0.25 G3:0.5 _:0.5 A3:0.25 C3:0.25 _:0.25 D3:0.25 F3:0.25 A#3:0.25 C3:0.25 _:0.25` at bars(1..7)
-      play notes`C3:0.25 C#3:0.125 D3:0.125 D#3:0.25 _:0.25 G3:0.25 A3:0.125 A#3:0.125 B3:0.25 C4:0.25 _:0.25 A#3:0.125 G3:0.125 D#3:0.25 C3:0.25 G3:0.25 C3:0.25 _:0.5` at bars(8..8)
-      play notes`C3:0.25 _:0.25 C#3:0.25 D#3:0.25 G3:0.25 G#3:0.25 _:0.5 A3:0.25 A#3:0.25 C3:0.5 D3:0.125 D#3:0.125 F3:0.25 _:0.5` at bars(9..15)
-      play notes`C3:0.25 C#3:0.125 D3:0.125 D#3:0.25 _:0.25 G3:0.25 A3:0.125 A#3:0.125 B3:0.25 C4:0.25 _:0.25 A#3:0.125 G3:0.125 D#3:0.25 C3:0.25 G3:0.25 C3:0.25 _:0.5` at bars(16..16)
-      play notes`C3:0.25 C#3:0.25 _:0.25 D#3:0.25 G3:0.5 _:0.5 A3:0.25 C3:0.25 _:0.25 D3:0.25 F3:0.25 A#3:0.25 C3:0.25 _:0.25` at bars(17..20)
+      instrument sampler(attack: 0.04, gain: 1.0, sample: MixS, slices: 16, end: 0.889, choke: "on", sustain: 1.0, release: 0.04, vary: 0.08)
+      modulate pitch with random(rate: 0.07, amount: 0.02, smooth: 0.75) as swim
+      volume 0.95
+      play notes`C3~:0.75 _:0.25 C#3~:0.5 D3~:0.5 _:0.5 D#3~:0.75 _:0.25 E3~:0.5` at bars(1..3)
+      play notes`C3~:0.25 C3~:0.25 _:0.25 D3~:0.25 D#3~:0.5 _:0.5 F3~:0.25 _:0.25 F#3~:0.25 F#3~:0.25 _:0.5 G3~:0.5` at bars(4..4)
+      play notes`E3~:0.75 _:0.25 F3~:0.5 _:0.5 G3~:0.5 _:0.5 G#3~:0.5 _:0.5` at bars(5..7)
+      play notes`C3~:0.125 C3~:0.125 C3~:0.125 C3~:0.125 _:0.5 E3~:0.125 E3~:0.125 E3~:0.125 E3~:0.125 _:0.5 G#3~:0.25 _:0.25 C4~:0.25 _:0.75` at bars(8..8)
+      play notes`G#3~:0.75 _:0.25 A3~:0.5 _:0.5 A#3~:0.5 _:0.5 B3~:0.25 _:0.75` at bars(9..11)
+      play notes`G#3~:0.25 _:0.25 A3~:0.125 A3~:0.125 _:0.25 A#3~:0.25 _:0.5 B3~:0.125 B3~:0.125 B3~:0.125 B3~:0.125 _:0.25 C4~:0.25 _:1` at bars(12..12)
+      play notes`C4~:0.75 _:0.25 C#4~:0.5 _:0.5 D4~:0.5 _:0.5 D#4~:0.5 _:0.5` at bars(13..15)
+      play notes`C4~:0.125 C4~:0.125 _:0.25 C#4~:0.125 C#4~:0.125 _:0.25 D4~:0.125 D4~:0.125 _:0.25 D#4~:0.125 D#4~:0.125 D#4~:0.125 D#4~:0.125 _:0.375 C3~:0.5 _:1` at bars(16..16)
+      play notes`C3~:0.75 _:0.25 C#3~:0.5 D3~:0.5 _:0.5 D#3~:0.75 _:0.25 E3~:0.5` at bars(17..19)
+      play notes`C3~:0.5 _:0.5 C3~:0.25 _:0.75 C3~:0.125 _:0.375 C3~:0.125 _:1.375` at bars(20..20)
     }
-    track Rev {
-      play notes`_:3.5 B3:0.25 G3:0.25` at bars(4..4)
-      play notes`_:3.25 D#3:0.25 F3:0.25 A#3:0.25` at bars(8..8)
-      play notes`_:3.5 B3:0.25 G3:0.25` at bars(12..12)
-      play notes`_:3.25 D#3:0.25 F3:0.25 A#3:0.25` at bars(16..16)
-      play notes`_:2 C3~:2` at bars(20..20)
-    }
-  }
-
-  block Sub : GlideSub {
-    track Slide {
-      play notes`C1~:3 D#1~:1 C1~:2 G1~:1 F1~:1` at bars(1..8)
-      play notes`C1~:3 A#0~:1 C1~:2 F1~:1 G1~:1` at bars(9..16)
-      play notes`C1~:3 D#1~:1 C1~:2 G1~:1 F1~:1` at bars(17..20)
+    track Turn {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: MixS, reverse: "on", end: 0.889, sustain: 1.0, release: 0.08, vary: 0.1)
+      volume 0.6
+      play notes`_:3 C3~:1` at bars(4..4)
+      play notes`_:3 C3~:1` at bars(12..12)
+      play notes`_:2.5 C3~:1.5` at bars(20..20)
     }
   }
-
-  play Break at bars(1..20)
-  play Sub(volume: 0.9) at bars(1..20)
-  play VoxCutUp(volume: 0.8) at bars(9..20)
+  play Cutter at bars(1..20)
 }

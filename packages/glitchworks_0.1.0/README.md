@@ -11,6 +11,9 @@ House rules, learned by ear:
 - Every groove is a **four-bar arc**, not a loop: bar 4 breaks the pattern.
 - Something **drifts at all times** (pitch swim, window slide, stepped flip).
 - **Choke cuts leave rests**; the rests are the groove.
+- **The whole mix is the sample**: bounce the full band to ONE record and
+  chop THAT — a rest then silences everything at once, reverb tails
+  included. That mix-wide dead-stop is the glitch groove.
 - **No hiss/crackle beds** — the music stays clean; patina is opt-in per song.
 - A steal, a cut, a slice end: everything **declicks**.
 
@@ -18,12 +21,15 @@ House rules, learned by ear:
 
 Two shelves:
 
-- **`songs/glitch/`** — the main event: twenty CHOP-FIRST songs. Every one
-  is arranged the sketch-arsenal way — song-local blocks inherit the
-  machines and re-write their cuts, with the chop parameters RIDDEN across
-  the song (stutter levers at the turns, windows walking, granular
-  freezes, tapestop endings, pitch-dive finales). The groove comes from
-  the cuts.
+- **`songs/glitch/`** — the main event: twenty MIX-CHOP songs. Every one
+  follows the same law: the full band (a `block Mix` placing the
+  machines) is bounced to ONE record (`sample MixS = bounce(Mix, beats:
+  16)`), and the song is that record re-cut — slice = one beat of the
+  mix, note length = gate length, `choke` on. Every rest is the ENTIRE
+  mix going silent at once, reverb tails and all; reversed answers,
+  retrig bursts, granular freezes and tapestop/pitch-dive finales are
+  cut from the same record. 28–86 mix-wide silences per song, 7–19
+  seconds of true zero in each.
 - **`songs/sampler_sample/`** — the earlier 34 palette showcases: the
   machines played straight, one mood each. Kept as the reference shelf.
 

@@ -1,36 +1,51 @@
-// glitch-08 — brass debt: dub economics. One brass stab (two brasses and
-// a sub glued) choked into eight answers, dub bass echoing itself, toms in
-// conversation — and the tape dies a little at every settling of accounts.
+// glitch-08 — brass debt: the dub band (glued stab, echoing bass, talking
+// toms, backspins) bounced to one record; the song cuts it on the offbeat
+// and lets the echoes fall into holes. The tape dies a little at every
+// settling, and completely at the last.
 import { EnsembleBrass, TomGroove, BackspinPerc } from "../../wrapped/glitchset.forte"
 import { BassStabEcho } from "../../wrapped/bassworks.forte"
 
 song "Glitch 08 — Brass Debt" {
-  desc "Dub economics: one glued brass stab choked into answers, echoing bass, talking toms, the tape dying at each turn."
+  desc "The dub band bounced to one record, cut on the offbeat, echoes falling into holes; the tape dies at every settling."
   artist "Forte Essentials"
   tempo 100bpm
   swing 0.58
-  master 1.35
+  master 2.2
   key G minor
 
-  block Stabs : EnsembleBrass {
-    track Stab {
+  block Mix {
+    play TomGroove at bars(1..4)
+    play BassStabEcho(volume: 0.9) at bars(1..4)
+    play EnsembleBrass(volume: 0.9) at bars(1..4)
+    play BackspinPerc(volume: 0.7) at bars(1..4)
+  }
+  sample MixS = bounce(Mix, note: C3, beats: 16)
+
+  block Cutter {
+    track Cut {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: MixS, slices: 16, end: 0.889, choke: "on", sustain: 1.0, release: 0.06, vary: 0.08)
+      modulate pitch with random(rate: 0.05, amount: 0.015, smooth: 0.85) as swim
       insert tapestop(amount: 0.0)
       automate tapestop.amount from 0.0 to 0.55 over bars(4..4)
       automate tapestop.amount from 0.55 to 0.0 over bars(5..5)
       automate tapestop.amount from 0.0 to 0.7 over bars(8..8)
       automate tapestop.amount from 0.7 to 0.0 over bars(9..9)
       automate tapestop.amount from 0.0 to 1.0 over bars(12..12)
-      play notes`C3:0.75 _:0.75 C3:0.5 _:1 D3:0.5 _:0.5` at bars(1..3)
-      play notes`C3:0.5 _:0.5 D3:0.375 D#3:0.375 _:0.25 C3:0.5 E3:0.5 _:1 F3:0.5 _:0.5` at bars(4..4)
-      play notes`C3:0.75 _:0.75 D#3:0.5 _:1 C3:0.5 _:0.5` at bars(5..7)
-      play notes`C3:0.5 _:0.5 D3:0.375 D#3:0.375 _:0.25 C3:0.5 E3:0.5 _:1 F3:0.5 _:0.5` at bars(8..8)
-      play notes`C3:0.75 _:0.75 C3:0.5 _:1 D3:0.5 _:0.5` at bars(9..11)
-      play notes`C3:0.75 _:0.75 C3:0.5 _:2` at bars(12..12)
+      volume 0.95
+      // dub: the one lands, the offbeat answers, the hole holds the room
+      play notes`C3~:0.75 _:0.75 C#3~:0.5 _:1 D3~:0.5 _:0.5` at bars(1..3)
+      play notes`C3~:0.5 _:0.5 C#3~:0.375 D3~:0.375 _:0.25 D#3~:0.5 _:1.5 E3~:0.5` at bars(4..4)
+      play notes`E3~:0.75 _:0.75 F3~:0.5 _:1 F#3~:0.25 _:0.75` at bars(5..7)
+      play notes`E3~:0.5 _:0.5 F3~:0.25 F3~:0.25 _:0.5 G3~:0.25 _:0.75 G#3~:0.5 _:0.5` at bars(8..8)
+      play notes`G#3~:0.75 _:0.75 A3~:0.5 _:1 A#3~:0.5 _:0.5` at bars(9..11)
+      play notes`C3~:0.75 _:0.75 C3~:0.5 _:2` at bars(12..12)
+    }
+    track Turn {
+      instrument sampler(attack: 0.06, gain: 1.0, sample: MixS, reverse: "on", end: 0.889, sustain: 1.0, release: 0.1, vary: 0.1)
+      volume 0.65
+      play notes`_:3 C3~:1` at bars(6..6)
+      play notes`_:3 C3~:1` at bars(10..10)
     }
   }
-
-  play TomGroove at bars(1..12)
-  play BassStabEcho(volume: 0.9) at bars(1..12)
-  play Stabs(volume: 0.9) at bars(3..12)
-  play BackspinPerc(volume: 0.7) at bars(5..12)
+  play Cutter at bars(1..12)
 }

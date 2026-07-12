@@ -1,38 +1,42 @@
-// glitch-06 — funk fraction: the glued funk grain (guitar+bass+clap as ONE
-// sample) re-cut against a backbeat that keeps re-editing itself; the
-// grain's stutter trips at the turns and the cuts tighten to nothing.
+// glitch-06 — funk fraction: the funk band (glued grain, pick bass,
+// flipping snare, hats) bounced to one record and cut like a rhythm
+// guitar: stabs, and the silence between them doing the dancing.
+// The power dies on the last bar.
 import { EnsembleFunk } from "../../wrapped/glitchset.forte"
 import { PickBass } from "../../wrapped/bassworks.forte"
 import { SnareFlip, HatWork } from "../../wrapped/grooveworks.forte"
 
 song "Glitch 06 — Funk Fraction" {
-  desc "The glued funk grain re-cut against a self-editing backbeat, stutters at the turns, cuts tightening to nothing."
+  desc "The funk band bounced to one record, cut like a rhythm guitar: stabs, with the silence between them doing the dancing."
   artist "Forte Essentials"
   tempo 104bpm
   swing 0.58
-  master 1.2
+  master 2.6
   key C minor
 
-  block Grain : EnsembleFunk {
-    track Grain {
-      insert stutter(beats: 0.25, mix: 0.0)
-      automate stutter.mix from 0.0 to 0.55 over bars(4..4)
-      automate stutter.mix from 0.55 to 0.0 over bars(5..5)
-      automate stutter.mix from 0.0 to 0.7 over bars(8..8)
-      automate stutter.mix from 0.7 to 0.0 over bars(9..9)
-      automate decay from 0.4 to 0.12 over bars(11..12)
+  block Mix {
+    play EnsembleFunk at bars(1..4)
+    play PickBass(volume: 0.9) at bars(1..4)
+    play SnareFlip(volume: 0.9) at bars(1..4)
+    play HatWork(volume: 0.55) at bars(1..4)
+  }
+  sample MixS = bounce(Mix, note: C3, beats: 16)
+
+  block Cutter {
+    track Cut {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: MixS, slices: 16, end: 0.889, choke: "on", sustain: 1.0, release: 0.05, vary: 0.08)
+      modulate pitch with random(rate: 0.06, amount: 0.015, smooth: 0.8) as swim
       insert tapestop(amount: 0.0)
-      automate tapestop.amount from 0.0 to 0.9 over bars(12..12)
-      play notes`C3:0.25 D3:0.25 _:0.25 F3:0.25 G3:0.25 _:0.25 A3:0.25 C3:0.25 _:0.5 D#3:0.25 F#3:0.25 _:0.25 B3:0.25 C3:0.25 _:0.25` at bars(1..3)
-      play notes`C3:0.25 D3:0.125 D#3:0.125 F3:0.25 _:0.25 G3:0.25 A3:0.125 A#3:0.125 B3:0.25 _:0.25 C3:0.25 G3:0.25 D#3:0.25 C3:0.25 _:0.25 F3:0.25 _:0.5` at bars(4..4)
-      play notes`C3:0.25 _:0.25 D3:0.25 F3:0.25 _:0.25 G3:0.25 C3:0.25 _:0.25 A3:0.25 _:0.5 F#3:0.25 D#3:0.25 _:0.25 C3:0.25 _:0.25` at bars(5..7)
-      play notes`C3:0.25 D3:0.125 D#3:0.125 F3:0.25 _:0.25 G3:0.25 A3:0.125 A#3:0.125 B3:0.25 _:0.25 C3:0.25 G3:0.25 D#3:0.25 C3:0.25 _:0.25 F3:0.25 _:0.5` at bars(8..8)
-      play notes`C3:0.25 D3:0.25 _:0.25 F3:0.25 G3:0.25 _:0.25 A3:0.25 C3:0.25 _:0.5 D#3:0.25 F#3:0.25 _:0.25 B3:0.25 C3:0.25 _:0.25` at bars(9..12)
+      automate tapestop.amount from 0.0 to 1.0 over bars(12..12)
+      volume 0.95
+      // the stab logic: hit on the one, hole on the and
+      play notes`C3~:0.5 _:0.25 C#3~:0.25 _:0.5 D3~:0.5 _:0.5 D#3~:0.25 _:0.25 E3~:0.5 _:0.5` at bars(1..3)
+      play notes`C3~:0.25 _:0.25 C#3~:0.25 _:0.25 D3~:0.5 _:0.5 F3~:0.125 F3~:0.125 F3~:0.125 F3~:0.125 _:0.5 G3~:0.5 _:0.5` at bars(4..4)
+      play notes`E3~:0.5 _:0.5 F3~:0.25 _:0.25 F#3~:0.5 _:0.75 G3~:0.25 _:0.5 G#3~:0.5` at bars(5..7)
+      play notes`E3~:0.25 E3~:0.25 _:0.5 F3~:0.25 _:0.25 F#3~:0.25 F#3~:0.25 _:0.5 G3~:0.25 _:0.25 A3~:0.25 _:0.75` at bars(8..8)
+      play notes`G#3~:0.5 _:0.5 A3~:0.25 _:0.5 A#3~:0.5 _:0.75 C4~:0.5 _:0.5` at bars(9..11)
+      play notes`C3~:0.75 _:0.25 C#3~:0.5 _:0.5 C3~:2` at bars(12..12)
     }
   }
-
-  play Grain at bars(1..12)
-  play PickBass(volume: 0.9) at bars(1..12)
-  play SnareFlip(volume: 0.9) at bars(1..11)
-  play HatWork(volume: 0.55) at bars(5..12)
+  play Cutter at bars(1..12)
 }

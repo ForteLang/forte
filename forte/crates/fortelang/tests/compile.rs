@@ -794,3 +794,33 @@ fn sampler_pitch_automation_bends_held_audio_and_stays_bitexact_when_constant() 
     let b = fortelang::render_digest(&fortelang::compile_str(&dsong("")).unwrap(), 1.0);
     assert_ne!(a.f32_digest, b.f32_digest, "automating the duck release must change the carve");
 }
+
+#[test]
+fn a_song_bounces_its_own_mix_of_placed_blocks() {
+    // the mix-chop workflow: a block PLACES other blocks (which declare
+    // their own internal bounce samples), the song bounces that whole mix
+    // to one record and chops it — so a rest silences everything at once.
+    // This requires machine-internal sample_lets to resolve BEFORE the
+    // song-level bounce (collection order: blocks first, root last).
+    let src = r#"
+      block Machine {
+        block MachineSrc {
+          track K { instrument prisma(wave: "sine", cutoff: 0.5, sustain: 0.8)
+            play notes`C2:1 _:3` at bars(1..1) }
+        }
+        sample MachineS = bounce(MachineSrc, note: C2, beats: 4)
+        track Hit { instrument sampler(sample: MachineS, end: 0.667, sustain: 0.0, decay: 0.5)
+          play beat`x--- x--- x--- x---` at bars(1..1) }
+      }
+      song "MixChop" { tempo 120bpm
+        block Mix { play Machine at bars(1..1) }
+        sample MixS = bounce(Mix, note: C3, beats: 4)
+        track Cut { instrument sampler(sample: MixS, slices: 4, end: 0.667, choke: "on", sustain: 1.0, release: 0.05)
+          play notes`C3~:1 _:1 D3~:0.5 _:1.5` at bars(1..1) }
+      }"#;
+    let p = fortelang::compile_str(src).expect("mix bounce of placed blocks must compile");
+    let a = fortelang::render_digest(&p, 2.0);
+    assert!(a.rms > 0.0005, "the chopped mix must sound (rms {})", a.rms);
+    let b = fortelang::render_digest(&fortelang::compile_str(src).unwrap(), 2.0);
+    assert_eq!(a.f32_digest, b.f32_digest, "mix bounce must be bit-stable");
+}
