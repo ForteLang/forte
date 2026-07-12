@@ -1017,3 +1017,31 @@ fn dig_windows_by_source_section_name() {
     let errs = fortelang::check_with_loader(&bad, &fortelang::FsLoader, dirs).err().unwrap();
     assert!(errs.iter().any(|d| d.code == "E-DIG-005"));
 }
+
+#[test]
+fn space_reverb_characters_and_decay_are_real() {
+    // the new-generation reverb: three characters, decay that actually
+    // scales the tail, deterministic to the bit
+    let song = |args: &str| {
+        format!(
+            r#"song "V" {{ tempo 120bpm
+      track A {{ instrument prisma(wave: "saw", cutoff: 0.6, sustain: 0.8)
+        insert space({args})
+        play notes`C3:0.5 _:3.5` at bars(1..1) }} }}"#
+        )
+    };
+    let render = |args: &str| {
+        let p = fortelang::compile_str(&song(args)).expect("space song must compile");
+        fortelang::render_digest(&p, 6.0)
+    };
+    let room = render(r#"type: "room", decay: 0.5, mix: 0.5"#);
+    let hall = render(r#"type: "hall", decay: 0.5, mix: 0.5"#);
+    let hall2 = render(r#"type: "hall", decay: 0.5, mix: 0.5"#);
+    assert_eq!(hall.f32_digest, hall2.f32_digest, "space must be deterministic");
+    assert_ne!(room.f32_digest, hall.f32_digest, "characters must differ");
+    // decay scales the audible tail: long-decay render carries much more
+    // energy than short-decay once the dry note is gone
+    let short = render(r#"type: "hall", decay: 0.1, mix: 0.5"#);
+    let long = render(r#"type: "hall", decay: 0.95, mix: 0.5"#);
+    assert!(long.rms > short.rms * 1.05, "decay must lengthen the tail (short {} long {})", short.rms, long.rms);
+}

@@ -1914,7 +1914,7 @@ const INSTRUMENTS: &[&str] = &["sampler", "kit", "prisma", "mesh"];
 const EFFECTS: &[&str] =
     &["filter", "eq", "drive", "delay", "reverb", "comp", "chorus", "pump", "width", "crush",
       "stutter", "gate", "saturate", "transient", "parcomp", "exciter", "ringmod", "tapestop",
-      "limiter",
+      "limiter", "space",
       "vinyl"];
 
 /// Build an instrument device. Returns the device plus the root pitch that
@@ -2574,6 +2574,11 @@ fn build_effect(
             "stutter" => (DeviceKind::Stutter, &[("beats", 0), ("mix", 1)], &[]),
             "gate" => (DeviceKind::Gate, &[("depth", 0), ("beats", 1), ("duty", 2)], &[]),
             "limiter" => (DeviceKind::Limiter, &[("ceiling", 0), ("release", 1)], &[]),
+            "space" => (
+                DeviceKind::Space,
+                &[("size", 1), ("decay", 2), ("damp", 3), ("predelay", 4), ("mod", 5), ("width", 6), ("mix", 7)],
+                &[("type", 0, &["room", "plate", "hall"])],
+            ),
             "saturate" => (
                 DeviceKind::Saturate,
                 &[("drive", 1), ("tone", 2), ("mix", 3)],

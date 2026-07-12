@@ -46,6 +46,7 @@ pub enum DeviceKind {
     /// Tempo-synced pattern chopper (trance gate).
     Gate,
     Limiter,
+    Space,
     /// Saturation: tape/tube/fuzz waveshaping with tone control.
     Saturate,
     /// Transient shaper: independent attack/sustain gain.
@@ -88,7 +89,7 @@ impl DeviceStage {
 impl DeviceKind {
     /// Every device, in stage order. The browser and factories iterate this —
     /// adding a device here is the only registration step the UI needs.
-    pub const ALL: [DeviceKind; 28] = [
+    pub const ALL: [DeviceKind; 29] = [
         DeviceKind::Arpeggiator,
         DeviceKind::NoteTranspose,
         DeviceKind::NoteRepeat,
@@ -109,6 +110,7 @@ impl DeviceKind {
         DeviceKind::Stutter,
         DeviceKind::Gate,
         DeviceKind::Limiter,
+        DeviceKind::Space,
         DeviceKind::Saturate,
         DeviceKind::Transient,
         DeviceKind::ParComp,
@@ -141,6 +143,7 @@ impl DeviceKind {
             DeviceKind::Stutter => "Stutter",
             DeviceKind::Gate => "Gate",
             DeviceKind::Limiter => "Limiter",
+            DeviceKind::Space => "Space",
             DeviceKind::Saturate => "Saturate",
             DeviceKind::Transient => "Transient",
             DeviceKind::ParComp => "ParComp",
@@ -198,6 +201,7 @@ impl DeviceKind {
             DeviceKind::Stutter => &["Period", "Mix"],
             DeviceKind::Gate => &["Depth", "Period", "Duty"],
             DeviceKind::Limiter => &["Ceiling", "Release"],
+            DeviceKind::Space => &["Type", "Size", "Decay", "Damp", "Predelay", "Mod", "Width", "Mix"],
             DeviceKind::Saturate => &["Mode", "Drive", "Tone", "Mix"],
             DeviceKind::Transient => &["Attack", "Sustain"],
             DeviceKind::ParComp => &["Amount", "Drive", "Color"],
@@ -246,6 +250,7 @@ impl DeviceKind {
             DeviceKind::Stutter => vec![0.25, 0.0],
             DeviceKind::Gate => vec![0.9, 0.25, 0.5],
             DeviceKind::Limiter => vec![0.95, 0.3],
+            DeviceKind::Space => vec![1.0, 0.5, 0.5, 0.4, 0.1, 0.3, 0.8, 0.3],
             DeviceKind::Saturate => vec![0.0, 0.4, 0.7, 1.0],
             DeviceKind::Transient => vec![0.5, 0.5],
             DeviceKind::ParComp => vec![0.35, 0.5, 0.3],

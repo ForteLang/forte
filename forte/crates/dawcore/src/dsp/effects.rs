@@ -974,3 +974,169 @@ impl Limiter {
         (l * g, r * g)
     }
 }
+
+/// `space` — the new-generation reverb (#123): input diffusion into an
+/// 8-line FDN with Hadamard mixing, frequency-dependent decay, and slow
+/// deterministic delay-line modulation (fixed-phase LFOs) so the tail is
+/// alive instead of metallic. Three characters (room / plate / hall) pick
+/// the delay-length sets and diffusion. The old `reverb` is untouched —
+/// its digests are load-bearing.
+pub struct Space {
+    sr: f32,
+    pub kind: u8,      // 0 room, 1 plate, 2 hall
+    pub size: f32,     // 0..1 scales the line lengths (0.5..1.5x)
+    pub decay: f32,    // 0..1 → T60 0.2..12 s
+    pub damp: f32,     // 0..1 high-frequency decay in the feedback path
+    pub predelay: f32, // 0..1 → 0..150 ms
+    pub depth: f32,    // modulation depth 0..1 (→ 0..10 samples)
+    pub width: f32,
+    pub mix: f32,
+    pre: Vec<f32>,
+    pre_pos: usize,
+    ap_buf: [Vec<f32>; 4],
+    ap_pos: [usize; 4],
+    lines: [Vec<f32>; 8],
+    pos: [usize; 8],
+    len: [usize; 8],
+    lp: [f32; 8],
+    lfo: [f32; 8],
+    cfg: (u8, f32), // (kind, size) the buffers were tuned for
+}
+
+/// Mutually-prime base lengths (samples at 48 kHz, size = 1.0).
+const SPACE_SETS: [[usize; 8]; 3] = [
+    [571, 683, 811, 929, 1039, 1153, 1259, 1361],           // room
+    [887, 1019, 1129, 1249, 1381, 1499, 1613, 1733],        // plate
+    [1687, 1861, 2053, 2251, 2399, 2687, 2903, 3181],       // hall
+];
+const SPACE_APS: [usize; 4] = [107, 142, 277, 379];
+const SPACE_LFO_HZ: [f32; 8] = [0.11, 0.13, 0.17, 0.19, 0.23, 0.29, 0.31, 0.37];
+
+impl Space {
+    pub fn new(sr: f32) -> Self {
+        let mut s = Self {
+            sr,
+            kind: 2,
+            size: 0.5,
+            decay: 0.5,
+            damp: 0.4,
+            predelay: 0.1,
+            depth: 0.3,
+            width: 0.8,
+            mix: 0.3,
+            pre: vec![0.0; (sr * 0.16) as usize + 1],
+            pre_pos: 0,
+            ap_buf: std::array::from_fn(|i| vec![0.0; SPACE_APS[i] * 2 + 8]),
+            ap_pos: [0; 4],
+            lines: std::array::from_fn(|_| Vec::new()),
+            pos: [0; 8],
+            len: [0; 8],
+            lp: [0.0; 8],
+            lfo: [0.0; 8],
+            cfg: (255, -1.0),
+        };
+        s.retune();
+        s
+    }
+
+    /// Rebuild line lengths for (kind, size). Buffers keep 16 samples of
+    /// headroom past the longest modulated read.
+    pub fn retune(&mut self) {
+        if self.cfg == (self.kind, self.size) {
+            return;
+        }
+        self.cfg = (self.kind, self.size);
+        let set = &SPACE_SETS[(self.kind as usize).min(2)];
+        let scale = (0.5 + self.size * 1.0) as f64 * (self.sr as f64 / 48_000.0);
+        for (i, &base) in set.iter().enumerate() {
+            self.len[i] = ((base as f64 * scale) as usize).max(32);
+            self.lines[i] = vec![0.0; self.len[i] + 16];
+            self.pos[i] = 0;
+            self.lp[i] = 0.0;
+            // fixed, distinct starting phases — deterministic everywhere
+            self.lfo[i] = i as f32 * std::f32::consts::FRAC_PI_4;
+        }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        // predelay on the mono sum
+        let dry_l = l;
+        let dry_r = r;
+        let pd = ((self.predelay * 0.15 * self.sr) as usize).min(self.pre.len() - 1);
+        self.pre[self.pre_pos] = (l + r) * 0.5;
+        let read = (self.pre_pos + self.pre.len() - pd) % self.pre.len();
+        let mut x = self.pre[read];
+        self.pre_pos = (self.pre_pos + 1) % self.pre.len();
+
+        // input diffusion: 4 series allpasses (g = 0.7)
+        for (i, &n) in SPACE_APS.iter().enumerate() {
+            let buf = &mut self.ap_buf[i];
+            let p = self.ap_pos[i];
+            let d = buf[(p + buf.len() - n) % buf.len()];
+            let y = d - 0.7 * x;
+            buf[p] = x + 0.7 * y;
+            self.ap_pos[i] = (p + 1) % buf.len();
+            x = y;
+        }
+
+        // FDN read (modulated taps), per-line damping, T60 gains
+        let t60 = 0.2 + self.decay * self.decay * 11.8;
+        let dmp = self.damp * 0.85;
+        let mdep = self.depth * 10.0;
+        let mut v = [0.0f32; 8];
+        for i in 0..8 {
+            self.lfo[i] += 2.0 * std::f32::consts::PI * SPACE_LFO_HZ[i] / self.sr;
+            if self.lfo[i] > 2.0 * std::f32::consts::PI {
+                self.lfo[i] -= 2.0 * std::f32::consts::PI;
+            }
+            let m = (crate::dmath::sin(self.lfo[i]) + 1.0) * 0.5 * mdep;
+            let fpos = self.len[i] as f32 - 1.0 - m;
+            let ip = fpos.floor() as usize;
+            let frac = fpos - ip as f32;
+            let buf = &self.lines[i];
+            let blen = buf.len();
+            let a = buf[(self.pos[i] + blen - 1 - ip) % blen];
+            let b = buf[(self.pos[i] + blen - 2 - ip) % blen];
+            let tap = a + (b - a) * frac;
+            // frequency-dependent decay: high frequencies die first
+            self.lp[i] += (tap - self.lp[i]) * (1.0 - dmp);
+            let g = crate::dmath::powf(10.0, -3.0 * self.len[i] as f32 / (t60 * self.sr));
+            v[i] = self.lp[i] * g;
+        }
+        // Hadamard mixing (fast Walsh–Hadamard, normalized)
+        for stride in [1usize, 2, 4] {
+            let mut i = 0;
+            while i < 8 {
+                for j in i..i + stride {
+                    let a = v[j];
+                    let b = v[j + stride];
+                    v[j] = a + b;
+                    v[j + stride] = a - b;
+                }
+                i += stride * 2;
+            }
+        }
+        for w in &mut v {
+            *w *= 0.353_553_4; // 1/sqrt(8)
+        }
+        // write back with the diffused input (alternating sign decorrelates)
+        for (i, &vi) in v.iter().enumerate() {
+            let inj = if i % 2 == 0 { x } else { -x };
+            let p = self.pos[i];
+            self.lines[i][p] = vi + inj;
+            self.pos[i] = (p + 1) % self.lines[i].len();
+        }
+        // stereo taps: even lines left, odd lines right
+        let wl = (v[0] + v[2] + v[4] + v[6]) * 0.7;
+        let wr = (v[1] + v[3] + v[5] + v[7]) * 0.7;
+        // width: mid/side around the wet signal
+        let mid = (wl + wr) * 0.5;
+        let side = (wl - wr) * 0.5 * self.width;
+        let (wl, wr) = (mid + side, mid - side);
+        (
+            dry_l + (wl - dry_l) * self.mix,
+            dry_r + (wr - dry_r) * self.mix,
+        )
+    }
+}
