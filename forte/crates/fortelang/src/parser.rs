@@ -347,6 +347,7 @@ impl Parser {
                         let mut beats = 2.0;
                         let mut skip = 0.0;
                         let mut bars: Option<(u32, u32)> = None;
+                        let mut section: Option<(String, Pos)> = None;
                         if is_dig {
                             self.bump(); // `dig`
                             self.expect(Tok::LParen, "`(`");
@@ -392,6 +393,15 @@ impl Parser {
                                                 skip = n;
                                             }
                                         }
+                                        "section" if is_dig => {
+                                            let spos = self.pos();
+                                            if let Tok::Str(nm) = self.peek().clone() {
+                                                self.bump();
+                                                section = Some((nm, spos));
+                                            } else {
+                                                self.err("E-PARSE-024", "dig の section は文字列で指定します(例: section: \"drop\")");
+                                            }
+                                        }
                                         "bars" if is_dig => {
                                             if let Some((a, _u, _p)) = self.number("開始小節") {
                                                 if self.expect(Tok::DotDot, "`..`") {
@@ -405,7 +415,7 @@ impl Parser {
                                             self.err(
                                                 "E-PARSE-024",
                                                 if is_dig {
-                                                    format!("dig() に '{other}' という引数はありません(note, beats, skip, bars)")
+                                                    format!("dig() に '{other}' という引数はありません(note, beats, skip, bars, section)")
                                                 } else {
                                                     format!("bounce() に '{other}' という引数はありません(note, beats)")
                                                 },
@@ -419,7 +429,7 @@ impl Parser {
                                 }
                             }
                         }
-                        song.sample_lets.push(SampleLetAst { name, call, dig, note, beats, skip, bars, pos });
+                        song.sample_lets.push(SampleLetAst { name, call, dig, note, beats, skip, bars, section, pos });
                     }
                     "meter" => {
                         self.bump();

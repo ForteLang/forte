@@ -196,6 +196,9 @@ pub struct SampleLetAst {
     /// `dig` only: `bars: 5..8` — window by the SOURCE's bars (overrides
     /// skip/beats; the compiler knows the record's meter).
     pub bars: Option<(u32, u32)>,
+    /// `dig` only: `section: "drop"` — window by a section NAME declared in
+    /// the source song. Survives the source being rearranged.
+    pub section: Option<(String, Pos)>,
     pub pos: Pos,
 }
 

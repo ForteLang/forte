@@ -986,3 +986,34 @@ fn warp_bars_and_semis_automation_speak_music() {
     assert!((lane.points[0].value - 0.5).abs() < 1e-6);
     assert!((lane.points[1].value - (0.5 - 5.0 / 48.0)).abs() < 1e-6);
 }
+
+#[test]
+fn dig_windows_by_source_section_name() {
+    // dig(section: "drop") grabs the source's own named bars — rearranging
+    // the record moves the window with it
+    let dir = std::env::temp_dir().join(format!("forte-digsec-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("rec.forte"),
+        r#"song "Rec" { tempo 120bpm
+  section drop = bars(2..2)
+  track A { instrument prisma(wave: "sine", cutoff: 0.5, sustain: 0.8)
+    play notes`C2:1 E2:1 G2:1 C3:1` at bars(1..2) } }"#,
+    )
+    .unwrap();
+    let dirs = dir.to_str().unwrap();
+    let digger = r#"song "S" { tempo 120bpm
+  sample Rec = dig("./rec.forte", section: "drop")
+  track Cut { instrument sampler(sample: Rec, sustain: 1.0, release: 0.1)
+    play notes`C3~:4` at bars(1..1) } }"#;
+    let p = fortelang::compile_with_loader(digger, &fortelang::FsLoader, dirs).unwrap();
+    let cut = p.tracks.iter().find(|t| t.name == "Cut").unwrap();
+    // section drop = one 4/4 bar = 4 beats -> auto end 4/6
+    let end = cut.devices[0].params[7];
+    assert!((end - 4.0 / 6.0).abs() < 1e-6, "section window must drive auto end, got {end}");
+    // unknown section names are E-DIG-005 with the available list
+    let bad = digger.replace("\"drop\"", "\"nosuch\"");
+    let errs = fortelang::check_with_loader(&bad, &fortelang::FsLoader, dirs).err().unwrap();
+    assert!(errs.iter().any(|d| d.code == "E-DIG-005"));
+}

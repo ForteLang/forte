@@ -318,8 +318,17 @@ fn resolve_digs(
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default();
         stack.push(full.clone());
+        let mut src_sections: Vec<(String, (u32, u32))> = Vec::new();
         let project = (|| -> Result<Project, Vec<Diag>> {
             let mut module = parser::parse(&src)?;
+            // remember the source's section names for `section:` windowing
+            if let Some(song) = &module.song {
+                src_sections =
+                    song.sections.iter().map(|x| (x.name.clone(), x.bars)).collect();
+            } else if let Some(b) = module.blocks.last() {
+                src_sections =
+                    b.body.sections.iter().map(|x| (x.name.clone(), x.bars)).collect();
+            }
             let mut mdiags = Vec::new();
             resolve_imports(&mut module, &module_dir, loader, &mut Vec::new(), &mut mdiags);
             let massets = resolve_assets(&module, &module_dir, loader, &mut mdiags);
@@ -344,8 +353,29 @@ fn resolve_digs(
             }
         };
         let record_len = dawcore::bounce::arrangement_len(&project);
+        // `section: "drop"` resolves to the SOURCE's declared bars — it
+        // survives the record being rearranged, unlike skip/beats
+        let window_bars = match &sl.section {
+            Some((nm, spos)) => match src_sections.iter().find(|(n, _)| n == nm) {
+                Some((_, b)) => Some(*b),
+                None => {
+                    let names: Vec<&str> =
+                        src_sections.iter().map(|(n, _)| n.as_str()).collect();
+                    diags.push(Diag::new(
+                        "E-DIG-005",
+                        *spos,
+                        format!(
+                            "dig 先に section '{nm}' がありません(あるもの: {})",
+                            if names.is_empty() { "なし".to_string() } else { names.join(", ") }
+                        ),
+                    ));
+                    None
+                }
+            },
+            None => sl.bars,
+        };
         // `bars: a..b` windows by the SOURCE's meter — no beat arithmetic
-        let (want_skip, want_beats) = match sl.bars {
+        let (want_skip, want_beats) = match window_bars {
             Some((a, b)) if a >= 1 && b >= a => {
                 let bpb = project.time_sig.0 as f64 * 4.0 / project.time_sig.1 as f64;
                 ((a - 1) as f64 * bpb, (b - a + 1) as f64 * bpb)
