@@ -1,0 +1,38 @@
+// glitch-11 — cutting room choir: the vowel wall frozen at 3 % and CARVED
+// — the gate's duty cycle is the melody here, opening and closing over
+// drops falling into a long dark delay, the floor sliding underneath.
+import { FreezeChoirHard, CaveDrip } from "../../wrapped/glitchset.forte"
+import { SubDeep } from "../../wrapped/bassworks.forte"
+import { WoodTick } from "../../wrapped/glitchset.forte"
+
+song "Glitch 11 — Cutting Room Choir" {
+  desc "The vowel wall frozen and carved — the gate's duty cycle is the melody, over cave drops and a sliding floor."
+  artist "Forte Essentials"
+  tempo 100bpm
+  swing 0.55
+  master 1.6
+  key C minor
+
+  block Wall : FreezeChoirHard {
+    track Wall {
+      automate gate.duty from 0.65 to 0.25 over bars(3..4)
+      automate gate.duty from 0.25 to 0.65 over bars(5..5)
+      automate gate.duty from 0.65 to 0.2 over bars(7..8)
+      automate gate.duty from 0.2 to 0.75 over bars(9..9)
+      automate gate.duty from 0.75 to 0.15 over bars(11..12)
+      // the freeze deepens at the very end — the vowel hangs
+      automate stretch from 0.03 to 0.012 over bars(12..12)
+      play notes`C3~:8` at bars(1..2)
+      play notes`D#3~:8` at bars(3..4)
+      play notes`C3~:8` at bars(5..6)
+      play notes`A#2~:8` at bars(7..8)
+      play notes`C3~:8` at bars(9..10)
+      play notes`G3~:8` at bars(11..12)
+    }
+  }
+
+  play Wall at bars(1..12)
+  play SubDeep(volume: 0.85) at bars(1..12)
+  play CaveDrip(volume: 0.8) at bars(3..12)
+  play WoodTick(volume: 0.55) at bars(5..10)
+}

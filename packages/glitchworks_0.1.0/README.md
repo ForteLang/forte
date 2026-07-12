@@ -16,6 +16,44 @@ House rules, learned by ear:
 
 ## Listening: the songbook (`songs/`, ~30 s each)
 
+Two shelves:
+
+- **`songs/glitch/`** — the main event: twenty CHOP-FIRST songs. Every one
+  is arranged the sketch-arsenal way — song-local blocks inherit the
+  machines and re-write their cuts, with the chop parameters RIDDEN across
+  the song (stutter levers at the turns, windows walking, granular
+  freezes, tapestop endings, pitch-dive finales). The groove comes from
+  the cuts.
+- **`songs/sampler_sample/`** — the earlier 34 palette showcases: the
+  machines played straight, one mood each. Kept as the reference shelf.
+
+### `glitch/` tracklist
+
+| # | thesis |
+| --- | --- |
+| 01 First Cut | a kick LINE that eats itself; piano re-cut tighter until the power dies |
+| 02 Window Walker | the dusk ensemble scrubbed as a record, upright walking under it |
+| 03 Stutter Budget | house floor; the string record's stutter lever pushed further every turn |
+| 04 Half Heart | the break at doom speed, lunging; it freezes mid-air at the end |
+| 05 Amen Ledger | jungle: the break re-cut every pass, an 808 sub that only slides |
+| 06 Funk Fraction | guitar+bass+clap glued as ONE grain, re-cut against a self-editing backbeat |
+| 07 Acid Receipt | the 303 slide on audio; the lane ridden down a fourth at the end |
+| 08 Brass Debt | dub: one glued brass stab choked into answers, tape dying at each turn |
+| 09 Cartridge Splinter | chip ensemble splintered over the body kit; the cartridge jams and gets pulled |
+| 10 Violin Economy | a violin phrase and the sampler's opinion of it, over a heartbeat |
+| 11 Cutting Room Choir | the frozen vowel wall CARVED — the gate's duty cycle is the melody |
+| 12 Pedalboard Alley | fuzz→wah bass, funk guitar recut with rests, stomp-box music sampled |
+| 13 Backspin Economy | everything runs backwards at least once |
+| 14 Piano Reassembly | the upright taken apart bar by bar, the music box answering in mirror |
+| 15 Vox Machine | impossible syllables answered by a voice that only slides |
+| 16 Bell Ledger | a music box forwards and backwards at once, a bell bent on the platter |
+| 17 Freeze Tag | granular freezes traded like tags; the last bar hangs mid-air |
+| 18 Tape Debt | keys losing power at every turn, paying more interest each time |
+| 19 Scrub Wars | two records fighting over one turntable, trading scrubbed windows |
+| 20 Last Cut | the closer: the whole song held as a chord, ridden down, power cut |
+
+### `sampler_sample/` (the reference shelf)
+
 Openers/closers: `cold-open`, `last-window`.
 
 | mood | songs |

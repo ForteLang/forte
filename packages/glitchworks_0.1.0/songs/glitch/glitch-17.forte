@@ -1,0 +1,45 @@
+// glitch-17 — freeze tag: granular freezes traded like tags — the ride
+// shimmer slows to a standstill while the square 303 keeps rolling, then
+// the whole song is IT and hangs mid-air on the last bar.
+import { RideGrain } from "../../wrapped/grooveworks.forte"
+import { SquareRoll } from "../../wrapped/bassworks.forte"
+import { KickStack } from "../../wrapped/drumcolor.forte"
+import { ClapRun } from "../../wrapped/grooveworks.forte"
+
+song "Glitch 17 — Freeze Tag" {
+  desc "Granular freezes traded like tags: the ride slows to a standstill, the square 303 keeps rolling, the last bar hangs mid-air."
+  artist "Forte Essentials"
+  tempo 126bpm
+  swing 0.54
+  master 0.9
+  key C minor
+
+  block Shimmer : RideGrain {
+    track Grain {
+      automate stretch from 0.25 to 0.05 over bars(4..4)
+      automate stretch from 0.05 to 0.25 over bars(5..5)
+      automate stretch from 0.25 to 0.04 over bars(8..8)
+      automate stretch from 0.04 to 0.25 over bars(9..9)
+      automate stretch from 0.25 to 0.05 over bars(12..12)
+      automate stretch from 0.05 to 0.25 over bars(13..13)
+      // the tag: the ride freezes for good
+      automate stretch from 0.25 to 0.015 over bars(16..16)
+      play notes`C3~:8 D3~:4 C3~:4` at bars(1..8)
+      play notes`C3~:8 A#2~:4 C3~:4` at bars(9..16)
+    }
+  }
+
+  block Roll : SquareRoll {
+    track Roll {
+      automate decay from 0.4 to 0.12 over bars(15..16)
+      play notes`C2:0.25 D2:0.25 _:0.25 F2:0.25 C2:0.25 _:0.25 G2:0.25 A2:0.25 C2:0.5 _:0.5 D#2:0.25 C#2:0.25 _:0.5` at bars(1..7)
+      play notes`_:3.5 A#2:0.125 G#2:0.125 F2:0.125 D2:0.125` at bars(8..8)
+      play notes`C2:0.25 D2:0.25 F2:0.25 _:0.25 C2:0.125 C#2:0.125 G2:0.25 A2:0.25 _:0.25 C2:0.25 A#2:0.125 G#2:0.125 F2:0.25 D#2:0.25 C#2:0.25 C2:0.25 _:0.5` at bars(9..16)
+    }
+  }
+
+  play KickStack at bars(1..16)
+  play Roll(volume: 0.85) at bars(2..16)
+  play Shimmer(volume: 0.8) at bars(1..16)
+  play ClapRun(volume: 0.65) at bars(5..14)
+}

@@ -1,0 +1,17 @@
+// slow-postcards — strings on the wrong tape speed, a solo violin
+// answering from another room, a heartbeat carrying the mail.
+import { HeartSub } from "../../wrapped/glitchset.forte"
+import { StringStretch, ViolinSolo } from "../../wrapped/melodyworks.forte"
+
+song "Slow Postcards" {
+  desc "Strings on the wrong tape speed, a violin from another room, a heartbeat carrying the mail."
+  artist "Forte Essentials"
+  tempo 70bpm
+  swing 0.5
+  master 2.0
+  key A minor
+
+  play StringStretch at bars(1..9)
+  play HeartSub at bars(2..9)
+  play ViolinSolo(volume: 0.85) at bars(3..9)
+}

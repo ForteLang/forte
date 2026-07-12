@@ -1,0 +1,19 @@
+// gravity-off — the square 303 rolls over itself while the chip
+// cartridge floats by; a reversed cymbal turns the room over.
+import { EnsembleChip, BodyBeat } from "../../wrapped/glitchset.forte"
+import { SquareRoll } from "../../wrapped/bassworks.forte"
+import { CrashRise } from "../../wrapped/textureworks.forte"
+
+song "Gravity Off" {
+  desc "A square 303 rolling over itself, a floating chip cartridge, the room turned over."
+  artist "Forte Essentials"
+  tempo 140bpm
+  swing 0.52
+  master 1.1
+  key E minor
+
+  play BodyBeat at bars(1..17)
+  play SquareRoll(volume: 0.8) at bars(3..17)
+  play EnsembleChip(volume: 0.7) at bars(7..16)
+  play CrashRise(volume: 0.7) at bars(12..12)
+}

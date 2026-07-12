@@ -1,0 +1,38 @@
+// glitch-06 — funk fraction: the glued funk grain (guitar+bass+clap as ONE
+// sample) re-cut against a backbeat that keeps re-editing itself; the
+// grain's stutter trips at the turns and the cuts tighten to nothing.
+import { EnsembleFunk } from "../../wrapped/glitchset.forte"
+import { PickBass } from "../../wrapped/bassworks.forte"
+import { SnareFlip, HatWork } from "../../wrapped/grooveworks.forte"
+
+song "Glitch 06 — Funk Fraction" {
+  desc "The glued funk grain re-cut against a self-editing backbeat, stutters at the turns, cuts tightening to nothing."
+  artist "Forte Essentials"
+  tempo 104bpm
+  swing 0.58
+  master 1.2
+  key C minor
+
+  block Grain : EnsembleFunk {
+    track Grain {
+      insert stutter(beats: 0.25, mix: 0.0)
+      automate stutter.mix from 0.0 to 0.55 over bars(4..4)
+      automate stutter.mix from 0.55 to 0.0 over bars(5..5)
+      automate stutter.mix from 0.0 to 0.7 over bars(8..8)
+      automate stutter.mix from 0.7 to 0.0 over bars(9..9)
+      automate decay from 0.4 to 0.12 over bars(11..12)
+      insert tapestop(amount: 0.0)
+      automate tapestop.amount from 0.0 to 0.9 over bars(12..12)
+      play notes`C3:0.25 D3:0.25 _:0.25 F3:0.25 G3:0.25 _:0.25 A3:0.25 C3:0.25 _:0.5 D#3:0.25 F#3:0.25 _:0.25 B3:0.25 C3:0.25 _:0.25` at bars(1..3)
+      play notes`C3:0.25 D3:0.125 D#3:0.125 F3:0.25 _:0.25 G3:0.25 A3:0.125 A#3:0.125 B3:0.25 _:0.25 C3:0.25 G3:0.25 D#3:0.25 C3:0.25 _:0.25 F3:0.25 _:0.5` at bars(4..4)
+      play notes`C3:0.25 _:0.25 D3:0.25 F3:0.25 _:0.25 G3:0.25 C3:0.25 _:0.25 A3:0.25 _:0.5 F#3:0.25 D#3:0.25 _:0.25 C3:0.25 _:0.25` at bars(5..7)
+      play notes`C3:0.25 D3:0.125 D#3:0.125 F3:0.25 _:0.25 G3:0.25 A3:0.125 A#3:0.125 B3:0.25 _:0.25 C3:0.25 G3:0.25 D#3:0.25 C3:0.25 _:0.25 F3:0.25 _:0.5` at bars(8..8)
+      play notes`C3:0.25 D3:0.25 _:0.25 F3:0.25 G3:0.25 _:0.25 A3:0.25 C3:0.25 _:0.5 D#3:0.25 F#3:0.25 _:0.25 B3:0.25 C3:0.25 _:0.25` at bars(9..12)
+    }
+  }
+
+  play Grain at bars(1..12)
+  play PickBass(volume: 0.9) at bars(1..12)
+  play SnareFlip(volume: 0.9) at bars(1..11)
+  play HatWork(volume: 0.55) at bars(5..12)
+}

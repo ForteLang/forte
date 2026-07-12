@@ -1,0 +1,34 @@
+// glitch-07 — acid receipt: the true 303 slide on AUDIO — accents bark,
+// ties bend, the stutter lever trips the line at the turn, and at the end
+// the whole lane is pitch-ridden down a fourth and cut.
+import { GlideAcid } from "../../wrapped/glitchset.forte"
+import { KickStack } from "../../wrapped/drumcolor.forte"
+import { ClapRun } from "../../wrapped/grooveworks.forte"
+
+song "Glitch 07 — Acid Receipt" {
+  desc "Audio-domain 303: barking accents, bending ties, a stutter trip at the turn, the lane ridden down a fourth at the end."
+  artist "Forte Essentials"
+  tempo 128bpm
+  swing 0.54
+  master 0.85
+  key C minor
+
+  block Line : GlideAcid {
+    track Line {
+      insert stutter(beats: 0.25, mix: 0.0)
+      automate stutter.mix from 0.0 to 0.6 over bars(8..8)
+      automate stutter.mix from 0.6 to 0.0 over bars(9..9)
+      automate stutter.mix from 0.0 to 0.7 over bars(12..12)
+      automate stutter.mix from 0.7 to 0.0 over bars(13..13)
+      automate pitch from 0.5 to 0.396 over bars(16..16)
+      play notes`C2!:0.25 C2~:0.25 D#2~:0.5 C2:0.25 _:0.25 G2!~:0.5 F2~:0.5 C2:0.25 C2:0.25 A#1~:0.5 C2!:0.5` at bars(1..7)
+      play notes`C2!:0.25 C2~:0.25 F2~:0.5 D#2:0.25 _:0.25 G#2!~:0.75 G2~:0.75 C2!:0.5 _:0.5` at bars(8..8)
+      play notes`C2!:0.25 C2~:0.25 D#2~:0.5 C2:0.25 _:0.25 G2!~:0.5 F2~:0.5 C2:0.25 C2:0.25 A#1~:0.5 C2!:0.5` at bars(9..15)
+      play notes`C2!:0.25 C2~:0.25 F2~:0.5 D#2:0.25 _:0.25 G#2!~:0.75 G2~:0.75 C2!~:1` at bars(16..16)
+    }
+  }
+
+  play KickStack at bars(1..16)
+  play Line(volume: 0.9) at bars(2..16)
+  play ClapRun(volume: 0.7) at bars(5..16)
+}

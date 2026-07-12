@@ -1,0 +1,19 @@
+// wool-socks — the soft lofi side: dusty carved e-piano, a deep sub that
+// dives at the turn, a wooden clock, vibes smeared into a halo.
+import { WoodTick } from "../../wrapped/glitchset.forte"
+import { EPianoDust, VibesFreeze } from "../../wrapped/melodyworks.forte"
+import { SubDeep } from "../../wrapped/bassworks.forte"
+
+song "Wool Socks" {
+  desc "Dusty carved keys, a diving sub, a wooden clock, vibes smeared into a halo."
+  artist "Forte Essentials"
+  tempo 80bpm
+  swing 0.58
+  master 1.2
+  key D minor
+
+  play EPianoDust(volume: 0.9) at bars(1..10)
+  play SubDeep(volume: 0.85) at bars(2..10)
+  play WoodTick(volume: 0.65) at bars(3..9)
+  play VibesFreeze(volume: 0.7) at bars(5..10)
+}

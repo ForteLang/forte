@@ -1,0 +1,48 @@
+// glitch-03 — stutter budget: octaver house floor, hats that never repeat,
+// and a string record whose stutter lever gets pushed further at every
+// turn — 40 %, 55 %, 70 %, then all the way over.
+import { LowKit, StutterStrings, EnsembleGlass } from "../../wrapped/glitchset.forte"
+import { OctaveHouse } from "../../wrapped/bassworks.forte"
+import { HatWork } from "../../wrapped/grooveworks.forte"
+
+song "Glitch 03 — Stutter Budget" {
+  desc "Octaver house floor, never-repeating hats, a string record whose stutter lever goes further over at every turn."
+  artist "Forte Essentials"
+  tempo 124bpm
+  swing 0.53
+  master 1.0
+  key C minor
+
+  block Hats : HatWork {}
+
+  block Lever : StutterStrings {
+    track Lever {
+      automate stutter.mix from 0.0 to 0.4 over bars(4..4)
+      automate stutter.mix from 0.4 to 0.0 over bars(5..5)
+      automate stutter.mix from 0.0 to 0.55 over bars(8..8)
+      automate stutter.mix from 0.55 to 0.0 over bars(9..9)
+      automate stutter.mix from 0.0 to 0.7 over bars(12..12)
+      automate stutter.mix from 0.7 to 0.0 over bars(13..13)
+      automate stutter.mix from 0.0 to 0.9 over bars(16..16)
+      play notes`C3~:8 A#2~:4 C3~:4` at bars(1..4)
+      play notes`C3~:8 D#3~:4 C3~:4` at bars(5..8)
+      play notes`C3~:8 A#2~:4 C3~:4` at bars(9..12)
+      play notes`F3~:8 D#3~:4 C3~:4` at bars(13..16)
+    }
+  }
+
+  // the shimmer exists only where the hats hit — the inverted sidechain
+  block Shimmer : EnsembleGlass {
+    track Shimmer {
+      insert duck(from: Hats, mode: "key", amount: 1.0, attack: 0.06, release: 0.16, shape: 0.7)
+      play notes`C4~:8 D#4~:4 C4~:4` at bars(9..12)
+      play notes`C4~:8 F4~:4 D#4~:4` at bars(13..16)
+    }
+  }
+
+  play LowKit at bars(1..16)
+  play OctaveHouse(volume: 0.8) at bars(2..16)
+  play Hats(volume: 0.8) at bars(5..16)
+  play Lever(volume: 0.8) at bars(3..16)
+  play Shimmer(volume: 0.8) at bars(9..16)
+}

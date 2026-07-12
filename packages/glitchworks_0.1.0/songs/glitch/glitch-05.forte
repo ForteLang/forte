@@ -1,0 +1,50 @@
+// glitch-05 — amen ledger: jungle arithmetic. The busy break re-cut
+// differently every pass with the stutter lever at the turns, an 808 sub
+// that only ever SLIDES, and a pitched-down voice cut into syllables
+// that never existed. The last four bars tighten until only cuts remain.
+import { AmenTwo } from "../../wrapped/grooveworks.forte"
+import { GlideSub } from "../../wrapped/glitchset.forte"
+import { VoxCutUp } from "../../wrapped/melodyworks.forte"
+
+song "Glitch 05 — Amen Ledger" {
+  desc "Jungle arithmetic: the break re-cut every pass, an 808 sub that only slides, a voice in impossible syllables."
+  artist "Forte Essentials"
+  tempo 160bpm
+  swing 0.52
+  master 1.0
+  key C minor
+
+  block Break : AmenTwo {
+    track Cut {
+      automate stutter.mix from 0.0 to 0.65 over bars(8..8)
+      automate stutter.mix from 0.65 to 0.0 over bars(9..9)
+      automate stutter.mix from 0.0 to 0.75 over bars(16..16)
+      automate stutter.mix from 0.75 to 0.0 over bars(17..17)
+      automate decay from 0.5 to 0.12 over bars(17..20)
+      play notes`C3:0.25 C#3:0.25 _:0.25 D#3:0.25 G3:0.5 _:0.5 A3:0.25 C3:0.25 _:0.25 D3:0.25 F3:0.25 A#3:0.25 C3:0.25 _:0.25` at bars(1..7)
+      play notes`C3:0.25 C#3:0.125 D3:0.125 D#3:0.25 _:0.25 G3:0.25 A3:0.125 A#3:0.125 B3:0.25 C4:0.25 _:0.25 A#3:0.125 G3:0.125 D#3:0.25 C3:0.25 G3:0.25 C3:0.25 _:0.5` at bars(8..8)
+      play notes`C3:0.25 _:0.25 C#3:0.25 D#3:0.25 G3:0.25 G#3:0.25 _:0.5 A3:0.25 A#3:0.25 C3:0.5 D3:0.125 D#3:0.125 F3:0.25 _:0.5` at bars(9..15)
+      play notes`C3:0.25 C#3:0.125 D3:0.125 D#3:0.25 _:0.25 G3:0.25 A3:0.125 A#3:0.125 B3:0.25 C4:0.25 _:0.25 A#3:0.125 G3:0.125 D#3:0.25 C3:0.25 G3:0.25 C3:0.25 _:0.5` at bars(16..16)
+      play notes`C3:0.25 C#3:0.25 _:0.25 D#3:0.25 G3:0.5 _:0.5 A3:0.25 C3:0.25 _:0.25 D3:0.25 F3:0.25 A#3:0.25 C3:0.25 _:0.25` at bars(17..20)
+    }
+    track Rev {
+      play notes`_:3.5 B3:0.25 G3:0.25` at bars(4..4)
+      play notes`_:3.25 D#3:0.25 F3:0.25 A#3:0.25` at bars(8..8)
+      play notes`_:3.5 B3:0.25 G3:0.25` at bars(12..12)
+      play notes`_:3.25 D#3:0.25 F3:0.25 A#3:0.25` at bars(16..16)
+      play notes`_:2 C3~:2` at bars(20..20)
+    }
+  }
+
+  block Sub : GlideSub {
+    track Slide {
+      play notes`C1~:3 D#1~:1 C1~:2 G1~:1 F1~:1` at bars(1..8)
+      play notes`C1~:3 A#0~:1 C1~:2 F1~:1 G1~:1` at bars(9..16)
+      play notes`C1~:3 D#1~:1 C1~:2 G1~:1 F1~:1` at bars(17..20)
+    }
+  }
+
+  play Break at bars(1..20)
+  play Sub(volume: 0.9) at bars(1..20)
+  play VoxCutUp(volume: 0.8) at bars(9..20)
+}

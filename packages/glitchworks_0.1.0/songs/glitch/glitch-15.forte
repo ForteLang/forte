@@ -1,0 +1,40 @@
+// glitch-15 — vox machine: a voice microsampled into syllables that never
+// existed, answered by a voice that only ever SLIDES; the dark body kit
+// underneath, and a wobble bass carved by a gate someone keeps steering.
+import { VoxCutUp } from "../../wrapped/melodyworks.forte"
+import { GlideVox, BodyBeat } from "../../wrapped/glitchset.forte"
+import { WobbleGate } from "../../wrapped/bassworks.forte"
+
+song "Glitch 15 — Vox Machine" {
+  desc "A voice cut into impossible syllables answered by a voice that only slides, over the body kit and a steered wobble."
+  artist "Forte Essentials"
+  tempo 120bpm
+  swing 0.55
+  master 1.25
+  key C minor
+
+  block Syllables : VoxCutUp {
+    track Cut {
+      insert stutter(beats: 0.125, mix: 0.0)
+      automate stutter.mix from 0.0 to 0.6 over bars(8..8)
+      automate stutter.mix from 0.6 to 0.0 over bars(9..9)
+      automate stutter.mix from 0.0 to 0.75 over bars(16..16)
+      play notes`C4:0.25 _:0.25 D4:0.25 F4:0.25 _:0.5 G4:0.25 A4:0.25 _:0.5 C4:0.5 _:0.25 D#4:0.25 _:0.5` at bars(1..7)
+      play notes`C4:0.25 D4:0.125 D#4:0.125 F4:0.25 _:0.25 G4:0.125 G#4:0.125 A4:0.25 A#4:0.25 _:0.25 C4:0.25 D#4:0.125 D4:0.125 _:0.25 F4:0.25 C4:0.25 _:0.75` at bars(8..8)
+      play notes`C4:0.25 _:0.25 D4:0.25 F4:0.25 _:0.5 G4:0.25 A4:0.25 _:0.5 C4:0.5 _:0.25 D#4:0.25 _:0.5` at bars(9..16)
+    }
+  }
+
+  block Answer : GlideVox {
+    track Slide {
+      play notes`_:2 C4~:1 A#3~:1` at bars(5..8)
+      play notes`_:2 D#4~:1 C4~:1` at bars(9..12)
+      play notes`_:1 C4~:1.5 D4~:0.5 C4~:1` at bars(13..16)
+    }
+  }
+
+  play BodyBeat at bars(1..16)
+  play WobbleGate(volume: 0.85) at bars(2..16)
+  play Syllables(volume: 0.9) at bars(3..16)
+  play Answer(volume: 0.7) at bars(5..16)
+}

@@ -1,0 +1,41 @@
+// glitch-13 — backspin economy: everything here runs backwards at least
+// once — the percussion spins into every downbeat, the snare throws
+// reversed pre-echoes, and the 606 rolls a different floor each bar.
+import { BackspinPerc } from "../../wrapped/glitchset.forte"
+import { SnareRainbow } from "../../wrapped/drumcolor.forte"
+import { KickRumble } from "../../wrapped/grooveworks.forte"
+import { SubPulse } from "../../wrapped/bassworks.forte"
+
+song "Glitch 13 — Backspin Economy" {
+  desc "Everything runs backwards at least once: spins into every downbeat, reversed snare pre-echoes, a 606 rolling the floor."
+  artist "Forte Essentials"
+  tempo 98bpm
+  swing 0.57
+  master 1.5
+  key C minor
+
+  block Spin : BackspinPerc {
+    track Spin {
+      play notes`_:3 C3~:1` at bars(1..2)
+      play notes`_:2.5 C3~:0.75 D3~:0.75` at bars(3..4)
+      play notes`_:3 D3~:1` at bars(5..6)
+      play notes`_:2 C3~:1 D3~:1` at bars(7..8)
+      play notes`_:3 C3~:1` at bars(9..10)
+      play notes`_:1.5 C3~:1 D3~:0.75 C3~:0.75` at bars(11..12)
+    }
+  }
+
+  block Floor : SubPulse {
+    track Pulse {
+      insert duck(from: KickRumble, amount: 0.75, attack: 0.02, release: 0.15, shape: 0.7)
+      play notes`C1~:6 G1~:2 C1~:4 A#0~:4` at bars(1..4)
+      play notes`C1~:6 D#1~:2 C1~:4 G0~:4` at bars(5..8)
+      play notes`C1~:6 G1~:2 A#0~:4 C1~:4` at bars(9..12)
+    }
+  }
+
+  play KickRumble at bars(1..12)
+  play SnareRainbow(volume: 0.9) at bars(1..11)
+  play Floor(volume: 0.9) at bars(1..12)
+  play Spin(volume: 0.8) at bars(3..12)
+}

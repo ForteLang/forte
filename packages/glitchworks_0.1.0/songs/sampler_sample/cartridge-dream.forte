@@ -1,0 +1,18 @@
+// cartridge-dream — the broken cartridge plays itself to sleep: chip
+// ensemble, the pico arp, a low kit, a hand-bent bell for the melody.
+import { EnsembleChip, GlideBell, LowKit } from "../../wrapped/glitchset.forte"
+import { ChipArp } from "../../wrapped/melodyworks.forte"
+
+song "Cartridge Dream" {
+  desc "A broken cartridge plays itself to sleep: chip grain, pico arp, low kit, a bent bell."
+  artist "Forte Essentials"
+  tempo 108bpm
+  swing 0.53
+  master 1.15
+  key C minor
+
+  play LowKit at bars(1..13)
+  play EnsembleChip(volume: 0.8) at bars(2..13)
+  play ChipArp(volume: 0.65) at bars(5..12)
+  play GlideBell(volume: 0.75) at bars(7..13)
+}

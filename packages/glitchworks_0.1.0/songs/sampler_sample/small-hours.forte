@@ -1,0 +1,17 @@
+// small-hours — the choir-string breath alone with the drips and the
+// heartbeat; one far bell marks the only hour that matters.
+import { EnsembleChoir, CaveDrip, HeartSub, FarBell } from "../../wrapped/glitchset.forte"
+
+song "Small Hours" {
+  desc "A choir-string breath, drips, a heartbeat, one far bell for the only hour that matters."
+  artist "Forte Essentials"
+  tempo 72bpm
+  swing 0.5
+  master 2.1
+  key C minor
+
+  play EnsembleChoir at bars(1..9)
+  play HeartSub at bars(2..9)
+  play CaveDrip(volume: 0.6) at bars(3..9)
+  play FarBell(volume: 0.75) at bars(6..9)
+}

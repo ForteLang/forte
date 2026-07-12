@@ -1,0 +1,34 @@
+// glitch-18 — tape debt: keys that lose power at every fourth bar and pay
+// a little more interest each time — brushed shuffle, an upright walking,
+// the snare edited hit by hit; the last stop is never paid back.
+import { TapeDropKeys } from "../../wrapped/glitchset.forte"
+import { BrushShuffle } from "../../wrapped/grooveworks.forte"
+import { UprightWalk } from "../../wrapped/bassworks.forte"
+import { SnareRainbow } from "../../wrapped/drumcolor.forte"
+
+song "Glitch 18 — Tape Debt" {
+  desc "Keys losing power at every turn and paying more interest each time; brushes, an upright, a hit-by-hit snare."
+  artist "Forte Essentials"
+  tempo 96bpm
+  swing 0.6
+  master 1.15
+  key F minor
+
+  block Power : TapeDropKeys {
+    track Power {
+      automate tapestop.amount from 0.0 to 0.6 over bars(4..4)
+      automate tapestop.amount from 0.6 to 0.0 over bars(5..5)
+      automate tapestop.amount from 0.0 to 0.8 over bars(8..8)
+      automate tapestop.amount from 0.8 to 0.0 over bars(9..9)
+      automate tapestop.amount from 0.0 to 1.0 over bars(12..12)
+      play notes`C3~:8 D3~:4 C3~:4` at bars(1..4)
+      play notes`C3~:8 A#2~:4 C3~:4` at bars(5..8)
+      play notes`C3~:8 D3~:4 C3~:4` at bars(9..12)
+    }
+  }
+
+  play BrushShuffle at bars(1..12)
+  play UprightWalk(volume: 0.9) at bars(1..12)
+  play Power(volume: 0.9) at bars(1..12)
+  play SnareRainbow(volume: 0.75) at bars(5..11)
+}

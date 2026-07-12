@@ -1,0 +1,20 @@
+// rainy-arcade — rain on the arcade window: bleeps inside the weather,
+// a deep sub, one far bell closing the night.
+import { FarBell } from "../../wrapped/glitchset.forte"
+import { ChipArp } from "../../wrapped/melodyworks.forte"
+import { SubDeep } from "../../wrapped/bassworks.forte"
+import { RainField } from "../../wrapped/textureworks.forte"
+
+song "Rainy Arcade" {
+  desc "Rain on the arcade glass, bleeps inside the weather, a deep sub, one far bell."
+  artist "Forte Essentials"
+  tempo 90bpm
+  swing 0.55
+  master 1.5
+  key D minor
+
+  play RainField at bars(1..11)
+  play SubDeep(volume: 0.85) at bars(2..11)
+  play ChipArp(volume: 0.6) at bars(3..10)
+  play FarBell(volume: 0.8) at bars(6..11)
+}

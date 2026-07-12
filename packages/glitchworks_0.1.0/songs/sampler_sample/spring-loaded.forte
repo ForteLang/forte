@@ -1,0 +1,19 @@
+// spring-loaded — muted funk plucks over talking toms, the pico arp
+// winding the spring, keys losing power at the turn.
+import { TomGroove, TapeDropKeys } from "../../wrapped/glitchset.forte"
+import { PickBass } from "../../wrapped/bassworks.forte"
+import { ChipArp } from "../../wrapped/melodyworks.forte"
+
+song "Spring Loaded" {
+  desc "Muted funk plucks over talking toms, a pico arp winding the spring, keys losing power."
+  artist "Forte Essentials"
+  tempo 126bpm
+  swing 0.57
+  master 1.1
+  key G minor
+
+  play TomGroove at bars(1..16)
+  play PickBass(volume: 0.85) at bars(2..16)
+  play ChipArp(volume: 0.6) at bars(5..15)
+  play TapeDropKeys(volume: 0.75) at bars(9..16)
+}

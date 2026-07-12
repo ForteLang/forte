@@ -1,0 +1,19 @@
+// eight-mirrors — glass house: the octaver pedal walks the floor, glass
+// keys shimmer inside a glass pad, a morse signal blinks far right.
+import { EnsembleGlass, LowKit } from "../../wrapped/glitchset.forte"
+import { OctaveHouse } from "../../wrapped/bassworks.forte"
+import { ColdPulse } from "../../wrapped/textureworks.forte"
+
+song "Eight Mirrors" {
+  desc "Octaver house floor, glass keys inside a glass pad, a morse signal far right."
+  artist "Forte Essentials"
+  tempo 124bpm
+  swing 0.52
+  master 1.15
+  key E minor
+
+  play LowKit at bars(1..15)
+  play OctaveHouse(volume: 0.6) at bars(2..15)
+  play EnsembleGlass(volume: 0.85) at bars(4..15)
+  play ColdPulse(volume: 0.6) at bars(8..13)
+}

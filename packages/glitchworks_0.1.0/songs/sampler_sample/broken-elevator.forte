@@ -1,0 +1,18 @@
+// broken-elevator — dub brass in a stuck machine: stab ensembles answer
+// their own echoes, toms carry the floor, percussion spins backwards.
+import { EnsembleBrass, TomGroove, BackspinPerc } from "../../wrapped/glitchset.forte"
+import { BassStabEcho } from "../../wrapped/bassworks.forte"
+
+song "Broken Elevator" {
+  desc "Dub brass stabs answering their echoes, toms on the floor, percussion spun backwards."
+  artist "Forte Essentials"
+  tempo 100bpm
+  swing 0.57
+  master 1.2
+  key G minor
+
+  play TomGroove at bars(1..12)
+  play BassStabEcho(volume: 0.85) at bars(2..12)
+  play EnsembleBrass(volume: 0.85) at bars(4..12)
+  play BackspinPerc(volume: 0.7) at bars(7..12)
+}

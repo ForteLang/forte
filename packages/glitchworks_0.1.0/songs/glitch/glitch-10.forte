@@ -1,0 +1,35 @@
+// glitch-10 — violin economy: a solo violin phrase and the sampler's
+// opinion of it — recut against a heartbeat sub and clockwork rims, one
+// snare edited differently every hit, the phrase ridden down at the close.
+import { ViolinSolo } from "../../wrapped/melodyworks.forte"
+import { HeartSub, WoodTick } from "../../wrapped/glitchset.forte"
+import { SnareRainbow } from "../../wrapped/drumcolor.forte"
+
+song "Glitch 10 — Violin Economy" {
+  desc "A violin phrase recut over a heartbeat sub and clockwork rims, one snare re-edited every hit, ridden down at the close."
+  artist "Forte Essentials"
+  tempo 92bpm
+  swing 0.55
+  master 2.4
+  key C minor
+
+  block Solo : ViolinSolo {
+    track Solo {
+      insert stutter(beats: 0.25, mix: 0.0)
+      automate stutter.mix from 0.0 to 0.5 over bars(8..8)
+      automate stutter.mix from 0.5 to 0.0 over bars(9..9)
+      automate pitch from 0.5 to 0.396 over bars(12..12)
+      play notes`C4~:2 D4~:1.5 F4:0.5 E4~:2 C4~:1 D4~:1` at bars(1..3)
+      play notes`C4:0.75 D4:0.25 F4:0.5 G4~:1 E4:0.5 D4:0.5 C4:0.5` at bars(4..4)
+      play notes`E4~:2 D4~:1.5 C4:0.5 G4~:2 F4~:1 D4~:1` at bars(5..7)
+      play notes`C4:0.5 D4:0.25 E4:0.25 F4:0.5 G4:0.5 E4:0.5 D4:0.25 C4:0.25 G4~:1` at bars(8..8)
+      play notes`C4~:2 D4~:1.5 F4:0.5 E4~:2 C4~:1 D4~:1` at bars(9..11)
+      play notes`C4~:4` at bars(12..12)
+    }
+  }
+
+  play HeartSub(volume: 0.9) at bars(1..12)
+  play WoodTick(volume: 0.7) at bars(3..12)
+  play Solo(volume: 0.9) at bars(1..12)
+  play SnareRainbow(volume: 0.6) at bars(5..11)
+}

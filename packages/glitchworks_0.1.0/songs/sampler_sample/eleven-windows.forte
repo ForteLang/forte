@@ -1,0 +1,18 @@
+// eleven-windows — the window walks the dusk record while the octaver
+// keeps house time; glass shimmer above, wood ticking below.
+import { WindowWalkDusk, WoodTick, EnsembleGlass } from "../../wrapped/glitchset.forte"
+import { OctaveHouse } from "../../wrapped/bassworks.forte"
+
+song "Eleven Windows" {
+  desc "A window walking a dusk record over octaver house time, glass shimmer, wood ticking."
+  artist "Forte Essentials"
+  tempo 128bpm
+  swing 0.52
+  master 1.15
+  key A minor
+
+  play OctaveHouse(volume: 0.6) at bars(1..16)
+  play WindowWalkDusk(volume: 0.85) at bars(3..16)
+  play WoodTick(volume: 0.6) at bars(5..15)
+  play EnsembleGlass(volume: 0.7) at bars(9..16)
+}

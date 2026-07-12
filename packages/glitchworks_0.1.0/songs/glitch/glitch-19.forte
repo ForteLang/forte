@@ -1,0 +1,55 @@
+// glitch-19 — scrub wars: two records fighting over the same turntable —
+// the poly-mod sweep and the dusk ensemble trade two-bar windows, each
+// walked by its own sequencer, over a kick line and a re-aimed laser.
+import { SweepScrub } from "../../wrapped/melodyworks.forte"
+import { WindowWalkDusk } from "../../wrapped/glitchset.forte"
+import { KickFlip } from "../../wrapped/chopworks.forte"
+import { LaserBass } from "../../wrapped/bassworks.forte"
+
+song "Glitch 19 — Scrub Wars" {
+  desc "Two records fighting over one turntable: sweep and dusk ensemble trading scrubbed windows over a kick line."
+  artist "Forte Essentials"
+  tempo 116bpm
+  swing 0.55
+  master 0.95
+  key C minor
+
+  block Drums : KickFlip {
+    track Main {
+      play beat`x--- ---- x-x- ----` at bars(1..3)
+      play beat`x--- --x- x-x- ---x*3` at bars(4..4)
+      play beat`x--- ---- x-x- ----` at bars(5..7)
+      play beat`x--- --x- x-x- x*4---` at bars(8..8)
+      play beat`x--- --x- x-x- ----` at bars(9..15)
+    }
+    track Chop {
+      play notes`_:3 D3:0.25 F3:0.25 C3:0.25 A3:0.25` at bars(8..8)
+      play notes`_:2 C3:0.25 D3:0.25 E3:0.25 F3:0.25 G3:0.25 A3:0.25 B3:0.25 C4:0.25` at bars(16..16)
+    }
+  }
+
+  // record one: the sweep, scrubbed on the odd pairs
+  block RecordA : SweepScrub {
+    track Scrub {
+      play beat`x-x- x-x- x-x- x-x-` at bars(1..2)
+      play beat`x-x- x-x- x-x- x-x-` at bars(5..6)
+      play beat`x-x- x-x- x-x- x-x-` at bars(9..10)
+      play beat`x-x- xx-x x-xx x*3x*3-` at bars(13..14)
+    }
+  }
+
+  // record two: the dusk ensemble, walked on the even pairs
+  block RecordB : WindowWalkDusk {
+    track Walk {
+      play beat`x-x- x-x- x-x- x-x-` at bars(3..4)
+      play beat`x-x- x-x- x-x- x-x-` at bars(7..8)
+      play beat`x-x- x-x- x-x- x-x-` at bars(11..12)
+      play beat`x-xx x-x- xx-x x-x-` at bars(15..16)
+    }
+  }
+
+  play Drums at bars(1..16)
+  play LaserBass(volume: 0.8) at bars(2..16)
+  play RecordA(volume: 0.85) at bars(1..16)
+  play RecordB(volume: 0.85) at bars(1..16)
+}

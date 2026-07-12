@@ -1,0 +1,17 @@
+// cold-open — the album breathes in: a pad at 6 % speed, one far bell and
+// its reversed answer, a heartbeat, a wooden clock. Nothing louder than air.
+import { SlowWave, FarBell, HeartSub, WoodTick } from "../../wrapped/glitchset.forte"
+
+song "Cold Open" {
+  desc "A pad at six percent speed, a far bell answered backwards, a heartbeat and a wooden clock."
+  artist "Forte Essentials"
+  tempo 76bpm
+  swing 0.5
+  master 2.0
+  key A minor
+
+  play SlowWave at bars(1..9)
+  play FarBell(volume: 0.8) at bars(2..9)
+  play HeartSub at bars(3..9)
+  play WoodTick(volume: 0.6) at bars(5..8)
+}

@@ -1,0 +1,47 @@
+// glitch-04 — half heart: the busy break slowed to a doom crawl that
+// lunges at every turn, a sub that dives a fourth, the vowel wall carved
+// by a gate — and at the end the whole break freezes mid-air.
+import { HalfBreak } from "../../wrapped/grooveworks.forte"
+import { SubDeep } from "../../wrapped/bassworks.forte"
+import { FreezeChoirHard } from "../../wrapped/glitchset.forte"
+import { SnareRainbow } from "../../wrapped/drumcolor.forte"
+
+song "Glitch 04 — Half Heart" {
+  desc "The busy break at doom speed lunging at the turns, a diving sub, a gated vowel wall — the break freezes mid-air at the end."
+  artist "Forte Essentials"
+  tempo 92bpm
+  swing 0.55
+  master 1.35
+  key C minor
+
+  block Doom : HalfBreak {
+    track Doom {
+      automate stretch from 0.25 to 0.5 over bars(4..4)
+      automate stretch from 0.5 to 0.25 over bars(5..5)
+      automate stretch from 0.25 to 0.5 over bars(8..8)
+      automate stretch from 0.5 to 0.25 over bars(9..9)
+      // the ending: the break slows into a granular freeze, no pitch fall
+      automate stretch from 0.25 to 0.02 over bars(12..12)
+      play notes`C3~:8 D3~:2 C3~:6` at bars(1..4)
+      play notes`C3~:8 A#2~:2 C3~:6` at bars(5..8)
+      play notes`C3~:8 D3~:2 C3~:4 C3~:2` at bars(9..12)
+    }
+  }
+
+  block Wall : FreezeChoirHard {
+    track Wall {
+      automate gate.duty from 0.65 to 0.3 over bars(9..12)
+      play notes`C3~:8` at bars(1..2)
+      play notes`D#3~:8` at bars(3..4)
+      play notes`C3~:8` at bars(5..6)
+      play notes`A#2~:8` at bars(7..8)
+      play notes`C3~:8` at bars(9..10)
+      play notes`C3~:8` at bars(11..12)
+    }
+  }
+
+  play Doom at bars(1..12)
+  play SubDeep(volume: 0.9) at bars(1..12)
+  play Wall(volume: 0.75) at bars(3..12)
+  play SnareRainbow(volume: 0.85) at bars(5..11)
+}

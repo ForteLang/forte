@@ -1,0 +1,33 @@
+// glitch-02 — window walker: a dusk ensemble treated as a record and
+// SCRUBBED, the window jumping every eighth; an upright walks underneath,
+// clockwork rims argue, and every fourth bar the percussion spins backwards.
+import { WindowWalkDusk, WoodTick, BackspinPerc } from "../../wrapped/glitchset.forte"
+import { UprightWalk } from "../../wrapped/bassworks.forte"
+import { ClapRun } from "../../wrapped/grooveworks.forte"
+
+song "Glitch 02 — Window Walker" {
+  desc "A dusk ensemble scrubbed as a record, an upright walking under it, percussion spinning backwards at the turns."
+  artist "Forte Essentials"
+  tempo 118bpm
+  swing 0.57
+  master 2.1
+  key C minor
+
+  block Walk : WindowWalkDusk {
+    track Walk {
+      automate decay from 0.3 to 0.12 over bars(13..16)
+      insert stutter(beats: 0.125, mix: 0.0)
+      automate stutter.mix from 0.0 to 0.6 over bars(8..8)
+      automate stutter.mix from 0.6 to 0.0 over bars(9..9)
+      automate stutter.mix from 0.0 to 0.8 over bars(16..16)
+      play beat`x-x- x-x- x-x- x-x-` at bars(1..12)
+      play beat`x-xx x-x- xx-x x-x-` at bars(13..16)
+    }
+  }
+
+  play Walk at bars(1..16)
+  play UprightWalk(volume: 0.9) at bars(3..16)
+  play WoodTick(volume: 0.7) at bars(5..16)
+  play ClapRun(volume: 0.6) at bars(9..16)
+  play BackspinPerc(volume: 0.75) at bars(4..16)
+}

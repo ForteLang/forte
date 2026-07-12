@@ -1,0 +1,16 @@
+// felt-hills — a piano re-cut over sliding strings, the heartbeat
+// walking the valley between them.
+import { ReCutPiano, GlideStrings, HeartSub } from "../../wrapped/glitchset.forte"
+
+song "Felt Hills" {
+  desc "A re-cut piano over sliding strings, a heartbeat walking the valley."
+  artist "Forte Essentials"
+  tempo 74bpm
+  swing 0.55
+  master 1.25
+  key C minor
+
+  play GlideStrings(volume: 0.75) at bars(1..9)
+  play ReCutPiano at bars(2..9)
+  play HeartSub at bars(3..9)
+}

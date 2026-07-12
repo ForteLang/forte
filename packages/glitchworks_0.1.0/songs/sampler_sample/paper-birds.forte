@@ -1,0 +1,19 @@
+// paper-birds — rain on the window, birds over the field, a piano loop
+// that never existed and a heartbeat keeping it honest.
+import { HeartSub } from "../../wrapped/glitchset.forte"
+import { PianoLoop } from "../../wrapped/melodyworks.forte"
+import { RainField, BirdSong } from "../../wrapped/textureworks.forte"
+
+song "Paper Birds" {
+  desc "Rain, birds, a piano loop that never existed, a heartbeat underneath."
+  artist "Forte Essentials"
+  tempo 84bpm
+  swing 0.55
+  master 1.5
+  key F minor
+
+  play RainField at bars(1..10)
+  play PianoLoop(volume: 0.9) at bars(2..10)
+  play BirdSong(volume: 0.8) at bars(3..10)
+  play HeartSub at bars(4..9)
+}
