@@ -924,3 +924,65 @@ fn stereo_survives_bounce_and_dig() {
     let d2 = out.data.iter().zip(r2.iter()).filter(|(a, b)| a != b).count();
     assert!(d2 > 1000, "sampler playback must keep the field ({d2} differing samples)");
 }
+
+#[test]
+fn master_chain_and_limiter_glue_the_mix() {
+    // song-level inserts are the MASTER BUS: a limiter on the 2-bus caps
+    // the summed peak; removing the chain is a bit-different (i.e. real) change
+    let song = |chain: &str| {
+        format!(
+            r#"song "M" {{ tempo 120bpm
+      master 2.5
+      {chain}
+      track A {{ instrument prisma(wave: "saw", cutoff: 0.7, sustain: 0.9)
+        play notes`[C2 G2 C3]:1 [C2 G2 C3]:1 [C2 G2 C3]:1 [C2 G2 C3]:1` at bars(1..1) }} }}"#
+        )
+    };
+    let plain = fortelang::compile_str(&song("")).unwrap();
+    let glued = fortelang::compile_str(&song(r#"insert comp(thresh: 0.4, ratio: 0.7, makeup: 0.1)
+      insert limiter(ceiling: 0.5, release: 0.3)"#)).unwrap();
+    assert_eq!(glued.master_inserts.len(), 2, "song-level inserts land on the master bus");
+    let a = fortelang::render_digest(&plain, 1.0);
+    let b = fortelang::render_digest(&glued, 1.0);
+    assert_ne!(a.f32_digest, b.f32_digest, "the master chain must change the sound");
+    assert!(b.peak <= 0.52, "the limiter must cap the bus (peak {})", b.peak);
+    assert!(a.peak > 0.6, "the unglued mix should exceed the ceiling (peak {})", a.peak);
+}
+
+#[test]
+fn warp_bars_and_semis_automation_speak_music() {
+    // dig(bars: 2..2) windows by the SOURCE's bars; warp: "on" time-stretches
+    // the record to the SONG's tempo; automate semis rides pitch in semitones
+    let dir = std::env::temp_dir().join(format!("forte-warp-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("rec.forte"),
+        r#"song "Rec" { tempo 120bpm
+  track A { instrument prisma(wave: "sine", cutoff: 0.5, sustain: 0.8)
+    play notes`C2:1 E2:1 G2:1 C3:1` at bars(1..2) } }"#,
+    )
+    .unwrap();
+    let digger = r#"song "W" { tempo 90bpm
+  sample Rec = dig("./rec.forte", bars: 2..2)
+  track Cut { instrument sampler(sample: Rec, warp: "on", sustain: 1.0, release: 0.1)
+    automate semis from 0 to -5 over bars(1..2)
+    play notes`C3~:4` at bars(1..1) } }"#;
+    let p = fortelang::compile_with_loader(digger, &fortelang::FsLoader, dir.to_str().unwrap())
+        .expect("warp/bars/semis song must compile");
+    let cut = p.tracks.iter().find(|t| t.name == "Cut").unwrap();
+    // bars: 2..2 of a 4/4 source = a 4-beat window -> auto end = 4/6
+    let end = cut.devices[0].params[7];
+    assert!((end - 4.0 / 6.0).abs() < 1e-6, "bars window must drive auto end, got {end}");
+    // warp: stretch = 0.5 * song/record = 0.5 * 90/120 = 0.375
+    let stretch = cut.devices[0].params[14];
+    assert!((stretch - 0.375).abs() < 1e-6, "warp must tempo-sync the record, got {stretch}");
+    // automate semis 0 -> -5 lands on the pitch slot as 0.5 -> 0.5 - 5/48
+    let lane = cut
+        .param_automation
+        .iter()
+        .find(|pa| pa.device == 0 && pa.param == 5)
+        .expect("semis automation must target the pitch slot");
+    assert!((lane.points[0].value - 0.5).abs() < 1e-6);
+    assert!((lane.points[1].value - (0.5 - 5.0 / 48.0)).abs() < 1e-6);
+}

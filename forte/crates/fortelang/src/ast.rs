@@ -167,6 +167,9 @@ pub struct SongAst {
     pub sections: Vec<SectionAst>,
     pub tracks: Vec<TrackAst>,
     pub returns: Vec<ReturnAst>,
+    /// Song-level `insert …` — the MASTER-BUS chain (glue comp / EQ /
+    /// saturation / limiter applied to the summed mix).
+    pub master_inserts: Vec<Call>,
     /// Nested block definitions, local to this body.
     pub blocks: Vec<BlockAst>,
     /// Block placements on this body's timeline.
@@ -190,6 +193,9 @@ pub struct SampleLetAst {
     pub beats: f64,
     /// `dig` only: beats to skip into the record before the window starts.
     pub skip: f64,
+    /// `dig` only: `bars: 5..8` — window by the SOURCE's bars (overrides
+    /// skip/beats; the compiler knows the record's meter).
+    pub bars: Option<(u32, u32)>,
     pub pos: Pos,
 }
 

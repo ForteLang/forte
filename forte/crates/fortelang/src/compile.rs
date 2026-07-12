@@ -13,6 +13,10 @@ use dawcore::model::{
     ModRoute, Modulator, Note, Project, SampleSource, Scale, Track, TrackKind, TRACK_COLORS,
 };
 
+/// Bounce/dig sample registry: name → (asset key, root pitch, and for dig
+/// records Some((musical beats, source tempo)) — drives auto `end` / warp).
+type BounceMap = HashMap<String, (String, u8, Option<(f64, f64)>)>;
+
 pub fn compile(
     file: &FileAst,
     assets: &HashMap<String, crate::AssetInfo>,
@@ -127,8 +131,8 @@ pub fn compile(
     // name → (asset key, root pitch, musical beats). beats is Some only for
     // dig records: the sampler then knows where the music ends inside the
     // asset (the +2-beat tail) and can default `end` to the musical edge.
-    let no_bounces: HashMap<String, (String, u8, Option<f64>)> = HashMap::new();
-    let mut bounces: HashMap<String, (String, u8, Option<f64>)> = HashMap::new();
+    let no_bounces: BounceMap = HashMap::new();
+    let mut bounces: BounceMap = HashMap::new();
     // collect from every block AND the root (imported wrapped-instrument
     // libraries declare their samples inside their blocks); one flat
     // namespace, curated packages keep names unique. The root's own
@@ -169,7 +173,7 @@ pub fn compile(
             // live there, not here. Just wire the asset in.
             match digs.get(&sl.name) {
                 Some(info) => {
-                    bounces.insert(sl.name.clone(), (info.key.clone(), pitch, Some(info.beats)));
+                    bounces.insert(sl.name.clone(), (info.key.clone(), pitch, Some((info.beats, info.tempo))));
                 }
                 None => diags.push(Diag::new(
                     "E-DIG-001",
@@ -237,7 +241,7 @@ pub fn compile(
                 continue;
             }
         } else {
-            let dev = match build_instrument(&sl.call, &user_devices, assets, &no_bounces) {
+            let dev = match build_instrument(&sl.call, &user_devices, assets, &no_bounces, p.tempo) {
                 Ok((dev, _root)) => dev,
                 Err(d) => {
                     diags.push(d);
@@ -255,6 +259,15 @@ pub fn compile(
         // 2 beats of tail so releases and reverbs ring out into the sample
         let (key, _sample) = crate::render_to_sample(&mini, 2.0, pitch);
         bounces.insert(sl.name.clone(), (key, pitch, None));
+    }
+
+    // ---- the master-bus chain: song-level inserts glue the summed mix
+    // (comp / eq / saturate / limiter after the master gain) ----
+    for call in &root.master_inserts {
+        match build_effect(call, &user_devices, p.tempo) {
+            Ok(dev) => p.master_inserts.push(dev),
+            Err(d) => diags.push(d),
+        }
     }
 
     let env = Env { beats_per_bar, swing, tempo: p.tempo, assets, user_devices: &user_devices, bounces: &bounces };
@@ -390,7 +403,7 @@ struct Env<'a> {
     assets: &'a HashMap<String, crate::AssetInfo>,
     user_devices: &'a HashMap<&'a str, &'a DeviceAst>,
     /// Bounce-to-sample assets: name → (asset key, root pitch).
-    bounces: &'a HashMap<String, (String, u8, Option<f64>)>,
+    bounces: &'a BounceMap,
 }
 
 /// A lowered track whose engine id / color / send targets are still symbolic.
@@ -565,7 +578,7 @@ fn lower_body(
         // instrument (required unless the track only places recorded audio)
         let mut beat_pitch = 36u8; // C2 default; samplers use their sample root
         match &tast.instrument {
-            Some(call) => match build_instrument(&bind_params(call, &param_env), env.user_devices, env.assets, env.bounces) {
+            Some(call) => match build_instrument(&bind_params(call, &param_env), env.user_devices, env.assets, env.bounces, env.tempo) {
                 Ok((dev, root)) => {
                     beat_pitch = root;
                     track.devices[0] = dev;
@@ -743,8 +756,26 @@ fn lower_body(
                 Param(usize, usize),
                 Modf(usize, u8),
             }
+            // `automate semis from -5 to 0` — musical-unit pitch rides on a
+            // sampler (pitch slot 0.5 ± n/48), no raw fractions
+            let mut from = auto.from;
+            let mut to = auto.to;
             let target = if auto.target == "volume" {
                 AutoTarget::Volume
+            } else if auto.target == "semis"
+                && track.devices.first().map(|d| d.kind) == Some(DeviceKind::Sampler)
+            {
+                if !(-24.0..=24.0).contains(&auto.from) || !(-24.0..=24.0).contains(&auto.to) {
+                    diags.push(Diag::new(
+                        "E-TYPE-002",
+                        auto.pos,
+                        format!("automate semis の値 {} → {} は -24..24(半音)で指定してください", auto.from, auto.to),
+                    ));
+                    continue;
+                }
+                from = 0.5 + auto.from / 48.0;
+                to = 0.5 + auto.to / 48.0;
+                AutoTarget::Param(0, 5)
             } else {
                 match resolve_target(&track, &insert_devs, &auto.target) {
                     Ok((di, pi)) => AutoTarget::Param(di, pi),
@@ -766,11 +797,11 @@ fn lower_body(
                     },
                 }
             };
-            if !(0.0..=1.0).contains(&auto.from) || !(0.0..=1.0).contains(&auto.to) {
+            if !(0.0..=1.0).contains(&from) || !(0.0..=1.0).contains(&to) {
                 diags.push(Diag::new(
                     "E-TYPE-002",
                     auto.pos,
-                    format!("automate volume の値 {} → {} は 0..1 の範囲外です", auto.from, auto.to),
+                    format!("automate の値 {} → {} は 0..1 の範囲外です", auto.from, auto.to),
                 ));
                 continue;
             }
@@ -787,10 +818,10 @@ fn lower_body(
             let points = vec![
                 AutomationPoint {
                     beat: (a - 1) as f64 * beats_per_bar,
-                    value: auto.from as f32,
+                    value: from as f32,
                     hold: false,
                 },
-                AutomationPoint { beat: b as f64 * beats_per_bar, value: auto.to as f32, hold: true },
+                AutomationPoint { beat: b as f64 * beats_per_bar, value: to as f32, hold: true },
             ];
             match target {
                 AutoTarget::Volume => track.volume_automation.extend(points),
@@ -1451,6 +1482,9 @@ fn resolved_body(
 fn merge_block(parent: &SongAst, child: &SongAst) -> SongAst {
     let mut out = parent.clone();
     out.name = child.name.clone();
+    if !child.master_inserts.is_empty() {
+        out.master_inserts = child.master_inserts.clone();
+    }
     if child.desc.is_some() {
         out.desc = child.desc.clone();
     }
@@ -1880,6 +1914,7 @@ const INSTRUMENTS: &[&str] = &["sampler", "kit", "prisma", "mesh"];
 const EFFECTS: &[&str] =
     &["filter", "eq", "drive", "delay", "reverb", "comp", "chorus", "pump", "width", "crush",
       "stutter", "gate", "saturate", "transient", "parcomp", "exciter", "ringmod", "tapestop",
+      "limiter",
       "vinyl"];
 
 /// Build an instrument device. Returns the device plus the root pitch that
@@ -1888,7 +1923,8 @@ fn build_instrument(
     call: &Call,
     user_devices: &HashMap<&str, &DeviceAst>,
     assets: &HashMap<String, crate::AssetInfo>,
-    bounces: &HashMap<String, (String, u8, Option<f64>)>,
+    bounces: &BounceMap,
+    tempo: f64,
 ) -> Result<(Device, u8), Diag> {
     if let Some(dev_ast) = user_devices.get(call.name.as_str()) {
         if dev_ast.kind == "Effect" {
@@ -1948,8 +1984,10 @@ fn build_instrument(
         "sampler" => {
             let mut dev = Device::new(DeviceKind::Sampler);
             let mut root = 36u8;
-            // musical length (beats) of a dig record — drives the auto `end`
-            let mut dig_beats: Option<f64> = None;
+            // musical (beats, source tempo) of a dig record — drives the
+            // auto `end` and the warp tempo-sync
+            let mut dig_beats: Option<(f64, f64)> = None;
+            let mut warp: Option<Pos> = None;
             for (key, arg) in &call.args {
                 match (key.as_str(), arg) {
                     // recorded take as the instrument: your voice becomes a synth
@@ -2049,6 +2087,17 @@ fn build_instrument(
                         dev.sample = SampleSource::Builtin(canon.0.into());
                         root = canon.1;
                     }
+                    ("warp", Arg::Str(v, pos)) => {
+                        if v == "on" {
+                            warp = Some(*pos);
+                        } else if v != "off" {
+                            return Err(Diag::new(
+                                "E-TYPE-004",
+                                *pos,
+                                "sampler.warp は \"on\" / \"off\" で指定します".to_string(),
+                            ));
+                        }
+                    }
                     // repitch in MUSICAL units: semis: -5 plays the record a
                     // fourth down — no magic pitch fractions (pitch 0.5 ± n/48)
                     ("semis", Arg::Num(n, pos)) => {
@@ -2088,9 +2137,25 @@ fn build_instrument(
             // a dig record knows its musical length: unless the user trims
             // it themselves, `end` lands exactly where the music ends (the
             // +2-beat tail stays out of the slice math — no 0.889 magic)
-            if let Some(b) = dig_beats {
+            if let Some((b, _t)) = dig_beats {
                 if !call.args.iter().any(|(k, _)| k == "end") {
                     dev.params[7] = (b / (b + 2.0)) as f32;
+                }
+            }
+            // warp: "on" — time-stretch the record so its beats land on the
+            // song's beats (stretch 0.5 = original tempo, scaled by ratio)
+            if let Some(wpos) = warp {
+                match dig_beats {
+                    Some((_b, src_tempo)) if src_tempo > 0.0 => {
+                        dev.params[14] = ((0.5 * tempo / src_tempo) as f32).clamp(0.01, 1.0);
+                    }
+                    _ => {
+                        return Err(Diag::new(
+                            "E-SMP-004",
+                            wpos,
+                            "warp は dig レコードにのみ使えます(レコードのテンポが必要)".to_string(),
+                        ))
+                    }
                 }
             }
             Ok((dev, root))
@@ -2508,6 +2573,7 @@ fn build_effect(
             "crush" => (DeviceKind::Crush, &[("bits", 0), ("rate", 1), ("mix", 2)], &[]),
             "stutter" => (DeviceKind::Stutter, &[("beats", 0), ("mix", 1)], &[]),
             "gate" => (DeviceKind::Gate, &[("depth", 0), ("beats", 1), ("duty", 2)], &[]),
+            "limiter" => (DeviceKind::Limiter, &[("ceiling", 0), ("release", 1)], &[]),
             "saturate" => (
                 DeviceKind::Saturate,
                 &[("drive", 1), ("tone", 2), ("mix", 3)],

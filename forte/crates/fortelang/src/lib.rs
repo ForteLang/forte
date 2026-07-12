@@ -189,6 +189,7 @@ fn resolve_imports(
 }
 
 /// What a `.forte` file turned out to be.
+#[allow(clippy::large_enum_variant)] // one Checked per compile; boxing Song buys nothing
 pub enum Checked {
     Song(Project),
     DeviceLibrary { devices: usize },
@@ -258,6 +259,8 @@ pub struct DigInfo {
     pub key: String,
     pub root: u8,
     pub beats: f64,
+    /// The record's own tempo — lets the sampler warp it to the song.
+    pub tempo: f64,
 }
 
 /// Resolve every `sample X = dig("song.forte", ...)` in the file: compile
@@ -341,11 +344,27 @@ fn resolve_digs(
             }
         };
         let record_len = dawcore::bounce::arrangement_len(&project);
-        let skip = sl.skip.max(0.0).min(record_len);
-        let want = if sl.beats > 0.0 { sl.beats } else { record_len - skip };
+        // `bars: a..b` windows by the SOURCE's meter — no beat arithmetic
+        let (want_skip, want_beats) = match sl.bars {
+            Some((a, b)) if a >= 1 && b >= a => {
+                let bpb = project.time_sig.0 as f64 * 4.0 / project.time_sig.1 as f64;
+                ((a - 1) as f64 * bpb, (b - a + 1) as f64 * bpb)
+            }
+            Some((a, b)) => {
+                diags.push(Diag::new(
+                    "E-DIG-004",
+                    sl.pos,
+                    format!("dig の bars({a}..{b}) が不正です(小節は 1 始まり、開始 ≤ 終了)"),
+                ));
+                (sl.skip, sl.beats)
+            }
+            None => (sl.skip, sl.beats),
+        };
+        let skip = want_skip.max(0.0).min(record_len);
+        let want = if want_beats > 0.0 { want_beats } else { record_len - skip };
         let beats = want.min(record_len - skip).max(0.25);
         let key = render_dig_to_sample(&project, root, skip, beats);
-        out.insert(sl.name.clone(), DigInfo { key, root, beats });
+        out.insert(sl.name.clone(), DigInfo { key, root, beats, tempo: project.tempo });
     }
     out
 }

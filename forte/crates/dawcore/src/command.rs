@@ -19,6 +19,10 @@ pub enum Command {
     SetTempo(f64),
     /// Mastering gain on the summed mix, pre-limiter (1.0 = neutral).
     SetMaster(f32),
+    /// Replace the master-bus insert chain (glue comp / EQ / limiter on the
+    /// summed mix). Empty clears it — bit-identical bypass.
+    #[allow(clippy::vec_box)] // boxes recycle through Garbage without audio-thread alloc
+    SetMasterChain(Vec<Box<crate::engine::EngineDevice>>),
     SetLoop { enabled: bool, start: f64, end: f64 },
     SetLaunchQuant(f64),
     SetMetronome(bool),

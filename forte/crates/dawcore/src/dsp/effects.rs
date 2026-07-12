@@ -943,3 +943,34 @@ impl Vinyl {
         (ol, or)
     }
 }
+
+/// Master-grade peak limiter: instant attack, exponential release. The
+/// envelope tracks the stereo peak and gain never lets the output exceed
+/// the ceiling — loudness without the soft-clip crunch. Deterministic
+/// (one-pole linear-approx release, no libm).
+pub struct Limiter {
+    sr: f32,
+    env: f32,
+    pub ceiling: f32, // output ceiling (linear, 0..1)
+    pub release: f32, // seconds back to unity
+}
+
+impl Limiter {
+    pub fn new(sr: f32) -> Self {
+        Self { sr, env: 0.0, ceiling: 0.95, release: 0.12 }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let peak = l.abs().max(r.abs());
+        if peak > self.env {
+            self.env = peak; // instant attack: nothing gets past
+        } else {
+            let rel = (1.0 / (self.release.max(0.005) * self.sr)).min(1.0);
+            self.env += (peak - self.env) * rel;
+        }
+        let c = self.ceiling.clamp(0.05, 1.0);
+        let g = if self.env > c { c / self.env } else { 1.0 };
+        (l * g, r * g)
+    }
+}

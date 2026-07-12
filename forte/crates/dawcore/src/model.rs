@@ -45,6 +45,7 @@ pub enum DeviceKind {
     Stutter,
     /// Tempo-synced pattern chopper (trance gate).
     Gate,
+    Limiter,
     /// Saturation: tape/tube/fuzz waveshaping with tone control.
     Saturate,
     /// Transient shaper: independent attack/sustain gain.
@@ -87,7 +88,7 @@ impl DeviceStage {
 impl DeviceKind {
     /// Every device, in stage order. The browser and factories iterate this —
     /// adding a device here is the only registration step the UI needs.
-    pub const ALL: [DeviceKind; 27] = [
+    pub const ALL: [DeviceKind; 28] = [
         DeviceKind::Arpeggiator,
         DeviceKind::NoteTranspose,
         DeviceKind::NoteRepeat,
@@ -107,6 +108,7 @@ impl DeviceKind {
         DeviceKind::Crush,
         DeviceKind::Stutter,
         DeviceKind::Gate,
+        DeviceKind::Limiter,
         DeviceKind::Saturate,
         DeviceKind::Transient,
         DeviceKind::ParComp,
@@ -138,6 +140,7 @@ impl DeviceKind {
             DeviceKind::Crush => "Crush",
             DeviceKind::Stutter => "Stutter",
             DeviceKind::Gate => "Gate",
+            DeviceKind::Limiter => "Limiter",
             DeviceKind::Saturate => "Saturate",
             DeviceKind::Transient => "Transient",
             DeviceKind::ParComp => "ParComp",
@@ -194,6 +197,7 @@ impl DeviceKind {
             DeviceKind::Crush => &["Bits", "Rate", "Mix"],
             DeviceKind::Stutter => &["Period", "Mix"],
             DeviceKind::Gate => &["Depth", "Period", "Duty"],
+            DeviceKind::Limiter => &["Ceiling", "Release"],
             DeviceKind::Saturate => &["Mode", "Drive", "Tone", "Mix"],
             DeviceKind::Transient => &["Attack", "Sustain"],
             DeviceKind::ParComp => &["Amount", "Drive", "Color"],
@@ -241,6 +245,7 @@ impl DeviceKind {
             // Period is seconds per repeat; the compiler overwrites it from tempo
             DeviceKind::Stutter => vec![0.25, 0.0],
             DeviceKind::Gate => vec![0.9, 0.25, 0.5],
+            DeviceKind::Limiter => vec![0.95, 0.3],
             DeviceKind::Saturate => vec![0.0, 0.4, 0.7, 1.0],
             DeviceKind::Transient => vec![0.5, 0.5],
             DeviceKind::ParComp => vec![0.35, 0.5, 0.3],
@@ -834,6 +839,11 @@ pub struct Project {
     /// it — the song-level `master` statement drives loudness here.
     #[serde(default = "default_master")]
     pub master: f32,
+    /// Master-bus insert chain, applied to the summed mix AFTER the master
+    /// gain and BEFORE the soft limiter — the glue compressor / EQ /
+    /// saturation / limiter of a real 2-bus. Empty = bit-identical bypass.
+    #[serde(default)]
+    pub master_inserts: Vec<Device>,
     next_id: usize,
 }
 
@@ -863,6 +873,7 @@ impl Project {
             cue_markers: Vec::new(),
             launch_quant: 0.0,
             master: 1.0,
+            master_inserts: Vec::new(),
             next_id: 0,
         }
     }
@@ -927,6 +938,7 @@ impl Project {
             ],
             launch_quant: 4.0, // 1 bar, Bitwig default
             master: 1.0,
+            master_inserts: Vec::new(),
             next_id: 0,
         };
 

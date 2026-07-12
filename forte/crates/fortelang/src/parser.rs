@@ -192,6 +192,7 @@ impl Parser {
             sections: Vec::new(),
             tracks: Vec::new(),
             returns: Vec::new(),
+            master_inserts: Vec::new(),
             blocks: Vec::new(),
             places: Vec::new(),
         };
@@ -322,6 +323,12 @@ impl Parser {
                             song.master = Some((n, pos));
                         }
                     }
+                    "insert" => {
+                        // song-level insert = the MASTER-BUS chain
+                        self.bump();
+                        let c = self.call()?;
+                        song.master_inserts.push(c);
+                    }
                     "sample" => {
                         // sample Name = bounce(Call[, note: C1][, beats: 2])
                         // sample Name = dig("song.forte"[, note: C3][, beats: 16][, skip: 16])
@@ -339,6 +346,7 @@ impl Parser {
                         let mut note = "C3".to_string();
                         let mut beats = 2.0;
                         let mut skip = 0.0;
+                        let mut bars: Option<(u32, u32)> = None;
                         if is_dig {
                             self.bump(); // `dig`
                             self.expect(Tok::LParen, "`(`");
@@ -384,11 +392,20 @@ impl Parser {
                                                 skip = n;
                                             }
                                         }
+                                        "bars" if is_dig => {
+                                            if let Some((a, _u, _p)) = self.number("開始小節") {
+                                                if self.expect(Tok::DotDot, "`..`") {
+                                                    if let Some((b, _u2, _p2)) = self.number("終了小節") {
+                                                        bars = Some((a as u32, b as u32));
+                                                    }
+                                                }
+                                            }
+                                        }
                                         other => {
                                             self.err(
                                                 "E-PARSE-024",
                                                 if is_dig {
-                                                    format!("dig() に '{other}' という引数はありません(note, beats, skip)")
+                                                    format!("dig() に '{other}' という引数はありません(note, beats, skip, bars)")
                                                 } else {
                                                     format!("bounce() に '{other}' という引数はありません(note, beats)")
                                                 },
@@ -402,7 +419,7 @@ impl Parser {
                                 }
                             }
                         }
-                        song.sample_lets.push(SampleLetAst { name, call, dig, note, beats, skip, pos });
+                        song.sample_lets.push(SampleLetAst { name, call, dig, note, beats, skip, bars, pos });
                     }
                     "meter" => {
                         self.bump();

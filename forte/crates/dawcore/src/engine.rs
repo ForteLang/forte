@@ -416,6 +416,10 @@ pub struct Engine {
     launch_quant: f64,
     /// Mastering gain on the summed mix, pre-limiter (1.0 = neutral).
     master: f32,
+    // boxed on purpose: the chain swap recycles each device through
+    // Garbage::Device(Box<…>) without allocating on the audio thread
+    #[allow(clippy::vec_box)]
+    master_chain: Vec<Box<EngineDevice>>,
 
     // metronome click synth
     metronome: bool,
@@ -463,6 +467,7 @@ impl Engine {
             loop_end: 32.0,
             launch_quant: 4.0,
             master: 1.0,
+            master_chain: Vec::new(),
             metronome: false,
             beats_per_bar: 4.0,
             click_env: 0.0,
@@ -532,6 +537,11 @@ impl Engine {
             }
             Command::SetTempo(bpm) => self.tempo = bpm.clamp(20.0, 300.0),
             Command::SetMaster(m) => self.master = m.clamp(0.0, 4.0),
+            Command::SetMasterChain(devices) => {
+                for d in std::mem::replace(&mut self.master_chain, devices) {
+                    self.recycle(Garbage::Device(d));
+                }
+            }
             Command::SetLoop { enabled, start, end } => {
                 self.loop_enabled = enabled;
                 self.loop_start = start.max(0.0);
@@ -891,6 +901,22 @@ impl Engine {
             for i in 0..frames {
                 out_l[i] *= self.master;
                 out_r[i] *= self.master;
+            }
+        }
+
+        // master-bus insert chain: the 2-bus glue (comp / EQ / saturation /
+        // limiter) the mix was missing. Runs post-gain, pre-soft-limiter;
+        // an empty chain is a bit-identical bypass.
+        for d in &mut self.master_chain {
+            if !d.enabled {
+                continue;
+            }
+            if let Dsp::Audio(fx) = &mut d.dsp {
+                for i in 0..frames {
+                    let (a, b) = fx.process(out_l[i], out_r[i]);
+                    out_l[i] = a;
+                    out_r[i] = b;
+                }
             }
         }
 

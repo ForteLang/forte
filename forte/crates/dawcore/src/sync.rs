@@ -9,6 +9,9 @@ use crate::model::{Project, Track};
 pub fn full_sync(handle: &mut EngineHandle, project: &Project) {
     handle.send(Command::SetTempo(project.tempo));
     handle.send(Command::SetMaster(project.master));
+    handle.send(Command::SetMasterChain(
+        project.master_inserts.iter().map(|d| build_device(d, handle.sample_rate)).collect(),
+    ));
     for t in &project.tracks {
         handle.send(Command::AddTrack { slot: t.id, track: build_track(t, handle.sample_rate) });
     }
