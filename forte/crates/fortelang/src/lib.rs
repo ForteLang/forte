@@ -2,6 +2,7 @@
 //! them, and compile to a `dawcore` project that renders deterministically
 //! (07-determinism-spike.md) on native and wasm from the same source.
 
+pub mod analyze;
 pub mod ast;
 #[cfg(not(target_family = "wasm"))]
 pub mod audio;
@@ -462,6 +463,24 @@ pub fn check_with_loader(
             Err(diags)
         }
     }
+}
+
+/// The `section name = bars(a..b)` spans of a song source in BEATS — the
+/// structure vocabulary `forte analyze` reports against. Empty when the
+/// source doesn't parse or declares no sections.
+pub fn song_sections(src: &str) -> Vec<analyze::SectionSpan> {
+    let Ok(file) = parser::parse(src) else { return Vec::new() };
+    let Some(song) = &file.song else { return Vec::new() };
+    let (n, d) = song.meter.map(|(sig, _)| sig).unwrap_or((4, 4));
+    let bpb = n as f64 * 4.0 / d as f64;
+    song.sections
+        .iter()
+        .map(|s| analyze::SectionSpan {
+            name: s.name.clone(),
+            start_beat: (s.bars.0.saturating_sub(1)) as f64 * bpb,
+            end_beat: s.bars.1 as f64 * bpb,
+        })
+        .collect()
 }
 
 /// Parse + compile a `.forte` song with import resolution.

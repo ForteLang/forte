@@ -96,6 +96,33 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("analyze") if args.len() >= 2 => {
+            let path = &args[1];
+            let json = args.iter().any(|a| a == "--json");
+            let stems = !args.iter().any(|a| a == "--no-stems");
+            let src = match load(path) {
+                Ok(s) => s,
+                Err(c) => return c,
+            };
+            match fortelang::compile_with_loader(&src, &fortelang::FsLoader, &base_dir(path)) {
+                Ok(p) => {
+                    let sections = fortelang::song_sections(&src);
+                    let a = fortelang::analyze::analyze(&p, &sections, stems);
+                    if json {
+                        println!("{}", a.to_json());
+                    } else {
+                        print_analysis(&a);
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(diags) => {
+                    for d in &diags {
+                        eprintln!("{path}:{d}");
+                    }
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("fmt") if args.len() >= 2 => {
             let check = args.iter().any(|a| a == "--check");
             let path = &args[1];
@@ -391,6 +418,7 @@ fn main() -> ExitCode {
             eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte test  [PATH…] [--update]  (digest 固定の回帰テスト: forte-test.lock と照合)");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
+            eprintln!("       forte analyze <song.forte> [--json] [--no-stems]  (聴取レポート: ラウドネス/帯域/定位/リズム/構成/調性)");
             eprintln!("       forte lsp");
             eprintln!("       forte init [NAME]           (NAME 付きで package プロジェクトを作成 / なしで cwd をリポジトリに)");
             eprintln!("       forte package add <github:owner/repo[@ref] | URL | PATH>  (packages/ にフラット導入)");
@@ -651,6 +679,76 @@ fn base_dir(path: &str) -> String {
         .parent()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_default()
+}
+
+/// `forte analyze` の人間向け表示(機械は --json を読む)。
+fn print_analysis(a: &fortelang::analyze::Analysis) {
+    use fortelang::analyze::BAND_NAMES;
+    println!("== 聴取レポート ({:.1}s, {} bpm) ==", a.seconds, a.tempo);
+    println!("-- ラウドネス --");
+    println!(
+        "  integrated {} LUFS / true peak {} dBTP / rms {} dB / crest {} dB",
+        a.loudness.integrated_lufs, a.loudness.true_peak_db, a.loudness.rms_db, a.loudness.crest_db
+    );
+    println!("-- 帯域バランス (mix) --");
+    let shares: Vec<String> = BAND_NAMES
+        .iter()
+        .zip(a.spectral.band_share_pct.iter())
+        .map(|(n, v)| format!("{n} {v}%"))
+        .collect();
+    println!("  {}", shares.join(" / "));
+    for t in &a.spectral.tracks {
+        let shares: Vec<String> = BAND_NAMES
+            .iter()
+            .zip(t.band_share_pct.iter())
+            .map(|(n, v)| format!("{n} {v}%"))
+            .collect();
+        println!("  track {} ({} dB): {}", t.name, t.rms_db, shares.join(" / "));
+    }
+    for m in a.spectral.masking.iter().take(3) {
+        if m.overlap >= 0.6 {
+            println!("  ⚠ 帯域かぶり {} × {} = {}", m.a, m.b, m.overlap);
+        }
+    }
+    println!("-- ステレオ --");
+    let bands: Vec<String> = BAND_NAMES
+        .iter()
+        .zip(a.stereo.band_side_mid_db.iter())
+        .map(|(n, v)| format!("{n} {v}"))
+        .collect();
+    println!("  side/mid {} dB (帯域別 dB: {})", a.stereo.side_mid_db, bands.join(" / "));
+    println!("-- リズム --");
+    println!(
+        "  譜面 {} 発 / 検出 {} 発 / 一致 {}% (平均ズレ {} ms)",
+        a.rhythm.score_onsets, a.rhythm.audio_onsets, a.rhythm.matched_pct, a.rhythm.mean_offset_ms
+    );
+    for d in &a.rhythm.density_per_section {
+        println!("  {}: {} 発/秒", d.name, d.onsets_per_second);
+    }
+    println!("-- 構成 --");
+    for s in &a.structure.sections {
+        println!(
+            "  {} [{}s..{}s] rms {} dB / peak {} dB",
+            s.name, s.start_s, s.end_s, s.rms_db, s.peak_db
+        );
+    }
+    println!(
+        "  無音 {} 箇所 ({}%)",
+        a.structure.silences.len(),
+        a.structure.silence_total_pct
+    );
+    println!("-- 調性 --");
+    println!(
+        "  推定 {} / 宣言 {}{}",
+        a.tonality.estimated_key,
+        a.tonality.declared_key,
+        match (a.tonality.agrees, a.tonality.relative) {
+            (Some(true), _) => " (一致)",
+            (Some(false), true) => " (相対調 — 同じ音組織)",
+            (Some(false), false) => " (⚠ 不一致)",
+            (None, _) => "",
+        }
+    );
 }
 
 fn check(path: &str) -> ExitCode {
