@@ -1,0 +1,48 @@
+// records/lantern — the voice record. A wordless voice carrying the album
+// motif, a glide lead answering from across the room, warm pad under
+// both. Cut for digging: the human layer.
+import { VoxLead, GlideLead } from "../../essentials_0.6.0/instruments/leads.forte"
+import { EightiesPad } from "../../essentials_0.6.0/instruments/pads.forte"
+
+song "Lantern" {
+  desc "The voice record: a wordless voice carrying the motif, a glide lead answering, warm pad under both."
+  artist "Forte Essentials"
+  tempo 120bpm
+  swing 0.54
+  master 1.4
+  key A minor
+
+  track Voice {
+    instrument VoxLead
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.3)
+    insert width(amount: 0.7)
+    volume 0.85
+    play humanize(notes`A3~:1 C4~:0.5 B3~:0.5 E4~:1 D4~:1`, time: 0.03, vel: 8, seed: 41) at bars(1..1)
+    play humanize(notes`C4~:1.5 B3~:0.5 A3~:2`, time: 0.03, vel: 8, seed: 42) at bars(2..2)
+    play humanize(notes`A3~:1 C4~:0.5 B3~:0.5 E4~:1 D4~:1`, time: 0.03, vel: 8, seed: 43) at bars(3..3)
+    play humanize(notes`E4~:1.5 D4~:0.5 C4~:1 B3~:1`, time: 0.03, vel: 8, seed: 44) at bars(4..4)
+    play humanize(notes`A3~:1 C4~:0.5 B3~:0.5 E4~:1 D4~:1`, time: 0.03, vel: 8, seed: 45) at bars(5..5)
+    play humanize(notes`G4~:1.5 E4~:0.5 D4~:1 C4~:1`, time: 0.03, vel: 8, seed: 46) at bars(6..6)
+    play humanize(notes`A3~:2 C4~:1 B3~:1`, time: 0.03, vel: 8, seed: 47) at bars(7..7)
+    play humanize(notes`A3~:4`, time: 0.03, vel: 8, seed: 48) at bars(8..8)
+  }
+  track Answer {
+    instrument GlideLead
+    insert filter(type: "lp", cutoff: 0.55, reso: 0.2)
+    insert delay(time: 0.375, fdbk: 0.4, mix: 0.3)
+    insert reverb(size: 0.75, decay: 0.65, mix: 0.4)
+    volume 0.5
+    play notes`_:2 E4~:1 D4~:1` at bars(2..2)
+    play notes`_:2 C4~:1 B3~:1` at bars(4..4)
+    play notes`_:2 G4~:1.5 E4~:0.5` at bars(6..6)
+    play notes`_:1 C4~:1.5 B3~:0.5 A3~:1` at bars(8..8)
+  }
+  track Under {
+    instrument EightiesPad
+    insert filter(type: "lp", cutoff: 0.42, reso: 0.15)
+    insert width(amount: 0.8)
+    volume 0.5
+    play notes`[A2 E3 C4]~:8 [F2 C3 A3]~:4 [G2 D3 B3]~:4` at bars(1..4)
+    play notes`[A2 E3 C4]~:8 [F2 C3 A3]~:4 [G2 D3 B3]~:4` at bars(5..8)
+  }
+}

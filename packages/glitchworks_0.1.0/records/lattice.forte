@@ -1,0 +1,55 @@
+// records/lattice — the arp record. A pluck lattice in sixteenths over a
+// glass pad, the album motif surfacing on the beat; delays turn every
+// note into three. Cut for digging: the melodic-techno top layer.
+import { Pluck } from "../../essentials_0.6.0/instruments/leads.forte"
+import { Bell, Glass } from "../../essentials_0.6.0/instruments/keys.forte"
+import { GlassPad } from "../../essentials_0.6.0/instruments/pads.forte"
+
+song "Lattice" {
+  desc "The arp record: a pluck lattice in sixteenths over a glass pad, the album motif surfacing on the beat."
+  artist "Forte Essentials"
+  tempo 120bpm
+  swing 0.54
+  master 2.0
+  key A minor
+
+  track Arp {
+    instrument Pluck
+    insert delay(time: 0.375, fdbk: 0.42, mix: 0.3)
+    insert width(amount: 0.8)
+    volume 0.85
+    play notes`A3:0.25 C4:0.25 E4:0.25 A4:0.25 B3:0.25 E4:0.25 G4:0.25 B4:0.25 C4:0.25 E4:0.25 A4:0.25 C5:0.25 B3:0.25 D4:0.25 G4:0.25 B4:0.25` at bars(1..3)
+    play notes`A3:0.25 C4:0.25 E4:0.25 A4:0.25 C4:0.25 E4:0.25 A4:0.25 C5:0.25 D4:0.25 F4:0.25 A4:0.25 D5:0.25 E4:0.25 G4:0.25 B4:0.25 E5:0.25` at bars(4..4)
+    play notes`A3:0.25 C4:0.25 E4:0.25 A4:0.25 B3:0.25 E4:0.25 G4:0.25 B4:0.25 C4:0.25 E4:0.25 A4:0.25 C5:0.25 B3:0.25 D4:0.25 G4:0.25 B4:0.25` at bars(5..7)
+    play notes`A3:0.25 E4:0.25 A4:0.25 C5:0.25 B4:0.25 A4:0.25 G4:0.25 E4:0.25 D4:0.25 E4:0.25 G4:0.25 A4:0.25 B4:0.25 C5:0.25 D5:0.25 E5:0.25` at bars(8..8)
+  }
+  track Chime {
+    instrument Bell(decay: 0.55)
+    insert delay(time: 0.5, fdbk: 0.35, mix: 0.3)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.3)
+    volume 0.55
+    play notes`A4~:1 C5~:0.5 B4~:0.5 E5~:1 D5~:1` at bars(2..2)
+    play notes`A4~:1 C5~:0.5 B4~:0.5 E5~:1 D5~:1` at bars(6..6)
+  }
+  track Pad {
+    instrument GlassPad
+    insert width(amount: 0.85)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.3)
+    volume 0.6
+    play notes`[A2 E3 C4]~:4` at bars(1..1)
+    play notes`[C3 G3 E4]~:2 [G2 D3 B3]~:2` at bars(2..2)
+    play notes`[A2 E3 C4]~:4` at bars(3..3)
+    play notes`[F2 C3 A3]~:2 [G2 D3 B3]~:2` at bars(4..4)
+    play notes`[A2 E3 C4]~:4` at bars(5..5)
+    play notes`[C3 G3 E4]~:2 [G2 D3 B3]~:2` at bars(6..6)
+    play notes`[F2 C3 A3]~:4` at bars(7..7)
+    play notes`[G2 D3 B3]~:4` at bars(8..8)
+  }
+  track Sparkle {
+    instrument Glass(shimmer: 0.5)
+    insert delay(time: 0.25, fdbk: 0.3, mix: 0.25)
+    volume 0.4
+    play notes`_:3 E5:0.5 A5:0.5` at bars(4..4)
+    play notes`_:3 D5:0.5 E5:0.5` at bars(8..8)
+  }
+}

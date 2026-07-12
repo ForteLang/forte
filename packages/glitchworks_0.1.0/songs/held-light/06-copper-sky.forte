@@ -1,0 +1,81 @@
+// held-light 06 — copper sky: the warm one. Piano and arps in a slow
+// braid over a floor that only plays every other bar — half the time the
+// low end is just implied. The violin record arrives from the other
+// crate mid-song and bows the motif like it always lived here.
+song "Copper Sky" {
+  desc "Piano and arps braided over a half-time floor; the violin record arrives and bows the motif like it always lived here."
+  artist "Forte Essentials"
+  tempo 118bpm
+  swing 0.55
+  master 1.6
+  key A minor
+
+  sample Felt   = dig("../../records/felt.forte", beats: 16)
+  sample FeltB  = dig("../../records/felt.forte", beats: 16, skip: 16)
+  sample Arp    = dig("../../records/lattice.forte", beats: 16, skip: 16)
+  sample Kit    = dig("../../records/floor.forte", beats: 16)
+  sample Violin = dig("../glitch/glitch-10.forte", beats: 16)
+
+  block Ground {
+    track Kick {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: Kit, slices: 16, choke: "on", sustain: 1.0, release: 0.05, vary: 0.04)
+      volume 0.95
+      automate volume from 0.0 to 0.95 over bars(9..12)
+      // every other bar: the floor breathes in twos
+      play notes`C3~:0.75 _:0.25 C#3~:0.75 _:0.25 D3~:0.75 _:0.25 D#3~:0.75 _:0.25 _:4` at bars(9..48)
+      play notes`C3~:0.75 _:0.25 C#3~:0.75 _:0.25 D3~:0.75 _:0.25 D#3~:0.75 _:0.25` at bars(65..95)
+      play notes`C3~:0.75 _:0.25 C#3~:0.5 _:0.5 D3~:1 _:1` at bars(96..96)
+    }
+  }
+
+  block Braid {
+    track Keys {
+      instrument sampler(attack: 0.08, gain: 1.0, sample: Felt, sustain: 1.0, release: 0.2, vary: 0.02)
+      insert duck(from: Ground, amount: 0.45, attack: 0.02, release: 0.13, shape: 0.6)
+      volume 0.9
+      automate volume from 0.0 to 0.9 over bars(1..4)
+      play notes`C3~:16` at bars(1..48)
+      play notes`C3~:16` at bars(65..88)
+    }
+    track Arps {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: Arp, slices: 16, choke: "on", sustain: 1.0, release: 0.07, vary: 0.05)
+      insert duck(from: Ground, amount: 0.55, attack: 0.02, release: 0.12, shape: 0.6)
+      volume 0.8
+      play notes`_:1 C3~:0.5 _:0.5 C#3~:0.5 _:0.5 D3~:0.5 _:0.5` at bars(17..48)
+      play notes`_:1 C4~:0.5 _:0.5 C#4~:0.5 _:0.5 D4~:0.5 _:0.5` at bars(65..88)
+    }
+  }
+
+  // ---- the violin record, bowing the motif into the braid ----
+  block Bow {
+    track Solo {
+      instrument sampler(attack: 0.08, gain: 1.0, sample: Violin, sustain: 1.0, release: 0.25, vary: 0.03, semis: -3)
+      volume 0.9
+      automate volume from 0.0 to 0.9 over bars(49..51)
+      play notes`C3~:16` at bars(49..64)
+    }
+    track SoloCut {
+      instrument sampler(attack: 0.06, gain: 1.0, sample: Violin, slices: 16, choke: "on", sustain: 1.0, release: 0.1, vary: 0.06, semis: -3)
+      insert duck(from: Ground, amount: 0.5, attack: 0.02, release: 0.13, shape: 0.6)
+      volume 0.7
+      play notes`_:2 G#3~:1 _:1` at bars(69..88)
+      play notes`_:1.5 C4~:1 _:1.5` at bars(89..95)
+    }
+  }
+
+  // the sky at the end: piano's far half, slowed, glowing out
+  block Dusk {
+    track Out {
+      instrument sampler(attack: 0.12, gain: 1.0, sample: FeltB, stretch: 0.5, sustain: 1.0, release: 0.6)
+      automate stretch from 0.5 to 0.03 over bars(102..104)
+      volume 0.85
+      play notes`C3~:16` at bars(97..100)
+      play notes`C3~:16` at bars(101..104)
+    }
+  }
+
+  play Braid at bars(1..95)
+  play Ground at bars(1..96)
+  play Bow at bars(1..95)
+  play Dusk at bars(1..104)
+}

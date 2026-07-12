@@ -1,0 +1,88 @@
+// held-light 03 — paper lanterns: the voice record carries the song. It
+// sings the motif alone; the floor arrives underneath it; mid-song the
+// piano record REPLACES the voice entirely for sixteen bars — a different
+// song in the same key — then the voice returns over both, an octave of
+// itself glowing above.
+song "Paper Lanterns" {
+  desc "The voice record sings the motif; the piano record replaces it mid-song; the voice returns over both, glowing an octave up."
+  artist "Forte Essentials"
+  tempo 120bpm
+  swing 0.54
+  master 1.6
+  key A minor
+
+  sample Voice  = dig("../../records/lantern.forte", beats: 16)
+  sample VoiceB = dig("../../records/lantern.forte", beats: 16, skip: 16)
+  sample Felt   = dig("../../records/felt.forte", beats: 16)
+  sample Kit    = dig("../../records/floor.forte", beats: 16)
+
+  block Ground {
+    track Kick {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: Kit, slices: 16, choke: "on", sustain: 1.0, release: 0.05, vary: 0.04)
+      volume 0.95
+      automate volume from 0.0 to 0.95 over bars(17..20)
+      play notes`C3~:0.75 _:0.25 C#3~:0.75 _:0.25 D3~:0.75 _:0.25 D#3~:0.75 _:0.25` at bars(17..47)
+      play notes`C3~:0.5 _:0.5 C#3~:0.25 C#3~:0.25 _:0.5 D3~:0.5 _:1.5` at bars(48..48)
+      play notes`E3~:0.75 _:0.25 F3~:0.75 _:0.25 F#3~:0.75 _:0.25 G3~:0.75 _:0.25` at bars(65..95)
+      play notes`E3~:0.75 _:0.25 F3~:0.5 _:0.5 G3~:1 _:1` at bars(96..96)
+    }
+  }
+
+  block Song {
+    // the voice, straight off the record
+    track Sings {
+      instrument sampler(attack: 0.08, gain: 1.0, sample: Voice, sustain: 1.0, release: 0.15, vary: 0.02)
+      insert duck(from: Ground, amount: 0.5, attack: 0.02, release: 0.13, shape: 0.6)
+      volume 0.95
+      automate volume from 0.0 to 0.95 over bars(1..4)
+      play notes`C3~:16` at bars(1..32)
+      play notes`C3~:16` at bars(65..88)
+    }
+    // the voice cut into syllables while the floor runs
+    track Syllables {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: VoiceB, slices: 16, choke: "on", sustain: 1.0, release: 0.07, vary: 0.06)
+      insert duck(from: Ground, amount: 0.55, attack: 0.02, release: 0.13, shape: 0.6)
+      volume 0.8
+      play notes`_:2 C3~:0.5 _:0.5 D3~:0.5 _:0.5` at bars(21..32)
+      play notes`_:1.5 G#3~:0.5 _:1 A3~:0.5 _:0.5` at bars(73..88)
+    }
+    // the return, an octave of itself above
+    track Glow {
+      instrument sampler(attack: 0.08, gain: 1.0, sample: Voice, sustain: 1.0, release: 0.2, vary: 0.03, semis: 12)
+      insert duck(from: Ground, amount: 0.5, attack: 0.02, release: 0.13, shape: 0.6)
+      volume 0.45
+      play notes`C3~:16` at bars(81..96)
+    }
+  }
+
+  // ---- the middle: the piano record takes the song over entirely ----
+  block Middle {
+    track Keys {
+      instrument sampler(attack: 0.08, gain: 1.0, sample: Felt, sustain: 1.0, release: 0.2, vary: 0.02)
+      volume 0.95
+      play notes`C3~:16` at bars(49..64)
+    }
+    track KeysCut {
+      instrument sampler(attack: 0.05, gain: 1.0, sample: Felt, slices: 16, choke: "on", sustain: 1.0, release: 0.08, vary: 0.05)
+      volume 0.7
+      play notes`_:3 C4~:0.5 _:0.5` at bars(53..56)
+      play notes`_:2.5 E3~:0.5 _:0.5 G#3~:0.5` at bars(61..64)
+    }
+  }
+
+  // the end: the voice alone again, slowed until it hangs
+  block Coda {
+    track Hang {
+      instrument sampler(attack: 0.1, gain: 1.0, sample: Voice, stretch: 0.5, sustain: 1.0, release: 0.5)
+      automate stretch from 0.5 to 0.02 over bars(103..104)
+      volume 0.9
+      play notes`C3~:16` at bars(97..100)
+      play notes`C3~:16` at bars(101..104)
+    }
+  }
+
+  play Song at bars(1..96)
+  play Ground at bars(1..96)
+  play Middle at bars(1..64)
+  play Coda at bars(1..104)
+}

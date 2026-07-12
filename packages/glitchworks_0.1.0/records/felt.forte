@@ -1,0 +1,50 @@
+// records/felt — the piano record. A felt piano walking Am–F–C–G with the
+// album motif (A C B E D) on top, an upright barely breathing underneath.
+// Cut for digging: warm, clean, no drums, no hiss.
+import { TinePiano, UprightBass } from "../instruments/modal.forte"
+import { EPiano } from "../../essentials_0.6.0/instruments/keys.forte"
+
+song "Felt" {
+  desc "The piano record: felt keys walking Am-F-C-G, the album motif on top, an upright barely breathing."
+  artist "Forte Essentials"
+  tempo 120bpm
+  swing 0.54
+  master 1.1
+  key A minor
+
+  track Keys {
+    instrument TinePiano(bell: 0.3)
+    insert saturate(mode: "tape", drive: 0.25)
+    insert reverb(size: 0.6, decay: 0.5, mix: 0.22)
+    volume 0.9
+    play humanize(notes`[A2 E3 A3]:1 [C3 E3]:0.5 [A2 C3]:0.5 [F2 C3 F3]:1 [A2 C3]:1`, time: 0.02, vel: 10, seed: 11) at bars(1..1)
+    play humanize(notes`[C3 G3 C4]:1 [E3 G3]:0.5 [C3 E3]:0.5 [G2 D3 G3]:1 [B2 D3]:1`, time: 0.02, vel: 10, seed: 12) at bars(2..2)
+    play humanize(notes`[A2 E3 A3]:1 [C3 E3]:0.5 [A2 C3]:0.5 [F2 C3 F3]:1 [A2 C3]:1`, time: 0.02, vel: 10, seed: 13) at bars(3..3)
+    play humanize(notes`[C3 G3 C4]:1 [E3 G3]:0.5 [C3 E3]:0.5 [G2 D3 G3]:1.5 _:0.5`, time: 0.02, vel: 10, seed: 14) at bars(4..4)
+    play humanize(notes`[A2 E3 A3]:1 [C3 E3]:0.5 [A2 C3]:0.5 [F2 C3 F3]:1 [A2 C3]:1`, time: 0.02, vel: 10, seed: 15) at bars(5..7)
+    play humanize(notes`[C3 G3 C4]:1 [E3 G3]:0.5 [C3 E3]:0.5 [G2 D3 G3]:1 [E3 A3]:1`, time: 0.02, vel: 10, seed: 16) at bars(8..8)
+  }
+  track Motif {
+    instrument EPiano(tine: 0.3)
+    insert delay(time: 0.375, fdbk: 0.35, mix: 0.25)
+    insert reverb(size: 0.65, decay: 0.55, mix: 0.3)
+    volume 0.7
+    play humanize(notes`A3~:1 C4~:0.5 B3~:0.5 E4~:1 D4~:1`, time: 0.025, vel: 10, seed: 21) at bars(2..2)
+    play humanize(notes`C4~:1 A3~:0.5 B3~:0.5 G3~:2`, time: 0.025, vel: 10, seed: 22) at bars(4..4)
+    play humanize(notes`A3~:1 C4~:0.5 B3~:0.5 E4~:1 D4~:1`, time: 0.025, vel: 10, seed: 23) at bars(6..6)
+    play humanize(notes`E4~:1 D4~:0.5 C4~:0.5 B3~:1 A3~:1`, time: 0.025, vel: 10, seed: 24) at bars(8..8)
+  }
+  track Low {
+    instrument UprightBass(body: 0.5)
+    insert comp(thresh: 0.5, ratio: 0.5, makeup: 0.1)
+    volume 0.5
+    play notes`A1~:4` at bars(1..1)
+    play notes`C2~:2 G1~:2` at bars(2..2)
+    play notes`A1~:4` at bars(3..3)
+    play notes`C2~:2 G1~:2` at bars(4..4)
+    play notes`A1~:4` at bars(5..5)
+    play notes`C2~:2 G1~:2` at bars(6..6)
+    play notes`F1~:4` at bars(7..7)
+    play notes`G1~:4` at bars(8..8)
+  }
+}

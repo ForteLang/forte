@@ -1,0 +1,55 @@
+// records/floor — the floor record. The melodic-techno kit: a soft round
+// four-on-the-floor, offbeat hats, a brushed clap on the two and four,
+// air in the shaker — NO bassline, the floor leaves room for the music.
+// Cut for digging: the album's rhythmic ground.
+import { KickModal } from "../instruments/modal.forte"
+import { KickSub, HatClosed, HatOpen, Clap, Snap, Shaker } from "../../essentials_0.6.0/instruments/drums.forte"
+
+song "Floor" {
+  desc "The floor record: a soft round four-on-the-floor, offbeat hats, brushed claps — no bassline, room for the music."
+  artist "Forte Essentials"
+  tempo 120bpm
+  swing 0.54
+  master 1.0
+  key A minor
+
+  track Kick {
+    instrument KickModal(ring: 0.35, knock: 0.25)
+    insert saturate(mode: "tape", drive: 0.3)
+    insert comp(thresh: 0.5, ratio: 0.55, makeup: 0.15)
+    volume 0.95
+    play beat`x--- x--- x--- x---` at bars(1..7)
+    play beat`x--- x--- x--- x-x-` at bars(8..8)
+  }
+  track Sub {
+    instrument KickSub
+    volume 0.5
+    play beat`x--- x--- x--- x---` at bars(1..8)
+  }
+  track Hats {
+    instrument HatClosed(bright: 0.7)
+    volume 0.5
+    play humanize(beat`--x- --x- --x- --x-`, time: 0.012, vel: 16, seed: 31) at bars(1..8)
+  }
+  track Open {
+    instrument HatOpen(decay: 0.25)
+    volume 0.35
+    play beat`---- --x- ---- ----` at bars(2..8)
+  }
+  track Clap {
+    instrument Clap
+    insert reverb(size: 0.5, decay: 0.4, mix: 0.25)
+    volume 0.55
+    play late(beat`---- x--- ---- x---`, by: 0.04) at bars(1..8)
+  }
+  track Ticks {
+    instrument Snap
+    volume 0.35
+    play humanize(beat`---x ---- -x-- ---x`, time: 0.015, vel: 18, seed: 33) at bars(3..8)
+  }
+  track Air {
+    instrument Shaker
+    volume 0.4
+    play humanize(beat`x-x- x-x- x-x- x-x-`, time: 0.012, vel: 18, seed: 35) at bars(1..8)
+  }
+}
