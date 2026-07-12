@@ -175,14 +175,21 @@ pub struct SongAst {
 
 /// `sample Name = bounce(Call, note: C1, beats: 2)` — render an instrument
 /// hit offline into a deterministic audio asset, usable as a sampler source.
+/// Or `sample Name = dig("song.forte", beats: 16, skip: 16)` — render a
+/// whole OTHER SONG (crate digging: your own songs are the records).
 #[derive(Clone, Debug)]
 pub struct SampleLetAst {
     pub name: String,
     pub call: Call,
+    /// `dig`: relative path of the .forte song/block file to sample.
+    pub dig: Option<String>,
     /// Pitch name the bounce plays (and the sample's root). Default "C3".
     pub note: String,
     /// Length of the bounced note in beats. Default 2.0 (plus release tail).
+    /// For `dig`, 0.0 means the whole record.
     pub beats: f64,
+    /// `dig` only: beats to skip into the record before the window starts.
+    pub skip: f64,
     pub pos: Pos,
 }
 

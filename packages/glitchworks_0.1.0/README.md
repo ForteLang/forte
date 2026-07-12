@@ -19,7 +19,29 @@ House rules, learned by ear:
 
 ## Listening: the songbook (`songs/`, ~30 s each)
 
-Two shelves:
+Three shelves:
+
+- **`songs/dig/`** — crate digging: the glitch songs are the RECORDS.
+  `sample Rec = dig("../glitch/glitch-01.forte", beats: 16, skip: 16)`
+  renders a whole other song deterministically and hands it to the
+  sampler — `end` lands on the musical edge automatically, `semis: 5`
+  repitches into the new key, `skip` drops the needle mid-record. Every
+  dig song builds its backing out of two or three records (traded cuts,
+  simultaneous spins, backwards answers) and then plays its OWN drums,
+  bass and lead live on top.
+
+| # | records dug | ours on top |
+| --- | --- | --- |
+| 01 Crate One | first-cut + funk-fraction, traded in two-beat cuts | BodyBeat, GlideSub |
+| 02 Two Turntables | house + club, spinning at once | KickStack, ChipArp |
+| 03 Brass on Wax | the two G-minor records, same-key pair | SnareRainbow, UprightWalk |
+| 04 Choir Loan | choir over doom slabs, freeze ending | SubDeep, WoodTick |
+| 05 Jungle Reissue | amen re-cut harder, chips a fifth up | GlideSub, GlideVox |
+| 06 Piano Flip | piano vs violin, the session that never happened | ModalBackbeat, PickBass |
+| 07 Bell Exchange | bells vs dusk, every 4th bar backwards | HatWork, SubPulse |
+| 08 Tape Arbitrage | F-minor lounge + backspins pulled up a fourth | ShakerSwing, UprightWalk |
+| 09 Vox Reprint | voice re-cut into a new sentence, wars as punctuation | WobbleGate, ClapRun |
+| 10 The Anthology | THREE records collaged; the closer's ending cut twice | SlowWave |
 
 - **`songs/glitch/`** — the main event: twenty MIX-CHOP songs. Every one
   follows the same law: the full band (a `block Mix` placing the
@@ -120,3 +142,11 @@ instrument kit(C1: hitA, C2: hitB, wrap: WholeTake) // pads raw, other keys repi
 
 Slice math: a bounce carries +2 beats of tail — 4-beat source → `end:
 0.667`, 8-beat → `end: 0.8`. Slice n = bounce note + n semitones.
+A `dig` record needs NONE of this: `end` defaults to the musical edge,
+`semis: -5` repitches in semitones, `skip:` drops the needle mid-record.
+
+```
+sample Rec = dig("../glitch/glitch-08.forte", beats: 16, skip: 16)
+instrument sampler(sample: Rec, slices: 16, choke: "on", sustain: 1.0,
+                   release: 0.05, semis: 5)   // slice = one beat of the record
+```

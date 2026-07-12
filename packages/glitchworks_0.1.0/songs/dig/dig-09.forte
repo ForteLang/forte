@@ -1,0 +1,42 @@
+// dig-09 — vox reprint: the voice record reprinted over the scrub-wars
+// record — syllables re-cut into a new sentence, the war record stuttered
+// into punctuation. Our steered wobble and tripping claps are the press.
+import { WobbleGate } from "../../wrapped/bassworks.forte"
+import { ClapRun } from "../../wrapped/grooveworks.forte"
+
+song "Dig 09 — Vox Reprint" {
+  desc "The voice record reprinted over the scrub-wars record: syllables re-cut into a new sentence, wars as punctuation."
+  artist "Forte Essentials"
+  tempo 120bpm
+  swing 0.55
+  master 1.35
+  key C minor
+
+  sample Voice = dig("../glitch/glitch-15.forte", beats: 16)
+  sample Wars  = dig("../glitch/glitch-19.forte", beats: 16, skip: 16)
+
+  track Sentence {
+    instrument sampler(attack: 0.05, sample: Voice, slices: 16, choke: "on", sustain: 1.0, release: 0.05, vary: 0.08)
+    volume 0.95
+    play notes`C3~:0.5 _:0.25 C#3~:0.25 _:0.5 D3~:0.5 _:0.5 D#3~:0.5 _:1` at bars(1..4)
+    play notes`E3~:0.5 _:0.5 F3~:0.25 _:0.75 F#3~:0.5 _:0.5 G3~:0.25 _:0.75` at bars(5..8)
+    play notes`G#3~:0.5 _:0.25 A3~:0.25 _:0.5 A#3~:0.5 _:0.75 B3~:0.25 _:1` at bars(9..12)
+    play notes`C4~:0.5 _:0.5 C#4~:0.25 C#4~:0.25 _:0.5 D4~:0.5 _:1.5` at bars(13..15)
+    play notes`C3~:0.25 C3~:0.25 _:0.5 C3~:0.125 C3~:0.125 C3~:0.125 C3~:0.125 _:0.5 C3~:1.5` at bars(16..16)
+  }
+  track Punct {
+    instrument sampler(attack: 0.04, sample: Wars, slices: 16, choke: "on", sustain: 1.0, release: 0.04, vary: 0.1)
+    volume 0.75
+    play notes`_:3 E3~:0.25 E3~:0.25 _:0.5` at bars(2..6)
+    play notes`_:3 G#3~:0.125 G#3~:0.125 G#3~:0.125 G#3~:0.125 _:0.5` at bars(8..8)
+    play notes`_:3 C4~:0.25 C#4~:0.25 _:0.5` at bars(10..14)
+  }
+
+  play ClapRun(volume: 0.6) at bars(5..15)
+  block Bass : WobbleGate {
+    track Carve {
+      play notes`C2~:6 D#2~:2 C2~:4 A#1~:2 G1~:2` at bars(3..14)
+    }
+  }
+  play Bass(volume: 0.85) at bars(3..14)
+}

@@ -251,6 +251,129 @@ fn resolve_assets(
     out
 }
 
+/// A resolved `dig` record: another song rendered to an asset. `beats` is
+/// the musical length of the window (the asset carries +2 beats of tail
+/// beyond it) — the sampler uses it to default `end` to the musical edge.
+pub struct DigInfo {
+    pub key: String,
+    pub root: u8,
+    pub beats: f64,
+}
+
+/// Resolve every `sample X = dig("song.forte", ...)` in the file: compile
+/// the referenced song (its own imports, bounces and digs included),
+/// render its full arrangement with the same deterministic engine, window
+/// it by skip/beats, and register the result as a sample asset. Crate
+/// digging — your own songs are the records.
+fn resolve_digs(
+    file: &ast::FileAst,
+    base_dir: &str,
+    loader: &dyn ModuleLoader,
+    stack: &mut Vec<String>,
+    diags: &mut Vec<Diag>,
+) -> std::collections::HashMap<String, DigInfo> {
+    // collect dig-lets from the song root and every block
+    fn collect<'a>(blocks: &'a [ast::BlockAst], out: &mut Vec<&'a ast::SampleLetAst>) {
+        for b in blocks {
+            out.extend(b.body.sample_lets.iter().filter(|sl| sl.dig.is_some()));
+            collect(&b.body.blocks, out);
+        }
+    }
+    let mut lets: Vec<&ast::SampleLetAst> = Vec::new();
+    collect(&file.blocks, &mut lets);
+    if let Some(song) = &file.song {
+        lets.extend(song.sample_lets.iter().filter(|sl| sl.dig.is_some()));
+    }
+    let mut out = std::collections::HashMap::new();
+    for sl in lets {
+        let path = sl.dig.as_ref().unwrap();
+        let full = join_path(base_dir, path);
+        if stack.iter().any(|v| v == &full) {
+            diags.push(Diag::new(
+                "E-DIG-002",
+                sl.pos,
+                format!("dig が循環しています: {full}"),
+            ));
+            continue;
+        }
+        let root = match music::parse_pitch(&sl.note, sl.pos) {
+            Ok(v) => v,
+            Err(d) => {
+                diags.push(d);
+                continue;
+            }
+        };
+        let src = match loader.load(&full) {
+            Ok(s) => s,
+            Err(e) => {
+                diags.push(Diag::new("E-MOD-005", sl.pos, format!("{path} を読み込めません: {e}")));
+                continue;
+            }
+        };
+        let module_dir = std::path::Path::new(&full)
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        stack.push(full.clone());
+        let project = (|| -> Result<Project, Vec<Diag>> {
+            let mut module = parser::parse(&src)?;
+            let mut mdiags = Vec::new();
+            resolve_imports(&mut module, &module_dir, loader, &mut Vec::new(), &mut mdiags);
+            let massets = resolve_assets(&module, &module_dir, loader, &mut mdiags);
+            let mdigs = resolve_digs(&module, &module_dir, loader, stack, &mut mdiags);
+            if !mdiags.is_empty() {
+                return Err(mdiags);
+            }
+            compile::compile(&module, &massets, &mdigs)
+        })();
+        stack.pop();
+        let project = match project {
+            Ok(p) => p,
+            Err(ds) => {
+                for d in ds {
+                    diags.push(Diag::new(
+                        "E-DIG-003",
+                        sl.pos,
+                        format!("dig({path}) のコンパイルに失敗: {full}:{}:{} {}", d.pos.line, d.pos.col, d.message),
+                    ));
+                }
+                continue;
+            }
+        };
+        let record_len = dawcore::bounce::arrangement_len(&project);
+        let skip = sl.skip.max(0.0).min(record_len);
+        let want = if sl.beats > 0.0 { sl.beats } else { record_len - skip };
+        let beats = want.min(record_len - skip).max(0.25);
+        let key = render_dig_to_sample(&project, root, skip, beats);
+        out.insert(sl.name.clone(), DigInfo { key, root, beats });
+    }
+    out
+}
+
+/// Render a whole project and cut the [skip, skip+beats+2) window out of it
+/// as a registered sample asset. The 2 tail beats are REAL audio — whatever
+/// the record played next — so slice ends ring into truth, not silence.
+fn render_dig_to_sample(project: &Project, root: u8, skip: f64, beats: f64) -> String {
+    let (_full_key, sample) = render_to_sample(project, 2.0, root);
+    let spb = 48_000.0 * 60.0 / project.tempo; // samples per beat
+    let s = ((skip * spb) as usize).min(sample.data.len());
+    let e = (((skip + beats + 2.0) * spb) as usize).min(sample.data.len());
+    let data: Vec<f32> = sample.data[s..e].to_vec();
+    let mut digest = 0xcbf2_9ce4_8422_2325u64;
+    for v in &data {
+        for &b in &v.to_bits().to_le_bytes() {
+            digest ^= b as u64;
+            digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    let key = format!("dig-{digest:016x}");
+    dawcore::samples::register_asset(
+        &key,
+        std::sync::Arc::new(dawcore::dsp::sampler::Sample::one_shot(data.into(), 48_000.0, root)),
+    );
+    key
+}
+
 pub fn check_with_loader(
     src: &str,
     loader: &dyn ModuleLoader,
@@ -260,18 +383,19 @@ pub fn check_with_loader(
     let mut diags = Vec::new();
     resolve_imports(&mut file, base_dir, loader, &mut Vec::new(), &mut diags);
     let assets = resolve_assets(&file, base_dir, loader, &mut diags);
+    let digs = resolve_digs(&file, base_dir, loader, &mut Vec::new(), &mut diags);
     if !diags.is_empty() {
         return Err(diags);
     }
     if file.song.is_some() {
-        compile::compile(&file, &assets).map(Checked::Song)
+        compile::compile(&file, &assets, &digs).map(Checked::Song)
     } else if !file.blocks.is_empty() {
         // block library: validate devices AND compile the last block as root
         let diags = compile::validate_devices(&file);
         if !diags.is_empty() {
             return Err(diags);
         }
-        compile::compile(&file, &assets).map(|p| Checked::BlockLibrary {
+        compile::compile(&file, &assets, &digs).map(|p| Checked::BlockLibrary {
             blocks: file.blocks.len(),
             devices: file.devices.len(),
             root: Box::new(p),

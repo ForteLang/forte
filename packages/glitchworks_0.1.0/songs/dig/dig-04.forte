@@ -1,0 +1,44 @@
+// dig-04 — choir loan: the choir record borrowed into the doom record's
+// house — long cuts of the vowel wall over slabs of the half-speed break,
+// and when the break rests, the whole floor drops out. Our deep sub and
+// clockwork are the collateral.
+import { SubDeep } from "../../wrapped/bassworks.forte"
+import { WoodTick } from "../../wrapped/glitchset.forte"
+
+song "Dig 04 — Choir Loan" {
+  desc "The choir record borrowed over the doom record: long vowel cuts, slab cuts, the floor dropping out between them."
+  artist "Forte Essentials"
+  tempo 90bpm
+  swing 0.55
+  master 1.8
+  key C minor
+
+  sample Choir = dig("../glitch/glitch-11.forte", beats: 16)
+  sample Doom  = dig("../glitch/glitch-04.forte", beats: 16, skip: 8)
+
+  track Slab {
+    instrument sampler(attack: 0.06, sample: Doom, slices: 16, choke: "on", sustain: 1.0, release: 0.06, vary: 0.07)
+    volume 0.95
+    play notes`C3~:1.5 _:0.5 C#3~:1 _:1` at bars(1..4)
+    play notes`E3~:1 _:1 F3~:0.75 _:1.25` at bars(5..8)
+    play notes`G#3~:1.5 _:1 A3~:0.5 _:1` at bars(9..11)
+    play notes`C3~:2 _:2` at bars(12..12)
+  }
+  track Vowel {
+    instrument sampler(attack: 0.08, sample: Choir, slices: 16, choke: "on", sustain: 1.0, release: 0.1, vary: 0.05)
+    volume 0.8
+    play notes`_:2 G#3~:1.5 _:0.5` at bars(3..6)
+    play notes`_:1 C4~:2 _:1` at bars(7..10)
+    play notes`_:2 C3~:2` at bars(11..12)
+  }
+  // the record slowed to a hang under the last bars
+  track Hang {
+    instrument sampler(attack: 0.1, sample: Choir, stretch: 0.5, sustain: 1.0, release: 0.4)
+    automate stretch from 0.5 to 0.03 over bars(12..12)
+    volume 0.7
+    play notes`C3~:4` at bars(12..12)
+  }
+
+  play WoodTick(volume: 0.6) at bars(3..11)
+  play SubDeep(volume: 0.9) at bars(1..12)
+}

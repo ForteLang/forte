@@ -1,0 +1,41 @@
+// dig-06 — piano flip: the piano-room record flipped against the violin
+// record, cut to answer each other; our modal backbeat and muted funk
+// plucks are the rhythm section the records never had together.
+import { ModalBackbeat } from "../../wrapped/grooveworks.forte"
+import { PickBass } from "../../wrapped/bassworks.forte"
+
+song "Dig 06 — Piano Flip" {
+  desc "The piano record flipped against the violin record, our backbeat and funk plucks underneath — the session that never happened."
+  artist "Forte Essentials"
+  tempo 114bpm
+  swing 0.57
+  master 1.3
+  key C minor
+
+  sample Piano  = dig("../glitch/glitch-14.forte", beats: 16)
+  sample Violin = dig("../glitch/glitch-10.forte", beats: 16, skip: 8)
+
+  track Keys {
+    instrument sampler(attack: 0.05, sample: Piano, slices: 16, choke: "on", sustain: 1.0, release: 0.05, vary: 0.07)
+    volume 0.95
+    play notes`C3~:1 _:0.5 C#3~:0.75 _:0.25 D3~:1 _:0.5` at bars(1..4)
+    play notes`E3~:0.75 _:0.25 G3~:0.5 _:0.5 F3~:0.75 _:1.25` at bars(5..8)
+    play notes`G#3~:1 _:0.5 B3~:0.5 _:0.5 A3~:0.5 _:1` at bars(9..12)
+    play notes`C4~:0.75 _:0.25 D#4~:0.5 _:0.5 C#4~:0.5 _:1.5` at bars(13..14)
+  }
+  track Bow {
+    instrument sampler(attack: 0.07, sample: Violin, slices: 16, choke: "on", sustain: 1.0, release: 0.08, vary: 0.06)
+    volume 0.8
+    play notes`_:2.5 E3~:1 _:0.5` at bars(3..6)
+    play notes`_:2 G#3~:1.5 _:0.5` at bars(7..10)
+    play notes`_:2.5 C4~:1.5` at bars(11..14)
+  }
+
+  play ModalBackbeat at bars(3..13)
+  block Bass : PickBass {
+    track Funk {
+      play notes`C2:0.25 _:0.25 D2:0.25 E2:0.25 _:0.25 G2:0.25 C2:0.25 _:0.25 A2:0.25 C2:0.25 _:0.5 F2:0.25 D#2:0.25 _:0.5` at bars(5..12)
+    }
+  }
+  play Bass(volume: 0.85) at bars(5..12)
+}

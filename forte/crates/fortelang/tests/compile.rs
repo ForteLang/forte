@@ -824,3 +824,66 @@ fn a_song_bounces_its_own_mix_of_placed_blocks() {
     let b = fortelang::render_digest(&fortelang::compile_str(src).unwrap(), 2.0);
     assert_eq!(a.f32_digest, b.f32_digest, "mix bounce must be bit-stable");
 }
+
+#[test]
+fn dig_samples_another_song_as_a_record() {
+    // crate digging: a song renders ANOTHER SONG FILE to a sample and chops
+    // it — key-fit with `semis`, window with `skip`/`beats`, and `end`
+    // defaults to the musical edge (no tail-fraction magic).
+    let dir = std::env::temp_dir().join(format!("forte-dig-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("record.forte"),
+        r#"song "Record" { tempo 120bpm
+  track A { instrument prisma(wave: "sine", cutoff: 0.5, sustain: 0.8)
+    play notes`C2:1 E2:1 G2:1 C3:1` at bars(1..2) } }"#,
+    )
+    .unwrap();
+    let song = r#"song "Digger" { tempo 100bpm
+  sample Rec = dig("./record.forte", beats: 4, skip: 2)
+  track Cut { instrument sampler(sample: Rec, slices: 4, choke: "on", sustain: 1.0, release: 0.05, semis: -5)
+    play notes`C3~:1 _:1 D3~:0.5 _:1.5` at bars(1..1) } }"#;
+    let dirs = dir.to_str().unwrap();
+    let p = fortelang::compile_with_loader(song, &fortelang::FsLoader, dirs)
+        .expect("dig song must compile");
+    let a = fortelang::render_digest(&p, 2.0);
+    assert!(a.rms > 0.0005, "the dug record must sound (rms {})", a.rms);
+    let b = fortelang::render_digest(
+        &fortelang::compile_with_loader(song, &fortelang::FsLoader, dirs).unwrap(),
+        2.0,
+    );
+    assert_eq!(a.f32_digest, b.f32_digest, "dig must be bit-stable");
+
+    // auto `end` = beats/(beats+2): the sampler's region ends at the
+    // musical edge without the user computing tail fractions
+    let cut = p.tracks.iter().find(|t| t.name == "Cut").expect("Cut track");
+    let end = cut.devices[0].params[7];
+    assert!((end - 4.0 / 6.0).abs() < 1e-6, "auto end must be beats/(beats+2), got {end}");
+    // and semis: -5 lands on the pitch slot as 0.5 - 5/48
+    let pitch = cut.devices[0].params[5];
+    assert!((pitch - (0.5 - 5.0 / 48.0)).abs() < 1e-6, "semis must map to the pitch slot, got {pitch}");
+
+    // a dig cycle reports E-DIG-002 instead of recursing forever
+    std::fs::write(
+        dir.join("a.forte"),
+        r#"song "A" { tempo 120bpm
+  sample R = dig("./b.forte", beats: 4)
+  track T { instrument sampler(sample: R) play beat`x--- ---- ---- ----` at bars(1..1) } }"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("b.forte"),
+        r#"song "B" { tempo 120bpm
+  sample R = dig("./a.forte", beats: 4)
+  track T { instrument sampler(sample: R) play beat`x--- ---- ---- ----` at bars(1..1) } }"#,
+    )
+    .unwrap();
+    let cyc = std::fs::read_to_string(dir.join("a.forte")).unwrap();
+    let errs = fortelang::check_with_loader(&cyc, &fortelang::FsLoader, dirs)
+        .err()
+        .expect("dig cycle must be an error");
+    assert!(errs.iter().any(|d| d.code == "E-DIG-002" || d.code == "E-DIG-003"),
+        "cycle must surface E-DIG-002/003, got {:?}",
+        errs.iter().map(|d| d.code).collect::<Vec<_>>());
+}

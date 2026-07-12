@@ -1,0 +1,50 @@
+// dig-07 — bell exchange: the bell-shop record traded against the dusk
+// record, and every fourth bar one of them is played BACKWARDS — the
+// exchange rate. Our never-repeating hats and pumping sub are the market.
+import { HatWork } from "../../wrapped/grooveworks.forte"
+import { SubPulse } from "../../wrapped/bassworks.forte"
+
+song "Dig 07 — Bell Exchange" {
+  desc "The bell record traded against the dusk record — every fourth bar one plays backwards; our hats and sub run the market."
+  artist "Forte Essentials"
+  tempo 116bpm
+  swing 0.56
+  master 1.6
+  key C minor
+
+  sample Bells = dig("../glitch/glitch-16.forte", beats: 16)
+  sample Dusk  = dig("../glitch/glitch-02.forte", beats: 16, skip: 16)
+
+  track Shop {
+    instrument sampler(attack: 0.05, sample: Bells, slices: 16, choke: "on", sustain: 1.0, release: 0.05, vary: 0.07)
+    volume 0.95
+    play notes`C3~:0.75 _:0.25 C#3~:0.5 _:0.5 D3~:0.75 _:1.25` at bars(1..3)
+    play notes`E3~:0.75 _:0.25 F3~:0.5 _:0.75 F#3~:0.5 _:1.25` at bars(5..7)
+    play notes`G#3~:0.75 _:0.25 A3~:0.5 _:0.5 A#3~:0.5 _:1.5` at bars(9..11)
+    play notes`C4~:0.75 _:0.25 C#4~:0.5 _:0.75 D4~:0.5 _:1.25` at bars(13..15)
+  }
+  track Counter {
+    instrument sampler(attack: 0.05, sample: Dusk, slices: 16, choke: "on", sustain: 1.0, release: 0.05, vary: 0.08)
+    volume 0.85
+    play notes`_:1.5 E3~:0.5 _:1 F3~:0.5 _:0.5` at bars(2..3)
+    play notes`_:1.5 G#3~:0.5 _:1 A3~:0.5 _:0.5` at bars(6..7)
+    play notes`_:1.5 C4~:0.5 _:1 C#4~:0.5 _:0.5` at bars(10..11)
+    play notes`_:1.5 E3~:0.5 _:1 C3~:0.5 _:0.5` at bars(14..15)
+  }
+  // the rate: bar 4/8/12/16 — one record backwards, everything else out
+  track Rate {
+    instrument sampler(attack: 0.06, sample: Bells, reverse: "on", sustain: 1.0, release: 0.08, vary: 0.1)
+    volume 0.8
+    play notes`_:1 C3~:2 _:1` at bars(4..4)
+    play notes`_:1 E3~:2 _:1` at bars(12..12)
+  }
+  track RateB {
+    instrument sampler(attack: 0.06, sample: Dusk, reverse: "on", sustain: 1.0, release: 0.08, vary: 0.1)
+    volume 0.8
+    play notes`_:1 C3~:2 _:1` at bars(8..8)
+    play notes`_:1 C3~:3` at bars(16..16)
+  }
+
+  play HatWork(volume: 0.6) at bars(5..15)
+  play SubPulse(volume: 0.85) at bars(1..15)
+}

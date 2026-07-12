@@ -1,0 +1,42 @@
+// dig-02 — two turntables: the house record and the club record spinning
+// AT THE SAME TIME — one carries the floor, the other drops club moments
+// into the gaps. Our own pico lead and stacked kick keep the room ours.
+import { KickStack } from "../../wrapped/drumcolor.forte"
+import { ChipArp } from "../../wrapped/melodyworks.forte"
+
+song "Dig 02 — Two Turntables" {
+  desc "The house record and the club record spinning at once, our pico lead and stacked kick keeping the room ours."
+  artist "Forte Essentials"
+  tempo 122bpm
+  swing 0.53
+  master 0.95
+  key C minor
+
+  sample House = dig("../glitch/glitch-03.forte", beats: 16)
+  sample Club  = dig("../glitch/glitch-17.forte", beats: 16, skip: 16)
+
+  track TableA {
+    instrument sampler(attack: 0.05, sample: House, slices: 16, choke: "on", sustain: 1.0, release: 0.05, vary: 0.05)
+    volume 0.95
+    play notes`C3~:0.75 _:0.25 C#3~:0.75 _:0.25 D3~:0.75 _:0.25 D#3~:0.75 _:0.25` at bars(1..7)
+    play notes`C3~:0.5 _:0.5 C#3~:0.25 C#3~:0.25 _:0.5 D3~:0.5 _:1.5` at bars(8..8)
+    play notes`E3~:0.75 _:0.25 F3~:0.75 _:0.25 F#3~:0.75 _:0.25 G3~:0.75 _:0.25` at bars(9..15)
+    play notes`C3~:0.5 _:0.5 C3~:0.25 _:0.75 C3~:2` at bars(16..16)
+  }
+  track TableB {
+    instrument sampler(attack: 0.05, sample: Club, slices: 16, choke: "on", sustain: 1.0, release: 0.05, vary: 0.08)
+    volume 0.8
+    play notes`_:3 G#3~:0.5 _:0.5` at bars(2..7)
+    play notes`_:1 A3~:0.5 _:1 B3~:0.5 _:1` at bars(8..8)
+    play notes`_:3 C4~:0.5 _:0.5` at bars(9..15)
+    play notes`_:2 C4~:1 _:1` at bars(16..16)
+  }
+
+  play KickStack at bars(1..15)
+  block Lead : ChipArp {
+    track Pico {
+      play notes`C4:0.25 D4:0.25 F4:0.25 C4:0.25 G4:0.25 C4:0.25 A#4:0.25 G4:0.25 C4:0.25 D#4:0.25 C4:0.25 F#4:0.25 G4:0.25 C4:0.25 B4:0.25 C5:0.25` at bars(9..14)
+    }
+  }
+  play Lead(volume: 0.6) at bars(9..14)
+}

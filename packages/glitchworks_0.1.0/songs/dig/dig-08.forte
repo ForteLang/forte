@@ -1,0 +1,41 @@
+// dig-08 — tape arbitrage: the F-minor lounge record cut against the
+// backspin record pulled UP a fourth to match it — buying in one key,
+// selling in another. Our shaker and a walking upright collect the spread.
+import { ShakerSwing } from "../../wrapped/grooveworks.forte"
+import { UprightWalk } from "../../wrapped/bassworks.forte"
+
+song "Dig 08 — Tape Arbitrage" {
+  desc "The lounge record against the backspin record repitched a fourth up to meet it — our shaker and upright collect the spread."
+  artist "Forte Essentials"
+  tempo 94bpm
+  swing 0.6
+  master 1.7
+  key F minor
+
+  sample Lounge = dig("../glitch/glitch-18.forte", beats: 16)
+  sample Spin   = dig("../glitch/glitch-13.forte", beats: 16, skip: 8)
+
+  track Buy {
+    instrument sampler(attack: 0.05, sample: Lounge, slices: 16, choke: "on", sustain: 1.0, release: 0.06, vary: 0.06)
+    volume 0.95
+    play notes`C3~:1 _:0.5 C#3~:0.75 _:0.25 D3~:1 _:0.5` at bars(1..4)
+    play notes`E3~:1 _:0.5 F3~:0.5 _:0.5 F#3~:0.75 _:0.75` at bars(5..8)
+    play notes`G#3~:1 _:0.5 A3~:0.5 _:0.75 A#3~:0.5 _:0.75` at bars(9..12)
+  }
+  track Sell {
+    // the C-minor record, pulled up a fourth into F minor
+    instrument sampler(attack: 0.05, sample: Spin, slices: 16, choke: "on", sustain: 1.0, release: 0.05, vary: 0.08, semis: 5)
+    volume 0.8
+    play notes`_:2.5 E3~:0.5 _:0.5 F3~:0.5` at bars(3..6)
+    play notes`_:2.5 G#3~:0.75 _:0.75` at bars(7..10)
+    play notes`_:2 C4~:1 _:1` at bars(11..12)
+  }
+
+  play ShakerSwing(volume: 0.55) at bars(3..11)
+  block Bass : UprightWalk {
+    track Walk {
+      play notes`C2:1 E2:1 C2:0.5 D2:0.5 G2:0.5 F2:0.5 C2:1 E2:0.75 D2:0.25 A2:1 G2:0.5 F2:0.5` at bars(5..12)
+    }
+  }
+  play Bass(volume: 0.9) at bars(5..12)
+}

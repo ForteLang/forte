@@ -16,6 +16,7 @@ use dawcore::model::{
 pub fn compile(
     file: &FileAst,
     assets: &HashMap<String, crate::AssetInfo>,
+    digs: &HashMap<String, crate::DigInfo>,
 ) -> Result<Project, Vec<Diag>> {
     // the build root: the song, or the LAST top-level block in the file.
     // A song is just the outermost block — structurally there is no
@@ -123,8 +124,11 @@ pub fn compile(
     // ---- bounce-to-sample: render instrument hits into audio assets --------
     // (song-level `sample X = bounce(...)`; the render is the same
     // deterministic engine, so the asset is bit-identical everywhere)
-    let no_bounces: HashMap<String, (String, u8)> = HashMap::new();
-    let mut bounces: HashMap<String, (String, u8)> = HashMap::new();
+    // name → (asset key, root pitch, musical beats). beats is Some only for
+    // dig records: the sampler then knows where the music ends inside the
+    // asset (the +2-beat tail) and can default `end` to the musical edge.
+    let no_bounces: HashMap<String, (String, u8, Option<f64>)> = HashMap::new();
+    let mut bounces: HashMap<String, (String, u8, Option<f64>)> = HashMap::new();
     // collect from every block AND the root (imported wrapped-instrument
     // libraries declare their samples inside their blocks); one flat
     // namespace, curated packages keep names unique. The root's own
@@ -159,6 +163,22 @@ pub fn compile(
                 continue;
             }
         };
+        if sl.dig.is_some() {
+            // dig("song.forte"): the record was already rendered by the
+            // loader phase (lib.rs resolve_digs) — imports and file access
+            // live there, not here. Just wire the asset in.
+            match digs.get(&sl.name) {
+                Some(info) => {
+                    bounces.insert(sl.name.clone(), (info.key.clone(), pitch, Some(info.beats)));
+                }
+                None => diags.push(Diag::new(
+                    "E-DIG-001",
+                    sl.pos,
+                    format!("dig '{}' を解決できませんでした(ファイルローダーのないビルドでは dig は使えません)", sl.name),
+                )),
+            }
+            continue;
+        }
         if !(0.05..=32.0).contains(&sl.beats) {
             diags.push(Diag::new(
                 "E-SMP-001",
@@ -234,7 +254,7 @@ pub fn compile(
         }
         // 2 beats of tail so releases and reverbs ring out into the sample
         let (key, _sample) = crate::render_to_sample(&mini, 2.0, pitch);
-        bounces.insert(sl.name.clone(), (key, pitch));
+        bounces.insert(sl.name.clone(), (key, pitch, None));
     }
 
     let env = Env { beats_per_bar, swing, tempo: p.tempo, assets, user_devices: &user_devices, bounces: &bounces };
@@ -370,7 +390,7 @@ struct Env<'a> {
     assets: &'a HashMap<String, crate::AssetInfo>,
     user_devices: &'a HashMap<&'a str, &'a DeviceAst>,
     /// Bounce-to-sample assets: name → (asset key, root pitch).
-    bounces: &'a HashMap<String, (String, u8)>,
+    bounces: &'a HashMap<String, (String, u8, Option<f64>)>,
 }
 
 /// A lowered track whose engine id / color / send targets are still symbolic.
@@ -1868,7 +1888,7 @@ fn build_instrument(
     call: &Call,
     user_devices: &HashMap<&str, &DeviceAst>,
     assets: &HashMap<String, crate::AssetInfo>,
-    bounces: &HashMap<String, (String, u8)>,
+    bounces: &HashMap<String, (String, u8, Option<f64>)>,
 ) -> Result<(Device, u8), Diag> {
     if let Some(dev_ast) = user_devices.get(call.name.as_str()) {
         if dev_ast.kind == "Effect" {
@@ -1928,6 +1948,8 @@ fn build_instrument(
         "sampler" => {
             let mut dev = Device::new(DeviceKind::Sampler);
             let mut root = 36u8;
+            // musical length (beats) of a dig record — drives the auto `end`
+            let mut dig_beats: Option<f64> = None;
             for (key, arg) in &call.args {
                 match (key.as_str(), arg) {
                     // recorded take as the instrument: your voice becomes a synth
@@ -1982,7 +2004,7 @@ fn build_instrument(
                     // bounce-to-sample asset by name: the wrapped-instrument
                     // idiom (sample Sub = bounce(BD808(...)); sampler(sample: Sub))
                     ("sample", Arg::Ident(name, pos)) => {
-                        let Some((key, broot)) = bounces.get(name) else {
+                        let Some((key, broot, beats)) = bounces.get(name) else {
                             let mut names: Vec<&str> =
                                 bounces.keys().map(String::as_str).collect();
                             names.sort();
@@ -1997,6 +2019,7 @@ fn build_instrument(
                         };
                         dev.sample = SampleSource::Asset(key.clone());
                         root = *broot; // the bounced pitch plays back untouched
+                        dig_beats = *beats;
                     }
                     // slice mode: chop the region into N pads (root+n picks
                     // slice n at original speed — the MPC chop / breakbeat cut)
@@ -2026,6 +2049,18 @@ fn build_instrument(
                         dev.sample = SampleSource::Builtin(canon.0.into());
                         root = canon.1;
                     }
+                    // repitch in MUSICAL units: semis: -5 plays the record a
+                    // fourth down — no magic pitch fractions (pitch 0.5 ± n/48)
+                    ("semis", Arg::Num(n, pos)) => {
+                        if !(-24.0..=24.0).contains(n) {
+                            return Err(Diag::new(
+                                "E-TYPE-002",
+                                *pos,
+                                format!("semis {n} は -24..24(半音)で指定してください"),
+                            ));
+                        }
+                        dev.params[5] = 0.5 + (*n as f32) / 48.0;
+                    }
                     // start/end trim the take; loop sustains it; reverse flips it —
                     // one recording becomes many instruments
                     _ => set_param(
@@ -2050,6 +2085,14 @@ fn build_instrument(
                     "sampler には sample: \"Kick\" か take: <import した録音> の指定が必要です",
                 ));
             }
+            // a dig record knows its musical length: unless the user trims
+            // it themselves, `end` lands exactly where the music ends (the
+            // +2-beat tail stays out of the slice math — no 0.889 magic)
+            if let Some(b) = dig_beats {
+                if !call.args.iter().any(|(k, _)| k == "end") {
+                    dev.params[7] = (b / (b + 2.0)) as f32;
+                }
+            }
             Ok((dev, root))
         }
         // pitch → take map: a drum kit built from recordings.
@@ -2063,7 +2106,7 @@ fn build_instrument(
                 if let Some(info) = assets.get(name) {
                     return Ok(SampleSource::Asset(info.key.clone()));
                 }
-                if let Some((key, _root)) = bounces.get(name) {
+                if let Some((key, _root, _beats)) = bounces.get(name) {
                     return Ok(SampleSource::Asset(key.clone()));
                 }
                 let mut names: Vec<&str> = assets

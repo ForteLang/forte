@@ -324,18 +324,40 @@ impl Parser {
                     }
                     "sample" => {
                         // sample Name = bounce(Call[, note: C1][, beats: 2])
+                        // sample Name = dig("song.forte"[, note: C3][, beats: 16][, skip: 16])
                         let pos = self.pos();
                         self.bump();
                         let Some(name) = self.ident("sample の名前") else { continue };
                         self.expect(Tok::Eq, "`=`");
-                        if !self.keyword("bounce") {
-                            self.err("E-PARSE-024", "sample には bounce(楽器コール) を書きます(例: sample Sub = bounce(BD808(), note: C1, beats: 2))");
+                        let is_dig = matches!(self.peek(), Tok::Ident(k) if k == "dig");
+                        if !is_dig && !self.keyword("bounce") {
+                            self.err("E-PARSE-024", "sample には bounce(楽器コール) か dig(\"song.forte\") を書きます(例: sample Sub = bounce(BD808(), note: C1, beats: 2))");
                             continue;
                         }
-                        self.expect(Tok::LParen, "`(`");
-                        let Some(call) = self.call() else { continue };
+                        let mut dig: Option<String> = None;
+                        let mut call = Call { name: String::new(), args: Vec::new(), pos };
                         let mut note = "C3".to_string();
                         let mut beats = 2.0;
+                        let mut skip = 0.0;
+                        if is_dig {
+                            self.bump(); // `dig`
+                            self.expect(Tok::LParen, "`(`");
+                            match self.peek().clone() {
+                                Tok::Str(p) => {
+                                    self.bump();
+                                    dig = Some(p);
+                                }
+                                _ => {
+                                    self.err("E-PARSE-024", "dig の最初の引数はファイルパスの文字列です(例: dig(\"../glitch/glitch-01.forte\", beats: 16))");
+                                    continue;
+                                }
+                            }
+                            beats = 0.0; // dig defaults to the whole record
+                        } else {
+                            self.expect(Tok::LParen, "`(`");
+                            let Some(c) = self.call() else { continue };
+                            call = c;
+                        }
                         loop {
                             match self.peek().clone() {
                                 Tok::RParen => {
@@ -357,18 +379,30 @@ impl Parser {
                                                 beats = n;
                                             }
                                         }
+                                        "skip" if is_dig => {
+                                            if let Some((n, _u, _p)) = self.number("skip") {
+                                                skip = n;
+                                            }
+                                        }
                                         other => {
-                                            self.err("E-PARSE-024", format!("bounce() に '{other}' という引数はありません(note, beats)"));
+                                            self.err(
+                                                "E-PARSE-024",
+                                                if is_dig {
+                                                    format!("dig() に '{other}' という引数はありません(note, beats, skip)")
+                                                } else {
+                                                    format!("bounce() に '{other}' という引数はありません(note, beats)")
+                                                },
+                                            );
                                         }
                                     }
                                 }
                                 _ => {
-                                    self.err("E-PARSE-024", "bounce の引数は `, note: C1` / `, beats: 2` の形です");
+                                    self.err("E-PARSE-024", "bounce/dig の引数は `, note: C1` / `, beats: 2` の形です");
                                     self.bump();
                                 }
                             }
                         }
-                        song.sample_lets.push(SampleLetAst { name, call, note, beats, pos });
+                        song.sample_lets.push(SampleLetAst { name, call, dig, note, beats, skip, pos });
                     }
                     "meter" => {
                         self.bump();

@@ -1,0 +1,49 @@
+// dig-10 — the anthology: three records from the crate at once — the
+// closer, the first cut, and the violin — collaged in long quotations,
+// our slow wave under the whole retrospective. The last quote is the
+// closer's own ending, ridden down and power-cut a second time.
+import { SlowWave } from "../../wrapped/glitchset.forte"
+
+song "Dig 10 — The Anthology" {
+  desc "Three records collaged in long quotations over a slow wave; the last quote is the closer's ending, cut a second time."
+  artist "Forte Essentials"
+  tempo 100bpm
+  swing 0.56
+  master 1.7
+  key C minor
+
+  sample Closer = dig("../glitch/glitch-20.forte", beats: 16)
+  sample First  = dig("../glitch/glitch-01.forte", beats: 16, skip: 16)
+  sample Bow    = dig("../glitch/glitch-10.forte", beats: 16)
+
+  track QuoteA {
+    instrument sampler(attack: 0.06, sample: Closer, slices: 16, choke: "on", sustain: 1.0, release: 0.06, vary: 0.06)
+    volume 0.95
+    play notes`C3~:1.5 _:0.5 C#3~:1 _:1` at bars(1..4)
+    play notes`G#3~:1.5 _:0.5 A3~:0.75 _:1.25` at bars(9..12)
+  }
+  track QuoteB {
+    instrument sampler(attack: 0.06, sample: First, slices: 16, choke: "on", sustain: 1.0, release: 0.06, vary: 0.06)
+    volume 0.9
+    play notes`E3~:1.5 _:0.5 F3~:0.75 _:1.25` at bars(5..8)
+    play notes`_:2 C4~:1 _:1` at bars(9..12)
+  }
+  track QuoteC {
+    instrument sampler(attack: 0.07, sample: Bow, slices: 16, choke: "on", sustain: 1.0, release: 0.08, vary: 0.06)
+    volume 0.8
+    play notes`_:2.5 G#3~:1 _:0.5` at bars(3..6)
+    play notes`_:2 E3~:1.5 _:0.5` at bars(7..10)
+    play notes`_:2.5 C4~:1.5` at bars(11..12)
+  }
+  // the final quotation: the closer held whole, ridden down, cut again
+  track Ending {
+    instrument sampler(attack: 0.08, sample: Closer, sustain: 1.0, release: 0.3)
+    insert tapestop(amount: 0.0)
+    automate pitch from 0.5 to 0.396 over bars(13..14)
+    automate tapestop.amount from 0.0 to 1.0 over bars(14..14)
+    volume 0.9
+    play notes`C3~:8` at bars(13..14)
+  }
+
+  play SlowWave(volume: 0.6) at bars(1..12)
+}
