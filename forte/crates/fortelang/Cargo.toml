@@ -15,6 +15,11 @@ serde_json = "1"
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 cpal = "0.15"
 
+# terminal width for the in-place player UI (TIOCGWINSZ); already in the
+# tree via cpal, never built for wasm
+[target.'cfg(all(unix, not(target_family = "wasm")))'.dependencies]
+libc = "0.2"
+
 [[bin]]
 name = "forte"
 path = "src/bin/forte.rs"

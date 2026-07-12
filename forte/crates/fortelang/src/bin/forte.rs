@@ -780,8 +780,20 @@ fn build(path: &str, out: Option<String>, stems: bool) -> ExitCode {
 }
 
 #[cfg(not(target_family = "wasm"))]
-/// Terminal column count (stty, then $COLUMNS, then a safe default).
+/// Terminal column count. The tty itself is asked first (TIOCGWINSZ on
+/// stdout/stderr/stdin) — `stty` and `$COLUMNS` lie or vanish depending on
+/// the platform, and a too-wide guess makes clamped lines wrap anyway,
+/// which breaks the in-place redraw's cursor-up arithmetic.
 fn term_cols() -> usize {
+    #[cfg(unix)]
+    unsafe {
+        let mut ws: libc::winsize = std::mem::zeroed();
+        for fd in [libc::STDOUT_FILENO, libc::STDERR_FILENO, libc::STDIN_FILENO] {
+            if libc::ioctl(fd, libc::TIOCGWINSZ, &mut ws) == 0 && ws.ws_col >= 20 {
+                return ws.ws_col as usize;
+            }
+        }
+    }
     if let Ok(o) = std::process::Command::new("stty")
         .arg("size")
         .stdin(std::process::Stdio::inherit())
@@ -795,7 +807,7 @@ fn term_cols() -> usize {
             }
         }
     }
-    std::env::var("COLUMNS").ok().and_then(|v| v.parse().ok()).filter(|&c| c >= 20).unwrap_or(100)
+    std::env::var("COLUMNS").ok().and_then(|v| v.parse().ok()).filter(|&c| c >= 20).unwrap_or(80)
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -894,10 +906,6 @@ block __Probe : {b} {{}}
         let bars = (len_beats / bpb).ceil().max(1.0);
         let total = len_beats * 60.0 / p.tempo;
         let mut out = Vec::with_capacity(p.tracks.len() + 4);
-        if !p.desc.is_empty() {
-            // the top block's own words: what this piece is
-            out.push(format!("\x1b[1m{}\x1b[0m — {}", p.name, p.desc));
-        }
         out.push(format!(
             "♪ {} bpm {}/{} — {} bars({}:{:04.1})  save = hot reload, Ctrl+C = quit",
             p.tempo,
@@ -965,7 +973,7 @@ block __Probe : {b} {{}}
     };
     let mut audio = fortelang::audio::start();
     let tty = std::io::stdout().is_terminal();
-    let cols = if tty { term_cols() } else { usize::MAX };
+    let mut cols = if tty { term_cols() } else { usize::MAX };
     if audio.silent {
         eprintln!("audio: 出力デバイスなし — 無音バックエンドで走行します({})", audio.device_name);
     } else {
@@ -974,6 +982,12 @@ block __Probe : {b} {{}}
     apply(&mut audio.handle, &project, 0, from_bar);
     audio.handle.send(Command::Play);
     println!("playing: \"{path}\"");
+    if !project.desc.is_empty() {
+        // the piece's own words, printed ONCE above the redraw region — a
+        // desc inside the repainted frame multiplies forever the moment the
+        // line wraps (wrong width guess, resized terminal, anything)
+        println!("{}", clamp_visible(&format!("\x1b[1m{}\x1b[0m — {}", project.name, project.desc), cols));
+    }
 
     let started = Instant::now();
     let mut last_mtime = mtime(path);
@@ -1017,6 +1031,7 @@ block __Probe : {b} {{}}
             let peak = audio.handle.shared.master_peak();
             if tty {
                 // in-place redraw: jump to the top of the block, wipe, repaint
+                cols = term_cols(); // per frame: tracks live resizes (ioctl)
                 let frame = render(&project, pos, loops, peak, &message);
                 let mut out = String::new();
                 if drawn > 0 {
@@ -1109,7 +1124,6 @@ fn play_album(path: &str, verify: bool, for_secs: Option<f64>) -> ExitCode {
         eprintln!("audio: 出力デバイスなし — 無音バックエンドで走行します({})", audio.device_name);
     }
     let tty = std::io::stdout().is_terminal();
-    let cols = if tty { term_cols() } else { usize::MAX };
     let _raw = if tty { Some(fortelang::live::RawTerm::enter()) } else { None };
 
     let mm_ss = |s: f64| format!("{}:{:04.1}", (s / 60.0) as i64, s % 60.0);
@@ -1196,6 +1210,7 @@ fn play_album(path: &str, verify: bool, for_secs: Option<f64>) -> ExitCode {
             }
 
             if tty {
+                let cols = term_cols(); // per frame: tracks live resizes (ioctl)
                 let mut frame = Vec::with_capacity(songs.len() + 4);
                 let head = if title.is_empty() {
                     format!("\x1b[1m♪ {}\x1b[0m{}", sf.name, if sf.artist.is_empty() { String::new() } else { format!(" — {}", sf.artist) })
