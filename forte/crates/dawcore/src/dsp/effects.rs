@@ -2,6 +2,7 @@
 //! pre-allocated buffers so `process` never allocates on the audio thread.
 
 use super::filter::OnePole;
+use super::oversample::Oversampler;
 
 /// Stereo delay with feedback and high-frequency damping in the feedback path.
 pub struct StereoDelay {
@@ -135,6 +136,9 @@ impl FdnReverb {
 /// Soft-clipping waveshaper drive.
 pub struct Drive {
     pub amount: f32, // 0..1
+    /// oversampling factor 1 (off, bit-exact legacy path) / 2 / 4
+    pub os: u8,
+    ovs: Option<Oversampler>,
 }
 
 impl Default for Drive {
@@ -145,13 +149,36 @@ impl Default for Drive {
 
 impl Drive {
     pub fn new() -> Self {
-        Self { amount: 0.3 }
+        Self { amount: 0.3, os: 1, ovs: None }
     }
     #[inline]
     pub fn process(&self, x: f32) -> f32 {
         let k = 1.0 + self.amount * 20.0;
         let shaped = crate::dmath::tanh(x * k);
         shaped / (1.0 + self.amount * 1.5)
+    }
+    #[inline]
+    pub fn process_lr(&mut self, l: f32, r: f32) -> (f32, f32) {
+        match self.ovs.as_mut() {
+            Some(o) => {
+                let amount = self.amount;
+                let shape = |x: f32| {
+                    let k = 1.0 + amount * 20.0;
+                    crate::dmath::tanh(x * k) / (1.0 + amount * 1.5)
+                };
+                let (wl, wr, _, _) = o.run(l, r, |a, b| (shape(a), shape(b)));
+                (wl, wr)
+            }
+            None => (self.process(l), self.process(r)),
+        }
+    }
+    /// Rebuilds the oversampler only when the factor actually changes —
+    /// `configure` runs every block and must not allocate in steady state.
+    pub fn set_os(&mut self, factor: u8) {
+        if factor != self.os {
+            self.os = factor;
+            self.ovs = (factor > 1).then(|| Oversampler::new(factor));
+        }
     }
 }
 
@@ -368,28 +395,66 @@ pub struct Crush {
     pub bits: f32, // 0..1 → 16..1 effective bits
     pub rate: f32, // 0..1 → hold 1..64 samples
     pub mix: f32,
+    /// oversampling factor 1 (off, bit-exact legacy path) / 2 / 4
+    pub os: u8,
     phase: f32,
     held: (f32, f32),
+    ovs: Option<Oversampler>,
 }
 
 impl Crush {
     pub fn new() -> Self {
-        Self { bits: 0.5, rate: 0.35, mix: 1.0, phase: 0.0, held: (0.0, 0.0) }
+        Self { bits: 0.5, rate: 0.35, mix: 1.0, os: 1, phase: 0.0, held: (0.0, 0.0), ovs: None }
+    }
+
+    #[inline]
+    fn step(
+        phase: &mut f32,
+        held: &mut (f32, f32),
+        hold: f32,
+        bits: f32,
+        l: f32,
+        r: f32,
+    ) -> (f32, f32) {
+        *phase += 1.0;
+        if *phase >= hold {
+            *phase -= hold;
+            // quantize to 2^bits amplitude levels
+            let levels = crate::dmath::powf(2.0, bits - 1.0);
+            *held = ((l * levels).round() / levels, (r * levels).round() / levels);
+        }
+        *held
+    }
+
+    pub fn set_os(&mut self, factor: u8) {
+        if factor != self.os {
+            self.os = factor;
+            self.ovs = (factor > 1).then(|| Oversampler::new(factor));
+        }
     }
 
     #[inline]
     pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let bits = 16.0 - self.bits.clamp(0.0, 1.0) * 15.0;
         let hold = 1.0 + self.rate.clamp(0.0, 1.0) * 63.0;
-        self.phase += 1.0;
-        if self.phase >= hold {
-            self.phase -= hold;
-            // quantize to 2^bits amplitude levels
-            let bits = 16.0 - self.bits.clamp(0.0, 1.0) * 15.0;
-            let levels = crate::dmath::powf(2.0, bits - 1.0);
-            self.held = ((l * levels).round() / levels, (r * levels).round() / levels);
-        }
         let m = self.mix.clamp(0.0, 1.0);
-        (l * (1.0 - m) + self.held.0 * m, r * (1.0 - m) + self.held.1 * m)
+        let (phase, held) = (&mut self.phase, &mut self.held);
+        match self.ovs.as_mut() {
+            // whole sample-and-hold core at the high rate (hold length scaled
+            // so the crunch stays the same speed in seconds); the decimation
+            // filter then strips the fold-back off both the hold steps and
+            // the quantize edges
+            Some(o) => {
+                let hold_hi = hold * o.factor() as f32;
+                let (wl, wr, dl, dr) =
+                    o.run(l, r, |a, b| Self::step(phase, held, hold_hi, bits, a, b));
+                (dl * (1.0 - m) + wl * m, dr * (1.0 - m) + wr * m)
+            }
+            None => {
+                let (wl, wr) = Self::step(phase, held, hold, bits, l, r);
+                (l * (1.0 - m) + wl * m, r * (1.0 - m) + wr * m)
+            }
+        }
     }
 }
 
@@ -494,17 +559,20 @@ pub struct Saturate {
     pub drive: f32, // 0..1
     pub tone: f32,  // 0..1 → dark..open
     pub mix: f32,
+    /// oversampling factor 1 (off, bit-exact legacy path) / 2 / 4
+    pub os: u8,
+    ovs: Option<Oversampler>,
 }
 
 impl Saturate {
     pub fn new(sr: f32) -> Self {
-        Self { sr, lp: (0.0, 0.0), mode: 0, drive: 0.4, tone: 0.7, mix: 1.0 }
+        Self { sr, lp: (0.0, 0.0), mode: 0, drive: 0.4, tone: 0.7, mix: 1.0, os: 1, ovs: None }
     }
 
     #[inline]
-    fn shape(&self, x: f32) -> f32 {
-        let d = 1.0 + self.drive * 9.0;
-        match self.mode {
+    fn shape_with(mode: u8, drive: f32, x: f32) -> f32 {
+        let d = 1.0 + drive * 9.0;
+        match mode {
             // tube: asymmetric — a touch of x² rectification before the tanh
             1 => {
                 let y = x * d;
@@ -518,8 +586,30 @@ impl Saturate {
     }
 
     #[inline]
+    fn shape(&self, x: f32) -> f32 {
+        Self::shape_with(self.mode, self.drive, x)
+    }
+
+    pub fn set_os(&mut self, factor: u8) {
+        if factor != self.os {
+            self.os = factor;
+            self.ovs = (factor > 1).then(|| Oversampler::new(factor));
+        }
+    }
+
+    #[inline]
     pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
-        let (mut wl, mut wr) = (self.shape(l), self.shape(r));
+        // waveshape (the aliasing source) — oversampled when `os` is on;
+        // the tone filter and mix blend stay at the base rate either way
+        let (mut wl, mut wr, l, r) = match self.ovs.as_mut() {
+            Some(o) => {
+                let (mode, drive) = (self.mode, self.drive);
+                o.run(l, r, |a, b| {
+                    (Self::shape_with(mode, drive, a), Self::shape_with(mode, drive, b))
+                })
+            }
+            None => (self.shape(l), self.shape(r), l, r),
+        };
         // tone: one-pole lowpass, 800 Hz (dark) .. 18 kHz (open)
         let cutoff = 800.0 * crate::dmath::powf(22.5, self.tone.clamp(0.0, 1.0));
         let a = (cutoff / self.sr * std::f32::consts::TAU).min(1.0);
@@ -579,43 +669,81 @@ pub struct ParComp {
     pub amount: f32, // wet blend 0..1
     pub drive: f32,  // input gain into the crushed bus
     pub color: f32,  // 0..1 smiley tilt on the wet bus
+    /// oversampling factor 1 (off, bit-exact legacy path) / 2 / 4
+    pub os: u8,
+    ovs: Option<Oversampler>,
 }
 
 impl ParComp {
     pub fn new(sr: f32) -> Self {
-        Self { sr, env: 0.0, low: (0.0, 0.0), amount: 0.35, drive: 0.5, color: 0.3 }
+        Self { sr, env: 0.0, low: (0.0, 0.0), amount: 0.35, drive: 0.5, color: 0.3, os: 1, ovs: None }
     }
 
+    /// The crushed bus for one sample at rate `sr` — followers, gain
+    /// computer, tilt and the final tanh (the aliasing source).
     #[inline]
-    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
-        let g_in = 1.0 + self.drive * 7.0;
+    fn wet(
+        env: &mut f32,
+        low: &mut (f32, f32),
+        sr: f32,
+        g_in: f32,
+        c: f32,
+        l: f32,
+        r: f32,
+    ) -> (f32, f32) {
         let (xl, xr) = (l * g_in, r * g_in);
         let level = (xl.abs() + xr.abs()) * 0.5;
         // fast follower: ~2 ms up, ~60 ms down
-        let up = (1.0 / (0.002 * self.sr)).min(1.0);
-        let down = (1.0 / (0.06 * self.sr)).min(1.0);
-        self.env += (level - self.env) * if level > self.env { up } else { down };
+        let up = (1.0 / (0.002 * sr)).min(1.0);
+        let down = (1.0 / (0.06 * sr)).min(1.0);
+        *env += (level - *env) * if level > *env { up } else { down };
         // 8:1 over −24 dBFS (0.063 linear)
         const THRESH: f32 = 0.063;
-        let gr = if self.env > THRESH {
-            crate::dmath::powf(self.env / THRESH, -(1.0 - 1.0 / 8.0))
+        let gr = if *env > THRESH {
+            crate::dmath::powf(*env / THRESH, -(1.0 - 1.0 / 8.0))
         } else {
             1.0
         };
         let makeup = 2.2;
         let (mut wl, mut wr) = (xl * gr * makeup, xr * gr * makeup);
         // smiley tilt: split lows with a one-pole, lift lows and the residue
-        let a = (180.0 / self.sr * std::f32::consts::TAU).min(1.0);
-        self.low.0 += (wl - self.low.0) * a;
-        self.low.1 += (wr - self.low.1) * a;
-        let c = self.color.clamp(0.0, 1.0) * 0.7;
-        wl += self.low.0 * c + (wl - self.low.0) * c * 0.6;
-        wr += self.low.1 * c + (wr - self.low.1) * c * 0.6;
+        let a = (180.0 / sr * std::f32::consts::TAU).min(1.0);
+        low.0 += (wl - low.0) * a;
+        low.1 += (wr - low.1) * a;
+        wl += low.0 * c + (wl - low.0) * c * 0.6;
+        wr += low.1 * c + (wr - low.1) * c * 0.6;
         // safety: the crushed bus must never explode
-        wl = crate::dmath::tanh(wl);
-        wr = crate::dmath::tanh(wr);
+        (crate::dmath::tanh(wl), crate::dmath::tanh(wr))
+    }
+
+    pub fn set_os(&mut self, factor: u8) {
+        if factor != self.os {
+            self.os = factor;
+            self.ovs = (factor > 1).then(|| Oversampler::new(factor));
+        }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let g_in = 1.0 + self.drive * 7.0;
+        let c = self.color.clamp(0.0, 1.0) * 0.7;
         let m = self.amount.clamp(0.0, 1.0);
-        (l + wl * m, r + wr * m)
+        let (env, low) = (&mut self.env, &mut self.low);
+        match self.ovs.as_mut() {
+            // the whole crushed bus runs at the high rate (followers scaled
+            // to the effective sample rate) so the tanh's harmonics land
+            // above the decimation filter instead of folding back
+            Some(o) => {
+                let sr_hi = self.sr * o.factor() as f32;
+                let (wl, wr, dl, dr) =
+                    o.run(l, r, |a, b| Self::wet(env, low, sr_hi, g_in, c, a, b));
+                (dl + wl * m, dr + wr * m)
+            }
+            None => {
+                let (wl, wr) = Self::wet(env, low, self.sr, g_in, c, l, r);
+                (l + wl * m, r + wr * m)
+            }
+        }
     }
 }
 

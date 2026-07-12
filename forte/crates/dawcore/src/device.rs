@@ -703,10 +703,15 @@ impl AudioFx for Saturate {
     }
     fn configure(&mut self, p: &[f32]) {
         if p.len() >= 4 {
-            self.mode = (p[0] * 2.0).round() as u8;
+            // switch params arrive as raw choice indices (same convention
+            // as filter type) — tape/tube/fuzz = 0/1/2
+            self.mode = (p[0].round() as i32).clamp(0, 2) as u8;
             self.drive = p[1];
             self.tone = p[2];
             self.mix = p[3];
+        }
+        if p.len() >= 5 {
+            self.set_os(crate::dsp::oversample::os_factor(p[4]));
         }
     }
 }
@@ -732,6 +737,9 @@ impl AudioFx for ParComp {
             self.amount = p[0];
             self.drive = p[1];
             self.color = p[2];
+        }
+        if p.len() >= 4 {
+            self.set_os(crate::dsp::oversample::os_factor(p[3]));
         }
     }
 }
@@ -812,6 +820,9 @@ impl AudioFx for Crush {
             self.rate = p[1];
             self.mix = p[2];
         }
+        if p.len() >= 4 {
+            self.set_os(crate::dsp::oversample::os_factor(p[3]));
+        }
     }
 }
 
@@ -859,7 +870,8 @@ impl AudioFx for Space {
     }
     fn configure(&mut self, p: &[f32]) {
         if p.len() >= 8 {
-            self.kind = (p[0] * 2.0).round() as u8;
+            // raw choice index: room/plate/hall = 0/1/2
+            self.kind = (p[0].round() as i32).clamp(0, 2) as u8;
             self.size = p[1];
             self.decay = p[2];
             self.damp = p[3];
@@ -897,11 +909,14 @@ impl AudioFx for Width {
 
 impl AudioFx for Drive {
     fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
-        (Drive::process(self, l), Drive::process(self, r))
+        Drive::process_lr(self, l, r)
     }
     fn configure(&mut self, p: &[f32]) {
         if let Some(&d) = p.first() {
             self.amount = d;
+        }
+        if p.len() >= 2 {
+            self.set_os(crate::dsp::oversample::os_factor(p[1]));
         }
     }
 }

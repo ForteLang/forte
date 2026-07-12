@@ -4,6 +4,7 @@ pub mod filter;
 pub mod grid;
 pub mod kit;
 pub mod oscillator;
+pub mod oversample;
 pub mod sampler;
 pub mod synth;
 pub mod voice;

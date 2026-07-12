@@ -2555,7 +2555,11 @@ fn build_effect(
                 &[("type", 0, &["lp", "hp", "bp", "notch"])],
             ),
             "eq" => (DeviceKind::Eq, &[("low", 0), ("mid", 1), ("high", 2)], &[]),
-            "drive" => (DeviceKind::Drive, &[("drive", 0), ("amount", 0)], &[]),
+            "drive" => (
+                DeviceKind::Drive,
+                &[("drive", 0), ("amount", 0)],
+                &[("os", 1, &["off", "2x", "4x"])],
+            ),
             "delay" => (
                 DeviceKind::Delay,
                 &[("time", 0), ("fdbk", 1), ("feedback", 1), ("mix", 2)],
@@ -2570,7 +2574,11 @@ fn build_effect(
             "chorus" => (DeviceKind::Chorus, &[("rate", 0), ("depth", 1), ("mix", 2)], &[]),
             "pump" => (DeviceKind::Pump, &[("amount", 0), ("beats", 1)], &[]),
             "width" => (DeviceKind::Width, &[("amount", 0)], &[]),
-            "crush" => (DeviceKind::Crush, &[("bits", 0), ("rate", 1), ("mix", 2)], &[]),
+            "crush" => (
+                DeviceKind::Crush,
+                &[("bits", 0), ("rate", 1), ("mix", 2)],
+                &[("os", 3, &["off", "2x", "4x"])],
+            ),
             "stutter" => (DeviceKind::Stutter, &[("beats", 0), ("mix", 1)], &[]),
             "gate" => (DeviceKind::Gate, &[("depth", 0), ("beats", 1), ("duty", 2)], &[]),
             "limiter" => (DeviceKind::Limiter, &[("ceiling", 0), ("release", 1)], &[]),
@@ -2582,10 +2590,14 @@ fn build_effect(
             "saturate" => (
                 DeviceKind::Saturate,
                 &[("drive", 1), ("tone", 2), ("mix", 3)],
-                &[("mode", 0, &["tape", "tube", "fuzz"])],
+                &[("mode", 0, &["tape", "tube", "fuzz"]), ("os", 4, &["off", "2x", "4x"])],
             ),
             "transient" => (DeviceKind::Transient, &[("attack", 0), ("sustain", 1)], &[]),
-            "parcomp" => (DeviceKind::ParComp, &[("amount", 0), ("drive", 1), ("color", 2)], &[]),
+            "parcomp" => (
+                DeviceKind::ParComp,
+                &[("amount", 0), ("drive", 1), ("color", 2)],
+                &[("os", 3, &["off", "2x", "4x"])],
+            ),
             "exciter" => (DeviceKind::Exciter, &[("amount", 0), ("freq", 1)], &[]),
             "ringmod" => (DeviceKind::RingMod, &[("freq", 0), ("mix", 1)], &[]),
             "tapestop" => (DeviceKind::TapeStop, &[("amount", 0)], &[]),

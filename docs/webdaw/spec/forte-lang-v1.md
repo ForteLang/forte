@@ -186,18 +186,18 @@ user-space code written in the device DSL of §4.5, used via ordinary `import`.
 | --- | --- |
 | `filter` | type(lp/hp/bp/notch), cutoff, reso |
 | `eq` | low, mid, high |
-| `drive` | drive (alias amount) |
+| `drive` | drive (alias amount), os("off"/"2x"/"4x") |
 | `delay` | time, fdbk (alias feedback), mix |
 | `reverb` | size, decay, mix |
 | `comp` | thresh, ratio, attack, release, makeup — stereo-linked compressor |
 | `chorus` | rate, depth, mix — modulated delay with L/R quadrature phase |
 | `pump` | amount, beats — tempo-synced ducking (a deterministic version of sidechain pumping. beats is the number of beats per cycle, default 1)|
-| `crush` | bits, rate, mix — bit-depth (16→1 across 0..1) + sample-rate reduction (hold 1..64 samples). The lo-fi/glitch crunch |
+| `crush` | bits, rate, mix, os("off"/"2x"/"4x") — bit-depth (16→1 across 0..1) + sample-rate reduction (hold 1..64 samples). The lo-fi/glitch crunch. With `os` on, the whole sample-and-hold core runs oversampled (hold length preserved in seconds) and the fold-back above the audible band is filtered off |
 | `stutter` | beats, mix — tempo-synced buffer repeat: the last `beats` of dry signal loop while mix is up. Automate `stutter.mix` for glitch fills |
 | `gate` | depth, beats, duty — tempo-synced chopper (trance gate): open for `duty` of each cycle, closed by `depth` for the rest, 1 ms anti-click slew |
-| `saturate` | mode("tape"/"tube"/"fuzz"), drive, tone, mix — waveshaping saturation: tape = warm symmetric, tube = asymmetric even harmonics, fuzz = pedal aggression. `tone` darkens post-shape so heavy drive stays musical |
+| `saturate` | mode("tape"/"tube"/"fuzz"), drive, tone, mix, os("off"/"2x"/"4x") — waveshaping saturation: tape = warm symmetric, tube = asymmetric even harmonics, fuzz = pedal aggression. `tone` darkens post-shape so heavy drive stays musical. `os` runs the waveshaper at 2x/4x through linear-phase halfbands so its harmonics stop folding back as inharmonic aliasing (default off = bit-exact legacy path; the oversampled wet is latency-matched to the dry blend, and the insert as a whole runs ~0.7 ms late) |
 | `transient` | attack, sustain (0.5 = neutral, ±12 dB) — fast/slow follower split: shape the hit and the body independently, before compression |
-| `parcomp` | amount, drive, color — parallel (New York) compression in one insert: a hard-compressed copy (8:1, fast, makeup, `color` = smiley tilt) blended UNDER the dry. Punch and glue without losing dynamics |
+| `parcomp` | amount, drive, color, os("off"/"2x"/"4x") — parallel (New York) compression in one insert: a hard-compressed copy (8:1, fast, makeup, `color` = smiley tilt) blended UNDER the dry. Punch and glue without losing dynamics. `os` oversamples the crushed bus so its safety clip stops aliasing |
 | `exciter` | amount, freq — saturated high band mixed on top: synthesized sparkle where the source has none |
 | `ringmod` | freq (20 Hz..4 kHz log), mix — sine-carrier multiplication: inharmonic, metallic, the broken-machine voice |
 | `tapestop` | amount — 0 is a bit-exact bypass; automate toward 1 and a buffered read head slows to a halt, pitch falling like power-cut tape |

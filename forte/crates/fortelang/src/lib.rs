@@ -517,12 +517,12 @@ fn render_cache_dir() -> Option<std::path::PathBuf> {
 /// serializes stably — no maps in the model), so a cache hit is exactly
 /// the render that would have happened. The version salt invalidates
 /// entries written before the format/render semantics changed (v2 =
-/// stereo bounces).
+/// stereo bounces; v3 = saturate/space switch-index fix).
 #[cfg(not(target_family = "wasm"))]
 fn render_cache_key(project: &Project, tail_beats: f64, root: u8) -> Option<String> {
     let json = serde_json::to_string(project).ok()?;
     let mut h = fnv1a64(json.as_bytes());
-    for &b in tail_beats.to_le_bytes().iter().chain(std::iter::once(&root)).chain(b"v2") {
+    for &b in tail_beats.to_le_bytes().iter().chain(std::iter::once(&root)).chain(b"v3") {
         h ^= b as u64;
         h = h.wrapping_mul(0x0000_0100_0000_01b3);
     }

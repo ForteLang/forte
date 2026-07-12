@@ -1045,3 +1045,40 @@ fn space_reverb_characters_and_decay_are_real() {
     let long = render(r#"type: "hall", decay: 0.95, mix: 0.5"#);
     assert!(long.rms > short.rms * 1.05, "decay must lengthen the tail (short {} long {})", short.rms, long.rms);
 }
+
+#[test]
+fn nonlinear_effects_take_an_os_switch() {
+    // `os: "off"/"2x"/"4x"` on the four waveshaping inserts; off is the
+    // default and stays on the legacy bit-exact path
+    let song = |inserts: &str| {
+        format!(
+            r#"song "O" {{ tempo 120bpm
+      track A {{ instrument prisma(wave: "saw", cutoff: 0.9, sustain: 0.8)
+        {inserts}
+        play notes`C5:2 _:2` at bars(1..1) }} }}"#
+        )
+    };
+    let p = fortelang::compile_str(&song(
+        r#"insert saturate(mode: "fuzz", drive: 0.8, os: "4x")
+        insert crush(bits: 0.6, os: "2x")
+        insert parcomp(amount: 0.5, os: "4x")
+        insert drive(amount: 0.4, os: "2x")"#,
+    ))
+    .expect("os switch must compile");
+    let chain = &p.tracks[0].devices;
+    // switch choices land as their raw index: off/2x/4x → 0/1/2
+    assert_eq!(chain[1].params[4], 2.0, "saturate os 4x");
+    assert_eq!(chain[2].params[3], 1.0, "crush os 2x");
+    assert_eq!(chain[3].params[3], 2.0, "parcomp os 4x");
+    assert_eq!(chain[4].params[1], 1.0, "drive os 2x");
+    // "off" renders bit-identically to leaving os out entirely…
+    let plain = fortelang::compile_str(&song(r#"insert saturate(mode: "fuzz", drive: 0.9)"#)).unwrap();
+    let off = fortelang::compile_str(&song(r#"insert saturate(mode: "fuzz", drive: 0.9, os: "off")"#)).unwrap();
+    let d_plain = fortelang::render_digest(&plain, 3.0);
+    let d_off = fortelang::render_digest(&off, 3.0);
+    assert_eq!(d_plain.f32_digest, d_off.f32_digest, "os off must be the legacy path");
+    // …while 4x actually changes the audio (the aliasing is gone)
+    let hq = fortelang::compile_str(&song(r#"insert saturate(mode: "fuzz", drive: 0.9, os: "4x")"#)).unwrap();
+    let d_hq = fortelang::render_digest(&hq, 3.0);
+    assert_ne!(d_plain.f32_digest, d_hq.f32_digest, "os 4x must engage");
+}
