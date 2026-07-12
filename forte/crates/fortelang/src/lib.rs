@@ -447,6 +447,32 @@ pub struct RenderInfo {
 /// and everything a sampler later does to it — is bit-identical on every
 /// machine. `root` is the MIDI note at which the sample plays back at its
 /// bounced pitch (the sampler repitches relative to it).
+/// Where cached bounce/dig renders live: $FORTE_RENDER_CACHE, else
+/// ~/.cache/forte/renders. None disables the cache (no home, wasm).
+#[cfg(not(target_family = "wasm"))]
+fn render_cache_dir() -> Option<std::path::PathBuf> {
+    let dir = match std::env::var_os("FORTE_RENDER_CACHE") {
+        Some(d) if !d.is_empty() => std::path::PathBuf::from(d),
+        _ => std::path::PathBuf::from(std::env::var_os("HOME")?).join(".cache/forte/renders"),
+    };
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir)
+}
+
+/// Digest the render INPUTS (the compiled project is deterministic and
+/// serializes stably — no maps in the model), so a cache hit is exactly
+/// the render that would have happened.
+#[cfg(not(target_family = "wasm"))]
+fn render_cache_key(project: &Project, tail_beats: f64, root: u8) -> Option<String> {
+    let json = serde_json::to_string(project).ok()?;
+    let mut h = fnv1a64(json.as_bytes());
+    for &b in tail_beats.to_le_bytes().iter().chain(std::iter::once(&root)) {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    Some(format!("{h:016x}"))
+}
+
 pub fn render_to_sample(
     project: &dawcore::model::Project,
     tail_beats: f64,
@@ -457,6 +483,40 @@ pub fn render_to_sample(
     use dawcore::sync::full_sync;
     const BLOCK: usize = 512;
     let sr = 48_000.0f32;
+
+    // ---- the audio cache: bounces and digs are deterministic, so they
+    // land on disk once and every later compile just reads them back —
+    // this is what makes dig-heavy songs compile in milliseconds
+    #[cfg(not(target_family = "wasm"))]
+    let cache_file = render_cache_key(project, tail_beats, root)
+        .and_then(|k| render_cache_dir().map(|d| d.join(format!("{k}.f32"))));
+    #[cfg(not(target_family = "wasm"))]
+    if let Some(path) = &cache_file {
+        if let Ok(bytes) = std::fs::read(path) {
+            if bytes.len() >= 8 {
+                let n = u64::from_le_bytes(bytes[..8].try_into().unwrap()) as usize;
+                if bytes.len() == 8 + n * 4 {
+                    let mut digest = 0xcbf2_9ce4_8422_2325u64;
+                    let mut data = Vec::with_capacity(n);
+                    for c in bytes[8..].chunks_exact(4) {
+                        for &b in c {
+                            digest ^= b as u64;
+                            digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
+                        }
+                        data.push(f32::from_le_bytes(c.try_into().unwrap()));
+                    }
+                    let key = format!("bounce-{digest:016x}");
+                    let sample = std::sync::Arc::new(dawcore::dsp::sampler::Sample::one_shot(
+                        data.into(),
+                        sr,
+                        root,
+                    ));
+                    dawcore::samples::register_asset(&key, sample.clone());
+                    return (key, sample);
+                }
+            }
+        }
+    }
     let (mut engine, mut handle) = Engine::new(sr);
     full_sync(&mut handle, project);
     handle.send(Command::SetLoop { enabled: false, start: 0.0, end: f64::MAX / 4.0 });
@@ -486,6 +546,20 @@ pub fn render_to_sample(
         done += n;
     }
     let key = format!("bounce-{digest:016x}");
+    // drop the render to disk as audio (atomically), so the next compile
+    // of anything that bounces or digs this exact project is a file read
+    #[cfg(not(target_family = "wasm"))]
+    if let Some(path) = &cache_file {
+        let mut bytes = Vec::with_capacity(8 + data.len() * 4);
+        bytes.extend_from_slice(&(data.len() as u64).to_le_bytes());
+        for v in &data {
+            bytes.extend_from_slice(&v.to_le_bytes());
+        }
+        let tmp = path.with_extension("f32.tmp");
+        if std::fs::write(&tmp, &bytes).is_ok() {
+            let _ = std::fs::rename(&tmp, path);
+        }
+    }
     let sample = std::sync::Arc::new(dawcore::dsp::sampler::Sample::one_shot(
         data.into(),
         sr,
