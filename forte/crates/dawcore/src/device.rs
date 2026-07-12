@@ -81,6 +81,13 @@ pub trait Instrument: Send {
     fn handle(&mut self, on: bool, pitch: u8, velocity: f32);
     /// Render one mono sample.
     fn next(&mut self) -> f32;
+    /// Render one STEREO sample. Default duplicates the mono tick, so every
+    /// synth stays bit-identical; samplers override it to play stereo
+    /// bounces/digs without collapsing the field.
+    fn next_lr(&mut self) -> (f32, f32) {
+        let m = self.next();
+        (m, m)
+    }
     fn configure(&mut self, params: &[f32]);
     fn voices(&self) -> usize;
     fn reset(&mut self);
@@ -491,6 +498,9 @@ impl Instrument for Sampler {
     fn next(&mut self) -> f32 {
         Sampler::next(self)
     }
+    fn next_lr(&mut self) -> (f32, f32) {
+        Sampler::next_lr(self)
+    }
     fn configure(&mut self, p: &[f32]) {
         if p.len() >= 6 {
             self.gain = p[0];
@@ -536,6 +546,9 @@ impl Instrument for crate::dsp::kit::KitSampler {
     }
     fn next(&mut self) -> f32 {
         crate::dsp::kit::KitSampler::next(self)
+    }
+    fn next_lr(&mut self) -> (f32, f32) {
+        crate::dsp::kit::KitSampler::next_lr(self)
     }
     fn configure(&mut self, p: &[f32]) {
         if p.len() >= 5 {

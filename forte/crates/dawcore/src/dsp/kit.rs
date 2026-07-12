@@ -176,7 +176,15 @@ impl KitSampler {
     #[inline]
     #[allow(clippy::should_implement_trait)] // audio-rate tick, not an Iterator
     pub fn next(&mut self) -> f32 {
+        self.next_lr().0
+    }
+
+    /// Stereo tick: pads whose sample carries a right channel keep their
+    /// field; mono pads duplicate left through the same ops (bit-exact).
+    #[inline]
+    pub fn next_lr(&mut self) -> (f32, f32) {
         let mut sum = 0.0f32;
+        let mut sum_r = 0.0f32;
         for v in &mut self.voices {
             if !v.active {
                 continue;
@@ -190,7 +198,19 @@ impl KitSampler {
             let frac = (v.pos - i as f64) as f32;
             let a = data.get(i).copied().unwrap_or(0.0);
             let b = data.get(i + 1).copied().unwrap_or(0.0);
-            sum += (a + (b - a) * frac) * v.env.next() * v.vel;
+            // multiplication ORDER matters for bit-compat: keep the original
+            // ((interp * env) * vel) association on both channels
+            let env = v.env.next();
+            let sl = (a + (b - a) * frac) * env * v.vel;
+            sum += sl;
+            sum_r += match sample.right.as_deref() {
+                Some(r) => {
+                    let ra = r.get(i).copied().unwrap_or(0.0);
+                    let rb = r.get(i + 1).copied().unwrap_or(0.0);
+                    (ra + (rb - ra) * frac) * env * v.vel
+                }
+                None => sl,
+            };
 
             // live transpose: automating `pitch` bends every held WRAP
             // voice; equal to the note-on transpose multiplies by exactly
@@ -211,6 +231,6 @@ impl KitSampler {
                 v.active = false;
             }
         }
-        sum * self.gain * 0.9
+        (sum * self.gain * 0.9, sum_r * self.gain * 0.9)
     }
 }

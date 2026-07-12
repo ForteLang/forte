@@ -1160,14 +1160,18 @@ impl EngineTrack {
             let (mut l, mut r) = if is_effect {
                 input.map(|(a, b)| (a[i], b[i])).unwrap_or((0.0, 0.0))
             } else {
-                let mut mono = 0.0;
+                // instruments tick in stereo; mono synths return (m, m)
+                // through the default hook, so the sums stay bit-identical
+                let (mut sl, mut sr) = (0.0, 0.0);
                 for d in &mut self.devices {
                     if let Dsp::Inst(inst) = &mut d.dsp {
-                        mono += inst.next();
+                        let (a, b) = inst.next_lr();
+                        sl += a;
+                        sr += b;
                     }
                 }
                 let (il, ir) = input.map(|(a, b)| (a[i], b[i])).unwrap_or((0.0, 0.0));
-                (mono + il, mono + ir)
+                (sl + il, sr + ir)
             };
 
             // audio-FX chain, in device order

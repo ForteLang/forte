@@ -7,9 +7,14 @@ use std::sync::Arc;
 use super::envelope::Adsr;
 use super::voice::midi_to_freq;
 
-/// Immutable mono sample data plus its natural pitch and loop region.
+/// Immutable sample data plus its natural pitch and loop region. `data` is
+/// the left (or only) channel; `right` present makes the sample STEREO —
+/// voices read both channels through the same position/pitch/grain logic,
+/// so a bounced mix keeps the width its source was produced with.
 pub struct Sample {
     pub data: Arc<[f32]>,
+    /// Right channel, same length as `data`. None = mono (bit-exact old path).
+    pub right: Option<Arc<[f32]>>,
     pub sample_rate: f32,
     /// MIDI note at which the sample plays back at its recorded pitch.
     pub root: u8,
@@ -21,7 +26,12 @@ pub struct Sample {
 impl Sample {
     pub fn one_shot(data: Arc<[f32]>, sample_rate: f32, root: u8) -> Self {
         let len = data.len();
-        Self { data, sample_rate, root, loop_enabled: false, loop_start: 0, loop_end: len }
+        Self { data, right: None, sample_rate, root, loop_enabled: false, loop_start: 0, loop_end: len }
+    }
+
+    pub fn stereo(left: Arc<[f32]>, right: Arc<[f32]>, sample_rate: f32, root: u8) -> Self {
+        let len = left.len();
+        Self { data: left, right: Some(right), sample_rate, root, loop_enabled: false, loop_start: 0, loop_end: len }
     }
 }
 
@@ -376,12 +386,23 @@ impl Sampler {
     #[inline]
     #[allow(clippy::should_implement_trait)] // audio-rate tick, not an Iterator
     pub fn next(&mut self) -> f32 {
-        let Some(sample) = &self.sample else { return 0.0 };
+        self.next_lr().0
+    }
+
+    /// Stereo tick: every voice reads both channels through ONE position,
+    /// envelope and grain state, so mono samples stay bit-identical (right
+    /// duplicates left through the same operations) and stereo bounces keep
+    /// their field.
+    #[inline]
+    pub fn next_lr(&mut self) -> (f32, f32) {
+        let Some(sample) = &self.sample else { return (0.0, 0.0) };
         let data = &sample.data;
+        let right = sample.right.as_deref();
         if data.is_empty() {
-            return 0.0;
+            return (0.0, 0.0);
         }
         let mut sum = 0.0f32;
+        let mut sum_r = 0.0f32;
         // live stretch speed for grain voices (in source samples per output
         // sample): knob 0.5 = original tempo. Read every sample so riding
         // the knob toward ~0.02 grinds held voices into a granular freeze.
@@ -434,6 +455,14 @@ impl Sampler {
                 let sa = read(data, v.ga_read);
                 let sb = read(data, v.gb_read);
                 sum += (sa * wa + sb * wb) * amp * v.vel;
+                match right {
+                    Some(r) => {
+                        let ra = read(r, v.ga_read);
+                        let rb = read(r, v.gb_read);
+                        sum_r += (ra * wa + rb * wb) * amp * v.vel;
+                    }
+                    None => sum_r += (sa * wa + sb * wb) * amp * v.vel,
+                }
                 // grains always read forward at the pitch rate; `reverse`
                 // lives in the timeline direction instead
                 let gstep = eff.abs();
@@ -451,7 +480,12 @@ impl Sampler {
                 }
                 v.pos += if v.step < 0.0 { -tl_step } else { tl_step };
             } else {
-                sum += read(data, v.pos) * amp * v.vel;
+                let sl = read(data, v.pos) * amp * v.vel;
+                sum += sl;
+                sum_r += match right {
+                    Some(r) => read(r, v.pos) * amp * v.vel,
+                    None => sl,
+                };
                 v.pos += eff;
             }
             let (rs, re) = v.region;
@@ -481,6 +515,6 @@ impl Sampler {
                 v.active = false;
             }
         }
-        sum * self.gain * 0.9
+        (sum * self.gain * 0.9, sum_r * self.gain * 0.9)
     }
 }

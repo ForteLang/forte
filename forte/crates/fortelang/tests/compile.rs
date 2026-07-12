@@ -887,3 +887,40 @@ fn dig_samples_another_song_as_a_record() {
         "cycle must surface E-DIG-002/003, got {:?}",
         errs.iter().map(|d| d.code).collect::<Vec<_>>());
 }
+
+#[test]
+fn stereo_survives_bounce_and_dig() {
+    // the pressing keeps the field: a source whose stereo comes from its
+    // effect returns must come out of bounce/dig with L != R, and a sampler
+    // PLAYING that record must keep the difference in its own output.
+    let dir = std::env::temp_dir().join(format!("forte-stereo-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("wide.forte"),
+        r#"song "Wide" { tempo 120bpm
+  track A { instrument prisma(wave: "saw", cutoff: 0.6, sustain: 0.8)
+    insert chorus(rate: 0.4, depth: 0.7, mix: 0.6)
+    insert reverb(size: 0.7, decay: 0.6, mix: 0.4)
+    play notes`C3:1 E3:1 G3:1 C4:1` at bars(1..1) } }"#,
+    )
+    .unwrap();
+    let dirs = dir.to_str().unwrap();
+    let src = std::fs::read_to_string(dir.join("wide.forte")).unwrap();
+    let record = fortelang::compile_with_loader(&src, &fortelang::FsLoader, dirs).unwrap();
+    let (_k, pressed) = fortelang::render_to_sample(&record, 2.0, 48);
+    let r = pressed.right.as_ref().expect("bounce must keep both channels");
+    let differs = pressed.data.iter().zip(r.iter()).filter(|(a, b)| a != b).count();
+    assert!(differs > 1000, "the pressed record must be stereo ({differs} differing samples)");
+
+    // and through a sampler: dig the record, play it, render the digger
+    let digger = r#"song "Digger" { tempo 120bpm
+  sample Rec = dig("./wide.forte", beats: 4)
+  track Cut { instrument sampler(sample: Rec, sustain: 1.0, release: 0.1)
+    play notes`C3~:4` at bars(1..1) } }"#;
+    let p = fortelang::compile_with_loader(digger, &fortelang::FsLoader, dirs).unwrap();
+    let (_k2, out) = fortelang::render_to_sample(&p, 2.0, 48);
+    let r2 = out.right.as_ref().unwrap();
+    let d2 = out.data.iter().zip(r2.iter()).filter(|(a, b)| a != b).count();
+    assert!(d2 > 1000, "sampler playback must keep the field ({d2} differing samples)");
+}

@@ -351,16 +351,21 @@ fn resolve_digs(
 }
 
 /// Render a whole project and cut the [skip, skip+beats+2) window out of it
-/// as a registered sample asset. The 2 tail beats are REAL audio — whatever
-/// the record played next — so slice ends ring into truth, not silence.
+/// as a registered sample asset (both channels — the record keeps its
+/// stereo field). The 2 tail beats are REAL audio — whatever the record
+/// played next — so slice ends ring into truth, not silence.
 fn render_dig_to_sample(project: &Project, root: u8, skip: f64, beats: f64) -> String {
     let (_full_key, sample) = render_to_sample(project, 2.0, root);
     let spb = 48_000.0 * 60.0 / project.tempo; // samples per beat
     let s = ((skip * spb) as usize).min(sample.data.len());
     let e = (((skip + beats + 2.0) * spb) as usize).min(sample.data.len());
-    let data: Vec<f32> = sample.data[s..e].to_vec();
+    let l: Vec<f32> = sample.data[s..e].to_vec();
+    let r: Vec<f32> = match &sample.right {
+        Some(rc) => rc[s..e].to_vec(),
+        None => l.clone(),
+    };
     let mut digest = 0xcbf2_9ce4_8422_2325u64;
-    for v in &data {
+    for v in l.iter().chain(r.iter()) {
         for &b in &v.to_bits().to_le_bytes() {
             digest ^= b as u64;
             digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
@@ -369,7 +374,7 @@ fn render_dig_to_sample(project: &Project, root: u8, skip: f64, beats: f64) -> S
     let key = format!("dig-{digest:016x}");
     dawcore::samples::register_asset(
         &key,
-        std::sync::Arc::new(dawcore::dsp::sampler::Sample::one_shot(data.into(), 48_000.0, root)),
+        std::sync::Arc::new(dawcore::dsp::sampler::Sample::stereo(l.into(), r.into(), 48_000.0, root)),
     );
     key
 }
@@ -461,12 +466,14 @@ fn render_cache_dir() -> Option<std::path::PathBuf> {
 
 /// Digest the render INPUTS (the compiled project is deterministic and
 /// serializes stably — no maps in the model), so a cache hit is exactly
-/// the render that would have happened.
+/// the render that would have happened. The version salt invalidates
+/// entries written before the format/render semantics changed (v2 =
+/// stereo bounces).
 #[cfg(not(target_family = "wasm"))]
 fn render_cache_key(project: &Project, tail_beats: f64, root: u8) -> Option<String> {
     let json = serde_json::to_string(project).ok()?;
     let mut h = fnv1a64(json.as_bytes());
-    for &b in tail_beats.to_le_bytes().iter().chain(std::iter::once(&root)) {
+    for &b in tail_beats.to_le_bytes().iter().chain(std::iter::once(&root)).chain(b"v2") {
         h ^= b as u64;
         h = h.wrapping_mul(0x0000_0100_0000_01b3);
     }
@@ -495,19 +502,25 @@ pub fn render_to_sample(
         if let Ok(bytes) = std::fs::read(path) {
             if bytes.len() >= 8 {
                 let n = u64::from_le_bytes(bytes[..8].try_into().unwrap()) as usize;
-                if bytes.len() == 8 + n * 4 {
+                // v2 layout: [n][L f32 × n][R f32 × n]
+                if bytes.len() == 8 + n * 8 {
                     let mut digest = 0xcbf2_9ce4_8422_2325u64;
-                    let mut data = Vec::with_capacity(n);
-                    for c in bytes[8..].chunks_exact(4) {
-                        for &b in c {
-                            digest ^= b as u64;
-                            digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
-                        }
-                        data.push(f32::from_le_bytes(c.try_into().unwrap()));
+                    for &b in &bytes[8..] {
+                        digest ^= b as u64;
+                        digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
                     }
+                    let read_ch = |off: usize| -> Vec<f32> {
+                        bytes[off..off + n * 4]
+                            .chunks_exact(4)
+                            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+                            .collect()
+                    };
+                    let l = read_ch(8);
+                    let r = read_ch(8 + n * 4);
                     let key = format!("bounce-{digest:016x}");
-                    let sample = std::sync::Arc::new(dawcore::dsp::sampler::Sample::one_shot(
-                        data.into(),
+                    let sample = std::sync::Arc::new(dawcore::dsp::sampler::Sample::stereo(
+                        l.into(),
+                        r.into(),
                         sr,
                         root,
                     ));
@@ -527,32 +540,35 @@ pub fn render_to_sample(
     let seconds = total_beats * 60.0 / project.tempo;
     let total_samples = (seconds * sr as f64) as usize;
 
-    let mut digest = 0xcbf2_9ce4_8422_2325u64;
     let mut data = Vec::with_capacity(total_samples);
+    let mut data_r = Vec::with_capacity(total_samples);
     let mut bl = vec![0.0f32; BLOCK];
     let mut br = vec![0.0f32; BLOCK];
     let mut done = 0;
     while done < total_samples {
         let n = BLOCK.min(total_samples - done);
         engine.process(&mut bl, &mut br, n);
-        for i in 0..n {
-            let mono = (bl[i] + br[i]) * 0.5;
-            for &b in &mono.to_bits().to_le_bytes() {
-                digest ^= b as u64;
-                digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
-            }
-            data.push(mono);
-        }
+        data.extend_from_slice(&bl[..n]);
+        data_r.extend_from_slice(&br[..n]);
         done += n;
+    }
+    // the asset key digests BOTH channels (L stream then R stream) — the
+    // same digest a cache hit recomputes from the file body
+    let mut digest = 0xcbf2_9ce4_8422_2325u64;
+    for v in data.iter().chain(data_r.iter()) {
+        for &b in &v.to_bits().to_le_bytes() {
+            digest ^= b as u64;
+            digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
+        }
     }
     let key = format!("bounce-{digest:016x}");
     // drop the render to disk as audio (atomically), so the next compile
     // of anything that bounces or digs this exact project is a file read
     #[cfg(not(target_family = "wasm"))]
     if let Some(path) = &cache_file {
-        let mut bytes = Vec::with_capacity(8 + data.len() * 4);
+        let mut bytes = Vec::with_capacity(8 + data.len() * 8);
         bytes.extend_from_slice(&(data.len() as u64).to_le_bytes());
-        for v in &data {
+        for v in data.iter().chain(data_r.iter()) {
             bytes.extend_from_slice(&v.to_le_bytes());
         }
         let tmp = path.with_extension("f32.tmp");
@@ -560,8 +576,9 @@ pub fn render_to_sample(
             let _ = std::fs::rename(&tmp, path);
         }
     }
-    let sample = std::sync::Arc::new(dawcore::dsp::sampler::Sample::one_shot(
+    let sample = std::sync::Arc::new(dawcore::dsp::sampler::Sample::stereo(
         data.into(),
+        data_r.into(),
         sr,
         root,
     ));
