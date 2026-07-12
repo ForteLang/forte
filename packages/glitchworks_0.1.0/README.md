@@ -17,32 +17,19 @@ House rules, learned by ear:
 - **No hiss/crackle beds** — the music stays clean; patina is opt-in per song.
 - A steal, a cut, a slice end: everything **declicks**.
 
-## The album: `songs/held-light/` (8 tracks, 3–4 min each)
+## Source records: `records/`
 
-**Held Light** — melodic glitch built the sampler-artist way. Five source
-records were cut first (`records/`): *felt* (piano), *lattice* (arps),
-*dawn* (choir), *floor* (a melodic-techno kit with NO bassline), *lantern*
-(voice) — all A minor at 120, all carrying the album motif (A C B E D).
-Every track digs several of them (plus guests from the glitch crate,
-`semis: -3` into key) and changes records MID-SONG — the arrangement
-moves like a DJ set inside one piece, held together by the shared key,
-the motif, and the floor. Pads and melodies duck from the floor (the
-melodic-techno pump); the low end is a room, not a bassline.
-
-| # | shape |
-| --- | --- |
-| 01 First Light | piano alone → floor → arps → the choir takes the room → merge → ride-down |
-| 02 Northlight | driving; the bell-shop record walks in from the other crate; choir breakdown; double peak |
-| 03 Paper Lanterns | the voice sings the motif; the piano REPLACES it mid-song; the voice returns an octave above itself |
-| 04 Static Bloom | fast; arps vs the house record; the choir blooms an octave up over the peak |
-| 05 Hollow | the still centre: no floor, whole-phrase breathing, one shared freeze |
-| 06 Copper Sky | half-time floor; the violin record arrives and bows the motif |
-| 07 Sodium | night drive; two voice records in opposite lanes close it alone together |
-| 08 Afterimage | every record quoted once over the slowing floor; the choir held, ridden down, out |
+Five melodic source records for future album work — *felt* (piano),
+*lattice* (arps), *dawn* (choir), *floor* (a melodic-techno kit with NO
+bassline), *lantern* (voice) — all A minor at 120, all carrying one
+motif (A C B E D). A first album attempt built on them was scrapped:
+everything through a sampler currently collapses to MONO (issue #122),
+which flattens exactly the pads/width these records live on. The records
+stay; the album returns after stereo sampling lands.
 
 ## Listening: the songbook (`songs/`, ~30 s each)
 
-Three more shelves:
+Three shelves:
 
 - **`songs/dig/`** — crate digging: the glitch songs are the RECORDS.
   `sample Rec = dig("../glitch/glitch-01.forte", beats: 16, skip: 16)`
