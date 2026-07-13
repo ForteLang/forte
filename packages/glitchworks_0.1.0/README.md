@@ -10,10 +10,15 @@ House rules, learned by ear:
 - Drums are **body first, noise last** — no noise-burst snare anchors.
 - Every groove is a **four-bar arc**, not a loop: bar 4 breaks the pattern.
 - Something **drifts at all times** (pitch swim, window slide, stepped flip).
-- **The BUG is the groove**: wild audio-domain pitch movement, stutters,
-  reversed answers, broken artifacts — impossible playback that surprises.
-  Choke cuts still leave rests, but an ambient bed keeps sounding under
-  them; TOTAL silence is an occasional shock, not the default.
+- **The BUG is the groove**: stutters, reversed answers, broken
+  artifacts — impossible playback that surprises. Choke cuts still leave
+  rests, but an ambient bed keeps sounding under them; TOTAL silence is
+  an occasional shock, not the default.
+- **Pitch bugs are local or transitional, never global**: if the key
+  stops being legible the bug is UNACCEPTABLE. Allowed: a toy layer's
+  fixed micro-detune riding a stable progression, a glide-in at bar 1,
+  a terminal tape-death. Never modulate the whole record's pitch
+  mid-song.
 - **The whole mix is the sample**: bounce the full band to ONE record and
   chop THAT — a rest then silences everything at once, reverb tails
   included. That mix-wide dead-stop is the glitch groove.
