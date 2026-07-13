@@ -47,6 +47,9 @@ pub enum DeviceKind {
     Gate,
     Limiter,
     Space,
+    /// Program-dependent bus compressor: soft knee, dual-stage release,
+    /// sidechain HPF, lookahead — the glue of a real 2-bus.
+    Glue,
     /// Saturation: tape/tube/fuzz waveshaping with tone control.
     Saturate,
     /// Transient shaper: independent attack/sustain gain.
@@ -89,7 +92,7 @@ impl DeviceStage {
 impl DeviceKind {
     /// Every device, in stage order. The browser and factories iterate this —
     /// adding a device here is the only registration step the UI needs.
-    pub const ALL: [DeviceKind; 29] = [
+    pub const ALL: [DeviceKind; 30] = [
         DeviceKind::Arpeggiator,
         DeviceKind::NoteTranspose,
         DeviceKind::NoteRepeat,
@@ -111,6 +114,7 @@ impl DeviceKind {
         DeviceKind::Gate,
         DeviceKind::Limiter,
         DeviceKind::Space,
+        DeviceKind::Glue,
         DeviceKind::Saturate,
         DeviceKind::Transient,
         DeviceKind::ParComp,
@@ -144,6 +148,7 @@ impl DeviceKind {
             DeviceKind::Gate => "Gate",
             DeviceKind::Limiter => "Limiter",
             DeviceKind::Space => "Space",
+            DeviceKind::Glue => "Glue",
             DeviceKind::Saturate => "Saturate",
             DeviceKind::Transient => "Transient",
             DeviceKind::ParComp => "ParComp",
@@ -202,6 +207,7 @@ impl DeviceKind {
             DeviceKind::Gate => &["Depth", "Period", "Duty"],
             DeviceKind::Limiter => &["Ceiling", "Release"],
             DeviceKind::Space => &["Type", "Size", "Decay", "Damp", "Predelay", "Mod", "Width", "Mix"],
+            DeviceKind::Glue => &["Thresh", "Ratio", "Attack", "Release", "Knee", "ScHpf", "Makeup", "Mix"],
             DeviceKind::Saturate => &["Mode", "Drive", "Tone", "Mix", "OS"],
             DeviceKind::Transient => &["Attack", "Sustain"],
             DeviceKind::ParComp => &["Amount", "Drive", "Color", "OS"],
@@ -252,6 +258,8 @@ impl DeviceKind {
             DeviceKind::Gate => vec![0.9, 0.25, 0.5],
             DeviceKind::Limiter => vec![0.95, 0.3],
             DeviceKind::Space => vec![1.0, 0.5, 0.5, 0.4, 0.1, 0.3, 0.8, 0.3],
+            // Thresh, Ratio(→4:1ish), Attack, Release, Knee, ScHpf, Makeup, Mix
+            DeviceKind::Glue => vec![0.5, 0.15, 0.3, 0.3, 0.5, 0.0, 0.1, 1.0],
             DeviceKind::Saturate => vec![0.0, 0.4, 0.7, 1.0, 0.0],
             DeviceKind::Transient => vec![0.5, 0.5],
             DeviceKind::ParComp => vec![0.35, 0.5, 0.3, 0.0],

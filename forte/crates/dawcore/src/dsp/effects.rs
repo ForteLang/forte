@@ -1268,3 +1268,239 @@ impl Space {
         )
     }
 }
+
+/// The glue: a program-dependent bus compressor (#127). Where `comp` is a
+/// static one-pole gain computer, this one behaves like the desk glue a mix
+/// actually leans on:
+///
+/// - hybrid detector: RMS body + peak overshoot, after a sidechain highpass
+///   (`sc_hpf`) so the kick's sub doesn't pump the whole bus
+/// - soft knee: reduction fades in across the knee width instead of kinking
+/// - program-dependent release: a fast and a slow recovery run in parallel
+///   and the slow one only charges while reduction PERSISTS — transients
+///   recover in tens of ms, sustained squash lets go slowly (the "breathing
+///   with the music" behavior no static release reproduces)
+/// - lookahead: the audio path runs 2.5 ms late so the attack has already
+///   seen the transient it is catching (offline rendering makes this free);
+///   the dry path of `mix` is latency-matched
+/// - `mix` under 1.0 is parallel compression on the same insert
+///
+/// Linear-domain math + dmath::powf only — native/wasm bit-identical.
+pub struct Glue {
+    sr: f32,
+    /// sidechain HP state (per channel)
+    sc: (f32, f32),
+    /// RMS accumulator (one-pole of the squared detector)
+    ms: f32,
+    /// smoothed gain-reduction envelope (1.0 = no reduction)
+    gr: f32,
+    /// slow recovery channel: charges while reduction persists
+    slow: f32,
+    /// lookahead ring
+    buf: Vec<(f32, f32)>,
+    pos: usize,
+    pub thresh: f32,  // 0..1 → linear 0.05..1.0
+    pub ratio: f32,   // 0..1 → 1:1..20:1
+    pub attack: f32,  // 0..1 → 0.1..30 ms
+    pub release: f32, // 0..1 → 60 ms..1.2 s (the FAST stage; slow is ~6x)
+    pub knee: f32,    // 0..1 → hard..±12 dB-ish soft zone
+    pub sc_hpf: f32,  // 0..1 → off..300 Hz
+    pub makeup: f32,  // 0..1 → x1..x4
+    pub mix: f32,     // parallel blend
+}
+
+/// 2.5 ms at 48 kHz.
+const GLUE_LOOKAHEAD: usize = 120;
+
+impl Glue {
+    pub fn new(sr: f32) -> Self {
+        Self {
+            sr,
+            sc: (0.0, 0.0),
+            ms: 0.0,
+            gr: 1.0,
+            slow: 1.0,
+            buf: vec![(0.0, 0.0); GLUE_LOOKAHEAD],
+            pos: 0,
+            thresh: 0.5,
+            ratio: 0.3,
+            attack: 0.3,
+            release: 0.3,
+            knee: 0.5,
+            sc_hpf: 0.0,
+            makeup: 0.15,
+            mix: 1.0,
+        }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        // ---- detector (on the UNDELAYED input = lookahead) ----
+        let (dl, dr) = if self.sc_hpf > 0.0 {
+            // one-pole highpass at 20..300 Hz
+            let f = 20.0 + self.sc_hpf.clamp(0.0, 1.0) * 280.0;
+            let a = (f / self.sr * std::f32::consts::TAU).min(1.0);
+            self.sc.0 += (l - self.sc.0) * a;
+            self.sc.1 += (r - self.sc.1) * a;
+            (l - self.sc.0, r - self.sc.1)
+        } else {
+            (l, r)
+        };
+        let inst = (dl.abs() + dr.abs()) * 0.5;
+        // RMS body (~10 ms window) + a taste of the raw peak on top
+        let rms_a = (1.0 / (0.010 * self.sr)).min(1.0);
+        self.ms += (inst * inst - self.ms) * rms_a;
+        let level = self.ms.sqrt() * 0.8 + inst * 0.2;
+
+        // ---- gain computer: soft knee in the linear domain ----
+        let t = 0.05 + self.thresh.clamp(0.0, 1.0) * 0.95;
+        let ratio = 1.0 + self.ratio.clamp(0.0, 1.0) * 19.0;
+        let exp = -(1.0 - 1.0 / ratio);
+        // knee: reduction blends in between t/w and t*w
+        let w = 1.0 + self.knee.clamp(0.0, 1.0) * 1.5;
+        let x = level / t.max(1e-6);
+        let target = if x <= 1.0 / w {
+            1.0
+        } else {
+            let full = crate::dmath::powf(x.max(1e-6), exp);
+            if x >= w || w <= 1.0 + 1e-6 {
+                full
+            } else {
+                // fade the reduction in across the knee zone
+                let k = (x - 1.0 / w) / (w - 1.0 / w);
+                1.0 + (full - 1.0) * k * k
+            }
+        };
+
+        // ---- program-dependent ballistics ----
+        // `slow` charges toward the reduction with a ~0.4 s constant: a
+        // transient barely moves it, sustained squash fills it up. The
+        // RELEASE COEFFICIENT itself then slides from fast (uncharged)
+        // to 8x slower (fully charged) — recovery breathes with how long
+        // the compressor has been working, not just how hard
+        let att = (1.0 / ((0.0001 + self.attack * 0.03) * self.sr)).min(1.0);
+        let rel_fast = (1.0 / ((0.06 + self.release * 1.14) * self.sr)).min(1.0);
+        let charge_coef = (1.0 / (0.4 * self.sr)).min(1.0);
+        let charge = (1.0 - self.slow).clamp(0.0, 1.0);
+        let rel = rel_fast * (1.0 - charge) + (rel_fast * 0.125) * charge;
+        if target < self.gr {
+            self.gr += (target - self.gr) * att;
+        } else {
+            self.gr += (target - self.gr) * rel;
+        }
+        self.slow += (self.gr - self.slow) * charge_coef;
+        let gain = self.gr;
+
+        // ---- apply to the DELAYED audio, blend the delayed dry ----
+        let (wl_in, wr_in) = self.buf[self.pos];
+        self.buf[self.pos] = (l, r);
+        self.pos = (self.pos + 1) % GLUE_LOOKAHEAD;
+        let makeup = 1.0 + self.makeup.clamp(0.0, 1.0) * 3.0;
+        let (wl, wr) = (wl_in * gain * makeup, wr_in * gain * makeup);
+        let m = self.mix.clamp(0.0, 1.0);
+        (wl_in * (1.0 - m) + wl * m, wr_in * (1.0 - m) + wr * m)
+    }
+}
+
+#[cfg(test)]
+mod glue_tests {
+    use super::Glue;
+
+    fn make() -> Glue {
+        let mut g = Glue::new(48_000.0);
+        g.thresh = 0.15; // low threshold so the test tones compress
+        g.ratio = 0.35;
+        g.attack = 0.1;
+        g.release = 0.2;
+        g.mix = 1.0;
+        g.makeup = 0.0;
+        g
+    }
+
+    /// Feed `secs` of a 200 Hz tone at `amp`, return the last output amp.
+    fn run_tone(g: &mut Glue, amp: f32, secs: f32) -> f32 {
+        let n = (secs * 48_000.0) as usize;
+        let mut peak = 0.0f32;
+        for i in 0..n {
+            let x = amp * crate::dmath::sin(i as f32 * 200.0 / 48_000.0 * std::f32::consts::TAU);
+            let (l, _) = g.process(x, x);
+            if i > n.saturating_sub(2_000) {
+                peak = peak.max(l.abs());
+            }
+        }
+        peak
+    }
+
+    #[test]
+    fn release_is_program_dependent() {
+        // recovery after a SHORT burst vs after LONG sustain: the slow
+        // channel only charges while reduction persists, so the burst
+        // case must come back noticeably faster
+        let recovered_after = |loud_secs: f32| -> f32 {
+            let mut g = make();
+            run_tone(&mut g, 0.9, loud_secs);
+            // 120 ms into recovery, measure a quiet probe tone
+            run_tone(&mut g, 0.05, 0.12)
+        };
+        let after_burst = recovered_after(0.05);
+        let after_sustain = recovered_after(2.0);
+        assert!(
+            after_burst > after_sustain * 1.02,
+            "burst must recover faster than sustain ({after_burst} vs {after_sustain})"
+        );
+    }
+
+    #[test]
+    fn sidechain_hpf_keeps_bass_from_pumping() {
+        // a 30 Hz sub at the same level must pull far less gain with the
+        // sidechain highpass engaged
+        let gr_with = |hpf: f32| -> f32 {
+            let mut g = make();
+            g.sc_hpf = hpf;
+            let mut min_out = f32::MAX;
+            for i in 0..48_000 {
+                let x = 0.9 * crate::dmath::sin(i as f32 * 30.0 / 48_000.0 * std::f32::consts::TAU);
+                let (l, _) = g.process(x, x);
+                if i > 40_000 {
+                    min_out = min_out.min(l.abs() + (1.0 - x.abs()));
+                }
+            }
+            // steady-state gain estimate via output/input peak
+            let mut peak_in = 0.0f32;
+            let mut peak_out = 0.0f32;
+            for i in 0..9_600 {
+                let x = 0.9 * crate::dmath::sin(i as f32 * 30.0 / 48_000.0 * std::f32::consts::TAU);
+                let (l, _) = g.process(x, x);
+                peak_in = peak_in.max(x.abs());
+                peak_out = peak_out.max(l.abs());
+            }
+            peak_out / peak_in
+        };
+        let ducked = gr_with(0.0);
+        let spared = gr_with(1.0);
+        assert!(
+            spared > ducked * 1.3,
+            "the HPF must spare the sub ({spared} vs {ducked})"
+        );
+    }
+
+    #[test]
+    fn glue_is_deterministic_and_bounded() {
+        let render = || -> Vec<u32> {
+            let mut g = make();
+            (0..4_800)
+                .map(|i| {
+                    let x = if i % 480 < 40 { 0.9 } else { 0.1 };
+                    g.process(x, -x).0.to_bits()
+                })
+                .collect()
+        };
+        assert_eq!(render(), render(), "same input, same bits");
+        let mut g = make();
+        for i in 0..48_000 {
+            let x = if i % 480 < 40 { 1.5 } else { 0.0 };
+            let (l, r) = g.process(x, x);
+            assert!(l.is_finite() && r.is_finite() && l.abs() < 8.0, "bounded output");
+        }
+    }
+}

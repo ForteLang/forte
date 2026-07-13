@@ -26,6 +26,7 @@ fn every_new_insert_changes_the_sound_and_stays_deterministic() {
     let dry = digest("");
     let inserts = [
         "insert comp(thresh: 0.25, ratio: 0.7, attack: 0.05, release: 0.3, makeup: 0.4)",
+        "insert glue(thresh: 0.2, ratio: 0.4, attack: 0.2, release: 0.3, knee: 0.6, schpf: 0.4, makeup: 0.2, mix: 0.8)",
         "insert chorus(rate: 0.35, depth: 0.6, mix: 0.6)",
         "insert pump(amount: 0.8, beats: 1.0)",
         // inserts run pre-pan, so width needs a stereo source: chorus first

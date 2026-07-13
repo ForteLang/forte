@@ -17,7 +17,7 @@
 //! audio thread pre-boxed. `process`/`next` must not allocate; bounded pushes
 //! only (use [`push_bounded`]).
 
-use crate::dsp::effects::{Chorus, Compressor, Crush, Drive, Duck, Eq3, Exciter, FdnReverb, Gate, Limiter, ParComp, Space, Pump, RingMod, Saturate, StereoDelay, Stutter, TapeStop, Transient, Vinyl, Width};
+use crate::dsp::effects::{Chorus, Compressor, Crush, Drive, Duck, Eq3, Exciter, FdnReverb, Gate, Glue, Limiter, ParComp, Space, Pump, RingMod, Saturate, StereoDelay, Stutter, TapeStop, Transient, Vinyl, Width};
 use crate::dsp::filter::{FilterMode, Svf};
 use crate::dsp::grid::GridSynth;
 use crate::dsp::sampler::Sampler;
@@ -156,6 +156,7 @@ pub fn build_dsp(dev: &Device, sr: f32) -> Dsp {
         DeviceKind::Gate => Dsp::Audio(Box::new(Gate::new(sr))),
         DeviceKind::Limiter => Dsp::Audio(Box::new(Limiter::new(sr))),
         DeviceKind::Space => Dsp::Audio(Box::new(Space::new(sr))),
+        DeviceKind::Glue => Dsp::Audio(Box::new(Glue::new(sr))),
         DeviceKind::Saturate => Dsp::Audio(Box::new(Saturate::new(sr))),
         DeviceKind::Transient => Dsp::Audio(Box::new(Transient::new(sr))),
         DeviceKind::ParComp => Dsp::Audio(Box::new(ParComp::new(sr))),
@@ -865,6 +866,24 @@ impl AudioFx for Limiter {
             self.ceiling = p[0].clamp(0.05, 1.0);
             // knob 0..1 -> 10 ms .. ~1 s of release
             self.release = 0.01 + p[1] * p[1] * 1.0;
+        }
+    }
+}
+
+impl AudioFx for Glue {
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        Glue::process(self, l, r)
+    }
+    fn configure(&mut self, p: &[f32]) {
+        if p.len() >= 8 {
+            self.thresh = p[0];
+            self.ratio = p[1];
+            self.attack = p[2];
+            self.release = p[3];
+            self.knee = p[4];
+            self.sc_hpf = p[5];
+            self.makeup = p[6];
+            self.mix = p[7];
         }
     }
 }
