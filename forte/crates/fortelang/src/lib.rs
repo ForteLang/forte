@@ -288,6 +288,13 @@ fn resolve_digs(
     if let Some(song) = &file.song {
         lets.extend(song.sample_lets.iter().filter(|sl| sl.dig.is_some()));
     }
+    // `tempo: "match"` re-presses the record at the DIGGING song's tempo
+    let digger_tempo: Option<f64> = file
+        .song
+        .as_ref()
+        .and_then(|s| s.tempo)
+        .map(|(t, _)| t)
+        .or_else(|| file.blocks.last().and_then(|b| b.body.tempo).map(|(t, _)| t));
     let mut out = std::collections::HashMap::new();
     for sl in lets {
         let path = sl.dig.as_ref().unwrap();
@@ -330,6 +337,18 @@ fn resolve_digs(
                 src_sections =
                     b.body.sections.iter().map(|x| (x.name.clone(), x.bars)).collect();
             }
+            // tempo: "match" — the record replays at the digger's tempo
+            // (the root's tempo governs the whole render, so overriding it
+            // here is exactly the "upper block wins" rule applied upward)
+            if sl.dig_tempo_match {
+                if let Some(t) = digger_tempo {
+                    if let Some(song) = &mut module.song {
+                        song.tempo = Some((t, sl.pos));
+                    } else if let Some(b) = module.blocks.last_mut() {
+                        b.body.tempo = Some((t, sl.pos));
+                    }
+                }
+            }
             let mut mdiags = Vec::new();
             resolve_imports(&mut module, &module_dir, loader, &mut Vec::new(), &mut mdiags);
             let massets = resolve_assets(&module, &module_dir, loader, &mut mdiags);
@@ -337,18 +356,145 @@ fn resolve_digs(
             if !mdiags.is_empty() {
                 return Err(mdiags);
             }
-            compile::compile(&module, &massets, &mdigs)
+            let plain = compile::compile(&module, &massets, &mdigs)?;
+            // key: "E minor" — re-press the record in another key BEFORE
+            // sampling. The source recompiles wrapped in a key-overridden
+            // placement, so the existing transposition machinery does the
+            // musical work: melody follows the key, beat literals stay put.
+            // (One known limit: track-level `level` targets inside the
+            // source resolve on root tracks only, so they are skipped in
+            // the wrapped pass.)
+            if let Some(((kr, ks), kpos)) = &sl.dig_key {
+                let bpb = plain.time_sig.0 as f64 * 4.0 / plain.time_sig.1 as f64;
+                let bars = (dawcore::bounce::arrangement_len(&plain) / bpb).ceil().max(1.0) as u32;
+                let mut m2 = parser::parse(&src)?;
+                if sl.dig_tempo_match {
+                    if let Some(t) = digger_tempo {
+                        if let Some(song) = &mut m2.song {
+                            song.tempo = Some((t, sl.pos));
+                        } else if let Some(b) = m2.blocks.last_mut() {
+                            b.body.tempo = Some((t, sl.pos));
+                        }
+                    }
+                }
+                let mut mdiags2 = Vec::new();
+                resolve_imports(&mut m2, &module_dir, loader, &mut Vec::new(), &mut mdiags2);
+                if !mdiags2.is_empty() {
+                    return Err(mdiags2);
+                }
+                // wrap the root in a placement carrying the key override.
+                // Transposition needs a reference: the source must declare
+                // its own key, or the override has nothing to move FROM.
+                let src_key = m2
+                    .song
+                    .as_ref()
+                    .map(|s| s.key.clone())
+                    .or_else(|| m2.blocks.last().map(|b| b.body.key.clone()))
+                    .flatten();
+                if src_key.is_none() {
+                    return Err(vec![Diag::new(
+                        "E-DIG-006",
+                        *kpos,
+                        format!("dig({path}) の key: 指定には、dig 先が自分の key を宣言している必要があります(移調の基準になります)"),
+                    )]);
+                }
+                let (root_name, hdr) = if let Some(song) = m2.song.take() {
+                    let hdr = (
+                        song.tempo,
+                        song.meter,
+                        song.swing,
+                        song.master,
+                        song.level,
+                        song.master_inserts.clone(),
+                    );
+                    let name = "__DigRoot".to_string();
+                    m2.blocks.push(ast::BlockAst {
+                        name: name.clone(),
+                        parent: None,
+                        body: song,
+                        pos: sl.pos,
+                        import_line: None,
+                    });
+                    (name, hdr)
+                } else if let Some(b) = m2.blocks.last() {
+                    (
+                        b.name.clone(),
+                        (
+                            b.body.tempo,
+                            b.body.meter,
+                            b.body.swing,
+                            b.body.master,
+                            b.body.level,
+                            b.body.master_inserts.clone(),
+                        ),
+                    )
+                } else {
+                    return Err(vec![Diag::new(
+                        "E-DIG-003",
+                        sl.pos,
+                        "dig 先に song も block もありません".to_string(),
+                    )]);
+                };
+                m2.song = Some(ast::SongAst {
+                    name: "__Dig".into(),
+                    desc: None,
+                    tags: Vec::new(),
+                    license: None,
+                    version: None,
+                    requires: Vec::new(),
+                    artist: None,
+                    sponsor: None,
+                    place_autos: Vec::new(),
+                    params: Vec::new(),
+                    tempo: hdr.0,
+                    master: hdr.3,
+                    level: hdr.4,
+                    swing: hdr.2,
+                    meter: hdr.1,
+                    key: None,
+                    lets: Vec::new(),
+                    mod_lets: Vec::new(),
+                    sample_lets: Vec::new(),
+                    sections: Vec::new(),
+                    tracks: Vec::new(),
+                    returns: Vec::new(),
+                    master_inserts: hdr.5,
+                    blocks: Vec::new(),
+                    places: vec![ast::PlaceAst {
+                        block: root_name,
+                        key: Some(((kr.clone(), ks.clone()), *kpos)),
+                        from: None,
+                        to: None,
+                        volume: None,
+                        params: Vec::new(),
+                        swing: None,
+                        stretch: None,
+                        alias: None,
+                        at: ast::AtRef::Bars(1, bars),
+                        pos: *kpos,
+                    }],
+                });
+                return compile::compile(&m2, &massets, &mdigs);
+            }
+            Ok(plain)
         })();
         stack.pop();
         let project = match project {
             Ok(p) => p,
             Err(ds) => {
                 for d in ds {
-                    diags.push(Diag::new(
-                        "E-DIG-003",
-                        sl.pos,
-                        format!("dig({path}) のコンパイルに失敗: {full}:{}:{} {}", d.pos.line, d.pos.col, d.message),
-                    ));
+                    // dig-specific diagnostics (E-DIG-006 etc.) pass through
+                    // with their own code; everything else wraps as a
+                    // compile failure of the dug file
+                    if d.code.starts_with("E-DIG") {
+                        diags.push(d);
+                    } else {
+                        diags.push(Diag::new(
+                            "E-DIG-003",
+                            sl.pos,
+                            format!("dig({path}) のコンパイルに失敗: {full}:{}:{} {}", d.pos.line, d.pos.col, d.message),
+                        ));
+                    }
                 }
                 continue;
             }

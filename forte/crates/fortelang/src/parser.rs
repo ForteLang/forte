@@ -369,6 +369,8 @@ impl Parser {
                         let mut skip = 0.0;
                         let mut bars: Option<(u32, u32)> = None;
                         let mut section: Option<(String, Pos)> = None;
+                        let mut dig_key: Option<((String, String), Pos)> = None;
+                        let mut dig_tempo_match = false;
                         if is_dig {
                             self.bump(); // `dig`
                             self.expect(Tok::LParen, "`(`");
@@ -432,11 +434,37 @@ impl Parser {
                                                 }
                                             }
                                         }
+                                        "key" if is_dig => {
+                                            let kpos = self.pos();
+                                            if let Tok::Str(k) = self.peek().clone() {
+                                                self.bump();
+                                                let parts: Vec<&str> = k.split_whitespace().collect();
+                                                if parts.len() == 2 {
+                                                    dig_key = Some(((parts[0].to_string(), parts[1].to_string()), kpos));
+                                                } else {
+                                                    self.err("E-PARSE-024", r#"dig の key は "ルート スケール" で指定します(例: key: "E minor")"#);
+                                                }
+                                            } else {
+                                                self.err("E-PARSE-024", r#"dig の key は文字列で指定します(例: key: "E minor")"#);
+                                            }
+                                        }
+                                        "tempo" if is_dig => {
+                                            if let Tok::Str(t) = self.peek().clone() {
+                                                self.bump();
+                                                if t == "match" {
+                                                    dig_tempo_match = true;
+                                                } else {
+                                                    self.err("E-PARSE-024", r#"dig の tempo は "match" のみです(掘る側のテンポでレコードを再プレスします)"#);
+                                                }
+                                            } else {
+                                                self.err("E-PARSE-024", r#"dig の tempo は "match" で指定します"#);
+                                            }
+                                        }
                                         other => {
                                             self.err(
                                                 "E-PARSE-024",
                                                 if is_dig {
-                                                    format!("dig() に '{other}' という引数はありません(note, beats, skip, bars, section)")
+                                                    format!("dig() に '{other}' という引数はありません(note, beats, skip, bars, section, key, tempo)")
                                                 } else {
                                                     format!("bounce() に '{other}' という引数はありません(note, beats)")
                                                 },
@@ -450,7 +478,7 @@ impl Parser {
                                 }
                             }
                         }
-                        song.sample_lets.push(SampleLetAst { name, call, dig, note, beats, skip, bars, section, pos });
+                        song.sample_lets.push(SampleLetAst { name, call, dig, note, beats, skip, bars, section, dig_key, dig_tempo_match, pos });
                     }
                     "meter" => {
                         self.bump();
@@ -1280,3 +1308,4 @@ fn swing_template(name: &str) -> Option<f64> {
         _ => return None,
     })
 }
+

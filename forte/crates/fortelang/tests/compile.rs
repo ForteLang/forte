@@ -1047,6 +1047,76 @@ fn space_reverb_characters_and_decay_are_real() {
 }
 
 #[test]
+fn dig_represses_the_record_in_key_and_tempo() {
+    let dir = std::env::temp_dir().join("forte-dig-press");
+    let _ = std::fs::create_dir_all(&dir);
+    // a record with MELODY (transposable) and DRUMS (beat literal — pinned)
+    std::fs::write(
+        dir.join("rec.forte"),
+        r#"song "R" { tempo 100bpm
+  key C major
+  track M { instrument prisma(wave: "sine", cutoff: 0.5, sustain: 0.8)
+    play notes`C3:1 E3:1 G3:1 C4:1` at bars(1..2) }
+  track D { instrument prisma(wave: "square", cutoff: 0.8, attack: 0.001, sustain: 0.0, decay: 0.05)
+    play beat`x---x---x---x---` at bars(1..2) } }"#,
+    )
+    .unwrap();
+    // the same record with the melody hand-transposed up a whole step
+    std::fs::write(
+        dir.join("rec-d.forte"),
+        r#"song "R" { tempo 100bpm
+  key D major
+  track M { instrument prisma(wave: "sine", cutoff: 0.5, sustain: 0.8)
+    play notes`D3:1 F#3:1 A3:1 D4:1` at bars(1..2) }
+  track D { instrument prisma(wave: "square", cutoff: 0.8, attack: 0.001, sustain: 0.0, decay: 0.05)
+    play beat`x---x---x---x---` at bars(1..2) } }"#,
+    )
+    .unwrap();
+    let dirs = dir.to_str().unwrap();
+    let dig = |args: &str, digger_tempo: u32| {
+        let src = format!(
+            r#"song "S" {{ tempo {digger_tempo}bpm
+  sample Rec = dig("./rec.forte"{args})
+  track Cut {{ instrument sampler(sample: Rec, gain: 1.0, sustain: 1.0, release: 0.1)
+    play notes`C3~:8` at bars(1..2) }} }}"#
+        );
+        let p = fortelang::compile_with_loader(&src, &fortelang::FsLoader, dirs)
+            .unwrap_or_else(|e| panic!("dig({args}) must compile: {:?}", e.iter().map(|d| &d.message).collect::<Vec<_>>()));
+        fortelang::render_digest(&p, 2.0).f32_digest
+    };
+    // key: "D major" equals digging the hand-transposed record — melody
+    // moved, beat literals pinned, all through the placement machinery
+    let pressed = dig(r#", key: "D major""#, 100);
+    let manual = {
+        let src = r#"song "S" { tempo 100bpm
+  sample Rec = dig("./rec-d.forte")
+  track Cut { instrument sampler(sample: Rec, gain: 1.0, sustain: 1.0, release: 0.1)
+    play notes`C3~:8` at bars(1..2) } }"#;
+        let p = fortelang::compile_with_loader(src, &fortelang::FsLoader, dirs).unwrap();
+        fortelang::render_digest(&p, 2.0).f32_digest
+    };
+    assert_eq!(pressed, manual, "key: must equal the hand-transposed record");
+    assert_ne!(pressed, dig("", 100), "key: must actually change the record");
+    // tempo: "match" re-presses at the digger's tempo
+    let matched = dig(r#", tempo: "match""#, 140);
+    assert_ne!(matched, dig("", 140), "tempo match must change the pressing");
+    assert_eq!(matched, dig(r#", tempo: "match""#, 140), "and stay deterministic");
+    // a keyless source cannot be re-keyed (no transposition reference)
+    std::fs::write(
+        dir.join("nokey.forte"),
+        r#"song "N" { tempo 100bpm
+  track M { instrument prisma(wave: "sine")
+    play notes`C3:1 _:3` at bars(1..1) } }"#,
+    )
+    .unwrap();
+    let bad = r#"song "S" { tempo 100bpm
+  sample Rec = dig("./nokey.forte", key: "D major")
+  track Cut { instrument sampler(sample: Rec) play notes`C3~:4` at bars(1..1) } }"#;
+    let errs = fortelang::check_with_loader(bad, &fortelang::FsLoader, dirs).err().unwrap();
+    assert!(errs.iter().any(|d| d.code == "E-DIG-006"), "keyless source must be E-DIG-006");
+}
+
+#[test]
 fn theory_stdlib_speaks_harmony() {
     let song = |key: &str, play: &str| {
         format!(

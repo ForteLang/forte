@@ -203,6 +203,13 @@ pub struct SampleLetAst {
     /// `dig` only: `section: "drop"` — window by a section NAME declared in
     /// the source song. Survives the source being rearranged.
     pub section: Option<(String, Pos)>,
+    /// `dig` only: `key: "E minor"` — re-press the record in another key
+    /// BEFORE sampling: the source recompiles wrapped in a key-overridden
+    /// placement, so melody transposes while beat literals stay put.
+    pub dig_key: Option<((String, String), Pos)>,
+    /// `dig` only: `tempo: "match"` — recompile the source at the DIGGING
+    /// song's tempo, so slice grids line up without granular stretch.
+    pub dig_tempo_match: bool,
     pub pos: Pos,
 }
 
