@@ -3,7 +3,7 @@
 //! silence maps, onsets that line up with the score, keys heard correctly,
 //! and masking that flags identical spectra as identical.
 
-use fortelang::analyze::{analyze, SectionSpan};
+use fortelang::analyze::{analyze, compare, Profile, SectionSpan};
 
 fn project(src: &str) -> dawcore::model::Project {
     fortelang::compile_str(src).expect("song must compile")
@@ -131,6 +131,35 @@ fn unison_spread_opens_the_stereo_field() {
     // out-of-range voice counts are musical errors, not knob math
     let bad = fortelang::compile_str(&song(r#"prisma(unison: 9)"#));
     assert!(bad.is_err(), "unison: 9 must be rejected");
+}
+
+#[test]
+fn profiles_judge_a_render_against_targets() {
+    let p = project(
+        r#"song "P" { tempo 120bpm
+  track A { instrument prisma(wave: "saw", cutoff: 0.7, sustain: 0.8, release: 0.1)
+    play notes`C3:1 E3:1 G3:1 C4:1` at bars(1..2) } }"#,
+    );
+    let a = analyze(&p, &[], false);
+    // a profile this quiet mono phrase can never satisfy…
+    let strict = Profile::from_json(
+        r#"{ "name": "club", "integrated_lufs": [-9, -6], "side_mid_db": [-12, -4] }"#,
+    )
+    .expect("profile must parse");
+    let deltas = compare(&a, &strict);
+    assert_eq!(deltas.len(), 2, "only declared targets are judged");
+    assert!(deltas.iter().all(|d| !d.ok), "quiet mono must miss club targets");
+    let lufs = deltas.iter().find(|d| d.metric == "integrated_lufs").unwrap();
+    assert!(lufs.delta < 0.0, "shortfall points DOWN toward the target, got {}", lufs.delta);
+    // …and one built around what it actually measures passes
+    let fitted = Profile::from_json(&format!(
+        r#"{{ "name": "fit", "integrated_lufs": [{}, {}],
+             "band_share_pct": {{ "mid": [0, 100] }} }}"#,
+        a.loudness.integrated_lufs - 1.0,
+        a.loudness.integrated_lufs + 1.0
+    ))
+    .unwrap();
+    assert!(compare(&a, &fitted).iter().all(|d| d.ok));
 }
 
 #[test]

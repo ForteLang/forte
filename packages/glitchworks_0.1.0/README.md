@@ -27,6 +27,15 @@ everything through a sampler currently collapses to MONO (issue #122),
 which flattens exactly the pads/width these records live on. The records
 stay; the album returns after stereo sampling lands.
 
+## Genre targets: `profiles/`
+
+Reference profiles for `forte analyze --against`: **glitch-chop** (the
+songbook's architecture: real silence share, chop density),
+**melodic-glitch** (the album target: wide, bright, club-adjacent) and
+**ambient-records** (what a source record should measure like). Plain
+JSON target ranges — fork them like everything else. A profile miss is
+a work order with a number on it, not an adjective.
+
 ## Listening: the songbook (`songs/`, ~30 s each)
 
 Three shelves:

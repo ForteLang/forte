@@ -691,3 +691,86 @@ impl Analysis {
         serde_json::to_string_pretty(self).unwrap_or_else(|_| "{}".into())
     }
 }
+
+// --- reference profiles (#129) -----------------------------------------------
+
+/// A genre target: ranges for the metrics `analyze` measures. Profiles are
+/// plain JSON data — checked into packages, forkable, diffable — so "sounds
+/// like the genre" becomes numbers an agent can optimize toward.
+#[derive(serde::Deserialize)]
+pub struct Profile {
+    pub name: String,
+    #[serde(default)]
+    pub notes: String,
+    #[serde(default)]
+    pub integrated_lufs: Option<(f64, f64)>,
+    #[serde(default)]
+    pub true_peak_db: Option<(f64, f64)>,
+    #[serde(default)]
+    pub crest_db: Option<(f64, f64)>,
+    #[serde(default)]
+    pub side_mid_db: Option<(f64, f64)>,
+    #[serde(default)]
+    pub silence_total_pct: Option<(f64, f64)>,
+    /// audio onsets per second over the whole song
+    #[serde(default)]
+    pub onsets_per_second: Option<(f64, f64)>,
+    /// per-band energy share targets, keyed by band name (sub/low/mid/high/air)
+    #[serde(default)]
+    pub band_share_pct: std::collections::BTreeMap<String, (f64, f64)>,
+}
+
+impl Profile {
+    pub fn from_json(json: &str) -> Result<Self, String> {
+        serde_json::from_str(json).map_err(|e| e.to_string())
+    }
+}
+
+/// One metric compared against its target range. `delta` is 0 inside the
+/// range, negative by the shortfall below `lo`, positive by the excess
+/// above `hi` — the gradient an agent follows.
+#[derive(Serialize)]
+pub struct Delta {
+    pub metric: String,
+    pub value: f64,
+    pub lo: f64,
+    pub hi: f64,
+    pub ok: bool,
+    pub delta: f64,
+}
+
+fn check(out: &mut Vec<Delta>, metric: &str, value: f64, range: Option<(f64, f64)>) {
+    let Some((lo, hi)) = range else { return };
+    let delta = if value < lo {
+        r2(value - lo)
+    } else if value > hi {
+        r2(value - hi)
+    } else {
+        0.0
+    };
+    out.push(Delta { metric: metric.into(), value, lo, hi, ok: delta == 0.0, delta });
+}
+
+/// Compare a report against a profile. Only the targets the profile
+/// declares are judged; everything else stays informational.
+pub fn compare(a: &Analysis, p: &Profile) -> Vec<Delta> {
+    let mut out = Vec::new();
+    check(&mut out, "integrated_lufs", a.loudness.integrated_lufs, p.integrated_lufs);
+    check(&mut out, "true_peak_db", a.loudness.true_peak_db, p.true_peak_db);
+    check(&mut out, "crest_db", a.loudness.crest_db, p.crest_db);
+    check(&mut out, "side_mid_db", a.stereo.side_mid_db, p.side_mid_db);
+    check(&mut out, "silence_total_pct", a.structure.silence_total_pct, p.silence_total_pct);
+    let density = r2(a.rhythm.audio_onsets as f64 / a.seconds.max(1e-9));
+    check(&mut out, "onsets_per_second", density, p.onsets_per_second);
+    for (i, name) in BAND_NAMES.iter().enumerate() {
+        if let Some(&range) = p.band_share_pct.get(*name) {
+            check(
+                &mut out,
+                &format!("band_{name}_pct"),
+                a.spectral.band_share_pct[i],
+                Some(range),
+            );
+        }
+    }
+    out
+}

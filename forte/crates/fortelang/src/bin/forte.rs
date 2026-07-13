@@ -100,6 +100,26 @@ fn main() -> ExitCode {
             let path = &args[1];
             let json = args.iter().any(|a| a == "--json");
             let stems = !args.iter().any(|a| a == "--no-stems");
+            let profile = match args.iter().position(|a| a == "--against") {
+                Some(i) => {
+                    let Some(pf) = args.get(i + 1) else {
+                        eprintln!("--against にはプロファイルのパスを続けます");
+                        return ExitCode::from(2);
+                    };
+                    let body = match load(pf) {
+                        Ok(s) => s,
+                        Err(c) => return c,
+                    };
+                    match fortelang::analyze::Profile::from_json(&body) {
+                        Ok(p) => Some(p),
+                        Err(e) => {
+                            eprintln!("{pf}: プロファイルを読めません: {e}");
+                            return ExitCode::FAILURE;
+                        }
+                    }
+                }
+                None => None,
+            };
             let src = match load(path) {
                 Ok(s) => s,
                 Err(c) => return c,
@@ -108,10 +128,44 @@ fn main() -> ExitCode {
                 Ok(p) => {
                     let sections = fortelang::song_sections(&src);
                     let a = fortelang::analyze::analyze(&p, &sections, stems);
+                    let deltas = profile.as_ref().map(|pf| (pf, fortelang::analyze::compare(&a, pf)));
                     if json {
-                        println!("{}", a.to_json());
+                        match &deltas {
+                            Some((pf, ds)) => println!(
+                                "{{\"analysis\":{},\"against\":{{\"profile\":{},\"pass\":{},\"deltas\":{}}}}}",
+                                a.to_json(),
+                                serde_json::to_string(&pf.name).unwrap_or_default(),
+                                ds.iter().all(|d| d.ok),
+                                serde_json::to_string_pretty(ds).unwrap_or_default(),
+                            ),
+                            None => println!("{}", a.to_json()),
+                        }
                     } else {
                         print_analysis(&a);
+                        if let Some((pf, ds)) = &deltas {
+                            println!("-- 照合: {} --", pf.name);
+                            for d in ds {
+                                if d.ok {
+                                    println!("  ✓ {} = {} (目標 {}..{})", d.metric, d.value, d.lo, d.hi);
+                                } else {
+                                    println!(
+                                        "  ✗ {} = {} (目標 {}..{}, {}{})",
+                                        d.metric,
+                                        d.value,
+                                        d.lo,
+                                        d.hi,
+                                        if d.delta < 0.0 { "" } else { "+" },
+                                        d.delta
+                                    );
+                                }
+                            }
+                            let misses = ds.iter().filter(|d| !d.ok).count();
+                            if misses == 0 {
+                                println!("  合格: プロファイルの全目標を満たしています");
+                            } else {
+                                println!("  {misses} 項目が目標圏外です");
+                            }
+                        }
                     }
                     ExitCode::SUCCESS
                 }
@@ -418,7 +472,7 @@ fn main() -> ExitCode {
             eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte test  [PATH…] [--update]  (digest 固定の回帰テスト: forte-test.lock と照合)");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
-            eprintln!("       forte analyze <song.forte> [--json] [--no-stems]  (聴取レポート: ラウドネス/帯域/定位/リズム/構成/調性)");
+            eprintln!("       forte analyze <song.forte> [--json] [--no-stems] [--against X.profile]  (聴取レポート + ジャンル目標との照合)");
             eprintln!("       forte lsp");
             eprintln!("       forte init [NAME]           (NAME 付きで package プロジェクトを作成 / なしで cwd をリポジトリに)");
             eprintln!("       forte package add <github:owner/repo[@ref] | URL | PATH>  (packages/ にフラット導入)");
