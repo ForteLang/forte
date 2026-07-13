@@ -21,6 +21,17 @@ Never ship an album while groping in the dark and call the job done.
 (Learned the hard way with the first Raw Signal attempt: sine waves +
 clicks passed the gates but missed the genre completely.)
 
+NEVER generate album tracks from a shared template or script
+(2026-07, learned the hard way again — and the maintainer noticed
+immediately). Seven "tracks" that are parameter variants of one
+skeleton share the same intro melody and the same structure; that is
+one song pressed seven times, not an album. Profile targets measure
+the SOUND, not the MUSIC — passing 11/11 says nothing about whether
+the melody, harmony and arc are worth listening to. Each album track
+is composed individually: its own melody, its own intro, its own
+structure. Write ONE track, get it approved by ear, then write the
+next.
+
 ## What glitch actually is (so it is never misread again)
 
 Glitch is a SAMPLER phenomenon, not an oscillator one. The instruments
