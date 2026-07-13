@@ -387,6 +387,101 @@ pub fn compile(
         p.tracks[ti].devices[di].sidechain = hits;
     }
 
+    // ---- declarative gain staging: `level -14` targets in LUFS ----
+    // The compiler renders anyway, so faders become measurements instead of
+    // hand-retuning loops. Track targets first (each measured on its solo
+    // render), then the song target drives `master` in two passes so the
+    // soft limiter's take is folded in. All math is power-domain f64 and
+    // dmath — the same value on native and wasm, so digests stay one.
+    let level_targets: Vec<(String, f64, crate::diag::Pos)> = root
+        .tracks
+        .iter()
+        .filter_map(|t| t.level.map(|(v, pos)| (t.name.clone(), v, pos)))
+        .collect();
+    if !level_targets.is_empty() || root.level.is_some() {
+        for (_, v, pos) in level_targets.iter().chain(root.level.map(|(v, pos)| (String::new(), v, pos)).iter()) {
+            if !(-36.0..=-6.0).contains(v) {
+                diags.push(Diag::new(
+                    "E-LVL-001",
+                    *pos,
+                    format!("level は -36..-6 LUFS の範囲で指定してください(指定: {v})"),
+                ));
+            }
+        }
+    }
+    // target LUFS → power, via dmath (deterministic transcendental)
+    let target_power =
+        |lufs: f64| dawcore::dmath::powf(10.0, ((lufs + 0.691) / 10.0) as f32) as f64;
+    let measure = |proj: &Project| -> f64 {
+        let (_k, s) = crate::render_to_sample(proj, 0.0, 60);
+        match &s.right {
+            Some(r) => crate::analyze::integrated_power(&s.data, r),
+            None => crate::analyze::integrated_power(&s.data, &s.data),
+        }
+    };
+    if diags.is_empty() {
+        for (name, lufs, pos) in &level_targets {
+            let Some(ti) = p.tracks.iter().position(|t| t.name == *name) else { continue };
+            let mut solo = p.clone();
+            for t in &mut solo.tracks {
+                t.solo = t.id == p.tracks[ti].id || t.kind == dawcore::model::TrackKind::Effect;
+            }
+            let measured = measure(&solo);
+            if measured <= 0.0 {
+                diags.push(Diag::new(
+                    "E-LVL-003",
+                    *pos,
+                    format!("track '{name}' は無音なので level を合わせられません"),
+                ));
+                continue;
+            }
+            let gain = (target_power(*lufs) / measured).sqrt() as f32;
+            let want = p.tracks[ti].volume * gain;
+            if want > 1.0 {
+                // display only — the error text is not digest material
+                let short = 20.0 * (want as f64).log10();
+                diags.push(Diag::new(
+                    "E-LVL-002",
+                    *pos,
+                    format!(
+                        "track '{name}' はフェーダー最大でも目標 {lufs} LUFS に {short:.1} dB 届きません(楽器側の gain か master を上げてください)"
+                    ),
+                ));
+                continue;
+            }
+            p.tracks[ti].volume = want;
+        }
+    }
+    if diags.is_empty() {
+        if let Some((lufs, pos)) = root.level {
+            // three passes: each folds in whatever the soft limiter took of
+            // the previous one (geometric convergence, renders are cached)
+            for _ in 0..3 {
+                let measured = measure(&p);
+                if measured <= 0.0 {
+                    break;
+                }
+                let gain = (target_power(lufs) / measured).sqrt() as f32;
+                p.master = (p.master * gain).clamp(0.1, 4.0);
+            }
+            // honesty check: if the master clamp (or the limiter) leaves the
+            // mix >1 dB off target, say so instead of shipping a quiet lie.
+            // 1 dB in the power domain = ×10^0.1 (constant — deterministic)
+            const ONE_DB_POWER: f64 = 1.258_925_411_794_167_2;
+            let finall = measure(&p);
+            let want = target_power(lufs);
+            if finall > 0.0 && (want / finall > ONE_DB_POWER || finall / want > ONE_DB_POWER) {
+                diags.push(Diag::new(
+                    "E-LVL-004",
+                    pos,
+                    format!(
+                        "master の可動域では目標 {lufs} LUFS に 1 dB 以内まで届きません(トラックの level か楽器の gain を先に上げてください)"
+                    ),
+                ));
+            }
+        }
+    }
+
     if diags.is_empty() {
         Ok(p)
     } else {

@@ -156,6 +156,10 @@ pub struct SongAst {
     pub tempo: Option<(f64, Pos)>,
     /// `master 1.4` — mastering gain on the summed mix, pre-limiter.
     pub master: Option<(f64, Pos)>,
+    /// `level -12` at song level — integrated-LUFS target for the whole mix:
+    /// the compiler measures the summed render and drives `master` to hit it
+    /// (two passes, so the soft limiter's take is folded in).
+    pub level: Option<(f64, Pos)>,
     pub swing: Option<(f64, Pos)>,
     pub meter: Option<((u32, u32), Pos)>,
     pub key: Option<((String, String), Pos)>, // (root, scale) as written
@@ -218,6 +222,9 @@ pub struct ReturnAst {
     pub pos: Pos,
     pub inserts: Vec<Call>,
     pub volume: Option<(f64, Pos)>,
+    /// `level -14` — a LUFS target: the compiler measures this track's solo
+    /// render and sets the fader to hit it (declarative gain staging).
+    pub level: Option<(f64, Pos)>,
     pub pan: Option<(f64, Pos)>,
 }
 
@@ -244,6 +251,9 @@ pub struct TrackAst {
     pub inserts: Vec<Call>,
     pub plays: Vec<PlayAst>,
     pub volume: Option<(f64, Pos)>,
+    /// `level -14` — a LUFS target: the compiler measures this track's solo
+    /// render and sets the fader to hit it (declarative gain staging).
+    pub level: Option<(f64, Pos)>,
     pub pan: Option<(f64, Pos)>,
     /// `send Space 0.3` — (return name, level).
     pub sends: Vec<(String, f64, Pos)>,

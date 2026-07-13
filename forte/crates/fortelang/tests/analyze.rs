@@ -163,6 +163,52 @@ fn profiles_judge_a_render_against_targets() {
 }
 
 #[test]
+fn level_targets_stage_the_gain_declaratively() {
+    // song-level `level -12`: the compiler measures and drives master
+    let src = |level: &str| {
+        format!(
+            r#"song "L" {{ tempo 120bpm
+  {level}
+  track A {{ instrument prisma(wave: "saw", cutoff: 0.7, sustain: 0.8, release: 0.1)
+    play notes`C3:1 E3:1 G3:1 C4:1` at bars(1..2) }} }}"#
+        )
+    };
+    let p = fortelang::compile_str(&src("level -14")).expect("level song must compile");
+    let a = analyze(&p, &[], false);
+    assert!(
+        (a.loudness.integrated_lufs - -14.0).abs() < 1.0,
+        "the mix must land within 1 dB of the declared target, got {} LUFS",
+        a.loudness.integrated_lufs
+    );
+    // a target the master clamp cannot reach is an honest error, not a
+    // quietly-missed number
+    assert!(
+        fortelang::compile_str(&src("level -7")).is_err(),
+        "an out-of-reach song target must be E-LVL-004"
+    );
+    // deterministic: same source, same fader math, same audio
+    let p2 = fortelang::compile_str(&src("level -14")).unwrap();
+    assert_eq!(
+        fortelang::render_digest(&p, 1.0).f32_digest,
+        fortelang::render_digest(&p2, 1.0).f32_digest,
+        "level resolution must be deterministic"
+    );
+    // songs that never write level are untouched by the feature
+    let plain = fortelang::compile_str(&src("")).unwrap();
+    assert!((plain.master - 1.0).abs() < 1e-9, "no level = master untouched");
+    // range and reachability are musical errors
+    let bad = fortelang::compile_str(&src("level -3"));
+    assert!(bad.is_err(), "level -3 must be out of range (E-LVL-001)");
+    let unreachable = fortelang::compile_str(
+        r#"song "U" { tempo 120bpm
+  track A { instrument prisma(wave: "sine", cutoff: 0.4, sustain: 0.3)
+    level -8
+    play notes`C3:1 _:3` at bars(1..1) } }"#,
+    );
+    assert!(unreachable.is_err(), "a fader-only track cannot GAIN 10 dB (E-LVL-002)");
+}
+
+#[test]
 fn sections_shape_the_report() {
     let p = project(
         r#"song "T" { tempo 120bpm

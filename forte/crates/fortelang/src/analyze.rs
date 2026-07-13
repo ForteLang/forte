@@ -336,6 +336,58 @@ fn loudness(l: &[f32], r: &[f32]) -> Loudness {
     }
 }
 
+/// Gated integrated loudness of a stereo buffer in the POWER domain
+/// (K-weighted mean square with BS.1770-style gating). Everything here is
+/// f64 multiply/add/compare over fixed constants — bit-identical on native
+/// and wasm — so compile-time gain staging (`level`) may divide two of
+/// these and take a sqrt without breaking the determinism promise.
+/// Returns 0.0 for silence.
+pub fn integrated_power(l: &[f32], r: &[f32]) -> f64 {
+    let frame = (SR * 0.1) as usize;
+    let mut kwl = k_weight();
+    let mut kwr = k_weight();
+    let mut frames: Vec<f64> = Vec::with_capacity(l.len() / frame + 1);
+    let mut acc = 0.0f64;
+    for i in 0..l.len() {
+        let a1 = kwl[0].process(l[i] as f64);
+        let a = kwl[1].process(a1);
+        let b1 = kwr[0].process(r[i] as f64);
+        let b = kwr[1].process(b1);
+        acc += a * a + b * b;
+        if (i + 1) % frame == 0 {
+            frames.push(acc / frame as f64);
+            acc = 0.0;
+        }
+    }
+    // −70 LUFS absolute gate as a power threshold: 10^((−70 + 0.691)/10)
+    const ABS_GATE_POWER: f64 = 1.172_465_304_582_298_1e-7;
+    let mut blocks: Vec<f64> = Vec::new();
+    for w in frames.windows(4) {
+        let p = w.iter().sum::<f64>() / 4.0;
+        if p > ABS_GATE_POWER {
+            blocks.push(p);
+        }
+    }
+    if blocks.is_empty() {
+        return 0.0;
+    }
+    let mean = blocks.iter().sum::<f64>() / blocks.len() as f64;
+    // relative gate: −10 dB below the first-pass mean = ×0.1 in power
+    let gate = mean * 0.1;
+    let (mut sum, mut n) = (0.0f64, 0usize);
+    for &b in &blocks {
+        if b > gate {
+            sum += b;
+            n += 1;
+        }
+    }
+    if n == 0 {
+        0.0
+    } else {
+        sum / n as f64
+    }
+}
+
 // --- stereo ------------------------------------------------------------------
 
 fn stereo(l: &[f32], r: &[f32]) -> Stereo {

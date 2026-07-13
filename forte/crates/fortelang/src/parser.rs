@@ -183,6 +183,7 @@ impl Parser {
             params: Vec::new(),
             tempo: None,
             master: None,
+            level: None,
             swing: None,
             meter: None,
             key: None,
@@ -321,6 +322,13 @@ impl Parser {
                         self.bump();
                         if let Some((n, _unit, pos)) = self.number("master") {
                             song.master = Some((n, pos));
+                        }
+                    }
+                    "level" => {
+                        // level -12 = integrated-LUFS target for the mix
+                        self.bump();
+                        if let Some((n, _unit, pos)) = self.number("level") {
+                            song.level = Some((n, pos));
                         }
                     }
                     "insert" => {
@@ -688,6 +696,7 @@ impl Parser {
             inserts: Vec::new(),
             plays: Vec::new(),
             volume: None,
+            level: None,
             pan: None,
             sends: Vec::new(),
             audios: Vec::new(),
@@ -829,6 +838,13 @@ impl Parser {
                         self.bump();
                         if let Some((n, _, p)) = self.number("volume") {
                             t.volume = Some((n, p));
+                        }
+                    }
+                    "level" => {
+                        // level -14 = LUFS target; the compiler sets the fader
+                        self.bump();
+                        if let Some((n, _, p)) = self.number("level") {
+                            t.level = Some((n, p));
                         }
                     }
                     "pan" => {
@@ -1147,7 +1163,7 @@ impl Parser {
         self.bump(); // "return"
         let name = self.ident("return の名前")?;
         self.expect(Tok::LBrace, "`{`");
-        let mut r = ReturnAst { name, pos, inserts: Vec::new(), volume: None, pan: None };
+        let mut r = ReturnAst { name, pos, inserts: Vec::new(), volume: None, level: None, pan: None };
         loop {
             match self.peek().clone() {
                 Tok::RBrace => {
