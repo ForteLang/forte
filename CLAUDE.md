@@ -64,6 +64,16 @@ is the groove, not the silence. Glitch means bug-like behavior —
 - More broken-sounding artifacts: stutters, reversed answers, crushed
   moments, granular freezes — things a correct player would never do.
 
+## Long-form arrangement (maintainer rule, 2026-07)
+
+Full-length tracks (3+ minutes) MUST be structured around build-ups
+and drops — never a flat loop that runs long. The working template:
+intro → groove → BUILD → DROP → breakdown → bigger BUILD → peak DROP
+→ outro, with `section` statements naming the spans so
+`forte analyze` shows the energy arc. Build-ups rise (roll density,
+opening filters, risers, stutter tightening) and may end in a one-bar
+gasp — the sanctioned use of total silence. Drops must audibly arrive.
+
 ## Standing rules
 
 - Merge gate: `forte ci quick` must pass (exit code checked) before any
