@@ -3,6 +3,14 @@
 // laushub dose — the holes are phrasing, not violence). Same certified
 // master chain as still-glass; the profile is the mastering engineer.
 
+device NightWash : Instrument {
+  node w = lfo(rate: 0.03, shape: "sine")
+  node e = adsr(a: 0.9, d: 0.3, s: 0.9, r: 0.9)
+  node n = noise()
+  node f = svf(in: n, mod: w, cutoff: 0.38, reso: 0.25)
+  out gain(in: f, mod: e)
+}
+
 device ColdKeys : Instrument {
   node e = adsr(a: 0.01, d: 0.5, s: 0.35, r: 0.5)
   node o = uni(shape: "tri", voices: 5, detune: 0.22, spread: 0.38)
@@ -93,6 +101,13 @@ song "cold-letter" {
   block Cutter {
     track Cut {
       instrument sampler(attack: 0.02, gain: 1.0, sample: MixS, slices: 32, end: 0.941, choke: "on", sustain: 1.0, release: 0.06)
+      // the letter warps as it is read: slow drift, a whole-step sag in
+      // the middle, and the last line slurring down a fourth
+      modulate pitch with random(rate: 0.05, amount: 0.02, smooth: 0.8) as swim
+      automate pitch from 0.5 to 0.458 over bars(7..8)
+      automate pitch from 0.458 to 0.5 over bars(9..9)
+      automate pitch from 0.5 to 0.396 over bars(16..16)
+      automate volume from 0.95 to 0.3 over bars(16..16)
       insert parcomp(amount: 0.85, drive: 0.65, color: 0.45, os: "2x")
       insert eq(low: 0.48, mid: 0.5, high: 0.7)
       insert exciter(amount: 0.85, freq: 0.5)
@@ -116,6 +131,33 @@ song "cold-letter" {
       play notes`C#5~:1 D5~:1 _:0.5 D#5~:0.5 E5~:1` at bars(15..15)
       play notes`F5~:1 G5~:1 C3~:2` at bars(16..16)
     }
+    track Back {
+      instrument sampler(attack: 0.04, gain: 1.0, sample: MixS, slices: 32, end: 0.941, reverse: "on", sustain: 1.0, release: 0.1)
+      volume 0.45
+      play notes`_:3 A4~:1` at bars(4..4)
+      play notes`_:2.5 E4~:1 _:0.5` at bars(9..9)
+      play notes`_:3 C5~:1` at bars(13..13)
+    }
+  }
+  // the bed: it never stops — cold-letter has NO true silence, only
+  // the record breathing over a room that stays lit
+  track Drone {
+    instrument prisma(wave: "tri", cutoff: 0.45, attack: 0.7, sustain: 0.9, release: 0.9, unison: 5, detune: 0.18, spread: 0.42, sub: 0.3)
+    volume 0.3
+    insert space(type: "hall", size: 0.8, decay: 0.75, width: 0.4, mix: 0.32)
+    play notes`[A1 A2 E3]~:16` at bars(1..4)
+    play notes`[F2 C3 A3]~:16` at bars(5..8)
+    play notes`[A1 A2 E3]~:16` at bars(9..12)
+    play notes`[E2 B2 E3]~:16` at bars(13..16)
+  }
+  track Wash {
+    instrument NightWash()
+    insert vinyl(wow: 0.35, crackle: 0.45, hiss: 0.22, dust: 0.4)
+    volume 0.34
+    play notes`A3~:16` at bars(1..4)
+    play notes`A3~:16` at bars(5..8)
+    play notes`A3~:16` at bars(9..12)
+    play notes`A3~:16` at bars(13..16)
   }
   play Cutter at bars(1..16)
 }

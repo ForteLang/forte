@@ -1,8 +1,18 @@
-// still-glass — the first pressing with the new palette: a wide unison
-// pad walking a degree progression with nearest-motion voicing, an acid
-// vcf bass, bright hats for air, the whole band bounced to ONE record
-// and lightly chopped (the melodic-glitch dose: holes, not craters).
-// Mastered by declaration: level -11 through the glue.
+// still-glass — the reference pressing of the v2 aesthetic: THE BUG IS
+// THE GROOVE. A wide unison pad walks a degree progression, the band is
+// bounced to one record and chopped — but an ambient bed (drone + comfy
+// vinyl noise wash) keeps sounding under every rest, the record's pitch
+// audibly misbehaves (drift, a two-semitone lean, a final dive), a
+// reversed copy answers in the gaps, and one tape-brake drops the WHOLE
+// world — bed included — into the song's single true silence.
+
+device NightWash : Instrument {
+  node w = lfo(rate: 0.04, shape: "sine")
+  node e = adsr(a: 0.9, d: 0.3, s: 0.9, r: 0.9)
+  node n = noise()
+  node f = svf(in: n, mod: w, cutoff: 0.42, reso: 0.25)
+  out gain(in: f, mod: e)
+}
 
 device GlassKick : Instrument {
   node pe = adsr(a: 0.001, d: 0.045, s: 0.0, r: 0.02)
@@ -41,7 +51,7 @@ song "still-glass" {
   swing "mpc54"
   key A minor
   level -12
-  insert glue(thresh: 0.15, ratio: 0.45, attack: 0.06, release: 0.3, knee: 0.5, schpf: 0.4, makeup: 0.2)
+  insert glue(thresh: 0.13, ratio: 0.5, attack: 0.05, release: 0.3, knee: 0.5, schpf: 0.4, makeup: 0.2)
   insert limiter(ceiling: 0.82, release: 0.25)
 
   // ---- the record: eight bars of the full band ----
@@ -50,7 +60,7 @@ song "still-glass" {
     let P = prog`i | VI | III | VII | i | iv7 | VI | V7`
 
     track Pad {
-      instrument prisma(wave: "saw", cutoff: 0.66, attack: 0.25, sustain: 0.8, release: 0.45, unison: 7, detune: 0.3, spread: 0.72, sub: 0.1)
+      instrument prisma(wave: "saw", cutoff: 0.66, attack: 0.25, sustain: 0.8, release: 0.45, unison: 7, detune: 0.3, spread: 0.6, sub: 0.1)
       volume 0.62
       insert space(type: "plate", size: 0.55, decay: 0.5, mix: 0.22)
       play chords(P, lead: "nearest", voicing: "drop2", register: 4) at bars(1..8)
@@ -90,7 +100,7 @@ song "still-glass" {
   block Cutter {
     track Cut {
       instrument sampler(attack: 0.02, gain: 1.0, sample: MixS, slices: 32, end: 0.941, choke: "on", sustain: 1.0, release: 0.05)
-      insert parcomp(amount: 0.85, drive: 0.65, color: 0.45, os: "2x")
+      insert parcomp(amount: 1.0, drive: 0.7, color: 0.45, os: "2x")
       insert eq(low: 0.48, mid: 0.5, high: 0.62)
       insert exciter(amount: 0.85, freq: 0.7)
       volume 0.95
@@ -113,6 +123,35 @@ song "still-glass" {
       play notes`D#5~:0.5 D#5~:0.5 E5~:1 F5~:0.5 _:0.5 F#5~:1` at bars(15..15)
       play notes`G5~:1 F5~:1 C4~:1 C3~:0.75 _:0.25` at bars(16..16)
     }
+    track Back {
+      instrument sampler(attack: 0.03, gain: 1.0, sample: MixS, slices: 32, end: 0.941, reverse: "on", sustain: 1.0, release: 0.08)
+      volume 0.5
+      play notes`_:3 E4~:1` at bars(2..2)
+      play notes`_:3.25 A4~:0.75` at bars(5..5)
+      play notes`_:2 C5~:0.5 _:1.5` at bars(10..10)
+      play notes`_:3 G4~:1` at bars(14..14)
+    }
+  }
+  // ---- the ambient bed: it does NOT live on the record — it keeps
+  // sounding under every chop rest. Its only rest is bar 12, where the
+  // tape-brake takes the whole world down: the one true silence.
+  track Drone {
+    instrument prisma(wave: "saw", cutoff: 0.42, attack: 0.6, sustain: 0.9, release: 0.8, unison: 5, detune: 0.22, spread: 0.5, sub: 0.25)
+    volume 0.3
+    insert space(type: "hall", size: 0.75, decay: 0.7, width: 0.4, mix: 0.3)
+    play notes`[A1 A2 E3]~:16` at bars(1..4)
+    play notes`[F2 C3 A3]~:16` at bars(5..8)
+    play notes`[A1 A2 E3]~:12` at bars(9..11)
+    play notes`[F2 C3 F3]~:8 [E2 B2 E3]~:8` at bars(13..16)
+  }
+  track Wash {
+    instrument NightWash()
+    insert vinyl(wow: 0.3, crackle: 0.35, hiss: 0.2, dust: 0.35)
+    volume 0.34
+    play notes`A3~:16` at bars(1..4)
+    play notes`A3~:16` at bars(5..8)
+    play notes`A3~:12` at bars(9..11)
+    play notes`A3~:16` at bars(13..16)
   }
   play Cutter at bars(1..16)
 }

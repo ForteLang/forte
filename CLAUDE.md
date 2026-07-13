@@ -43,6 +43,22 @@ Saturation and guitar-pedal-style processing (fuzz, wah, chained
 stomp-box effects) are part of the same audio-domain vocabulary and are
 required, not optional.
 
+Maintainer refinement (2026-07, after the melodic pressings): the BUG
+is the groove, not the silence. Glitch means bug-like behavior —
+"impossible music" that surprises. Concretely:
+
+- Do not over-index on dead silence. A continuous ambient bed keeps
+  sounding UNDER the chopped record, so a rest in the record reveals
+  the bed instead of true zero. Total mix-wide silence still happens,
+  but as an occasional shock, not the default groove.
+- Wild pitch movement is a primary color: audio-domain pitch
+  automation/bends on the playing record, tapestop moments, glides —
+  the record audibly misbehaving.
+- Pleasant, non-clicky noise belongs (vinyl wow/crackle/hiss beds,
+  filtered noise washes) — comfy noise, not プチプチ.
+- More broken-sounding artifacts: stutters, reversed answers, crushed
+  moments, granular freezes — things a correct player would never do.
+
 ## Standing rules
 
 - Merge gate: `forte ci quick` must pass (exit code checked) before any

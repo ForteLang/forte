@@ -10,11 +10,14 @@ House rules, learned by ear:
 - Drums are **body first, noise last** — no noise-burst snare anchors.
 - Every groove is a **four-bar arc**, not a loop: bar 4 breaks the pattern.
 - Something **drifts at all times** (pitch swim, window slide, stepped flip).
-- **Choke cuts leave rests**; the rests are the groove.
+- **The BUG is the groove**: wild audio-domain pitch movement, stutters,
+  reversed answers, broken artifacts — impossible playback that surprises.
+  Choke cuts still leave rests, but an ambient bed keeps sounding under
+  them; TOTAL silence is an occasional shock, not the default.
 - **The whole mix is the sample**: bounce the full band to ONE record and
   chop THAT — a rest then silences everything at once, reverb tails
   included. That mix-wide dead-stop is the glitch groove.
-- **No hiss/crackle beds** — the music stays clean; patina is opt-in per song.
+- Comfy noise is welcome (vinyl wow/crackle/hiss beds, filtered washes) — pleasant, never clicky. (Revised 2026-07; the old "no beds" rule is retired.)
 - A steal, a cut, a slice end: everything **declicks**.
 
 ## Source records: `records/`
@@ -44,10 +47,18 @@ prisma stacks, degree progressions with nearest-motion voice leading,
 `vcf` ladder basses, air hats, the band bounced to one record, lightly
 chopped, and pressed through the house chain (transient-safe glue →
 parcomp → EQ tilt → exciter → limiter, loudness by `level`).
-**still-glass** and **aperture** pass every profile target;
-**cold-letter** (the slow sparse one) sits 3 numbers outside by
-character — its crest and inter-sample peaks are the price of breathing
-room, documented rather than hidden.
+V2 (the bug is the groove): every pressing carries an ambient BED —
+a unison drone plus a vinyl'd noise wash that keep sounding under the
+chops, so rests reveal a lit room instead of dead zero — wild
+audio-domain pitch behavior (constant micro-drift, mid-song leans, a
+dying-tape dive out the end), reversed copies answering from the gaps,
+and stutter fits. still-glass drops the whole world once (bar 12,
+tape-brake into the song's single true silence). **still-glass**
+passes every profile target; **aperture** misses only true peak,
+**cold-letter** true peak + high band — the inter-sample overshoot is
+a tooling gap (the limiter detects sample peaks, not reconstruction
+peaks; see the true-peak limiter issue), documented rather than
+hidden.
 
 ## Listening: the songbook (`songs/`, ~30 s each)
 
