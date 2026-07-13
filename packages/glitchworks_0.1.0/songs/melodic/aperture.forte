@@ -1,0 +1,116 @@
+// aperture — the fast one: the still-glass pressing chain (it passed the
+// profile, so it is now the house recipe) under a driving 16th arp, a
+// darker progression and a chop that stutters instead of breathing.
+
+device GlassKick : Instrument {
+  node pe = adsr(a: 0.001, d: 0.045, s: 0.0, r: 0.02)
+  node e = adsr(a: 0.001, d: 0.28, s: 0.0, r: 0.05)
+  node o = osc(shape: "sine", mod: pe)
+  node warm = shaper(in: o, drive: 0.25, mode: "tanh")
+  out gain(in: warm, mod: e)
+}
+
+device AirHat : Instrument {
+  node e = adsr(a: 0.004, d: 0.08, s: 0.0, r: 0.04)
+  node n = noise()
+  node hi = gain(in: n, mod: e)
+  out pan(in: hi, pos: 0.62)
+}
+
+device GlassBass : Instrument {
+  param cutoff = 0.4 in 0..1
+  node e = adsr(a: 0.004, d: 0.16, s: 0.2, r: 0.08)
+  node o = osc(shape: "saw")
+  node f = vcf(in: o, mod: e, cutoff: cutoff, reso: 0.55, drive: 0.35, track: 0.5, drift: 0.25, mode: "ladder")
+  out gain(in: f, mod: e)
+}
+
+device Shimmer : Instrument {
+  node e = adsr(a: 0.002, d: 0.12, s: 0.1, r: 0.15)
+  node o = uni(shape: "tri", voices: 3, detune: 0.2, spread: 0.85)
+  node f = svf(in: o, cutoff: 0.95, reso: 0.12)
+  out gain(in: f, mod: e)
+}
+
+song "aperture" {
+  desc "Driving 16th arp over a darker degree walk, the house pressing chain, a chop that stutters instead of breathing."
+  artist "Forte Essentials"
+  tempo 118bpm
+  swing "mpc58"
+  key A minor
+  level -12
+  insert glue(thresh: 0.15, ratio: 0.45, attack: 0.06, release: 0.3, knee: 0.5, schpf: 0.4, makeup: 0.2)
+  insert limiter(ceiling: 0.82, release: 0.25)
+
+  // ---- the record: eight bars of the full band ----
+  block Mix {
+    key A minor
+    let P = prog`i | bVII | VI | III | i | bVII | iv7 | V7`
+
+    track Pad {
+      instrument prisma(wave: "saw", cutoff: 0.66, attack: 0.25, sustain: 0.8, release: 0.45, unison: 7, detune: 0.3, spread: 0.72, sub: 0.1)
+      volume 0.62
+      insert space(type: "plate", size: 0.55, decay: 0.5, mix: 0.22)
+      play chords(P, lead: "nearest", voicing: "close", register: 4) at bars(1..8)
+    }
+    track Bass {
+      instrument GlassBass(cutoff: 0.42)
+      volume 0.72
+      play bass(P, rate: 0.5) at bars(1..8)
+    }
+    track Arp {
+      instrument Shimmer()
+      volume 0.6
+      insert space(type: "hall", size: 0.6, decay: 0.55, mix: 0.3)
+      play arp(P, rate: 0.25, style: "down") at bars(1..8)
+    }
+    track Kick {
+      instrument GlassKick()
+      volume 1.0
+      play beat`x--- x--x x--- x---` at bars(1..8)
+    }
+    track Hat {
+      instrument AirHat()
+      insert filter(type: "hp", cutoff: 0.8)
+      volume 0.95
+      play beat`--x- --x- -x-- --xx` at bars(1..8)
+    }
+    track Ride {
+      instrument AirHat()
+      insert filter(type: "hp", cutoff: 0.84)
+      volume 0.55
+      play beat`xx-x x-xx xx-x x-xx` at bars(5..8)
+    }
+  }
+  sample MixS = bounce(Mix, note: C3, beats: 32)
+
+  // ---- the song: the record replayed with holes, not craters ----
+  block Cutter {
+    track Cut {
+      instrument sampler(attack: 0.02, gain: 1.0, sample: MixS, slices: 32, end: 0.941, choke: "on", sustain: 1.0, release: 0.05)
+      insert parcomp(amount: 0.85, drive: 0.65, color: 0.45, os: "2x")
+      insert eq(low: 0.48, mid: 0.5, high: 0.62)
+      insert exciter(amount: 0.85, freq: 0.7)
+      volume 0.95
+      // side A: rolling forward, small catches
+      play notes`C3~:1 C#3~:1 D3~:0.5 D3~:0.5 D#3~:1` at bars(1..1)
+      play notes`E3~:1 F3~:1 F#3~:0.75 _:0.25 G3~:1` at bars(2..2)
+      play notes`G#3~:0.5 G#3~:0.5 A3~:1 A#3~:1 B3~:1` at bars(3..3)
+      play notes`C4~:1 C#4~:0.5 _:0.5 D4~:1 D#4~:1` at bars(4..4)
+      play notes`E4~:1 F4~:1 F#4~:0.5 F#4~:0.25 F#4~:0.25 G4~:1` at bars(5..5)
+      play notes`G#4~:1 A4~:0.75 _:0.25 A#4~:1 B4~:1` at bars(6..6)
+      play notes`C5~:0.5 C5~:0.5 C#5~:1 D5~:1 D#5~:1` at bars(7..7)
+      play notes`E5~:1 F5~:1 F#5~:0.75 _:0.25 G5~:1` at bars(8..8)
+      // side B: the aperture narrows — stutter clusters and snaps
+      play notes`C3~:0.5 C3~:0.25 C3~:0.25 C#3~:1 D3~:1 D#3~:0.75 _:0.25` at bars(9..9)
+      play notes`E3~:0.5 E3~:0.5 F3~:1 G3~:0.5 _:0.5 G#3~:1` at bars(10..10)
+      play notes`A3~:1 A#3~:0.5 A#3~:0.25 A#3~:0.25 C4~:1 C#4~:1` at bars(11..11)
+      play notes`D4~:0.75 _:0.25 D#4~:1 E4~:0.5 E4~:0.5 F4~:1` at bars(12..12)
+      play notes`F#4~:1 G4~:0.25 G4~:0.25 G4~:0.5 G#4~:1 A4~:0.75 _:0.25` at bars(13..13)
+      play notes`A#4~:1 B4~:1 C5~:0.5 C5~:0.5 C#5~:1` at bars(14..14)
+      play notes`D5~:0.5 D5~:0.25 D5~:0.25 D#5~:1 E5~:0.75 _:0.25 F5~:1` at bars(15..15)
+      play notes`F#5~:1 G5~:1 C4~:1 C3~:1` at bars(16..16)
+    }
+  }
+  play Cutter at bars(1..16)
+}

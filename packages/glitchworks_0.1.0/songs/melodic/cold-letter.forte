@@ -1,0 +1,121 @@
+// cold-letter — the slow one: bell-ish unison keys over a minor-seventh
+// walk, brushes of air, the record chopped with wider breaths (the
+// laushub dose — the holes are phrasing, not violence). Same certified
+// master chain as still-glass; the profile is the mastering engineer.
+
+device ColdKeys : Instrument {
+  node e = adsr(a: 0.01, d: 0.5, s: 0.35, r: 0.5)
+  node o = uni(shape: "tri", voices: 5, detune: 0.22, spread: 0.38)
+  node f = vcf(in: o, cutoff: 0.78, reso: 0.2, drift: 0.3, mode: "svf")
+  out gain(in: f, mod: e)
+}
+
+device DustKick : Instrument {
+  node pe = adsr(a: 0.001, d: 0.04, s: 0.0, r: 0.02)
+  node e = adsr(a: 0.001, d: 0.24, s: 0.0, r: 0.05)
+  node o = osc(shape: "sine", mod: pe)
+  node warm = shaper(in: o, drive: 0.25, mode: "tanh")
+  out gain(in: warm, mod: e)
+}
+
+device Brush : Instrument {
+  node e = adsr(a: 0.006, d: 0.11, s: 0.0, r: 0.06)
+  node n = noise()
+  node hi = gain(in: n, mod: e)
+  out pan(in: hi, pos: 0.35)
+}
+
+device BrightPluck : Instrument {
+  node e = adsr(a: 0.003, d: 0.18, s: 0.1, r: 0.12)
+  node o = uni(shape: "saw", voices: 3, detune: 0.18, spread: 0.5)
+  node f = vcf(in: o, cutoff: 0.8, reso: 0.18, mode: "svf")
+  out gain(in: f, mod: e)
+}
+
+device WarmBass : Instrument {
+  node e = adsr(a: 0.006, d: 0.22, s: 0.3, r: 0.12)
+  node o = osc(shape: "tri")
+  node f = vcf(in: o, mod: e, cutoff: 0.52, reso: 0.3, drive: 0.25, track: 0.4, mode: "ladder")
+  out gain(in: f, mod: e)
+}
+
+song "cold-letter" {
+  desc "Bell-ish unison keys on a minor-seventh walk, brushed air, the record chopped with wide breaths."
+  artist "Forte Essentials"
+  tempo 88bpm
+  swing "mpc58"
+  key A minor
+  master 2.0
+  insert glue(thresh: 0.15, ratio: 0.45, attack: 0.06, release: 0.3, knee: 0.5, schpf: 0.4, makeup: 0.2)
+  insert limiter(ceiling: 0.82, release: 0.25)
+
+  block Mix {
+    key A minor
+    let P = prog`i7 | iv7 | VImaj7 | V7 | i7 | bVII | VImaj7 | V7sus4`
+
+    track Keys {
+      instrument ColdKeys()
+      volume 1.0
+      insert space(type: "plate", size: 0.6, decay: 0.55, width: 0.45, mix: 0.2)
+      play chords(P, lead: "nearest", voicing: "open", register: 4) at bars(1..8)
+    }
+    track Bass {
+      instrument WarmBass()
+      volume 0.72
+      play bass(P, rate: 1) at bars(1..8)
+    }
+    track Melody {
+      instrument BrightPluck()
+      volume 0.6
+      insert space(type: "hall", size: 0.65, decay: 0.6, width: 0.45, mix: 0.24)
+      play arp(P, rate: 0.5, style: "up") at bars(3..8)
+    }
+    track Kick {
+      instrument DustKick()
+      volume 0.48
+      play beat`x--- x--- x--- --x-` at bars(1..8)
+    }
+    track Brush {
+      instrument Brush()
+      insert filter(type: "hp", cutoff: 0.74)
+      volume 0.9
+      play beat`--x- --x- --x- -x-x` at bars(1..8)
+    }
+    track Tick {
+      instrument Brush()
+      insert filter(type: "hp", cutoff: 0.66)
+      volume 0.8
+      play beat`x-x- x-x- x-x- x-x-` at bars(3..8)
+    }
+  }
+  sample MixS = bounce(Mix, note: C3, beats: 32)
+
+  block Cutter {
+    track Cut {
+      instrument sampler(attack: 0.02, gain: 1.0, sample: MixS, slices: 32, end: 0.941, choke: "on", sustain: 1.0, release: 0.06)
+      insert parcomp(amount: 0.85, drive: 0.65, color: 0.45, os: "2x")
+      insert eq(low: 0.48, mid: 0.5, high: 0.7)
+      insert exciter(amount: 0.85, freq: 0.5)
+      volume 0.95
+      // side A: long phrases, wide breaths between them
+      play notes`C3~:1 C#3~:1 D3~:0.75 _:0.25 D#3~:1` at bars(1..1)
+      play notes`E3~:1 F3~:1 _:0.5 F#3~:0.5 G3~:1` at bars(2..2)
+      play notes`G#3~:1 A3~:1 A#3~:1 _:0.5 B3~:0.5` at bars(3..3)
+      play notes`C4~:1 C#4~:1 D4~:1 D#4~:1` at bars(4..4)
+      play notes`E4~:1 _:0.5 F4~:0.5 F#4~:1 G4~:1` at bars(5..5)
+      play notes`G#4~:1 A4~:1 _:0.5 A#4~:0.5 B4~:1` at bars(6..6)
+      play notes`C5~:1 C#5~:1 D5~:0.75 _:0.25 D#5~:1` at bars(7..7)
+      play notes`E5~:1 F5~:1 F#5~:1 G5~:1` at bars(8..8)
+      // side B: the letter re-read — phrases fold back on themselves
+      play notes`C3~:1 D3~:0.5 D3~:0.5 C#3~:1 D#3~:0.75 _:0.25` at bars(9..9)
+      play notes`E3~:1 _:0.5 E3~:0.5 G3~:1 F3~:1` at bars(10..10)
+      play notes`G#3~:1 A3~:0.5 _:0.5 C4~:1 A#3~:1` at bars(11..11)
+      play notes`D4~:1 C#4~:0.5 C#4~:0.5 D#4~:1 _:0.5 E4~:0.5` at bars(12..12)
+      play notes`F4~:1 F#4~:1 G4~:0.5 G4~:0.25 G4~:0.25 G#4~:1` at bars(13..13)
+      play notes`A4~:1 _:0.5 B4~:0.5 A#4~:1 C5~:1` at bars(14..14)
+      play notes`C#5~:1 D5~:1 _:0.5 D#5~:0.5 E5~:1` at bars(15..15)
+      play notes`F5~:1 G5~:1 C3~:2` at bars(16..16)
+    }
+  }
+  play Cutter at bars(1..16)
+}

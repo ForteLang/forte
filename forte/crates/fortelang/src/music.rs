@@ -536,8 +536,6 @@ pub fn prog_chords_voiced(
                     best
                 })
                 .collect();
-            led.sort_unstable();
-            led.dedup();
             // any chord tone still missing joins nearest to the stack's mean
             let mean: i32 = led.iter().sum::<i32>() / led.len().max(1) as i32;
             for &pc in &pcs {
@@ -549,9 +547,48 @@ pub fn prog_chords_voiced(
                     led.push(cand);
                 }
             }
+            // three guards, learned from the first real song (without them
+            // an 8-chord walk GREW a voice per chord and ratcheted an
+            // octave downward until it left the piano):
+            // 1. tether every voice to the register center
+            for v in led.iter_mut() {
+                while *v < center - 18 {
+                    *v += 12;
+                }
+                while *v > center + 18 {
+                    *v -= 12;
+                }
+            }
             led.sort_unstable();
-            tones = led;
+            led.dedup();
+            // 2. one voice per pitch class — keep the copy nearest center
+            let mut pruned: Vec<i32> = Vec::with_capacity(led.len());
+            for &v in &led {
+                match pruned.iter().position(|q| q.rem_euclid(12) == v.rem_euclid(12)) {
+                    Some(i) => {
+                        if (v - center).abs() < (pruned[i] - center).abs() {
+                            pruned[i] = v;
+                        }
+                    }
+                    None => pruned.push(v),
+                }
+            }
+            // 3. cap at the chord's own size, dropping the farthest voice
+            while pruned.len() > pcs.len().max(1) {
+                let far = pruned
+                    .iter()
+                    .enumerate()
+                    .max_by_key(|(_, v)| (*v - center).abs())
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
+                pruned.remove(far);
+            }
+            pruned.sort_unstable();
+            tones = pruned;
         }
+        // the NEXT chord leads from the CLOSE-position stack; voicing shapes
+        // are applied on a copy each chord so drop2/open never compound
+        prev = tones.clone();
         // voicing shapes applied AFTER leading (they re-space, not re-choose)
         match voicing {
             "close" => {}
@@ -581,7 +618,6 @@ pub fn prog_chords_voiced(
                 ))
             }
         }
-        prev = tones.clone();
         // slash bass under the stack
         if let Some(b) = ev.bass_pc {
             let low = tones.first().copied().unwrap_or(center);

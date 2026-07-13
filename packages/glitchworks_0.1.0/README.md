@@ -36,6 +36,19 @@ songbook's architecture: real silence share, chop density),
 JSON target ranges — fork them like everything else. A profile miss is
 a work order with a number on it, not an adjective.
 
+## The melodic pressings: `songs/melodic/`
+
+The first songs written WITH the whole 2026-07 core-library wave and
+measured against `profiles/melodic-glitch.profile` — wide `uni`/unison
+prisma stacks, degree progressions with nearest-motion voice leading,
+`vcf` ladder basses, air hats, the band bounced to one record, lightly
+chopped, and pressed through the house chain (transient-safe glue →
+parcomp → EQ tilt → exciter → limiter, loudness by `level`).
+**still-glass** and **aperture** pass every profile target;
+**cold-letter** (the slow sparse one) sits 3 numbers outside by
+character — its crest and inter-sample peaks are the price of breathing
+room, documented rather than hidden.
+
 ## Listening: the songbook (`songs/`, ~30 s each)
 
 Three shelves:
