@@ -76,6 +76,22 @@ impl PolySynth {
         sum
     }
 
+    /// Stereo tick: with unison off every voice returns its mono tick on
+    /// both sides (bit-exact with `next`); with unison on the detuned
+    /// stacks fan across the field.
+    #[inline]
+    pub fn next_lr(&mut self) -> (f32, f32) {
+        let mut suml = 0.0;
+        let mut sumr = 0.0;
+        let p = self.params;
+        for v in &mut self.voices {
+            let (l, r) = v.next_lr(&p);
+            suml += l;
+            sumr += r;
+        }
+        (suml, sumr)
+    }
+
     pub fn active_voices(&self) -> usize {
         self.voices.iter().filter(|v| v.is_active()).count()
     }

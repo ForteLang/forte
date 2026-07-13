@@ -177,7 +177,7 @@ impl DeviceKind {
         match self {
             DeviceKind::Prisma => &[
                 "Wave", "Cutoff", "Reso", "Attack", "Decay", "Sustain", "Release",
-                "Detune", "Sub", "FiltEnv",
+                "Detune", "Sub", "FiltEnv", "Unison", "Spread",
             ],
             DeviceKind::Sampler => &[
                 "Gain", "Attack", "Decay", "Sustain", "Release", "Pitch", "Start", "End",
@@ -217,8 +217,9 @@ impl DeviceKind {
     /// Default parameter values, parallel to [`params`].
     pub fn defaults(self) -> Vec<f32> {
         match self {
+            // Unison 0 = the bit-exact mono voice; Spread fans the stack
             DeviceKind::Prisma => {
-                vec![1.0, 0.65, 0.15, 0.01, 0.3, 0.6, 0.25, 0.12, 0.3, 0.4]
+                vec![1.0, 0.65, 0.15, 0.01, 0.3, 0.6, 0.25, 0.12, 0.3, 0.4, 0.0, 0.5]
             }
             // Pitch 0.5 == centre (no transpose); ±24 semitones across the range.
             // Start/End trim the play region; Loop/Reverse are 0/1 switches.

@@ -2237,6 +2237,26 @@ fn build_instrument(
         "prisma" => {
             let mut dev = Device::new(DeviceKind::Prisma);
             for (key, arg) in &call.args {
+                // unison speaks in VOICES (1..7), not knob positions —
+                // `unison: 5` is what a musician means
+                if key.eq_ignore_ascii_case("unison") {
+                    let Arg::Num(n, pos) = arg else {
+                        return Err(Diag::new(
+                            "E-TYPE-004",
+                            arg.pos(),
+                            "prisma.unison は数値で指定します(1..7 ボイス)".to_string(),
+                        ));
+                    };
+                    if !(1.0..=7.0).contains(n) || n.fract() != 0.0 {
+                        return Err(Diag::new(
+                            "E-TYPE-002",
+                            *pos,
+                            format!("prisma.unison は 1..7 の整数ボイス数です(指定: {n})"),
+                        ));
+                    }
+                    dev.params[10] = ((*n as f32) - 1.0) / 6.0;
+                    continue;
+                }
                 set_param(
                     &mut dev,
                     key,
@@ -2244,7 +2264,7 @@ fn build_instrument(
                     &[
                         ("cutoff", 1), ("reso", 2), ("attack", 3), ("decay", 4),
                         ("sustain", 5), ("release", 6), ("detune", 7), ("sub", 8),
-                        ("filtenv", 9),
+                        ("filtenv", 9), ("spread", 11),
                     ],
                     &[("wave", 0, &["sine", "saw", "square", "tri"])],
                     call,

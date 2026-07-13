@@ -469,6 +469,9 @@ impl Instrument for PolySynth {
     fn next(&mut self) -> f32 {
         PolySynth::next(self)
     }
+    fn next_lr(&mut self) -> (f32, f32) {
+        PolySynth::next_lr(self)
+    }
     fn configure(&mut self, p: &[f32]) {
         if p.len() >= 10 {
             self.params = SynthParams {
@@ -482,6 +485,8 @@ impl Instrument for PolySynth {
                 detune: p[7],
                 sub: p[8],
                 filter_env: p[9],
+                unison: p.get(10).copied().unwrap_or(0.0),
+                spread: p.get(11).copied().unwrap_or(0.5),
             };
         }
     }

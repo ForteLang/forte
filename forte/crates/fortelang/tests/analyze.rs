@@ -100,6 +100,40 @@ fn identical_tracks_mask_each_other_completely() {
 }
 
 #[test]
+fn unison_spread_opens_the_stereo_field() {
+    // the same phrase, mono voice vs a 5-voice spread stack — the whole
+    // point of #126, measured with the ears from #128
+    let song = |inst: &str| {
+        format!(
+            r#"song "U" {{ tempo 120bpm
+  track A {{ instrument {inst}
+    play notes`C3:1 E3:1 G3:1 C4:1` at bars(1..2) }} }}"#
+        )
+    };
+    let mono = fortelang::compile_str(&song(r#"prisma(wave: "saw", cutoff: 0.7, sustain: 0.8)"#))
+        .unwrap();
+    let wide = fortelang::compile_str(&song(
+        r#"prisma(wave: "saw", cutoff: 0.7, sustain: 0.8, unison: 5, detune: 0.4, spread: 0.9)"#,
+    ))
+    .unwrap();
+    let a_mono = analyze(&mono, &[], false);
+    let a_wide = analyze(&wide, &[], false);
+    assert!(
+        a_mono.stereo.side_mid_db < -60.0,
+        "a mono synth has no side energy, got {} dB",
+        a_mono.stereo.side_mid_db
+    );
+    assert!(
+        a_wide.stereo.side_mid_db > -20.0,
+        "5-voice unison at spread 0.9 must open the field, got {} dB",
+        a_wide.stereo.side_mid_db
+    );
+    // out-of-range voice counts are musical errors, not knob math
+    let bad = fortelang::compile_str(&song(r#"prisma(unison: 9)"#));
+    assert!(bad.is_err(), "unison: 9 must be rejected");
+}
+
+#[test]
 fn sections_shape_the_report() {
     let p = project(
         r#"song "T" { tempo 120bpm
