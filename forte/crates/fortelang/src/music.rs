@@ -257,6 +257,8 @@ pub fn parse_notes(raw: &str, pos: Pos) -> Result<(Vec<Note>, f64), Diag> {
 pub struct ChordEvent {
     pub root_pc: u8,
     pub intervals: Vec<i32>,
+    /// slash-chord bass (`C/G`): the pitch class under the chord
+    pub bass_pc: Option<u8>,
     pub start: f64,
     pub dur: f64,
 }
@@ -273,11 +275,34 @@ const QUALITIES: &[(&str, &[i32])] = &[
     ("aug", &[0, 4, 8]),
     ("sus2", &[0, 2, 7]),
     ("sus4", &[0, 5, 7]),
+    // the jazz/neo-soul shelf (#130)
+    ("m7b5", &[0, 3, 6, 10]),
+    ("dim7", &[0, 3, 6, 9]),
+    ("6", &[0, 4, 7, 9]),
+    ("m6", &[0, 3, 7, 9]),
+    ("9", &[0, 4, 7, 10, 14]),
+    ("maj9", &[0, 4, 7, 11, 14]),
+    ("m9", &[0, 3, 7, 10, 14]),
+    ("add9", &[0, 4, 7, 14]),
+    ("madd9", &[0, 3, 7, 14]),
+    ("7sus4", &[0, 5, 7, 10]),
 ];
 
+/// Natural major / natural minor degree offsets for roman-numeral chords.
+const MAJOR_DEG: [i32; 7] = [0, 2, 4, 5, 7, 9, 11];
+const MINOR_DEG: [i32; 7] = [0, 2, 3, 5, 7, 8, 10];
+
 /// `prog` literal: bars separated by `|`; chords within a bar share its time
-/// equally. `prog`Em | C G | D``.
-pub fn parse_prog(raw: &str, beats_per_bar: f64, pos: Pos) -> Result<(Vec<ChordEvent>, f64), Diag> {
+/// equally. `prog`Em | C G | D``. Symbols are absolute (`Am7`, `F/A`) or
+/// roman-numeral degrees resolved against `key` — `prog`ii7 | V7 | Imaj7``
+/// in C major is `Dm7 | G7 | Cmaj7`; case picks the triad (`IV` major,
+/// `iv` minor) unless an explicit quality overrides it.
+pub fn parse_prog(
+    raw: &str,
+    beats_per_bar: f64,
+    key: (u8, bool),
+    pos: Pos,
+) -> Result<(Vec<ChordEvent>, f64), Diag> {
     let mut events = Vec::new();
     let mut cursor = 0.0f64;
     let segments: Vec<&str> = raw.split('|').map(str::trim).filter(|s| !s.is_empty()).collect();
@@ -288,16 +313,76 @@ pub fn parse_prog(raw: &str, beats_per_bar: f64, pos: Pos) -> Result<(Vec<ChordE
         let chords: Vec<&str> = seg.split_whitespace().collect();
         let dur = beats_per_bar / chords.len() as f64;
         for sym in chords {
-            let (root_pc, intervals) = parse_chord(sym, pos)?;
-            events.push(ChordEvent { root_pc, intervals, start: cursor, dur });
+            // slash bass first: everything after '/' names the bass note
+            let (body, bass_pc) = match sym.split_once('/') {
+                Some((b, bass)) => {
+                    let (pc, _) = parse_chord_root(bass, sym, pos)?;
+                    (b, Some(pc))
+                }
+                None => (sym, None),
+            };
+            let (root_pc, intervals) = match parse_degree(body, key) {
+                Some(v) => v?,
+                None => parse_chord(body, pos)?,
+            };
+            events.push(ChordEvent { root_pc, intervals, bass_pc, start: cursor, dur });
             cursor += dur;
         }
     }
     Ok((events, cursor))
 }
 
-fn parse_chord(sym: &str, pos: Pos) -> Result<(u8, Vec<i32>), Diag> {
-    let chars: Vec<char> = sym.chars().collect();
+/// Roman-numeral degree: optional accidental, numeral (case = triad),
+/// then any QUALITIES suffix. Returns None when `sym` isn't a numeral.
+fn parse_degree(sym: &str, key: (u8, bool)) -> Option<Result<(u8, Vec<i32>), Diag>> {
+    let (acc, rest) = match sym.chars().next()? {
+        'b' if sym.len() > 1 && matches!(sym.chars().nth(1), Some('i' | 'v' | 'I' | 'V')) => {
+            (-1i32, &sym[1..])
+        }
+        '#' => (1i32, &sym[1..]),
+        _ => (0i32, sym),
+    };
+    let numeral_len = rest.chars().take_while(|c| matches!(c, 'i' | 'v' | 'I' | 'V')).count();
+    if numeral_len == 0 || numeral_len > 3 {
+        return None;
+    }
+    let (numeral, quality) = rest.split_at(numeral_len);
+    let lower = numeral.to_ascii_lowercase();
+    let degree = match lower.as_str() {
+        "i" => 0usize,
+        "ii" => 1,
+        "iii" => 2,
+        "iv" => 3,
+        "v" => 4,
+        "vi" => 5,
+        "vii" => 6,
+        _ => return None,
+    };
+    let minor_case = numeral.chars().all(|c| c.is_ascii_lowercase());
+    if numeral.chars().any(|c| c.is_ascii_lowercase()) != minor_case {
+        return None; // mixed case is not a numeral
+    }
+    let scale = if key.1 { &MINOR_DEG } else { &MAJOR_DEG };
+    let root_pc = (((key.0 as i32 + scale[degree] + acc) % 12) + 12) % 12;
+    // quality: explicit suffix wins; bare/7 follow the numeral's case
+    let intervals: Vec<i32> = match quality {
+        "" => {
+            if minor_case { vec![0, 3, 7] } else { vec![0, 4, 7] }
+        }
+        "7" => {
+            if minor_case { vec![0, 3, 7, 10] } else { vec![0, 4, 7, 10] }
+        }
+        q => match QUALITIES.iter().find(|(name, _)| *name == q) {
+            Some((_, iv)) => iv.to_vec(),
+            None => return None, // fall through to the absolute parser's error
+        },
+    };
+    Some(Ok((root_pc as u8, intervals)))
+}
+
+/// The root letter (+accidental) of an absolute chord symbol.
+fn parse_chord_root(s: &str, whole: &str, pos: Pos) -> Result<(u8, usize), Diag> {
+    let chars: Vec<char> = s.chars().collect();
     let base = match chars.first().map(|c| c.to_ascii_uppercase()) {
         Some('C') => 0i32,
         Some('D') => 2,
@@ -310,7 +395,7 @@ fn parse_chord(sym: &str, pos: Pos) -> Result<(u8, Vec<i32>), Diag> {
             return Err(Diag::new(
                 "E-PROG-002",
                 pos,
-                format!("コード '{sym}' のルート音が読めません(C〜B で始めてください)"),
+                format!("コード '{whole}' のルート音が読めません(C〜B で始めてください)"),
             ))
         }
     };
@@ -320,7 +405,12 @@ fn parse_chord(sym: &str, pos: Pos) -> Result<(u8, Vec<i32>), Diag> {
         acc = if chars[i] == '#' { 1 } else { -1 };
         i += 1;
     }
-    let quality: String = chars[i..].iter().collect();
+    Ok(((((base + acc) % 12 + 12) % 12) as u8, i))
+}
+
+fn parse_chord(sym: &str, pos: Pos) -> Result<(u8, Vec<i32>), Diag> {
+    let (pc, used) = parse_chord_root(sym, sym, pos)?;
+    let quality: String = sym.chars().skip(used).collect();
     let intervals = QUALITIES
         .iter()
         .find(|(q, _)| *q == quality)
@@ -334,7 +424,7 @@ fn parse_chord(sym: &str, pos: Pos) -> Result<(u8, Vec<i32>), Diag> {
                 format!("コード '{sym}' のクオリティ '{quality}' が読めません(使えるもの: {})", names.join(", ")),
             )
         })?;
-    Ok(((((base + acc) % 12 + 12) % 12) as u8, intervals))
+    Ok((pc, intervals))
 }
 
 /// Transposition-invariant signature of a progression: each chord as
@@ -371,7 +461,7 @@ pub fn prog_chords(events: &[ChordEvent]) -> Vec<Note> {
 }
 
 /// Root-note bass line (oct 2); `rate` subdivides each chord, default one note
-/// per chord.
+/// per chord. A slash chord's bass note wins over the root.
 pub fn prog_bass(events: &[ChordEvent], rate: Option<f64>) -> Vec<Note> {
     let mut notes = Vec::new();
     for ev in events {
@@ -380,7 +470,7 @@ pub fn prog_bass(events: &[ChordEvent], rate: Option<f64>) -> Vec<Note> {
         while t < ev.dur - 1e-9 {
             let len = step.min(ev.dur - t);
             notes.push(Note {
-                pitch: 36 + ev.root_pc,
+                pitch: 36 + ev.bass_pc.unwrap_or(ev.root_pc),
                 start: ev.start + t,
                 length: len * 0.9,
                 velocity: 100,
@@ -389,6 +479,133 @@ pub fn prog_bass(events: &[ChordEvent], rate: Option<f64>) -> Vec<Note> {
         }
     }
     notes
+}
+
+/// Voiced block chords (#130): `voicing` shapes each chord, `lead` walks
+/// voices by NEAREST MOTION from chord to chord instead of jumping in
+/// parallel root position, `register` centers the stack (octave number,
+/// default 4 ≈ middle C). A slash bass is added below the voicing.
+/// The un-voiced `prog_chords` stays untouched — old songs keep their bits.
+pub fn prog_chords_voiced(
+    events: &[ChordEvent],
+    voicing: &str,
+    register: i32,
+    lead: bool,
+    pos: Pos,
+) -> Result<Vec<Note>, Diag> {
+    let center = (12 * (register + 1)).clamp(24, 96); // octave N → MIDI center
+    let mut notes = Vec::new();
+    let mut prev: Vec<i32> = Vec::new();
+    for ev in events {
+        // close position around the register center
+        let mut tones: Vec<i32> = ev
+            .intervals
+            .iter()
+            .map(|iv| {
+                let pc = (ev.root_pc as i32 + iv) % 12;
+                // place each tone in the octave closest to center
+                let mut p = center - 6 + ((pc - (center - 6)).rem_euclid(12));
+                if p - center > 6 {
+                    p -= 12;
+                }
+                p
+            })
+            .collect();
+        tones.sort_unstable();
+        tones.dedup();
+        // voice leading: move each PREVIOUS voice to the nearest tone of the
+        // NEW chord (octave-free), then make sure every chord tone sounds
+        if lead && !prev.is_empty() {
+            let pcs: Vec<i32> = tones.iter().map(|t| t.rem_euclid(12)).collect();
+            let mut led: Vec<i32> = prev
+                .iter()
+                .map(|&v| {
+                    // nearest pitch (any octave) whose class is in the chord
+                    let mut best = v;
+                    let mut best_d = i32::MAX;
+                    for &pc in &pcs {
+                        for oct in -1..=1 {
+                            let cand = v + ((pc - v).rem_euclid(12)) + 12 * oct;
+                            let d = (cand - v).abs();
+                            if d < best_d {
+                                best_d = d;
+                                best = cand;
+                            }
+                        }
+                    }
+                    best
+                })
+                .collect();
+            led.sort_unstable();
+            led.dedup();
+            // any chord tone still missing joins nearest to the stack's mean
+            let mean: i32 = led.iter().sum::<i32>() / led.len().max(1) as i32;
+            for &pc in &pcs {
+                if !led.iter().any(|v| v.rem_euclid(12) == pc) {
+                    let mut cand = mean - 6 + ((pc - (mean - 6)).rem_euclid(12));
+                    if cand - mean > 6 {
+                        cand -= 12;
+                    }
+                    led.push(cand);
+                }
+            }
+            led.sort_unstable();
+            tones = led;
+        }
+        // voicing shapes applied AFTER leading (they re-space, not re-choose)
+        match voicing {
+            "close" => {}
+            "open" => {
+                // spread: drop every second voice from the top down an octave
+                let n = tones.len();
+                for (i, t) in tones.iter_mut().enumerate() {
+                    if (n - 1 - i) % 2 == 1 {
+                        *t -= 12;
+                    }
+                }
+                tones.sort_unstable();
+            }
+            "drop2" => {
+                // second voice from the top drops an octave
+                let n = tones.len();
+                if n >= 2 {
+                    tones[n - 2] -= 12;
+                    tones.sort_unstable();
+                }
+            }
+            other => {
+                return Err(Diag::new(
+                    "E-PAT-002",
+                    pos,
+                    format!("voicing '{other}' はありません(close / open / drop2)"),
+                ))
+            }
+        }
+        prev = tones.clone();
+        // slash bass under the stack
+        if let Some(b) = ev.bass_pc {
+            let low = tones.first().copied().unwrap_or(center);
+            let mut bp = low - 1 - ((low - 1 - b as i32).rem_euclid(12));
+            if bp < 24 {
+                bp += 12;
+            }
+            notes.push(Note {
+                pitch: bp.clamp(0, 127) as u8,
+                start: ev.start,
+                length: ev.dur * 0.95,
+                velocity: 95,
+            });
+        }
+        for &t in &tones {
+            notes.push(Note {
+                pitch: t.clamp(0, 127) as u8,
+                start: ev.start,
+                length: ev.dur * 0.95,
+                velocity: 90,
+            });
+        }
+    }
+    Ok(notes)
 }
 
 /// Arpeggio over the chord tones (root oct 4) at `rate` beats per step.

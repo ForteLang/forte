@@ -314,7 +314,20 @@ impl Parser {
                     }
                     "swing" => {
                         self.bump();
-                        if let Some((n, _unit, pos)) = self.number("swing") {
+                        // named groove templates: the classic MPC percentages
+                        // by name, so songs say the feel instead of a float
+                        if let Tok::Str(name) = self.peek().clone() {
+                            let pos = self.pos();
+                            self.bump();
+                            match swing_template(&name) {
+                                Some(v) => song.swing = Some((v, pos)),
+                                None => self.diags.push(Diag::new(
+                                    "E-TYPE-001",
+                                    pos,
+                                    format!("swing テンプレート '{name}' はありません(straight / mpc54 / mpc58 / mpc62 / mpc66 / shuffle)"),
+                                )),
+                            }
+                        } else if let Some((n, _unit, pos)) = self.number("swing") {
                             song.swing = Some((n, pos));
                         }
                     }
@@ -1253,4 +1266,17 @@ impl Parser {
         }
         Some(Call { name, args, pos })
     }
+}
+
+/// Named swing amounts — the MPC-percentage vocabulary producers speak.
+/// 0.5 = straight 16ths; the value is the long half of each 8th pair.
+fn swing_template(name: &str) -> Option<f64> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "straight" => 0.5,
+        "mpc54" => 0.54,
+        "mpc58" => 0.58,
+        "mpc62" => 0.62,
+        "mpc66" | "shuffle" => 0.66,
+        _ => return None,
+    })
 }

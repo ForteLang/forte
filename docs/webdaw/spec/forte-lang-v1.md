@@ -88,7 +88,7 @@ num       = [ "-" ] NUMBER [ UNIT ] ;
 | Element | Meaning | Constraints |
 | --- | --- | --- |
 | `tempo 96bpm` | Tempo | **Required**. 20..400 (E-TIME-003) |
-| `swing 0.62` | Delays even-position 16th notes (MPC notation: 0.5 = straight, 0.66 ≈ shuffle, range 0.5..0.8). Applies only to notes on the grid |
+| `swing 0.62` | Delays even-position 16th notes (MPC notation: 0.5 = straight, 0.66 ≈ shuffle, range 0.5..0.8). Applies only to notes on the grid. Named templates say the feel instead of the float: `swing "mpc54"` / `"mpc58"` / `"mpc62"` / `"mpc66"` / `"shuffle"` / `"straight"` |
 | `meter 4/4` | Time signature | Denominator 2/4/8/16 (E-TIME-004). Engine beats = numerator × 4 / denominator |
 | `key D minor` | Key | Root C..B (+#/b), scales major/minor/dorian/phrygian/lydian/mixolydian/locrian/harmonicminor/chromatic |
 | `sample Sub = bounce(BD808(decay: 0.9), note: C1, beats: 2)` | Bounce-to-sample: render one hit of an instrument offline (same deterministic engine, +2 beats of tail) into an in-memory audio asset. `sampler(sample: Sub)` then plays that AUDIO — repitched relative to `note`, choppable, reversible. beats 0.05..32 (E-SMP-001); an unknown name at the sampler is E-SMP-002. Bounces resolve in declaration order, and a phrase bounce sees every bounce declared BEFORE it — resampling chains: bounce a source, wrap and produce it, bounce the production, wrap THAT. Block-internal samples resolve before the song's own, so a song-level `bounce(Mix)` of a block that PLACES machine blocks works: the whole mix becomes one record to chop (a rest then silences everything at once) | The audio-domain wrap: artifacts repitch along with the waveform, which oscillator pitch cannot do |
@@ -112,7 +112,7 @@ num       = [ "-" ] NUMBER [ UNIT ] ;
 | `` beat`euclid(3, 8)` `` | Bjorklund: k hits spread as evenly as possible over n steps; optional `rot:` rotates. `euclid(3,8)` = `x--x--x-` (1 ≤ k ≤ n ≤ 128, E-BEAT-003) | Expands to plain hits before step processing — layer a second play for accents |
 | `` notes`C4:1/2 [E4 G4]:1 _:1` `` | `pitch:length` (in beats). `[…]` = chord, `_` = rest; lengths are `1` `0.5` `1/2` | Placed sequentially. C4 = MIDI 60 |
 | `` notes`C2!:1/4 C2~:1/4 D2:1/2` `` | `!` = accent (vel 120), `~` = tie: holds the gate until the next note. Becomes a slide on mono/glide instruments (303 notation). To use both, write `C2!~` | Ties overlap at 102% of the length |
-| `` prog`Em \| C G \| D` `` | `\|` = bar. Multiple chords within one bar divide the time equally | ChordEvent sequence. Playing it bare produces block chords |
+| `` prog`Em \| C G \| D` `` | `\|` = bar. Multiple chords within one bar divide the time equally. Qualities: (major), m/min, 7, maj7, m7, dim, aug, sus2, sus4, m7b5, dim7, 6, m6, 9, maj9, m9, add9, madd9, 7sus4. Slash bass: `C/G`. Roman-numeral DEGREES resolve against the body's `key` — `` prog`ii7 \| V7 \| Imaj7` `` in C major is `Dm7 \| G7 \| Cmaj7` (case picks the triad: `IV` major / `iv` minor; explicit quality wins; `b`/`#` prefix borrows) | ChordEvent sequence. Playing it bare produces block chords |
 
 Chord qualities: (unmarked = major), `m`, `min`, `7`, `maj7`, `m7`, `min7`, `dim`,
 `aug`, `sus2`, `sus4`.
@@ -121,7 +121,7 @@ Chord qualities: (unmarked = major), `m`, `min`, `7`, `maj7`, `m7`, `min7`, `dim
 
 | Function | Arguments | Voicing |
 | --- | --- | --- |
-| `chords(p)` | — | Holds all chord tones for the chord duration (root oct3, vel 90) |
+| `chords(p)` | `voicing`: "close" / "open" / "drop2", `lead`: "nearest" / "off", `register`: 1..7 | Bare = legacy root-position stack (oct3, vel 90, bit-exact). ANY voicing/lead arg switches to the VOICED path: `lead: "nearest"` walks each voice to the nearest tone of the next chord instead of jumping in parallel, `voicing` re-spaces the stack, `register` centers it, and a slash bass sounds below |
 | `bass(p, rate: 0.5)` | If rate omitted, one note per chord | Root note oct2, vel 100 |
 | `arp(p, rate: 0.5, style: "up\|down\|updown")` | rate is 0<r≤1 bar | Cycles through chord tones at oct4, vel 95 |
 | `cycle(p, span: 1.5)` | p = beat/notes literal (or let). `span` in beats, 0<span≤128 — **required** (E-PAT-004) | Polymeter: the pattern's period is `span` instead of one bar. A beat literal's steps divide the span; the clip tiles at that period and phases against the meter |

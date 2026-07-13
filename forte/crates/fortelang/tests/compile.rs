@@ -1047,6 +1047,101 @@ fn space_reverb_characters_and_decay_are_real() {
 }
 
 #[test]
+fn theory_stdlib_speaks_harmony() {
+    let song = |key: &str, play: &str| {
+        format!(
+            r#"song "H" {{ tempo 120bpm
+  key {key}
+  track A {{ instrument prisma(wave: "sine", cutoff: 0.5, sustain: 0.8)
+    play {play} at bars(1..2) }} }}"#
+        )
+    };
+    let dig = |key: &str, play: &str| {
+        let p = fortelang::compile_str(&song(key, play)).unwrap_or_else(|e| {
+            panic!("{play} must compile: {:?}", e.iter().map(|d| &d.message).collect::<Vec<_>>())
+        });
+        fortelang::render_digest(&p, 2.0).f32_digest
+    };
+    // roman-numeral degrees ARE the absolute chords, key-resolved
+    assert_eq!(
+        dig("C major", "prog`ii7 | V7 | Imaj7 | I`"),
+        dig("C major", "prog`Dm7 | G7 | Cmaj7 | C`"),
+        "degrees in C major must equal their absolute spelling"
+    );
+    assert_eq!(
+        dig("A minor", "prog`i | VI | III | VII`"),
+        dig("A minor", "prog`Am | F | C | G`"),
+        "minor-key degrees must resolve against the natural minor scale"
+    );
+    // the jazz shelf parses and renders
+    let _ = dig("C major", "prog`Cm7b5 | F9 | Bbmaj9 | Ebadd9 | Am6 | G7sus4 | Bdim7 | Cm9`");
+    // a slash chord's bass note IS the bass line
+    assert_eq!(
+        dig("C major", "bass(prog`C/G | F/A`)"),
+        dig("C major", "bass(prog`G | A`)"),
+        "bass() must follow the slash"
+    );
+    // named swing templates are the numbers they claim
+    let named = fortelang::compile_str(&song("C major", "notes`C3:0.5 E3:0.5 G3:0.5 C4:0.5 C3:0.5 E3:0.5 G3:0.5 C4:0.5`").replace("tempo 120bpm", "tempo 120bpm\n  swing \"mpc58\"")).unwrap();
+    let float = fortelang::compile_str(&song("C major", "notes`C3:0.5 E3:0.5 G3:0.5 C4:0.5 C3:0.5 E3:0.5 G3:0.5 C4:0.5`").replace("tempo 120bpm", "tempo 120bpm\n  swing 0.58")).unwrap();
+    assert_eq!(
+        fortelang::render_digest(&named, 1.0).f32_digest,
+        fortelang::render_digest(&float, 1.0).f32_digest,
+        "swing \"mpc58\" must equal swing 0.58"
+    );
+}
+
+#[test]
+fn voice_leading_moves_less_than_root_position() {
+    let notes_of = |play: &str| -> Vec<(f64, u8)> {
+        let src = format!(
+            r#"song "V" {{ tempo 120bpm
+  key C major
+  track A {{ instrument prisma(wave: "sine", cutoff: 0.5, sustain: 0.8)
+    play {play} at bars(1..4) }} }}"#
+        );
+        let p = fortelang::compile_str(&src).expect("must compile");
+        let clip = &p.tracks[0].arranger[0].clip;
+        let mut v: Vec<(f64, u8)> = clip.notes.iter().map(|n| (n.start, n.pitch)).collect();
+        v.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        v
+    };
+    // mean absolute movement between consecutive chords' mean pitches
+    let movement = |notes: &[(f64, u8)]| -> f64 {
+        let mut by_start: Vec<(f64, f64)> = Vec::new(); // (start, mean pitch)
+        let mut i = 0;
+        while i < notes.len() {
+            let s = notes[i].0;
+            let mut sum = 0.0;
+            let mut n = 0.0;
+            while i < notes.len() && (notes[i].0 - s).abs() < 1e-9 {
+                sum += notes[i].1 as f64;
+                n += 1.0;
+                i += 1;
+            }
+            by_start.push((s, sum / n));
+        }
+        let mut total = 0.0;
+        for w in by_start.windows(2) {
+            total += (w[1].1 - w[0].1).abs();
+        }
+        total / (by_start.len().saturating_sub(1).max(1)) as f64
+    };
+    let prog = "prog`Cmaj7 | F | Am7 | G`";
+    let rooted = movement(&notes_of(&format!("chords({prog})")));
+    let led = movement(&notes_of(&format!("chords({prog}, lead: \"nearest\")")));
+    assert!(
+        led < rooted,
+        "nearest-motion leading must move less than root position ({led:.2} vs {rooted:.2})"
+    );
+    // drop2 respaces but still compiles/renders; register moves the stack
+    let low = notes_of(&format!("chords({prog}, voicing: \"drop2\", register: 3)"));
+    let high = notes_of(&format!("chords({prog}, voicing: \"drop2\", register: 5)"));
+    let mean = |v: &[(f64, u8)]| v.iter().map(|(_, p)| *p as f64).sum::<f64>() / v.len() as f64;
+    assert!(mean(&high) > mean(&low) + 12.0, "register must move the stack by octaves");
+}
+
+#[test]
 fn vcf_is_an_analog_character_filter() {
     // one acid voice, permuted through the vcf's promises. The envelope
     // gates the INPUT (a 0.2 s ping) and the filter output goes straight

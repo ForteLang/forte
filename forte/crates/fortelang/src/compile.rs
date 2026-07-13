@@ -615,6 +615,16 @@ fn lower_body(
         .as_ref()
         .and_then(|((r, s), _)| parse_key(r, s))
         .map(|k| k.root);
+    // the key roman-numeral prog degrees resolve against: this body's own
+    // declared key (placement transposition then applies as usual)
+    let local_key: (u8, bool) = body
+        .key
+        .as_ref()
+        .and_then(|((r, s), _)| parse_key(r, s))
+        .map(|k| {
+            (k.root % 12, matches!(k.scale, dawcore::model::Scale::Minor | dawcore::model::Scale::HarmonicMinor))
+        })
+        .unwrap_or((0, false));
     let transpose = match (native_root, eff_root) {
         (Some(n), Some(e)) => key_delta(n, e),
         _ => 0,
@@ -954,7 +964,7 @@ fn lower_body(
         // plays → arranger clips
         for play in &tast.plays {
             let (mut notes, len_beats, clip_name, transposable) =
-                match eval_pattern(&play.pattern, &lets, beats_per_bar, beat_pitch) {
+                match eval_pattern(&play.pattern, &lets, beats_per_bar, beat_pitch, local_key) {
                     Ok(v) => v,
                     Err(d) => {
                         diags.push(d);
@@ -1754,18 +1764,20 @@ pub fn validate_devices(file: &FileAst) -> Vec<Diag> {
 /// clip display name).
 /// Returns (notes, length, clip name, transposable): beat literals trigger a
 /// fixed pad/pitch, so block-placement transposition must leave them alone.
+#[allow(clippy::too_many_arguments)]
 fn eval_pattern(
     pref: &PatternRef,
     lets: &HashMap<&str, &PatternLit>,
     beats_per_bar: f64,
     beat_pitch: u8,
+    key: (u8, bool),
 ) -> Result<(Vec<Note>, f64, String, bool), Diag> {
     match pref {
-        PatternRef::Lit(lit) => eval_lit(lit, beats_per_bar, beat_pitch)
+        PatternRef::Lit(lit) => eval_lit(lit, beats_per_bar, beat_pitch, key)
             .map(|(n, l)| (n, l, "clip".into(), lit.kind != "beat")),
         PatternRef::Name(name, pos) => {
             let lit = resolve_let(name, *pos, lets)?;
-            eval_lit(lit, beats_per_bar, beat_pitch)
+            eval_lit(lit, beats_per_bar, beat_pitch, key)
                 .map(|(n, l)| (n, l, name.clone(), lit.kind != "beat"))
         }
         PatternRef::Fn { name, inner, args, pos } => {
@@ -1866,7 +1878,7 @@ fn eval_pattern(
                             }
                         }
                     }
-                    let (mut notes, len) = eval_lit(lit, beats_per_bar, beat_pitch)?;
+                    let (mut notes, len) = eval_lit(lit, beats_per_bar, beat_pitch, key)?;
                     // xorshift32 — the same fixed-seed generator the engine
                     // uses; two draws per note (timing, velocity)
                     let mut s = seed.wrapping_mul(0x9e37_79b9).max(1);
@@ -1910,7 +1922,7 @@ fn eval_pattern(
                             }
                         }
                     }
-                    let (mut notes, len) = eval_lit(lit, beats_per_bar, beat_pitch)?;
+                    let (mut notes, len) = eval_lit(lit, beats_per_bar, beat_pitch, key)?;
                     for n in &mut notes {
                         n.start = (n.start + by).max(0.0).min(len - 0.01);
                     }
@@ -1925,11 +1937,14 @@ fn eval_pattern(
                     format!("{name}() には prog リテラル(コード進行)を渡します(見つかったのは {})", lit.kind),
                 ));
             }
-            let (events, len) = music::parse_prog(&lit.raw, beats_per_bar, lit.pos)?;
+            let (events, len) = music::parse_prog(&lit.raw, beats_per_bar, key, lit.pos)?;
             let mut rate: Option<f64> = None;
             let mut style = "up".to_string();
-            for (key, arg) in args {
-                match (key.as_str(), arg) {
+            let mut voicing: Option<String> = None;
+            let mut lead: Option<bool> = None;
+            let mut register: i32 = 4;
+            for (akey, arg) in args {
+                match (akey.as_str(), arg) {
                     ("rate", Arg::Num(n, apos)) => {
                         if *n <= 0.0 || *n > beats_per_bar {
                             return Err(Diag::new(
@@ -1941,18 +1956,56 @@ fn eval_pattern(
                         rate = Some(*n);
                     }
                     ("style", Arg::Str(s, _)) => style = s.clone(),
+                    ("voicing", Arg::Str(s, _)) if name == "chords" => voicing = Some(s.clone()),
+                    ("lead", Arg::Str(s, apos)) if name == "chords" => {
+                        lead = Some(match s.as_str() {
+                            "nearest" => true,
+                            "off" => false,
+                            other => {
+                                return Err(Diag::new(
+                                    "E-PAT-002",
+                                    *apos,
+                                    format!("lead '{other}' はありません(nearest / off)"),
+                                ))
+                            }
+                        });
+                    }
+                    ("register", Arg::Num(n, apos)) if name == "chords" => {
+                        if !(1.0..=7.0).contains(n) || n.fract() != 0.0 {
+                            return Err(Diag::new(
+                                "E-TYPE-002",
+                                *apos,
+                                format!("register は 1..7 のオクターブ番号です(指定: {n})"),
+                            ));
+                        }
+                        register = *n as i32;
+                    }
                     (other, arg) => {
                         let pos = arg.pos();
                         return Err(Diag::new(
                             "E-PAT-002",
                             pos,
-                            format!("{name}() に '{other}' という引数はありません(rate, style)"),
+                            format!(
+                                "{name}() に '{other}' という引数はありません({})",
+                                if name == "chords" { "voicing, lead, register" } else { "rate, style" }
+                            ),
                         ));
                     }
                 }
             }
             let notes = match name.as_str() {
-                "chords" => music::prog_chords(&events),
+                // any voicing/lead/register arg switches to the VOICED path;
+                // a bare chords() keeps the legacy bit-exact stack
+                "chords" => match (voicing, lead) {
+                    (None, None) => music::prog_chords(&events),
+                    (v, l) => music::prog_chords_voiced(
+                        &events,
+                        v.as_deref().unwrap_or("close"),
+                        register,
+                        l.unwrap_or(true),
+                        *pos,
+                    )?,
+                },
                 "bass" => music::prog_bass(&events, rate),
                 "arp" => music::prog_arp(&events, rate.unwrap_or(0.5), &style, *pos)?,
                 other => {
@@ -1985,12 +2038,17 @@ fn resolve_let<'a>(
 }
 
 /// Evaluate a bare literal; a bare `prog` plays block chords.
-fn eval_lit(lit: &PatternLit, beats_per_bar: f64, beat_pitch: u8) -> Result<(Vec<Note>, f64), Diag> {
+fn eval_lit(
+    lit: &PatternLit,
+    beats_per_bar: f64,
+    beat_pitch: u8,
+    key: (u8, bool),
+) -> Result<(Vec<Note>, f64), Diag> {
     match lit.kind.as_str() {
         "beat" => music::parse_beat(&lit.raw, beats_per_bar, beat_pitch, lit.pos),
         "notes" => music::parse_notes(&lit.raw, lit.pos),
         "prog" => {
-            let (events, len) = music::parse_prog(&lit.raw, beats_per_bar, lit.pos)?;
+            let (events, len) = music::parse_prog(&lit.raw, beats_per_bar, key, lit.pos)?;
             Ok((music::prog_chords(&events), len))
         }
         other => Err(Diag::new(
