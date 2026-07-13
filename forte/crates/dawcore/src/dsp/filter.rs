@@ -172,3 +172,69 @@ impl Resonator {
         y
     }
 }
+
+/// The analog-character filter (#125): a NONLINEAR filter whose resonance
+/// saturates musically instead of screaming, self-oscillates at the top of
+/// the reso range (a playable sine source), and takes a drive input.
+///
+/// Two topologies share the struct: a 4-pole ladder (tanh around the
+/// feedback loop, the Moog lineage) and a 2-pole TPT SVF with saturated
+/// integrator state (the cleaner, brighter lineage). Keytracking and the
+/// deterministic per-voice cutoff drift live at the GRID layer — this
+/// struct just filters at whatever cutoff it is handed.
+#[derive(Clone)]
+pub struct Vcf {
+    sr: f32,
+    /// ladder stage states
+    s: [f32; 4],
+    /// last ladder output (feedback tap)
+    prev: f32,
+    /// TPT SVF integrator states
+    ic1: f32,
+    ic2: f32,
+}
+
+impl Vcf {
+    pub fn new(sr: f32) -> Self {
+        Self { sr, s: [0.0; 4], prev: 0.0, ic1: 0.0, ic2: 0.0 }
+    }
+
+    /// One sample. `mode` 0 = ladder (24 dB/oct), 1 = svf (12 dB/oct).
+    /// `reso` 0..1 — the last few percent push past unity loop gain, where
+    /// the tanh stops the blowup and the filter sings instead.
+    #[inline]
+    pub fn process(&mut self, x: f32, cutoff: f32, reso: f32, drive: f32, mode: u8) -> f32 {
+        let fc = cutoff.clamp(20.0, self.sr * 0.45);
+        let reso = reso.clamp(0.0, 1.0);
+        let boosted = x * (1.0 + drive.clamp(0.0, 1.0) * 4.0);
+        if mode == 1 {
+            // TPT SVF, lowpass tap; k→0 stops damping, slightly past → sing
+            let g = crate::dmath::tan(std::f32::consts::PI * fc / self.sr);
+            let k = 2.0 - 2.06 * reso;
+            let a1 = 1.0 / (1.0 + g * (g + k));
+            let v1 = (self.ic1 + g * (boosted - self.ic2)) * a1;
+            let v2 = self.ic2 + g * v1;
+            self.ic1 = 2.0 * v1 - self.ic1;
+            self.ic2 = 2.0 * v2 - self.ic2;
+            // the analog squash: saturate the integrator states, gently at
+            // low drive, hard when driven — this is what keeps
+            // self-oscillation a sine instead of a runaway
+            let sat = 1.0 + drive * 2.0;
+            self.ic1 = crate::dmath::tanh(self.ic1 * 0.6 * sat) / (0.6 * sat);
+            self.ic2 = crate::dmath::tanh(self.ic2 * 0.6 * sat) / (0.6 * sat);
+            v2 / (1.0 + drive * 1.5)
+        } else {
+            // 4-pole ladder: tanh around the loop, linear stages
+            let g = 1.0 - crate::dmath::exp(-std::f32::consts::TAU * fc / self.sr);
+            let k = reso * 4.8;
+            let input = crate::dmath::tanh(boosted - k * self.prev);
+            self.s[0] += g * (input - self.s[0]);
+            self.s[1] += g * (self.s[0] - self.s[1]);
+            self.s[2] += g * (self.s[1] - self.s[2]);
+            self.s[3] += g * (self.s[2] - self.s[3]);
+            self.prev = self.s[3];
+            // makeup for the passband the feedback eats
+            self.s[3] * (1.0 + k * 0.5) / (1.0 + drive * 1.5)
+        }
+    }
+}

@@ -87,6 +87,23 @@ fn prim(name: &str) -> Option<Prim> {
             params: &[("cutoff", 0, 0.65), ("reso", 1, 0.2)],
             options: &[],
         },
+        // the analog-character filter: nonlinear resonance that saturates
+        // instead of screaming, self-oscillation at the top of the reso
+        // range, keytracking (`track: 1.0` follows the note), and
+        // deterministic per-voice cutoff drift (`drift`) — no two voices'
+        // filters sit exactly alike. mode: "ladder" (24 dB) / "svf" (12 dB).
+        "vcf" => Prim {
+            kind: GridModuleKind::Vcf,
+            inputs: &[("in", 0, None), ("mod", 1, None)],
+            params: &[
+                ("cutoff", 0, 0.65),
+                ("reso", 1, 0.2),
+                ("drive", 2, 0.0),
+                ("track", 3, 0.0),
+                ("drift", 4, 0.0),
+            ],
+            options: &[("mode", 5, &["ladder", "svf"], &[0.1, 0.9])],
+        },
         "resonator" => Prim {
             kind: GridModuleKind::Resonator,
             inputs: &[("in", 0, None), ("fm", 1, None)],
@@ -299,7 +316,7 @@ impl<'a> Builder<'a> {
                     return Err(Diag::new(
                         "E-GRID-004",
                         *pos,
-                        format!("DSP プリミティブ '{name}' はありません(osc / noise / sample / lfo / adsr / svf / shaper / gain / mix)"),
+                        format!("DSP プリミティブ '{name}' はありません(osc / noise / sample / lfo / adsr / svf / vcf / resonator / shaper / gain / mix)"),
                     ));
                 };
                 if spec.kind == GridModuleKind::Sample && self.effect {

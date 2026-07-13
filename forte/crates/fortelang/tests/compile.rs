@@ -1047,6 +1047,54 @@ fn space_reverb_characters_and_decay_are_real() {
 }
 
 #[test]
+fn vcf_is_an_analog_character_filter() {
+    // one acid voice, permuted through the vcf's promises. The envelope
+    // gates the INPUT (a 0.2 s ping) and the filter output goes straight
+    // out while the note holds — so a self-oscillating filter is free to
+    // keep singing after its excitation dies.
+    let song = |vcf: &str| {
+        format!(
+            r#"device A : Instrument {{
+  node e = adsr(a: 0.005, d: 0.2, s: 0.0, r: 0.05)
+  node src = osc(shape: "saw")
+  node o = gain(in: src, mod: e)
+  node f = {vcf}
+  out f
+}}
+song "V" {{ tempo 120bpm
+  track T {{ instrument A()
+    play notes`[C2 E2 G2]~:4` at bars(1..1) }} }}"#
+        )
+    };
+    let dig = |vcf: &str| {
+        let p = fortelang::compile_str(&song(vcf)).expect("vcf song must compile");
+        fortelang::render_digest(&p, 4.0)
+    };
+    let base = dig(r#"vcf(in: o, cutoff: 0.5, reso: 0.3)"#);
+    let base2 = dig(r#"vcf(in: o, cutoff: 0.5, reso: 0.3)"#);
+    assert_eq!(base.f32_digest, base2.f32_digest, "vcf must be deterministic");
+    // ladder and svf are different filters
+    let svf_mode = dig(r#"vcf(in: o, cutoff: 0.5, reso: 0.3, mode: "svf")"#);
+    assert_ne!(base.f32_digest, svf_mode.f32_digest, "modes must differ");
+    // self-oscillation: at the top of the reso range the filter keeps
+    // singing long after the 0.5-beat ping is gone
+    let singing = dig(r#"vcf(in: o, cutoff: 0.5, reso: 0.98)"#);
+    assert!(
+        singing.rms > base.rms * 1.5,
+        "high reso must self-oscillate into the tail (rms {} vs {})",
+        singing.rms,
+        base.rms
+    );
+    // keytracking and per-voice drift both change the audio
+    let tracked = dig(r#"vcf(in: o, cutoff: 0.5, reso: 0.3, track: 1.0)"#);
+    assert_ne!(base.f32_digest, tracked.f32_digest, "keytracking must engage");
+    let drifted = dig(r#"vcf(in: o, cutoff: 0.5, reso: 0.3, drift: 0.8)"#);
+    assert_ne!(base.f32_digest, drifted.f32_digest, "per-voice drift must engage");
+    let drifted2 = dig(r#"vcf(in: o, cutoff: 0.5, reso: 0.3, drift: 0.8)"#);
+    assert_eq!(drifted.f32_digest, drifted2.f32_digest, "drift is deterministic");
+}
+
+#[test]
 fn nonlinear_effects_take_an_os_switch() {
     // `os: "off"/"2x"/"4x"` on the four waveshaping inserts; off is the
     // default and stays on the legacy bit-exact path

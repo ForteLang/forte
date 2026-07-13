@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::model::{GridConn, GridGraph, GridModuleKind};
 
 use super::envelope::Adsr;
-use super::filter::{FilterMode, Resonator, Svf};
+use super::filter::{FilterMode, Resonator, Svf, Vcf};
 use super::oscillator::{Oscillator, Waveform};
 use super::sampler::Sample;
 use super::voice::midi_to_freq;
@@ -33,6 +33,8 @@ enum NodeState {
     Osc(Oscillator),
     Adsr { env: Adsr, prev_gate: f32 },
     Filter(Svf),
+    /// nonlinear analog filter + this seat's deterministic drift (−1..1)
+    Vcf { f: Vcf, drift: f32 },
     Resonator(Resonator),
     Lfo { phase: f32 },
     /// xorshift32 state — deterministic noise, reseeded per note-on so the
@@ -103,11 +105,24 @@ fn topo_order(n: usize, conns: &[GridConn]) -> Vec<usize> {
     order
 }
 
-fn fresh_state(kind: GridModuleKind, sr: f32, node_idx: usize) -> NodeState {
+fn fresh_state(kind: GridModuleKind, sr: f32, node_idx: usize, seat: usize) -> NodeState {
     match kind {
         GridModuleKind::Osc => NodeState::Osc(Oscillator::default()),
         GridModuleKind::Adsr => NodeState::Adsr { env: Adsr::new(sr), prev_gate: 0.0 },
         GridModuleKind::Filter => NodeState::Filter(Svf::new(sr)),
+        // deterministic per-seat drift: which VOICE (or channel, in an
+        // effect) this instance is decides its analog offset — "two
+        // filters are never quite alike", reproducibly
+        GridModuleKind::Vcf => {
+            let mut h = (node_idx as u32 + 1)
+                .wrapping_mul(0x9e37_79b9)
+                ^ (seat as u32 + 1).wrapping_mul(0x85eb_ca6b);
+            h ^= h << 13;
+            h ^= h >> 17;
+            h ^= h << 5;
+            let drift = (h as f32 / u32::MAX as f32) * 2.0 - 1.0;
+            NodeState::Vcf { f: Vcf::new(sr), drift }
+        }
         GridModuleKind::Resonator => NodeState::Resonator(Resonator::new(sr)),
         GridModuleKind::Lfo => NodeState::Lfo { phase: 0.0 },
         // two noise nodes in one patch must not correlate: seed by node index
@@ -284,6 +299,25 @@ fn eval_node(
                 out[0] = svf.process(ins[0], FilterMode::Lowpass);
             }
         }
+        GridModuleKind::Vcf => {
+            if let NodeState::Vcf { f, drift } = state {
+                let base = 30.0 * crate::dmath::powf(600.0, params[0].clamp(0.0, 1.0));
+                // cutoff mod input shifts up to ±4 octaves (same as svf)
+                let mut cutoff = base * crate::dmath::powf(2.0, ins[1] * 4.0);
+                // keytracking: follow the played note away from middle C
+                let track = params[3].clamp(0.0, 1.0);
+                if track > 0.0 && note.0 > 0.0 {
+                    cutoff *= crate::dmath::powf(note.0 / 261.626, track);
+                }
+                // per-voice analog drift: up to ±1.2 semitones of cutoff
+                let da = params[4].clamp(0.0, 1.0);
+                if da > 0.0 {
+                    cutoff *= crate::dmath::powf(2.0, *drift * da * 0.1);
+                }
+                let mode = (params[5] * 1.999) as u8;
+                out[0] = f.process(ins[0], cutoff, params[1], params[2], mode);
+            }
+        }
         GridModuleKind::Resonator => {
             if let NodeState::Resonator(r) = state {
                 // key off: freq maps like cutoff (30 Hz..~18 kHz).
@@ -326,12 +360,12 @@ impl GridSynth {
         let has_adsr = graph.modules.iter().any(|m| m.kind == GridModuleKind::Adsr);
 
         let voices = (0..GRID_VOICES)
-            .map(|_| GridVoice {
+            .map(|vi| GridVoice {
                 states: graph
                     .modules
                     .iter()
                     .enumerate()
-                    .map(|(i, m)| fresh_state(m.kind, sample_rate, i))
+                    .map(|(i, m)| fresh_state(m.kind, sample_rate, i, vi))
                     .collect(),
                 note: 0,
                 velocity: 0.0,
@@ -406,7 +440,7 @@ impl GridSynth {
             }
             let sr = self.sample_rate;
             for (si, st) in v.states.iter_mut().enumerate() {
-                *st = fresh_state(self.nodes[si].kind, sr, si);
+                *st = fresh_state(self.nodes[si].kind, sr, si, 0);
             }
             v.note = note;
             v.velocity = velocity.clamp(0.0, 1.0);
@@ -431,7 +465,7 @@ impl GridSynth {
         let sr = self.sample_rate;
         let v = &mut self.voices[idx];
         for (si, st) in v.states.iter_mut().enumerate() {
-            *st = fresh_state(self.nodes[si].kind, sr, si);
+            *st = fresh_state(self.nodes[si].kind, sr, si, idx);
         }
         v.note = note;
         v.velocity = velocity.clamp(0.0, 1.0);
@@ -572,19 +606,23 @@ pub struct GridFx {
 impl GridFx {
     pub fn compile(graph: &GridGraph, sample_rate: f32) -> Self {
         let (nodes, order, out_node) = build_specs(graph);
-        let states: Vec<NodeState> = graph
-            .modules
-            .iter()
-            .enumerate()
-            .map(|(i, m)| fresh_state(m.kind, sample_rate, i))
-            .collect();
+        // channel seats 0/1: a drifting VCF sits slightly differently on
+        // the left and right — free analog stereo
+        let mk = |seat: usize| -> Vec<NodeState> {
+            graph
+                .modules
+                .iter()
+                .enumerate()
+                .map(|(i, m)| fresh_state(m.kind, sample_rate, i, seat))
+                .collect()
+        };
         let n = nodes.len();
         GridFx {
             sample_rate,
             nodes,
             order,
             out_node,
-            states: [states.clone(), states],
+            states: [mk(0), mk(1)],
             values: vec![[0.0; MAX_OUTPUTS]; n],
             param_binds: graph
                 .param_binds
