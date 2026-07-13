@@ -65,6 +65,26 @@ the fast one. Remaining profile misses (true peak everywhere; sub
 during tape-deaths; cold-letter's high band) are documented physics
 and tooling gaps (see the true-peak limiter issue), not hidden.
 
+### The album pressings (full-length, 3:20-3:55)
+
+Seven tracks on the opaline skeleton — intro → groove → BUILD (roll
+ratchets + opening riser over the running record, one-bar gasp) →
+DROP → breakdown → bigger BUILD → peak DROP → tape-death outro —
+every arc verified by `forte analyze`'s section report:
+
+| # | track | bpm | character |
+| --- | --- | --- | --- |
+| 1 | opaline | 116 | the statement: two records, the reference arc |
+| 2 | vitrine | 122 | brightest, hardest drops, 16th stabs |
+| 3 | cursive | 100 | seventh chords in soft hand, gentle drops |
+| 4 | mirror-stage | 112 | widest: drop2 voicings across the field |
+| 5 | slow-fires | 88 | halftime weight, mpc62 lean |
+| 6 | paper-planet | 96 | the toy leads, the band orbits |
+| 7 | last-light | 80 | the closer: one long arc, machine allowed to die |
+
+All seven land 10-11 of 11 profile targets; the only recurring miss is
+true peak (the #134 reconstruction-overshoot tooling gap).
+
 ## Listening: the songbook (`songs/`, ~30 s each)
 
 Three shelves:
