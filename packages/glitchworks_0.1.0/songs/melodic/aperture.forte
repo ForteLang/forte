@@ -97,13 +97,12 @@ song "aperture" {
   block Cutter {
     track Cut {
       instrument sampler(attack: 0.02, gain: 1.0, sample: MixS, slices: 32, end: 0.941, choke: "on", sustain: 1.0, release: 0.05)
-      // the bug: micro-drift always, a minor-third lean through bars
-      // 9-11, and the whole record diving a tritone out the end
-      modulate pitch with random(rate: 0.09, amount: 0.028, smooth: 0.7) as swim
-      automate pitch from 0.5 to 0.563 over bars(9..10)
-      automate pitch from 0.563 to 0.5 over bars(11..11)
-      automate pitch from 0.5 to 0.375 over bars(16..16)
-      automate volume from 0.95 to 0.35 over bars(16..16)
+      // pitch discipline: in key throughout; whole-pitch events are
+      // transitional only — the spin-up glide-in and the terminal death
+      automate pitch from 0.417 to 0.5 over bars(1..1)
+      insert tapestop(amount: 0.0)
+      automate tapestop.amount from 0.0 to 1.0 over bars(16..16)
+      automate volume from 0.95 to 0.4 over bars(16..16)
       insert stutter(beats: 0.25, mix: 0.0)
       automate stutter.mix from 0.0 to 0.7 over bars(4..4)
       automate stutter.mix from 0.7 to 0.0 over bars(5..5)

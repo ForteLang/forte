@@ -33,10 +33,11 @@ device Brush : Instrument {
   out pan(in: hi, pos: 0.35)
 }
 
+// the toy: fixed micro-detune + per-voice drift riding the progression
 device BrightPluck : Instrument {
   node e = adsr(a: 0.003, d: 0.18, s: 0.1, r: 0.12)
-  node o = uni(shape: "saw", voices: 3, detune: 0.18, spread: 0.5)
-  node f = vcf(in: o, cutoff: 0.8, reso: 0.18, mode: "svf")
+  node o = uni(shape: "saw", voices: 3, detune: 0.16, spread: 0.5)
+  node f = vcf(in: o, cutoff: 0.8, reso: 0.18, drift: 0.6, mode: "svf")
   out gain(in: f, mod: e)
 }
 
@@ -101,13 +102,12 @@ song "cold-letter" {
   block Cutter {
     track Cut {
       instrument sampler(attack: 0.02, gain: 1.0, sample: MixS, slices: 32, end: 0.941, choke: "on", sustain: 1.0, release: 0.06)
-      // the letter warps as it is read: slow drift, a whole-step sag in
-      // the middle, and the last line slurring down a fourth
-      modulate pitch with random(rate: 0.05, amount: 0.02, smooth: 0.8) as swim
-      automate pitch from 0.5 to 0.458 over bars(7..8)
-      automate pitch from 0.458 to 0.5 over bars(9..9)
-      automate pitch from 0.5 to 0.396 over bars(16..16)
-      automate volume from 0.95 to 0.3 over bars(16..16)
+      // pitch discipline: the letter reads in key; it spins up into
+      // place at the start and the machine dies at the very end
+      automate pitch from 0.417 to 0.5 over bars(1..1)
+      insert tapestop(amount: 0.0)
+      automate tapestop.amount from 0.0 to 1.0 over bars(16..16)
+      automate volume from 0.95 to 0.35 over bars(16..16)
       insert parcomp(amount: 0.85, drive: 0.65, color: 0.45, os: "2x")
       insert eq(low: 0.48, mid: 0.5, high: 0.7)
       insert exciter(amount: 0.85, freq: 0.5)

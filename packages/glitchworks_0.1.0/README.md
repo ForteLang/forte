@@ -47,18 +47,18 @@ prisma stacks, degree progressions with nearest-motion voice leading,
 `vcf` ladder basses, air hats, the band bounced to one record, lightly
 chopped, and pressed through the house chain (transient-safe glue →
 parcomp → EQ tilt → exciter → limiter, loudness by `level`).
-V2 (the bug is the groove): every pressing carries an ambient BED —
-a unison drone plus a vinyl'd noise wash that keep sounding under the
-chops, so rests reveal a lit room instead of dead zero — wild
-audio-domain pitch behavior (constant micro-drift, mid-song leans, a
-dying-tape dive out the end), reversed copies answering from the gaps,
-and stutter fits. still-glass drops the whole world once (bar 12,
-tape-brake into the song's single true silence). **still-glass**
-passes every profile target; **aperture** misses only true peak,
-**cold-letter** true peak + high band — the inter-sample overshoot is
-a tooling gap (the limiter detects sample peaks, not reconstruction
-peaks; see the true-peak limiter issue), documented rather than
-hidden.
+V2 (the bug is the groove, pitch-disciplined): every pressing carries
+an ambient BED — a unison drone plus a vinyl'd noise wash that keep
+sounding under the chops, so rests reveal a lit room instead of dead
+zero. The record stays strictly IN KEY: whole-pitch events are
+transitional only (a spin-up glide-in at bar 1; tape-deaths at the
+end; still-glass's bar-12 brake into its one great drop). The micro
+pitch-bug lives in ONE voice instead — the toy layer, a fixed
+few-cent-detuned unison with per-voice vcf drift riding the stable
+progression. Reversed copies answer from the gaps; stutter fits seize
+the fast one. Remaining profile misses (true peak everywhere; sub
+during tape-deaths; cold-letter's high band) are documented physics
+and tooling gaps (see the true-peak limiter issue), not hidden.
 
 ## Listening: the songbook (`songs/`, ~30 s each)
 

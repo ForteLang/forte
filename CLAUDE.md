@@ -51,9 +51,14 @@ is the groove, not the silence. Glitch means bug-like behavior —
   sounding UNDER the chopped record, so a rest in the record reveals
   the bed instead of true zero. Total mix-wide silence still happens,
   but as an occasional shock, not the default groove.
-- Wild pitch movement is a primary color: audio-domain pitch
-  automation/bends on the playing record, tapestop moments, glides —
-  the record audibly misbehaving.
+- Pitch bugs are a BALANCE question (2026-07 refinement): if the
+  song's original key stops being legible, that is an UNACCEPTABLE
+  bug. Whole-record pitch wobble/leans/sags mid-song are 不快 — never
+  modulate or automate the full mix's pitch while it plays. Acceptable
+  forms: toy-piano MICRO detune on ONE element riding a stable
+  progression; a glide-in at the very start (the record spinning up
+  into place); a terminal tape-death at the very end. Transitional or
+  local, never global and sustained.
 - Pleasant, non-clicky noise belongs (vinyl wow/crackle/hiss beds,
   filtered noise washes) — comfy noise, not プチプチ.
 - More broken-sounding artifacts: stutters, reversed answers, crushed

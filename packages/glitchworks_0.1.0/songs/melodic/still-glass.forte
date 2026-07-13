@@ -1,10 +1,11 @@
 // still-glass — the reference pressing of the v2 aesthetic: THE BUG IS
 // THE GROOVE. A wide unison pad walks a degree progression, the band is
 // bounced to one record and chopped — but an ambient bed (drone + comfy
-// vinyl noise wash) keeps sounding under every rest, the record's pitch
-// audibly misbehaves (drift, a two-semitone lean, a final dive), a
-// reversed copy answers in the gaps, and one tape-brake drops the WHOLE
-// world — bed included — into the song's single true silence.
+// vinyl noise wash) keeps sounding under every rest, the record stays
+// strictly IN KEY (pitch events are transitional only: a spin-up
+// glide-in and the tape deaths), a reversed copy answers in the gaps,
+// and one tape-brake drops the WHOLE world — bed included — into the
+// song's single true silence.
 
 device NightWash : Instrument {
   node w = lfo(rate: 0.04, shape: "sine")
@@ -37,10 +38,12 @@ device GlassBass : Instrument {
   out gain(in: f, mod: e)
 }
 
+// the toy piano: a fixed few-cent detune and per-voice filter drift —
+// micro-OFF riding a stable progression, never a moving pitch
 device Shimmer : Instrument {
   node e = adsr(a: 0.002, d: 0.12, s: 0.1, r: 0.15)
-  node o = uni(shape: "tri", voices: 3, detune: 0.2, spread: 0.85)
-  node f = svf(in: o, cutoff: 0.95, reso: 0.12)
+  node o = uni(shape: "tri", voices: 3, detune: 0.16, spread: 0.7)
+  node f = vcf(in: o, cutoff: 0.9, reso: 0.15, drift: 0.6, mode: "svf")
   out gain(in: f, mod: e)
 }
 
@@ -60,7 +63,7 @@ song "still-glass" {
     let P = prog`i | VI | III | VII | i | iv7 | VI | V7`
 
     track Pad {
-      instrument prisma(wave: "saw", cutoff: 0.66, attack: 0.25, sustain: 0.8, release: 0.45, unison: 7, detune: 0.3, spread: 0.6, sub: 0.1)
+      instrument prisma(wave: "saw", cutoff: 0.66, attack: 0.25, sustain: 0.8, release: 0.45, unison: 7, detune: 0.3, spread: 0.56, sub: 0.1)
       volume 0.62
       insert space(type: "plate", size: 0.55, decay: 0.5, mix: 0.22)
       play chords(P, lead: "nearest", voicing: "drop2", register: 4) at bars(1..8)
@@ -100,6 +103,19 @@ song "still-glass" {
   block Cutter {
     track Cut {
       instrument sampler(attack: 0.02, gain: 1.0, sample: MixS, slices: 32, end: 0.941, choke: "on", sustain: 1.0, release: 0.05)
+      // pitch discipline: the record stays IN KEY. Whole-pitch events
+      // are transitional only — the spin-up glide-in, the bar-12
+      // tape-brake into the song's one true silence, and the terminal
+      // tape-death out the end
+      automate pitch from 0.417 to 0.5 over bars(1..1)
+      insert stutter(beats: 0.5, mix: 0.0)
+      automate stutter.mix from 0.0 to 0.8 over bars(8..8)
+      automate stutter.mix from 0.8 to 0.0 over bars(9..9)
+      insert tapestop(amount: 0.0)
+      automate tapestop.amount from 0.0 to 1.0 over bars(12..12)
+      automate tapestop.amount from 1.0 to 0.0 over bars(13..14)
+      automate tapestop.amount from 0.0 to 1.0 over bars(16..16)
+      automate volume from 0.95 to 0.35 over bars(16..16)
       insert parcomp(amount: 1.0, drive: 0.7, color: 0.45, os: "2x")
       insert eq(low: 0.48, mid: 0.5, high: 0.62)
       insert exciter(amount: 0.85, freq: 0.7)
@@ -136,12 +152,12 @@ song "still-glass" {
   // sounding under every chop rest. Its only rest is bar 12, where the
   // tape-brake takes the whole world down: the one true silence.
   track Drone {
-    instrument prisma(wave: "saw", cutoff: 0.42, attack: 0.6, sustain: 0.9, release: 0.8, unison: 5, detune: 0.22, spread: 0.5, sub: 0.25)
+    instrument prisma(wave: "saw", cutoff: 0.42, attack: 0.6, sustain: 0.9, release: 0.8, unison: 5, detune: 0.22, spread: 0.45, sub: 0.12)
     volume 0.3
     insert space(type: "hall", size: 0.75, decay: 0.7, width: 0.4, mix: 0.3)
-    play notes`[A1 A2 E3]~:16` at bars(1..4)
+    play notes`[A2 E3 A3]~:16` at bars(1..4)
     play notes`[F2 C3 A3]~:16` at bars(5..8)
-    play notes`[A1 A2 E3]~:12` at bars(9..11)
+    play notes`[A2 E3 A3]~:12` at bars(9..11)
     play notes`[F2 C3 F3]~:8 [E2 B2 E3]~:8` at bars(13..16)
   }
   track Wash {
