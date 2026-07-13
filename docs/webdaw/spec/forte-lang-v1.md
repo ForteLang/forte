@@ -150,6 +150,8 @@ An Effect's graph is evaluated as the same graph with independent state for each
 | `lfo` | — | `rate` 0..1 (= 0.05..12Hz), `shape`: sine/tri/saw/square |
 | `adsr` | `gate` (note.gate) | `a` .05, `d` .3, `s` .6, `r` .25 (normalized) |
 | `svf` | `in` (required), `mod` (±4oct) | `cutoff` .65 (= 30..18kHz exponential), `reso` .2 |
+| `uni` | `freq` (defaults to note.freq), `mod` (±4oct) | `shape` (5 osc shapes), `voices` 1..7 (count, default 5), `detune` .25 (fan ±detune·45ct), `spread` .6 (stereo fan). A graph containing `uni` or `pan` renders PER CHANNEL — the mesh instrument gets a real stereo field. Graphs without them keep the bit-exact mono pass |
+| `pan` | `in` (required), `mod` (autopan: an LFO pushes the position live) | `pos` .5 (0 = hard left, 1 = hard right, equal-power) |
 | `vcf` | `in` (required), `mod` (±4oct) | `cutoff` .65, `reso` .2, `drive` 0, `track` 0 (keytracking: 1.0 = cutoff follows the played note), `drift` 0 (deterministic per-voice cutoff spread ±1.2 semitones — no two voices' filters sit alike), `mode`: "ladder" (24 dB, tanh feedback, Moog lineage) / "svf" (12 dB TPT, saturated integrators). Resonance saturates musically; the top of the reso range self-oscillates (a playable sine source). The plain `svf` is untouched — digests stand |
 | `shaper` | `in` (required), `mod` (added to drive) | `drive` .3, `mode`: tanh/clip/fold |
 | `gain` | `in` (required), `mod` (0..2×) | `level` .8 |

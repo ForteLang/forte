@@ -117,6 +117,26 @@ fn prim(name: &str) -> Option<Prim> {
             options: &[("key", 2, &["off", "on"], &[0.0, 1.0]),
                        ("strike", 3, &["off", "on"], &[0.0, 1.0])],
         },
+        // the width sources (#133): a graph containing either renders
+        // per channel — mesh instruments finally get a stereo field
+        "uni" => Prim {
+            kind: GridModuleKind::Uni,
+            inputs: &[("freq", 0, Some(0)), ("mod", 1, None)],
+            // voices is intercepted at the call site (1..7 count → knob)
+            params: &[("voices", 1, 0.666_666_7), ("detune", 2, 0.25), ("spread", 3, 0.6)],
+            options: &[(
+                "shape",
+                0,
+                &["sine", "saw", "square", "tri", "pulse"],
+                &[0.1, 0.25, 0.5, 0.75, 0.9],
+            )],
+        },
+        "pan" => Prim {
+            kind: GridModuleKind::Pan,
+            inputs: &[("in", 0, None), ("mod", 1, None)],
+            params: &[("pos", 0, 0.5)],
+            options: &[],
+        },
         "gain" => Prim {
             kind: GridModuleKind::Gain,
             inputs: &[("in", 0, None), ("mod", 1, None)],
@@ -316,7 +336,7 @@ impl<'a> Builder<'a> {
                     return Err(Diag::new(
                         "E-GRID-004",
                         *pos,
-                        format!("DSP プリミティブ '{name}' はありません(osc / noise / sample / lfo / adsr / svf / vcf / resonator / shaper / gain / mix)"),
+                        format!("DSP プリミティブ '{name}' はありません(osc / uni / noise / sample / lfo / adsr / svf / vcf / resonator / shaper / pan / gain / mix)"),
                     ));
                 };
                 if spec.kind == GridModuleKind::Sample && self.effect {
@@ -380,6 +400,25 @@ impl<'a> Builder<'a> {
                         sample_src =
                             binding.as_ref().map(|k| SampleSource::Asset(k.clone()));
                         take_seen = true;
+                        continue;
+                    }
+                    // uni.voices speaks in VOICES (1..7), not knob positions
+                    if spec.kind == GridModuleKind::Uni && key == "voices" {
+                        let NodeArg::Num(n, npos) = arg else {
+                            return Err(Diag::new(
+                                "E-TYPE-004",
+                                *pos,
+                                "uni.voices は数値で指定します(1..7 ボイス)",
+                            ));
+                        };
+                        if !(1.0..=7.0).contains(n) || n.fract() != 0.0 {
+                            return Err(Diag::new(
+                                "E-TYPE-002",
+                                *npos,
+                                format!("uni.voices は 1..7 の整数ボイス数です(指定: {n})"),
+                            ));
+                        }
+                        pvals[1] = ((*n as f32) - 1.0) / 6.0;
                         continue;
                     }
                     if let Some((_, port, _)) = spec.inputs.iter().find(|(n, _, _)| n == key) {

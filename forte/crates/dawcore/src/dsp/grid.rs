@@ -35,6 +35,9 @@ enum NodeState {
     Filter(Svf),
     /// nonlinear analog filter + this seat's deterministic drift (−1..1)
     Vcf { f: Vcf, drift: f32 },
+    /// unison oscillator stack (#133) — both channels advance identical
+    /// copies; only the per-channel pan gains differ
+    Uni([Oscillator; 7]),
     Resonator(Resonator),
     Lfo { phase: f32 },
     /// xorshift32 state — deterministic noise, reseeded per note-on so the
@@ -46,6 +49,9 @@ enum NodeState {
 
 struct GridVoice {
     states: Vec<NodeState>,
+    /// right-channel node states — allocated only for STEREO graphs (one
+    /// containing a uni/pan node); mono graphs keep the single bit-exact pass
+    states_r: Vec<NodeState>,
     note: u8,
     velocity: f32,
     gate: f32,
@@ -70,6 +76,8 @@ pub struct GridSynth {
     glide_coef: f32,
     /// exposed device params → node param slots (declaration order)
     param_binds: Vec<Vec<(usize, usize)>>,
+    /// graph contains a uni/pan node → evaluate per channel
+    stereo: bool,
 }
 
 fn topo_order(n: usize, conns: &[GridConn]) -> Vec<usize> {
@@ -123,6 +131,7 @@ fn fresh_state(kind: GridModuleKind, sr: f32, node_idx: usize, seat: usize) -> N
             let drift = (h as f32 / u32::MAX as f32) * 2.0 - 1.0;
             NodeState::Vcf { f: Vcf::new(sr), drift }
         }
+        GridModuleKind::Uni => NodeState::Uni([Oscillator::default(); 7]),
         GridModuleKind::Resonator => NodeState::Resonator(Resonator::new(sr)),
         GridModuleKind::Lfo => NodeState::Lfo { phase: 0.0 },
         // two noise nodes in one patch must not correlate: seed by node index
@@ -174,6 +183,7 @@ fn eval_node(
     note: (f32, f32, f32),
     audio_in: f32,
     sample: Option<&Arc<Sample>>,
+    ch: usize,
 ) {
     match kind {
         GridModuleKind::Sample => {
@@ -340,6 +350,35 @@ fn eval_node(
                 out[0] = r.process(ins[0]);
             }
         }
+        GridModuleKind::Uni => {
+            // detuned stack fanned across the field: this channel hears its
+            // own equal-power side of every voice. Phases advance the same
+            // on both channels (each channel owns an identical copy).
+            if let NodeState::Uni(oscs) = state {
+                let base = if connected[0] { ins[0].max(0.1) } else { 220.0 };
+                let freq = base * crate::dmath::powf(2.0, ins[1] * 4.0);
+                let shape = Waveform::from_index((params[0] * 4.999) as u8);
+                let n = 1 + (params[1].clamp(0.0, 1.0) * 6.0).round() as usize;
+                let detune = params[2].clamp(0.0, 1.0);
+                let spread = params[3].clamp(0.0, 1.0);
+                let mut sum = 0.0f32;
+                for (k, osc) in oscs.iter_mut().take(n).enumerate() {
+                    let off = if n > 1 { (2 * k) as f32 / (n - 1) as f32 - 1.0 } else { 0.0 };
+                    let ratio = crate::dmath::powf(2.0, detune * 45.0 * off / 1200.0);
+                    let s = osc.next_pw(freq * ratio, sr, shape, 0.5);
+                    let pan = (spread * off).clamp(-1.0, 1.0);
+                    let g = if ch == 0 { ((1.0 - pan) * 0.5).sqrt() } else { ((1.0 + pan) * 0.5).sqrt() };
+                    sum += s * g;
+                }
+                out[0] = sum * 0.85 / (n as f32).sqrt();
+            }
+        }
+        GridModuleKind::Pan => {
+            // equal-power position; the mod input pushes it live (autopan)
+            let pos = (params[0].clamp(0.0, 1.0) * 2.0 - 1.0 + ins[1]).clamp(-1.0, 1.0);
+            let g = if ch == 0 { ((1.0 - pos) * 0.5).sqrt() } else { ((1.0 + pos) * 0.5).sqrt() };
+            out[0] = ins[0] * g;
+        }
         GridModuleKind::Gain => {
             let m = if connected[1] { ins[1].clamp(0.0, 2.0) } else { 1.0 };
             out[0] = ins[0] * params[0] * m;
@@ -358,6 +397,10 @@ impl GridSynth {
     pub fn compile(graph: &GridGraph, sample_rate: f32) -> Self {
         let (nodes, order, out_node) = build_specs(graph);
         let has_adsr = graph.modules.iter().any(|m| m.kind == GridModuleKind::Adsr);
+        let stereo = graph
+            .modules
+            .iter()
+            .any(|m| matches!(m.kind, GridModuleKind::Uni | GridModuleKind::Pan));
 
         let voices = (0..GRID_VOICES)
             .map(|vi| GridVoice {
@@ -367,6 +410,16 @@ impl GridSynth {
                     .enumerate()
                     .map(|(i, m)| fresh_state(m.kind, sample_rate, i, vi))
                     .collect(),
+                states_r: if stereo {
+                    graph
+                        .modules
+                        .iter()
+                        .enumerate()
+                        .map(|(i, m)| fresh_state(m.kind, sample_rate, i, vi))
+                        .collect()
+                } else {
+                    Vec::new()
+                },
                 note: 0,
                 velocity: 0.0,
                 gate: 0.0,
@@ -394,6 +447,7 @@ impl GridSynth {
             values: vec![[0.0; MAX_OUTPUTS]; n],
             mono: graph.glide > 0.0,
             glide_coef,
+            stereo,
             param_binds: graph
                 .param_binds
                 .iter()
@@ -442,6 +496,9 @@ impl GridSynth {
             for (si, st) in v.states.iter_mut().enumerate() {
                 *st = fresh_state(self.nodes[si].kind, sr, si, 0);
             }
+            for (si, st) in v.states_r.iter_mut().enumerate() {
+                *st = fresh_state(self.nodes[si].kind, sr, si, 0);
+            }
             v.note = note;
             v.velocity = velocity.clamp(0.0, 1.0);
             v.gate = 1.0;
@@ -465,6 +522,9 @@ impl GridSynth {
         let sr = self.sample_rate;
         let v = &mut self.voices[idx];
         for (si, st) in v.states.iter_mut().enumerate() {
+            *st = fresh_state(self.nodes[si].kind, sr, si, idx);
+        }
+        for (si, st) in v.states_r.iter_mut().enumerate() {
             *st = fresh_state(self.nodes[si].kind, sr, si, idx);
         }
         v.note = note;
@@ -559,6 +619,7 @@ impl GridSynth {
                     note,
                     0.0,
                     self.nodes[ni].sample.as_ref(),
+                    0,
                 );
             }
 
@@ -583,6 +644,92 @@ impl GridSynth {
             }
         }
         sum * 0.25
+    }
+
+    /// Stereo tick. Mono graphs return the bit-exact mono tick on both
+    /// sides; a graph with a uni/pan node runs once per channel — each
+    /// channel owns its node states, so phases/envelopes stay in lockstep
+    /// while the pan laws diverge.
+    #[inline]
+    pub fn next_lr(&mut self) -> (f32, f32) {
+        if !self.stereo {
+            let m = self.next();
+            return (m, m);
+        }
+        let Some(out_node) = self.out_node else { return (0.0, 0.0) };
+        let mut suml = 0.0f32;
+        let mut sumr = 0.0f32;
+        let sr = self.sample_rate;
+
+        for vi in 0..self.voices.len() {
+            if !self.voices[vi].active {
+                continue;
+            }
+            // glide advances ONCE per sample, shared by both channels
+            let voice_freq = if self.mono {
+                let v = &mut self.voices[vi];
+                let target = midi_to_freq(v.note);
+                v.freq_cur += (target - v.freq_cur) * self.glide_coef;
+                v.freq_cur
+            } else {
+                midi_to_freq(self.voices[vi].note)
+            };
+            for ch in 0..2 {
+                for oi in 0..self.order.len() {
+                    let ni = self.order[oi];
+                    let kind = self.nodes[ni].kind;
+                    let mut ins = [0.0f32; 4];
+                    let mut connected = [false; 4];
+                    for (port, sources) in self.nodes[ni].inputs.iter().enumerate() {
+                        for &(sn, sp) in sources {
+                            ins[port] += self.values[sn][sp];
+                            connected[port] = true;
+                        }
+                    }
+                    let voice = &mut self.voices[vi];
+                    let note = (voice_freq, voice.gate, voice.velocity);
+                    let st = if ch == 0 { &mut voice.states[ni] } else { &mut voice.states_r[ni] };
+                    eval_node(
+                        kind,
+                        &self.nodes[ni].params,
+                        &ins,
+                        &connected,
+                        st,
+                        &mut self.values[ni],
+                        sr,
+                        note,
+                        0.0,
+                        self.nodes[ni].sample.as_ref(),
+                        ch,
+                    );
+                }
+                let sample_out = self.values[out_node][0];
+                let vel = self.voices[vi].velocity.max(0.05);
+                if ch == 0 {
+                    suml += sample_out * vel;
+                } else {
+                    sumr += sample_out * vel;
+                }
+            }
+            // free the voice when released and every envelope decayed (the
+            // left channel's envelopes are the reference — both are in step)
+            let voice = &mut self.voices[vi];
+            if voice.gate <= 0.0 {
+                let mut still = false;
+                for st in &voice.states {
+                    if let NodeState::Adsr { env, .. } = st {
+                        if env.is_active() {
+                            still = true;
+                            break;
+                        }
+                    }
+                }
+                if !still {
+                    voice.active = false;
+                }
+            }
+        }
+        (suml * 0.25, sumr * 0.25)
     }
 }
 
@@ -659,6 +806,7 @@ impl GridFx {
                 (0.0, 0.0, 0.0),
                 x,
                 self.nodes[ni].sample.as_ref(),
+                ch,
             );
             self.values[ni] = out;
         }

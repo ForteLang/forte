@@ -588,6 +588,9 @@ impl Instrument for GridSynth {
     fn next(&mut self) -> f32 {
         GridSynth::next(self)
     }
+    fn next_lr(&mut self) -> (f32, f32) {
+        GridSynth::next_lr(self)
+    }
     fn configure(&mut self, p: &[f32]) {
         // exposed device params (declaration order) → their node slots, so
         // modulators and automation drive grid instruments like builtins

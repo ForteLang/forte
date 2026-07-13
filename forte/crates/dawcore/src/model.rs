@@ -332,6 +332,11 @@ pub enum GridModuleKind {
     /// Nonlinear analog-character filter: ladder/SVF, tanh resonance,
     /// self-oscillation, keytracking, per-voice drift (#125).
     Vcf,
+    /// Unison oscillator stack: detuned voices fanned across the stereo
+    /// field — a graph with one of these renders per-channel (#133).
+    Uni,
+    /// Equal-power stereo positioner (mod input = autopan) (#133).
+    Pan,
     Shaper, // waveshaper: tanh / clip / fold
     /// Tuned modal resonator: rings at a frequency (physical modeling).
     Resonator,
@@ -357,6 +362,8 @@ impl GridModuleKind {
             GridModuleKind::Adsr => "ADSR",
             GridModuleKind::Filter => "SVF",
             GridModuleKind::Vcf => "VCF",
+            GridModuleKind::Uni => "Unison",
+            GridModuleKind::Pan => "Pan",
             GridModuleKind::Resonator => "Resonator",
             GridModuleKind::Gain => "Gain",
             GridModuleKind::Mix => "Mix",
@@ -374,6 +381,8 @@ impl GridModuleKind {
             GridModuleKind::Adsr => &["Gate"],
             GridModuleKind::Filter => &["In", "Cutoff"],
             GridModuleKind::Vcf => &["In", "Cutoff"],
+            GridModuleKind::Uni => &["Freq", "Mod"],
+            GridModuleKind::Pan => &["In", "Mod"],
             GridModuleKind::Resonator => &["In", "Fm"],
             GridModuleKind::Shaper => &["In", "Mod"],
             GridModuleKind::Gain => &["In", "Mod"],
@@ -393,6 +402,8 @@ impl GridModuleKind {
             GridModuleKind::Adsr => &["Env"],
             GridModuleKind::Filter => &["Out"],
             GridModuleKind::Vcf => &["Out"],
+            GridModuleKind::Uni => &["Out"],
+            GridModuleKind::Pan => &["Out"],
             GridModuleKind::Resonator => &["Out"],
             GridModuleKind::Gain => &["Out"],
             GridModuleKind::Mix => &["Out"],
@@ -407,6 +418,8 @@ impl GridModuleKind {
             GridModuleKind::Adsr => &["A", "D", "S", "R"],
             GridModuleKind::Filter => &["Cutoff", "Reso"],
             GridModuleKind::Vcf => &["Cutoff", "Reso", "Drive", "Track", "Drift", "Mode"],
+            GridModuleKind::Uni => &["Shape", "Voices", "Detune", "Spread"],
+            GridModuleKind::Pan => &["Pos"],
             GridModuleKind::Resonator => &["Freq", "Ring", "Key", "Strike"],
             GridModuleKind::Shaper => &["Drive", "Mode"],
             GridModuleKind::Gain => &["Level"],
@@ -421,6 +434,9 @@ impl GridModuleKind {
             GridModuleKind::Adsr => vec![0.05, 0.3, 0.6, 0.25],
             GridModuleKind::Filter => vec![0.65, 0.2],
             GridModuleKind::Vcf => vec![0.65, 0.2, 0.0, 0.0, 0.0, 0.0],
+            // Voices knob 0..1 → 1..7 (default 5); saw; moderate fan
+            GridModuleKind::Uni => vec![0.25, 0.666_666_7, 0.25, 0.6],
+            GridModuleKind::Pan => vec![0.5],
             GridModuleKind::Resonator => vec![0.5, 0.3, 0.0, 0.0],
             GridModuleKind::Shaper => vec![0.3, 0.1], // tanh
             GridModuleKind::Gain => vec![0.8],

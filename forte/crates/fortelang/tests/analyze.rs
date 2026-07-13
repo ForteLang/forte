@@ -209,6 +209,58 @@ fn level_targets_stage_the_gain_declaratively() {
 }
 
 #[test]
+fn mesh_instruments_get_a_stereo_field() {
+    // a user device with a uni stack — the whole point of #133
+    let song = |voice: &str| {
+        format!(
+            r#"device P : Instrument {{
+  node e = adsr(a: 0.05, d: 0.3, s: 0.7, r: 0.2)
+  node o = {voice}
+  out gain(in: o, mod: e)
+}}
+song "W" {{ tempo 120bpm
+  track A {{ instrument P()
+    play notes`[A2 E3 A3]:2 [F2 C3 F3]:2` at bars(1..2) }} }}"#
+        )
+    };
+    let width = |voice: &str| {
+        let p = fortelang::compile_str(&song(voice)).expect("mesh song must compile");
+        analyze(&p, &[], false).stereo.side_mid_db
+    };
+    // plain osc stays a mono point source (the bit-exact legacy path)
+    assert!(
+        width("osc(shape: \"saw\")") < -60.0,
+        "mono mesh must have no side energy"
+    );
+    // a uni stack opens the field
+    let wide = width("uni(shape: \"saw\", voices: 5, detune: 0.35, spread: 0.9)");
+    assert!(wide > -20.0, "uni must open the field, got {wide} dB");
+    // pan positions: hard-left renders more left energy than right
+    let p = fortelang::compile_str(&song("pan(in: osc(shape: \"saw\"), pos: 0.02)"))
+        .expect("pan song must compile");
+    let (_k, s) = fortelang::render_to_sample(&p, 0.0, 60);
+    let el: f64 = s.data.iter().map(|v| (*v as f64) * (*v as f64)).sum();
+    let er: f64 = s
+        .right
+        .as_ref()
+        .map(|r| r.iter().map(|v| (*v as f64) * (*v as f64)).sum())
+        .unwrap_or(el);
+    assert!(el > er * 10.0, "pos 0.02 must live on the left ({el} vs {er})");
+    // determinism of the stereo path
+    let d1 = fortelang::render_digest(
+        &fortelang::compile_str(&song("uni(shape: \"saw\", voices: 5)")).unwrap(),
+        2.0,
+    )
+    .f32_digest;
+    let d2 = fortelang::render_digest(
+        &fortelang::compile_str(&song("uni(shape: \"saw\", voices: 5)")).unwrap(),
+        2.0,
+    )
+    .f32_digest;
+    assert_eq!(d1, d2, "stereo grid must be deterministic");
+}
+
+#[test]
 fn sections_shape_the_report() {
     let p = project(
         r#"song "T" { tempo 120bpm
