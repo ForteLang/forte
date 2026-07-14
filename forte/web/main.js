@@ -563,11 +563,74 @@ async function refreshVcsLog() {
   document.body.dataset.commits = String(log.length);
 }
 
+// The working tree is clean when every committed file matches the store (with
+// the open buffer standing in for its file) — same rule as the CLI's is_clean.
+async function workingIsClean() {
+  const head = await vcs.head();
+  if (!head) return true;
+  const committed = await vcs.snapshotOf(head);
+  const work = await workingSnapshot();
+  const kc = Object.keys(committed).sort();
+  const kw = Object.keys(work).sort();
+  return kc.join(' ') === kw.join(' ') && kc.every((k) => committed[k] === work[k]);
+}
+
+/// Make a snapshot THE working tree: tracked files not in it are removed,
+/// the rest written, the editor follows (checkout / merge results land here).
+async function applySnapshotToWorkingTree(snap) {
+  for (const name of await store.list()) {
+    if (!(name in snap)) await store.remove(name).catch(() => {});
+  }
+  for (const [path, text] of Object.entries(snap)) await store.write(path, text);
+  await refreshModules();
+  if (snap[currentName] !== undefined) {
+    setText(snap[currentName]);
+  } else {
+    const first = Object.keys(snap).find((p) => p.endsWith('.forte'));
+    if (first) {
+      currentName = first;
+      localStorage.setItem('forte.last', first);
+      setText(snap[first]);
+    }
+  }
+  await refreshFileList();
+  recompile(0);
+}
+
+async function refreshGitBar() {
+  if (!vcs) return;
+  const cur = await vcs.headRef();
+  const branches = await vcs.branches();
+  const bsel = $('branch');
+  bsel.innerHTML = '';
+  for (const b of branches.length ? branches : [{ name: 'main' }]) {
+    const o = document.createElement('option');
+    o.value = b.name;
+    o.textContent = b.name;
+    bsel.appendChild(o);
+  }
+  bsel.value = cur ?? 'main';
+  const msel = $('merge-from');
+  msel.innerHTML = '';
+  for (const b of branches.filter((b) => b.name !== cur)) {
+    const o = document.createElement('option');
+    o.value = b.name;
+    o.textContent = b.name;
+    msel.appendChild(o);
+  }
+  msel.disabled = $('merge').disabled = msel.options.length === 0;
+  $('git-state').textContent = (await vcs.mergeHead())
+    ? ' merging…(競合を直して Commit)'
+    : '';
+  document.body.dataset.branch = cur ?? '';
+}
+
 async function initVcs() {
   if (!store) return;
   try {
     vcs = await new Vcs().init();
     await refreshVcsLog();
+    await refreshGitBar();
   } catch {
     vcs = null; // OPFS unavailable: the panel stays empty
   }
@@ -580,9 +643,68 @@ async function initVcs() {
       $('commit-msg').value = '';
       $('vcs-diff').hidden = true;
       await refreshVcsLog();
+      await refreshGitBar();
       status(`commit #${n}: ${msg}`);
     } catch (e) {
       status(e.message);
+    }
+  };
+  $('branch-new').onclick = async () => {
+    if (!vcs) return;
+    const name = (prompt('新しいブランチ名') || '').trim();
+    if (!name) return;
+    try {
+      await vcs.createBranch(name); // = checkout -b: same tree, new ref
+      await refreshGitBar();
+      await refreshVcsLog();
+      status(`ブランチ ${name} を作成して切り替えました`);
+    } catch (e) {
+      status(e.message);
+      await refreshGitBar();
+    }
+  };
+  $('branch').onchange = async (e) => {
+    if (!vcs) return;
+    const target = e.target.value;
+    if (target === (await vcs.headRef())) return;
+    try {
+      await store.write(currentName, getText()); // the buffer is part of the tree
+      if (!(await workingIsClean())) {
+        throw new Error('未コミットの変更があります(commit してから切り替え)');
+      }
+      const snap = await vcs.checkout(target);
+      await applySnapshotToWorkingTree(snap);
+      await refreshGitBar();
+      await refreshVcsLog();
+      status(`checkout: ${target}`);
+    } catch (err) {
+      status(err.message);
+      await refreshGitBar();
+    }
+  };
+  $('merge').onclick = async () => {
+    if (!vcs) return;
+    const from = $('merge-from').value;
+    if (!from) return;
+    try {
+      await store.write(currentName, getText());
+      if (!(await workingIsClean())) {
+        throw new Error('未コミットの変更があります(commit してから merge)');
+      }
+      const r = await vcs.merge(from);
+      await applySnapshotToWorkingTree(r.snapshot);
+      await refreshGitBar();
+      await refreshVcsLog();
+      if (r.kind === 'conflict') {
+        status(`競合があります — <<<<<<< マーカーを直して Commit してください: ${r.conflicts.join(' / ')}`);
+      } else if (r.kind === 'fast-forward') {
+        status(`fast-forward: ${from} を取り込みました`);
+      } else {
+        status(`merge ${from} 完了`);
+      }
+    } catch (err) {
+      status(err.message);
+      await refreshGitBar();
     }
   };
 }

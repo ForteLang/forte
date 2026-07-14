@@ -285,6 +285,57 @@ try {
   );
   check('restore returns the committed take', true);
 
+  // 5.7) the git GUI: branch off, commit there, come home, diverge, merge —
+  // disjoint edits combine automatically (same 3-way as the CLI)
+  const bufEdit = (from, to) =>
+    page.evaluate(
+      ([f, t]) => {
+        const edit = (s) => s.replace(f, t);
+        const ta = document.getElementById('fallback');
+        if (ta) {
+          ta.value = edit(ta.value);
+          ta.dispatchEvent(new Event('input'));
+        } else {
+          const ed = monaco.editor.getModels()[0];
+          ed.setValue(edit(ed.getValue()));
+        }
+      },
+      [from, to]
+    );
+  await page.evaluate(() => {
+    window.prompt = () => 'idea'; // the branch-name dialog, headless
+  });
+  await page.click('#branch-new');
+  await page.waitForFunction(() => document.getElementById('branch').value === 'idea', null, {
+    timeout: 15000,
+  });
+  check('new branch created and checked out', true);
+  await bufEdit('tempo 96bpm', 'tempo 120bpm');
+  await page.waitForTimeout(900); // autosave debounce
+  await page.fill('#commit-msg', 'テンポを上げる');
+  await page.click('#commit');
+  await page.waitForFunction(() => document.body.dataset.commits === '2', null, { timeout: 15000 });
+  await page.selectOption('#branch', 'main');
+  await page.waitForFunction(() => window.__forteGetText().includes('tempo 96bpm'), null, {
+    timeout: 15000,
+  });
+  check('checkout main restores that branch state', true);
+  await bufEdit('volume 0.55', 'volume 0.6');
+  await page.waitForTimeout(900);
+  await page.fill('#commit-msg', 'ハットを上げる');
+  await page.click('#commit');
+  await page.waitForFunction(() => document.body.dataset.commits === '2', null, { timeout: 15000 });
+  await page.selectOption('#merge-from', 'idea');
+  await page.click('#merge');
+  await page.waitForFunction(
+    () =>
+      window.__forteGetText().includes('tempo 120bpm') &&
+      window.__forteGetText().includes('volume 0.6'),
+    null,
+    { timeout: 15000 }
+  );
+  check('merge combines disjoint edits from both branches', true);
+
   // 6) offline PWA: with the service worker active, the editor still boots,
   //    compiles and plays with the network cut
   await page.evaluate(() => navigator.serviceWorker.ready);
