@@ -165,14 +165,24 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   // --- commands -------------------------------------------------------------
+  // Panels steal focus from the text editor, so remember the last .forte
+  // document: "Forte: Beat Grid" must work while the arrangement has focus.
+  let lastForteFile: string | undefined;
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((e) => {
+      if (e?.document.languageId === 'forte') lastForteFile = e.document.fileName;
+    })
+  );
   const activeForteFile = (): string | undefined => {
     const doc = vscode.window.activeTextEditor?.document;
-    if (!doc || doc.languageId !== 'forte') {
-      vscode.window.showErrorMessage('Forte: open a .forte file first.');
-      return undefined;
+    if (doc?.languageId === 'forte') {
+      doc.save();
+      lastForteFile = doc.fileName;
+      return doc.fileName;
     }
-    doc.save();
-    return doc.fileName;
+    if (lastForteFile) return lastForteFile;
+    vscode.window.showErrorMessage('Forte: open a .forte file first.');
+    return undefined;
   };
 
   context.subscriptions.push(
