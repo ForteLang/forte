@@ -11,6 +11,7 @@ pub mod browser;
 pub mod calib;
 pub mod compile;
 pub mod diag;
+pub mod edit;
 #[cfg(not(target_family = "wasm"))]
 pub mod export;
 pub mod fmt;

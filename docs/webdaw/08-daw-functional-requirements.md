@@ -300,3 +300,10 @@ analyze panels (MTR-01..05) that no other DAW can honestly offer.
 - Studio (issue #135) scopes its phases against the GUI and TOOL rows
   of this document; its P0 CST spike is a prerequisite for every GUI
   row marked "projection".
+- **P0 spike status (2026-07)**: the lossless edit layer exists as
+  `fortelang::edit` / `forte edit` — span-anchored token splices with a
+  re-parse guard, covering set_tempo, set_pattern (drum grid / piano
+  roll write-back), move_place / move_play / add_place / remove_place
+  (arrangement), set_arg (inspector knobs) and set_section. Contract
+  tests assert byte-identity outside the splice, comment survival and
+  idempotence (`crates/fortelang/tests/edit.rs`).

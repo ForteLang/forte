@@ -30,11 +30,28 @@ pub enum Tok {
 pub struct Spanned {
     pub tok: Tok,
     pub pos: Pos,
+    /// Byte range of the token in the source, half-open. Trivia (whitespace,
+    /// comments) never becomes tokens, so the bytes BETWEEN token ranges are
+    /// exactly the trivia — the lossless edit layer (`edit`) splices token
+    /// ranges and leaves everything else untouched.
+    pub off: usize,
+    pub end: usize,
 }
 
 pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
     let mut out = Vec::new();
     let b: Vec<char> = src.chars().collect();
+    // byte offset of each char index (plus the end sentinel), so token
+    // char-index spans convert to byte spans without re-walking the source
+    let mut boff: Vec<usize> = Vec::with_capacity(b.len() + 1);
+    {
+        let mut o = 0usize;
+        for c in &b {
+            boff.push(o);
+            o += c.len_utf8();
+        }
+        boff.push(o);
+    }
     let mut i = 0usize;
     let mut line = 1u32;
     let mut col = 1u32;
@@ -44,10 +61,16 @@ pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
             Pos { line, col }
         };
     }
+    macro_rules! push {
+        ($tok:expr, $p:expr, $si:expr) => {
+            out.push(Spanned { tok: $tok, pos: $p, off: boff[$si], end: boff[i] })
+        };
+    }
 
     while i < b.len() {
         let c = b[i];
         let p = pos!();
+        let si = i;
         match c {
             ' ' | '\t' | '\r' => {
                 i += 1;
@@ -85,9 +108,9 @@ pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
                 }
             }
             '/' => {
-                out.push(Spanned { tok: Tok::Slash, pos: p });
                 i += 1;
                 col += 1;
+                push!(Tok::Slash, p, si);
             }
             '{' | '}' | '(' | ')' | ':' | ',' | '-' | '=' => {
                 let tok = match c {
@@ -100,19 +123,19 @@ pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
                     '-' => Tok::Minus,
                     _ => Tok::Eq,
                 };
-                out.push(Spanned { tok, pos: p });
                 i += 1;
                 col += 1;
+                push!(tok, p, si);
             }
             '.' if i + 1 < b.len() && b[i + 1] == '.' => {
-                out.push(Spanned { tok: Tok::DotDot, pos: p });
                 i += 2;
                 col += 2;
+                push!(Tok::DotDot, p, si);
             }
             '.' => {
-                out.push(Spanned { tok: Tok::Dot, pos: p });
                 i += 1;
                 col += 1;
+                push!(Tok::Dot, p, si);
             }
             '"' => {
                 let mut s = String::new();
@@ -131,7 +154,7 @@ pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
                     i += 1;
                     col += 1;
                 }
-                out.push(Spanned { tok: Tok::Str(s), pos: p });
+                push!(Tok::Str(s), p, si);
             }
             '`' => {
                 let mut s = String::new();
@@ -155,7 +178,7 @@ pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
                     s.push(b[i]);
                     i += 1;
                 }
-                out.push(Spanned { tok: Tok::Backtick(s), pos: p });
+                push!(Tok::Backtick(s), p, si);
             }
             '0'..='9' => {
                 let mut s = String::new();
@@ -179,7 +202,7 @@ pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
                     col += 1;
                 }
                 let unit = if unit.is_empty() { None } else { Some(unit) };
-                out.push(Spanned { tok: Tok::Num(n, unit), pos: p });
+                push!(Tok::Num(n, unit), p, si);
             }
             c if c.is_ascii_alphabetic() || c == '_' || c == '@' => {
                 let mut s = String::new();
@@ -190,7 +213,7 @@ pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
                     i += 1;
                     col += 1;
                 }
-                out.push(Spanned { tok: Tok::Ident(s), pos: p });
+                push!(Tok::Ident(s), p, si);
             }
             other => {
                 return Err(Diag::new(
@@ -201,6 +224,6 @@ pub fn lex(src: &str) -> Result<Vec<Spanned>, Diag> {
             }
         }
     }
-    out.push(Spanned { tok: Tok::Eof, pos: pos!() });
+    out.push(Spanned { tok: Tok::Eof, pos: pos!(), off: src.len(), end: src.len() });
     Ok(out)
 }

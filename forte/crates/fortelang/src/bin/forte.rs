@@ -208,6 +208,55 @@ fn main() -> ExitCode {
                 }
             }
         }
+        // `forte edit song.forte '<json-op>' [--write]` — lossless structured
+        // edits (the Studio GUI's write path). Prints the edited source to
+        // stdout unless --write rewrites the file in place.
+        Some("edit") if args.len() >= 3 => {
+            let path = &args[1];
+            let json = if args[2] == "-" {
+                let mut s = String::new();
+                use std::io::Read as _;
+                if let Err(e) = std::io::stdin().read_to_string(&mut s) {
+                    eprintln!("標準入力が読めません: {e}");
+                    return ExitCode::FAILURE;
+                }
+                s
+            } else {
+                args[2].clone()
+            };
+            let write = args.iter().any(|a| a == "--write");
+            let src = match load(path) {
+                Ok(s) => s,
+                Err(c) => return c,
+            };
+            let ops = match fortelang::edit::parse_ops(&json) {
+                Ok(o) => o,
+                Err(d) => {
+                    eprintln!("{path}:{d}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            match fortelang::edit::apply_ops(&src, &ops) {
+                Ok(out) => {
+                    if write {
+                        if out != src {
+                            if let Err(e) = std::fs::write(path, &out) {
+                                eprintln!("{path}: 書き込めません: {e}");
+                                return ExitCode::FAILURE;
+                            }
+                        }
+                        println!("edited : {path}({} 件の編集)", ops.len());
+                    } else {
+                        print!("{out}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(d) => {
+                    eprintln!("{path}:{d}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("lsp") => ExitCode::from(fortelang::lsp::run() as u8),
         #[cfg(not(target_family = "wasm"))]
         Some("repl") => ExitCode::from(fortelang::repl::run() as u8),
@@ -470,6 +519,7 @@ fn main() -> ExitCode {
             eprintln!("       forte upgrade               (forte コマンド自体を更新)");
             eprintln!("       forte complete bash|zsh     (Tab 補完: source <(forte complete bash))");
             eprintln!("       forte fmt   <song.forte> [--check]");
+            eprintln!("       forte edit  <song.forte> <JSON|-> [--write]  (構造編集: コメント/レイアウト保存のままトークンだけ置換)");
             eprintln!("       forte test  [PATH…] [--update]  (digest 固定の回帰テスト: forte-test.lock と照合)");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
             eprintln!("       forte analyze <song.forte> [--json] [--no-stems] [--against X.profile]  (聴取レポート + ジャンル目標との照合)");

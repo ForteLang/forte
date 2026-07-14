@@ -41,6 +41,14 @@ Adopts the process discipline of IEC 62304 (traceability from requirements → a
   OPFS persistence, startup/compile/playback with the network disconnected).
 - **`scripts/determinism_test.sh`** — Two-stage determinism gate (engine alone / via forte build).
   Both can be CI-verified as bit-identical across native x86_64 and wasm32-wasip1.
+- **`forte edit` (fortelang::edit)** — The Studio P0 lossless-edit spike (#135,
+  DAW-FR "GUI projection" rows): structured JSON operations (set_tempo,
+  set_pattern, move_place/move_play, add_place/remove_place, set_arg,
+  set_section) are applied as **minimal token splices** — the real parser
+  supplies `Pos` anchors, the lexer's byte spans locate the exact bytes, and
+  everything outside the edited tokens (comments, blank lines, layout) is
+  byte-identical by construction. Every result must re-parse or the edit is
+  refused. This is the write path a Studio GUI gesture goes through.
 - **Local Hub (`forte hub`)** — The first implementation of the fork-lineage registry.
   `publish` (snapshots a song/library including its imports; requires successful compilation),
   `fork` (**the only means of acquisition**; writes the provenance stamp `.forte-lineage.json`),
