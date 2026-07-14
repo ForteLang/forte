@@ -1,6 +1,10 @@
-// Forte Studio: LSP diagnostics, play/build, REPL, the read-only arrangement
-// view and song history (VCS). The compiler and the CLI
-// are the single source of truth — this is a thin shell around `forte`.
+// Forte Studio: LSP diagnostics, play/build, REPL, a drag-editable
+// arrangement view, a beat grid and song history (VCS). The compiler and the
+// CLI are the single source of truth — this is a thin shell around `forte`.
+// Architecture (ADR D-13): VS Code IS the Studio shell — git, GitHub, AI
+// assistants and terminals come from the host; this extension owns only what
+// is unique to Forte: the code↔GUI projections over the lossless edit layer
+// (`forte edit`), playback and the listening instruments.
 
 import { execFile } from 'child_process';
 import * as path from 'path';
@@ -212,8 +216,16 @@ export async function activate(context: vscode.ExtensionContext) {
       if (!file) return;
       openViz(context, file);
     }),
+    // --- beat grid: pattern literals as clickable step rows ------------------
+    vscode.commands.registerCommand('forte.showGrid', () => {
+      const file = activeForteFile();
+      if (!file) return;
+      openGrid(context, file);
+    }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (doc.languageId === 'forte' && vizPanel) refreshViz(doc.fileName);
+      if (doc.languageId !== 'forte') return;
+      if (vizPanel) refreshViz(doc.fileName);
+      if (gridPanel) refreshGrid(doc.fileName);
     })
   );
 
@@ -324,6 +336,78 @@ function ensureRepl(): vscode.Terminal {
 }
 
 let vizFile: string | undefined;
+let gridPanel: vscode.WebviewPanel | undefined;
+let gridFile: string | undefined;
+
+/** Apply a structured edit through the lossless edit layer and save.
+ *  The op goes through the DOCUMENT (WorkspaceEdit), so it lands on the
+ *  editor's undo stack like any keystroke — Cmd+Z undoes a GUI gesture. */
+async function applyEditOp(file: string, op: unknown): Promise<void> {
+  const doc = await vscode.workspace.openTextDocument(file);
+  if (doc.isDirty) await doc.save();
+  const out = await new Promise<string>((resolve, reject) => {
+    execFile(
+      fortePath(),
+      ['edit', file, JSON.stringify(op)],
+      { maxBuffer: 16 * 1024 * 1024 },
+      (err, stdout, stderr) => (err ? reject(new Error((stderr || String(err)).trim())) : resolve(stdout))
+    );
+  });
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(
+    doc.uri,
+    new vscode.Range(doc.positionAt(0), doc.positionAt(doc.getText().length)),
+    out
+  );
+  await vscode.workspace.applyEdit(edit);
+  await doc.save(); // save → the panels refresh via onDidSaveTextDocument
+}
+
+function refreshGrid(file: string) {
+  gridFile = file;
+  execFile(fortePath(), ['edit', file, '--sites'], { maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+    if (!gridPanel) return;
+    if (err) {
+      gridPanel.webview.postMessage({ kind: 'error', message: stderr || String(err) });
+    } else {
+      gridPanel.webview.postMessage({ kind: 'sites', data: JSON.parse(stdout) });
+    }
+  });
+}
+
+function openGrid(context: vscode.ExtensionContext, file: string) {
+  if (!gridPanel) {
+    gridPanel = vscode.window.createWebviewPanel(
+      'forteGrid',
+      'Forte: Beat Grid',
+      vscode.ViewColumn.Beside,
+      { enableScripts: true, retainContextWhenHidden: true }
+    );
+    gridPanel.onDidDispose(() => (gridPanel = undefined), null, context.subscriptions);
+    gridPanel.webview.onDidReceiveMessage(
+      async (m) => {
+        if (m?.kind === 'edit' && gridFile) {
+          try {
+            await applyEditOp(gridFile, m.op);
+          } catch (e) {
+            vscode.window.showErrorMessage(`Forte: ${(e as Error).message}`);
+            refreshGrid(gridFile); // resync the stale view
+          }
+        } else if (m?.kind === 'jump' && typeof m.line === 'number' && m.line >= 1 && gridFile) {
+          const doc = await vscode.workspace.openTextDocument(gridFile);
+          const ed = await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One });
+          const pos = new vscode.Position(m.line - 1, 0);
+          ed.selection = new vscode.Selection(pos, pos);
+          ed.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+        }
+      },
+      null,
+      context.subscriptions
+    );
+    gridPanel.webview.html = GRID_HTML;
+  }
+  refreshGrid(file);
+}
 
 function refreshViz(file: string) {
   vizFile = file;
@@ -346,10 +430,20 @@ function openViz(context: vscode.ExtensionContext, file: string) {
       { enableScripts: true, retainContextWhenHidden: true }
     );
     vizPanel.onDidDispose(() => (vizPanel = undefined), null, context.subscriptions);
-    // code-jump: a click on a clip/lane reveals its source line
+    // clicks jump to source; drags re-place the play through the edit layer
     vizPanel.webview.onDidReceiveMessage(
       async (m) => {
-        if (m?.kind !== 'jump' || typeof m.line !== 'number' || m.line < 1 || !vizFile) return;
+        if (!vizFile) return;
+        if (m?.kind === 'move' && typeof m.line === 'number' && Array.isArray(m.bars)) {
+          try {
+            await applyEditOp(vizFile, { op: 'move_at_line', line: m.line, bars: m.bars });
+          } catch (e) {
+            vscode.window.showErrorMessage(`Forte: ${(e as Error).message}`);
+            refreshViz(vizFile);
+          }
+          return;
+        }
+        if (m?.kind !== 'jump' || typeof m.line !== 'number' || m.line < 1) return;
         const doc = await vscode.workspace.openTextDocument(vizFile);
         const ed = await vscode.window.showTextDocument(doc, {
           viewColumn: vscode.ViewColumn.One,
@@ -396,8 +490,56 @@ window.addEventListener('message', (e) => {
   else if (m.kind === 'error') { document.getElementById('err').textContent = m.message; }
 });
 new ResizeObserver(draw).observe(canvas);
-// lane header click → that track's piano roll; clip/lane click → code jump
+// lane header click → piano roll; clip click → code jump; clip DRAG →
+// re-place the play through the edit layer (bar-snapped, dashed ghost)
+let ghost = null;   // {track, start, duration}
+let drag = null;    // {track, clip, x0, moved, snapped}
+let dragJustEnded = false;
+function hitClip(x, y) {
+  if (!data || !data.tracks?.length || mode === 'piano') return null;
+  const rulerH = 16, headerW = 92;
+  const laneH = (canvas.clientHeight - rulerH) / data.tracks.length;
+  const i = Math.floor((y - rulerH) / laneH);
+  const t = data.tracks[i];
+  if (!t || x < headerW) return null;
+  const span = Math.max(data.lengthBeats, data.beatsPerBar);
+  const beats = ((x - headerW) / (canvas.clientWidth - headerW)) * span;
+  const clip = t.clips.find((c) => beats >= c.start && beats <= c.start + c.duration);
+  return clip ? { track: i, clip } : null;
+}
+canvas.addEventListener('mousedown', (ev) => {
+  const rect = canvas.getBoundingClientRect();
+  const hit = hitClip(ev.clientX - rect.left, ev.clientY - rect.top);
+  if (hit) drag = { ...hit, x0: ev.clientX, moved: false };
+});
+window.addEventListener('mousemove', (ev) => {
+  if (!drag || !data) return;
+  const dx = ev.clientX - drag.x0;
+  if (!drag.moved && Math.abs(dx) < 4) return;
+  drag.moved = true;
+  const headerW = 92;
+  const span = Math.max(data.lengthBeats, data.beatsPerBar);
+  const pxPerBeat = (canvas.clientWidth - headerW) / span;
+  const bpb = data.beatsPerBar;
+  drag.snapped = Math.max(0, Math.round((drag.clip.start + dx / pxPerBeat) / bpb)) * bpb;
+  ghost = { track: drag.track, start: drag.snapped, duration: drag.clip.duration };
+  draw();
+});
+window.addEventListener('mouseup', () => {
+  if (!drag) return;
+  const { clip, moved, snapped } = drag;
+  drag = null;
+  dragJustEnded = moved;
+  ghost = null;
+  draw();
+  if (!moved || snapped === undefined || snapped === clip.start || !clip.line) return;
+  const bpb = data.beatsPerBar;
+  const a = Math.round(snapped / bpb) + 1;
+  const durBars = Math.max(1, Math.round(clip.duration / bpb));
+  vscodeApi.postMessage({ kind: 'move', line: clip.line, bars: [a, a + durBars - 1] });
+});
 canvas.addEventListener('click', (ev) => {
+  if (dragJustEnded) { dragJustEnded = false; return; }
   if (!data || !data.tracks?.length) return;
   const rect = canvas.getBoundingClientRect();
   const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
@@ -461,6 +603,14 @@ function draw() {
       }
     }
   });
+  if (ghost) {
+    const y = rulerH + ghost.track * laneH;
+    g.save();
+    g.setLineDash([4, 3]);
+    g.strokeStyle = '#e8b34c';
+    g.strokeRect(bx(ghost.start) + 0.5, y + 2.5, bx(ghost.start + ghost.duration) - bx(ghost.start) - 1, laneH - 6);
+    g.restore();
+  }
 }
 // Piano roll of one track: pitch rows over time, loops unrolled, velocity
 // as opacity — the same projection web/viz.js draws.
@@ -511,6 +661,107 @@ function drawPianoRoll(w, h) {
     g.fillRect(x0, py(p) + 0.5, nw, Math.max(1.5, rowH - 1));
   }
 }
+</script></body></html>`;
+
+// Beat grid: every `beat` literal as a row of step cells. A click cycles
+// - → x → X → . and posts the exact set_pattern op back; the extension runs
+// it through `forte edit`, so the diff touches only the literal's contents.
+const GRID_HTML = /* html */ `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  html, body { margin: 0; background: #14161b; color: #d7dae0;
+    font: 12px/1.6 ui-monospace, monospace; }
+  #wrap { padding: 10px 14px; }
+  #err { color: #e06c75; white-space: pre-wrap; }
+  .hint { color: #565d69; }
+  .row { margin-bottom: 10px; }
+  .label { display: block; color: #8a919e; margin-bottom: 3px; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .label:hover { color: #d7dae0; }
+  .cells { display: flex; gap: 2px; flex-wrap: wrap; }
+  .cells button { padding: 0; width: 18px; height: 18px; flex: none;
+    font: 10px ui-monospace, monospace; border-radius: 3px;
+    border: 1px solid #3a3f4b; background: #22262e; color: #6a7280; cursor: pointer; }
+  .cells button:nth-child(4n+1):not(:first-child) { margin-left: 5px; }
+  .cells button.hit { background: #e8b34c; color: #16181d; border-color: #e8b34c; }
+  .cells button.acc { background: #f6cd7c; color: #16181d; border-color: #f6cd7c; font-weight: 700; }
+  .cells button.ghost { background: #5a4a2a; color: #d7dae0; border-color: #6a5a33; }
+</style></head>
+<body><div id="wrap"><div class="hint">—</div></div><div id="err"></div>
+<script>
+const vscodeApi = acquireVsCodeApi();
+const STEP_CLASS = { X: 'acc', x: 'hit', '.': 'ghost', '-': '' };
+const STEP_NEXT = { '-': 'x', x: 'X', X: '.', '.': '-' };
+function parseSteps(raw) {
+  const s = raw.replace(/\\s+/g, '');
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    let t = s[i];
+    if (s[i + 1] === '*') {
+      let j = i + 2, d = '';
+      while (j < s.length && /\\d/.test(s[j])) d += s[j++];
+      t += '*' + d;
+      i = j - 1;
+    }
+    out.push(t);
+  }
+  return out;
+}
+function cycle(t) {
+  const head = STEP_NEXT[t[0]] ?? 'x';
+  return head === '-' ? '-' : head + t.slice(1);
+}
+function join(steps) {
+  if (steps.length % 4 !== 0) return steps.join('');
+  const groups = [];
+  for (let i = 0; i < steps.length; i += 4) groups.push(steps.slice(i, i + 4).join(''));
+  return groups.join(' ');
+}
+window.addEventListener('message', (e) => {
+  const m = e.data;
+  if (m.kind === 'error') { document.getElementById('err').textContent = m.message; return; }
+  if (m.kind !== 'sites') return;
+  document.getElementById('err').textContent = '';
+  const el = document.getElementById('wrap');
+  el.textContent = '';
+  const rows = m.data.filter((s) => s.kind === 'beat' && !s.raw.trim().startsWith('euclid('));
+  if (!rows.length) {
+    el.innerHTML = '<div class="hint">beat リテラルがありません</div>';
+    return;
+  }
+  for (const site of rows) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const label = document.createElement('span');
+    label.className = 'label';
+    const where = site.path?.length ? site.path.join('/') + ' · ' : '';
+    label.textContent = site.let_name
+      ? where + 'let ' + site.let_name
+      : where + site.track + (site.at ? ' @' + site.at : '');
+    label.title = site.line + ' 行目へジャンプ';
+    label.onclick = () => vscodeApi.postMessage({ kind: 'jump', line: site.line });
+    row.appendChild(label);
+    const cells = document.createElement('div');
+    cells.className = 'cells';
+    const steps = parseSteps(site.raw);
+    steps.forEach((step, i) => {
+      const b = document.createElement('button');
+      b.textContent = step.length > 1 ? step[0] + '*' : step === '-' ? '' : step;
+      b.title = step;
+      b.className = STEP_CLASS[step[0]] ?? '';
+      b.onclick = () => {
+        const next = steps.slice();
+        next[i] = cycle(step);
+        const op = { op: 'set_pattern', path: site.path ?? [], value: join(next) };
+        if (site.let_name) op.let_name = site.let_name;
+        else { op.track = site.track; op.play = site.play; }
+        vscodeApi.postMessage({ kind: 'edit', op });
+      };
+      cells.appendChild(b);
+    });
+    row.appendChild(cells);
+    el.appendChild(row);
+  }
+});
 </script></body></html>`;
 
 export async function deactivate() {

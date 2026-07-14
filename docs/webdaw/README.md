@@ -27,8 +27,14 @@ Adopts the process discipline of IEC 62304 (traceability from requirements → a
   `night-parade`: prog/section/send-return, `handmade`: **instruments defined in code
   via the `device` syntax and `import`-ed from the `songs/devices/warm.forte` library** —
   the minimal proof that synths are forkable code and can circulate as modules).
-- **`editor/vscode-forte`** — VSCode extension: syntax highlighting, real-time diagnostics
-  via `forte lsp`, Play (hot reload) / Build / Stop commands.
+- **`editor/vscode-forte`** — **Forte Studio (ADR D-13: VS Code IS the Studio
+  shell)**: syntax highlighting, real-time diagnostics via `forte lsp`, Play
+  (hot reload) / Build / Stop, REPL, History (VCS) and Blocks sidebars with
+  one-click audition, a **drag-editable arrangement view** (drop = bar-snapped
+  `move_at_line` through the lossless edit layer, on the editor's undo stack)
+  and a **Beat Grid panel** (`forte edit --sites` → clickable step rows →
+  `set_pattern`). Git GUI, GitHub/PRs, AI assistants and terminals come from
+  VS Code itself — the extension owns only what is unique to Forte.
 - **`web/` + `crates/forteweb`** — Browser editor prototype:
   wasm on the main thread provides as-you-type diagnostics, build proofs, and visualization
   data; wasm inside the AudioWorklet handles playback plus hot reload. Read-only arrange

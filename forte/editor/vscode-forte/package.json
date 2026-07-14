@@ -1,8 +1,8 @@
 {
   "name": "forte-studio",
   "displayName": "Forte Studio",
-  "description": "Compose music as code: diagnostics, play/build and song history — all inside VSCode.",
-  "version": "0.2.0",
+  "description": "Compose music as code inside VS Code: diagnostics, play/build, a drag-editable arrangement, a beat grid, blocks and song history. VS Code supplies git, GitHub and your AI pair.",
+  "version": "0.3.0",
   "publisher": "forte",
   "license": "MIT",
   "engines": {
@@ -81,6 +81,10 @@
       {
         "command": "forte.showArrangement",
         "title": "Forte: Show Arrangement"
+      },
+      {
+        "command": "forte.showGrid",
+        "title": "Forte: Beat Grid"
       },
       {
         "command": "forte.commit",
