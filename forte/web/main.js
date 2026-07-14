@@ -406,6 +406,73 @@ async function refreshFileList() {
   for (const n of locals) add(n, `● ${n}`);
   for (const n of BUILTINS) if (!locals.includes(n)) add(n, `demo: ${n}`);
   sel.value = currentName;
+  await refreshTree(locals);
+}
+
+// ---- file tree (the project explorer on the left) -----------------------------
+// Nested paths render as indented rows under their directory; the current
+// file is highlighted; .frec takes are listed but not openable (audio).
+async function refreshTree(locals) {
+  const el = $('tree');
+  if (!el) return;
+  locals = locals ?? (await localNames());
+  const assets = store ? await store.list('.frec') : [];
+  el.textContent = '';
+  const section = (label) => {
+    const d = document.createElement('div');
+    d.className = 'sec';
+    d.textContent = label;
+    el.appendChild(d);
+  };
+  const INDENT = 12;
+  const fileRow = (path, { asset = false, demo = false } = {}) => {
+    const depth = path.split('/').length - 1;
+    const d = document.createElement('div');
+    d.className = 'f' + (!asset && path === currentName ? ' cur' : '') + (asset ? ' asset' : '');
+    d.dataset.file = path;
+    d.style.paddingLeft = `${12 + (depth + (asset ? 0 : 0)) * INDENT}px`;
+    d.textContent = `${asset ? '📼' : demo ? '♪' : '●'} ${path.split('/').pop()}`;
+    d.title = path;
+    if (!asset) d.onclick = () => loadSong(path);
+    el.appendChild(d);
+  };
+  const renderPaths = (paths, opts) => {
+    let lastDirs = [];
+    for (const p of paths) {
+      const dirs = p.split('/').slice(0, -1);
+      for (let i = 0; i < dirs.length; i++) {
+        if (lastDirs[i] !== dirs[i]) {
+          const d = document.createElement('div');
+          d.className = 'dir';
+          d.style.paddingLeft = `${12 + i * INDENT}px`;
+          d.textContent = `${dirs[i]}/`;
+          el.appendChild(d);
+          lastDirs = lastDirs.slice(0, i); // deeper levels are new too
+        }
+      }
+      lastDirs = dirs;
+      fileRow(p, opts);
+    }
+  };
+  if (locals.length || assets.length) {
+    section('local');
+    renderPaths([...locals, ...assets].sort(), {});
+    // assets got the local marker: restyle them
+    for (const a of assets) {
+      const row = el.querySelector(`[data-file="${CSS.escape(a)}"]`);
+      if (row) {
+        row.className = 'f asset';
+        row.textContent = `📼 ${a.split('/').pop()}`;
+        row.onclick = null;
+      }
+    }
+  }
+  const demos = BUILTINS.filter((n) => !locals.includes(n));
+  if (demos.length) {
+    section('demo');
+    renderPaths(demos, { demo: true });
+  }
+  document.body.dataset.treeFiles = String(el.querySelectorAll('.f').length);
 }
 
 async function loadSong(name) {
@@ -420,6 +487,7 @@ async function loadSong(name) {
   }
   setText(text);
   recompile(0);
+  refreshFileList(); // dropdown value + tree highlight follow the open file
 }
 
 let saveTimer;

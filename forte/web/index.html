@@ -28,6 +28,23 @@
   select { background: #2b2f38; color: #d7dae0; border: 1px solid #3a3f4b; border-radius: 6px; padding: 5px 8px; font-size: 13px; max-width: 210px; }
   #saved { font-size: 11px; color: #7fbf7f; min-width: 46px; }
   #wrap { flex: 1; display: flex; min-height: 0; }
+  #tree {
+    width: 208px; flex: none; border-right: 1px solid #2b2f38; background: #1a1d23;
+    overflow: auto; padding: 6px 0 10px; font: 12px/1.75 ui-monospace, monospace;
+  }
+  #tree .sec {
+    margin: 8px 12px 2px; color: #8a919e; font-size: 10px;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  #tree .dir { color: #565d69; padding: 0 12px; white-space: nowrap; }
+  #tree .f {
+    padding: 0 12px; color: #a9b0bb; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #tree .f:hover { background: #22262e; }
+  #tree .f.cur { background: #2b2f38; color: #e8b34c; }
+  #tree .f.asset { color: #6a7280; cursor: default; }
+  #tree .f.asset:hover { background: none; }
   #editor-host { flex: 1; min-width: 0; }
   textarea#fallback {
     width: 100%; height: 100%; resize: none; border: 0; outline: none;
@@ -93,6 +110,7 @@
   <span id="status">loading…</span>
 </header>
 <div id="wrap">
+  <div id="tree" title="プロジェクトのファイル。クリックで開きます(現在のファイルは黄色)"></div>
   <div id="editor-host"><textarea id="fallback" spellcheck="false"></textarea></div>
   <div id="side">
     <h2>Diagnostics</h2>

@@ -304,6 +304,21 @@ try {
   check('offline PWA: boots, compiles and plays with network cut', offlinePlays);
   await page.context().setOffline(false);
 
+  // 6.5) the file tree: local + demo songs listed, click opens the file and
+  // the highlight follows
+  const treeFiles = await page.evaluate(() => Number(document.body.dataset.treeFiles ?? 0));
+  check('file tree lists the project', treeFiles >= 4, `${treeFiles} entries`);
+  await page.click('#tree [data-file="slow-circles.forte"]');
+  await page.waitForFunction(
+    () => window.__forteGetText().includes('Slow Circles'),
+    null,
+    { timeout: 15000 }
+  );
+  const treeCur = await page.evaluate(
+    () => document.querySelector('#tree .f.cur')?.dataset.file
+  );
+  check('tree click opens the song and highlights it', treeCur === 'slow-circles.forte', treeCur);
+
   // 7) imports in the browser: handmade.forte pulls its instruments from
   //    devices/warm.forte and builds bit-identical to the native CLI
   await page.selectOption('#file', 'handmade.forte');
