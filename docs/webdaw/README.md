@@ -13,6 +13,7 @@ Adopts the process discipline of IEC 62304 (traceability from requirements → a
 | 05 | [detailed-design](05-detailed-design.md) | Detailed design (SDD): language sketch, engine, recording, Hub |
 | 06 | [roadmap](06-roadmap.md) | Development roadmap (Phase 0–5) + risk register |
 | 07 | [determinism-spike](07-determinism-spike.md) | Phase 0.4 spike results: native/wasm bit-identical rendering achieved |
+| 08 | [daw-functional-requirements](08-daw-functional-requirements.md) | The full DAW operation surface (survey of 6 major DAWs), every operation dispositioned: CODE / CODE-GAP / GUI / TOOL / NO — the requirements base for Forte Studio (#135) |
 | spec | [forte-lang-v1](spec/forte-lang-v1.md) | **Language specification v1 (implementation-conformant): grammar EBNF, semantics, diagnostics catalog, determinism contract** |
 | spec | [forte-lang-v0](spec/forte-lang-v0.md) | Language specification v0 draft (design intent, future concepts) |
 
