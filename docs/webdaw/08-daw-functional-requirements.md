@@ -306,4 +306,8 @@ analyze panels (MTR-01..05) that no other DAW can honestly offer.
   roll write-back), move_place / move_play / add_place / remove_place
   (arrangement), set_arg (inspector knobs) and set_section. Contract
   tests assert byte-identity outside the splice, comment survival and
-  idempotence (`crates/fortelang/tests/edit.rs`).
+  idempotence (`crates/fortelang/tests/edit.rs`). The first live GUI
+  projection is the web editor's **beat grid** (NOTE-02): `beat`
+  literals render as clickable step rows (fw_pattern_sites) and every
+  click writes back through fw_edit — verified end-to-end in Chromium
+  (grid renders, one-line write-back, cycle returns byte-identical).

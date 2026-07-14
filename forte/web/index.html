@@ -41,6 +41,23 @@
   }
   #side h2 { font-size: 11px; letter-spacing: 1px; color: #8a919e; margin: 12px 14px 6px; text-transform: uppercase; }
   #diags { flex: 1; overflow: auto; padding: 0 14px 10px; font: 12px/1.5 ui-monospace, monospace; }
+  #grid { padding: 0 14px 10px; max-height: 210px; overflow: auto; flex: none; }
+  #grid .hint { color: #565d69; font-size: 12px; }
+  .grid-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .grid-label {
+    font: 11px ui-monospace, monospace; color: #8a919e; width: 104px; flex: none;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+  }
+  .grid-label:hover { color: #d7dae0; }
+  .grid-cells { display: flex; gap: 2px; flex-wrap: wrap; }
+  .grid-cells button {
+    padding: 0; width: 18px; height: 18px; font: 10px ui-monospace, monospace;
+    border-radius: 3px; border: 1px solid #3a3f4b; background: #22262e; color: #6a7280;
+  }
+  .grid-cells button:nth-child(4n+1):not(:first-child) { margin-left: 5px; }
+  .grid-cells button.hit { background: #e8b34c; color: #16181d; border-color: #e8b34c; }
+  .grid-cells button.acc { background: #f6cd7c; color: #16181d; border-color: #f6cd7c; font-weight: 700; }
+  .grid-cells button.ghost { background: #5a4a2a; color: #d7dae0; border-color: #6a5a33; }
   #diags .d { color: #e06c75; margin-bottom: 8px; cursor: pointer; }
   #diags .ok { color: #7fbf7f; }
   #vcs { padding: 0 14px 10px; font: 12px/1.5 ui-monospace, monospace; max-height: 220px; overflow: auto; }
@@ -78,6 +95,8 @@
   <div id="side">
     <h2>Diagnostics</h2>
     <div id="diags"><div class="ok">—</div></div>
+    <h2 title="beat リテラルをそのまま編集できるグリッド。クリックで - → x → X → . を巡回し、コードに最小diffで書き戻されます">Beat grid</h2>
+    <div id="grid"><div class="hint">—</div></div>
     <h2>History</h2>
     <div id="vcs">
       <div id="vcs-bar">

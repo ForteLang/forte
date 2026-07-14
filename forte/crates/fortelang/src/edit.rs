@@ -621,6 +621,85 @@ fn resolve_body<'f>(file: &'f FileAst, path: &[String]) -> Result<(&'f SongAst, 
     Ok((body, pos))
 }
 
+// ------------------------------------------------------------ read side
+
+/// One editable music literal in the source — what a grid/roll GUI binds to.
+/// `path`/`track`/`play` (or `let_name`) are exactly the coordinates the
+/// corresponding `set_pattern` op takes, so a GUI can echo them back verbatim.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PatternSite {
+    pub path: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub let_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub play: Option<usize>,
+    /// "beat" | "notes" | "prog"
+    pub kind: String,
+    /// The literal's current contents (between the backticks).
+    pub raw: String,
+    /// 1-based source line of the literal (for editor code-jumps).
+    pub line: u32,
+    /// Where the play sits: "a..b" or a section name (lets have none).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at: Option<String>,
+}
+
+/// List every editable pattern literal with the coordinates `set_pattern`
+/// expects. The read side of the GUI round-trip.
+pub fn pattern_sites(src: &str) -> Result<Vec<PatternSite>, Diag> {
+    let file = parse(src).map_err(|mut ds| ds.remove(0))?;
+    let mut out = Vec::new();
+    if let Some(s) = &file.song {
+        walk_sites(s, &mut Vec::new(), &mut out);
+    }
+    for b in &file.blocks {
+        let mut path = vec![b.name.clone()];
+        walk_sites(&b.body, &mut path, &mut out);
+    }
+    Ok(out)
+}
+
+fn walk_sites(body: &SongAst, path: &mut Vec<String>, out: &mut Vec<PatternSite>) {
+    for l in &body.lets {
+        out.push(PatternSite {
+            path: path.clone(),
+            let_name: Some(l.name.clone()),
+            track: None,
+            play: None,
+            kind: l.value.kind.clone(),
+            raw: l.value.raw.clone(),
+            line: l.value.pos.line,
+            at: None,
+        });
+    }
+    for t in &body.tracks {
+        for (i, p) in t.plays.iter().enumerate() {
+            if let PatternRef::Lit(lit) = &p.pattern {
+                out.push(PatternSite {
+                    path: path.clone(),
+                    let_name: None,
+                    track: Some(t.name.clone()),
+                    play: Some(i),
+                    kind: lit.kind.clone(),
+                    raw: lit.raw.clone(),
+                    line: lit.pos.line,
+                    at: Some(match &p.at {
+                        AtRef::Bars(a, b) => format!("{a}..{b}"),
+                        AtRef::Section(s, _) => s.clone(),
+                    }),
+                });
+            }
+        }
+    }
+    for b in &body.blocks {
+        path.push(b.name.clone());
+        walk_sites(&b.body, path, out);
+        path.pop();
+    }
+}
+
 fn splice(src: &str, from: usize, to: usize, text: &str) -> String {
     let mut out = String::with_capacity(src.len() + text.len());
     out.push_str(&src[..from]);

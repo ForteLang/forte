@@ -32,6 +32,7 @@ pub struct Ctx {
     diags_json: Vec<u8>,
     viz_json: Vec<u8>,
     semdiff_out: Vec<u8>,
+    edit_out: Vec<u8>,
     out_l: Vec<f32>,
     out_r: Vec<f32>,
     prev_tracks: usize,
@@ -111,6 +112,7 @@ pub extern "C" fn fw_new(sample_rate: f32) -> *mut Ctx {
         diags_json: b"[]".to_vec(),
         viz_json: b"null".to_vec(),
         semdiff_out: Vec::new(),
+        edit_out: Vec::new(),
         out_l: vec![0.0; MAX_FRAMES],
         out_r: vec![0.0; MAX_FRAMES],
         prev_tracks: 0,
@@ -339,6 +341,74 @@ pub unsafe extern "C" fn fw_semdiff_ptr(ptr: *mut Ctx) -> *const u8 {
 #[no_mangle]
 pub unsafe extern "C" fn fw_semdiff_len(ptr: *mut Ctx) -> usize {
     ctx(ptr).semdiff_out.len()
+}
+
+// ---- lossless structured edits (Studio P0, issue #135) -----------------------
+
+/// Apply `fortelang::edit` ops. Source: [`fw_src_prepare`]; ops JSON (one
+/// object or an array): the staging buffer ([`fw_modules_prepare`]).
+/// Returns 0 (edited source via `fw_edit_ptr/len`) or -1 (error message in
+/// the same buffer). Comments and layout outside the edited tokens survive
+/// byte-for-byte — this is the GUI's write path to the code.
+#[no_mangle]
+pub unsafe extern "C" fn fw_edit(ptr: *mut Ctx) -> i32 {
+    let c = ctx(ptr);
+    let (src, ops_json) = match (std::str::from_utf8(&c.src), std::str::from_utf8(&c.stage)) {
+        (Ok(s), Ok(o)) => (s, o),
+        _ => {
+            c.edit_out = b"invalid utf-8".to_vec();
+            return -1;
+        }
+    };
+    match fortelang::edit::parse_ops(ops_json)
+        .and_then(|ops| fortelang::edit::apply_ops(src, &ops))
+    {
+        Ok(out) => {
+            c.edit_out = out.into_bytes();
+            0
+        }
+        Err(d) => {
+            c.edit_out = d.to_string().into_bytes();
+            -1
+        }
+    }
+}
+
+/// Editable music literals of the staged source ([`fw_src_prepare`]) as a
+/// JSON array of sites — each carries the exact coordinates its
+/// `set_pattern` op takes. Returns the site count (JSON via
+/// `fw_edit_ptr/len`) or -1 (error message in the same buffer).
+#[no_mangle]
+pub unsafe extern "C" fn fw_pattern_sites(ptr: *mut Ctx) -> i32 {
+    let c = ctx(ptr);
+    let src = match std::str::from_utf8(&c.src) {
+        Ok(s) => s,
+        Err(_) => {
+            c.edit_out = b"invalid utf-8".to_vec();
+            return -1;
+        }
+    };
+    match fortelang::edit::pattern_sites(src) {
+        Ok(sites) => {
+            let n = sites.len() as i32;
+            c.edit_out = serde_json::to_vec(&sites).unwrap_or_else(|_| b"[]".to_vec());
+            n
+        }
+        Err(d) => {
+            c.edit_out = d.to_string().into_bytes();
+            -1
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_edit_ptr(ptr: *mut Ctx) -> *const u8 {
+    ctx(ptr).edit_out.as_ptr()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_edit_len(ptr: *mut Ctx) -> usize {
+    ctx(ptr).edit_out.len()
 }
 
 #[no_mangle]

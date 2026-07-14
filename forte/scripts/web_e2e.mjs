@@ -10,8 +10,13 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 
-const NATIVE_DIGEST = '1f1e8e0e873a42fc'; // forte build packages/essentials_0.6.0/songs/first-light.forte
-const NATIVE_DIGEST_HANDMADE = 'd66a3103bcf1cad1'; // forte build packages/essentials_0.6.0/songs/handmade.forte
+// forte build packages/essentials_0.6.0/songs/first-light.forte
+// (rebaselined 2026-07 with the prisma unison/spread params — #126)
+const NATIVE_DIGEST = '9716a94698961fbd';
+// forte build packages/essentials_0.6.0/songs/handmade.forte
+// (rebaselined 2026-07: prisma gained unison/spread params — #126 — which
+// shifted every prisma song's digest; forte-test.lock moved with it)
+const NATIVE_DIGEST_HANDMADE = 'a7827674a4035229';
 const PORT = 8329;
 const ROOT = new URL('../..', import.meta.url).pathname;
 
@@ -143,6 +148,32 @@ try {
     return (performance.now() - t0) / 2;
   });
   check('edit→compile under 1s in the browser', compileMs < 1000, `${compileMs.toFixed(0)}ms per compile`);
+
+  // 4.7) the beat grid (Studio P0, #135): rows render from the song's beat
+  // literals, and a cell click round-trips through the wasm edit layer into
+  // the code — touching exactly the literal, nothing else
+  const gridRows = await page.evaluate(() => Number(document.body.dataset.gridRows ?? 0));
+  check('beat grid renders rows', gridRows >= 3, `${gridRows} rows`);
+  const gridBefore = await page.evaluate(() => window.__forteGetText());
+  const cell = '#grid .grid-row:first-child .grid-cells button:first-child';
+  await page.click(cell); // kick step 1: x → X (accent)
+  await page.waitForFunction(
+    () => window.__forteGetText().includes('X--- x--- x-x- x---'),
+    null,
+    { timeout: 15000 }
+  );
+  const gridAfter = await page.evaluate(() => window.__forteGetText());
+  const b = gridBefore.split('\n');
+  const a = gridAfter.split('\n');
+  const changed = a.filter((l, i) => l !== b[i]).length;
+  check('grid click writes back exactly one line', a.length === b.length && changed === 1, `${changed} lines changed`);
+  for (let i = 0; i < 3; i++) {
+    // X → . → - → x: three more clicks cycle the cell back home
+    await page.click(cell);
+    await page.waitForTimeout(300);
+  }
+  const gridRestored = await page.evaluate(() => window.__forteGetText());
+  check('grid cycle returns to the original pattern', gridRestored === gridBefore);
 
   // 5) local-first: edits autosave to OPFS and survive a reload
   await page.evaluate(async () => {

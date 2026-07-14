@@ -625,6 +625,116 @@ async function calibrate() {
   status(`較正完了: 往復 ${((rtl / 48000) * 1000).toFixed(1)}ms (信頼度 ${conf.toFixed(2)}) — 以後のテイクに記録されます`);
 }
 
+// ---- beat grid: the first GUI projection over the code (Studio P0, #135) -----
+// The grid renders `beat` literals as clickable step rows and writes each
+// click back through the wasm edit layer (fw_edit → fortelang::edit): the
+// diff touches only the literal's contents, comments and layout survive.
+function wasmText(p, l) {
+  return new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, p, l));
+}
+function stageSrc(text) {
+  const bytes = new TextEncoder().encode(text);
+  const ptr = main.e.fw_src_prepare(main.ctx, bytes.length);
+  new Uint8Array(main.e.memory.buffer, ptr, bytes.length).set(bytes);
+}
+function stageJson(json) {
+  const bytes = new TextEncoder().encode(json);
+  const ptr = main.e.fw_modules_prepare(main.ctx, bytes.length);
+  new Uint8Array(main.e.memory.buffer, ptr, bytes.length).set(bytes);
+}
+
+function applyEdit(op) {
+  stageSrc(getText());
+  stageJson(JSON.stringify(op));
+  const r = main.e.fw_edit(main.ctx);
+  const out = wasmText(main.e.fw_edit_ptr(main.ctx), main.e.fw_edit_len(main.ctx));
+  if (r !== 0) {
+    status(`edit: ${out}`);
+    return false;
+  }
+  setText(out); // Monaco fires onChange → autosave + recompile
+  autosave(); // the plain-textarea fallback does not
+  recompile(0);
+  return true;
+}
+
+// one step per hit/rest char, keeping `*N` ratchet suffixes attached
+function parseBeatSteps(raw) {
+  const s = raw.replace(/\s+/g, '');
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    let t = s[i];
+    if (s[i + 1] === '*') {
+      let j = i + 2, d = '';
+      while (j < s.length && /\d/.test(s[j])) d += s[j++];
+      t += `*${d}`;
+      i = j - 1;
+    }
+    out.push(t);
+  }
+  return out;
+}
+const STEP_CLASS = { X: 'acc', x: 'hit', '.': 'ghost', '-': 'rest' };
+const STEP_NEXT = { '-': 'x', x: 'X', X: '.', '.': '-' };
+function cycleStep(t) {
+  const head = STEP_NEXT[t[0]] ?? 'x';
+  return head === '-' ? '-' : head + t.slice(1); // rests cannot ratchet
+}
+function joinSteps(steps) {
+  if (steps.length % 4 !== 0) return steps.join('');
+  const groups = [];
+  for (let i = 0; i < steps.length; i += 4) groups.push(steps.slice(i, i + 4).join(''));
+  return groups.join(' ');
+}
+
+function refreshGrid() {
+  const el = $('grid');
+  stageSrc(getText());
+  const n = main.e.fw_pattern_sites(main.ctx);
+  if (n < 0) return; // unparsable source: keep the last grid
+  const sites = JSON.parse(wasmText(main.e.fw_edit_ptr(main.ctx), main.e.fw_edit_len(main.ctx)));
+  const rows = sites.filter((s) => s.kind === 'beat' && !s.raw.trim().startsWith('euclid('));
+  el.innerHTML = '';
+  document.body.dataset.gridRows = String(rows.length);
+  if (!rows.length) {
+    el.innerHTML = '<div class="hint">beat リテラルがありません</div>';
+    return;
+  }
+  for (const site of rows) {
+    const row = document.createElement('div');
+    row.className = 'grid-row';
+    const label = document.createElement('span');
+    label.className = 'grid-label';
+    const where = site.path.length ? `${site.path.join('/')} · ` : '';
+    label.textContent = site.let_name
+      ? `${where}let ${site.let_name}`
+      : `${where}${site.track}${site.at ? ` @${site.at}` : ''}`;
+    label.title = `${label.textContent}(${site.line} 行目へジャンプ)`;
+    label.onclick = () => jumpToLine(site.line);
+    row.appendChild(label);
+    const cells = document.createElement('div');
+    cells.className = 'grid-cells';
+    const steps = parseBeatSteps(site.raw);
+    steps.forEach((step, i) => {
+      const b = document.createElement('button');
+      b.textContent = step.length > 1 ? `${step[0]}*` : step === '-' ? '' : step;
+      b.title = step;
+      b.className = STEP_CLASS[step[0]] ?? '';
+      b.onclick = () => {
+        const next = steps.slice();
+        next[i] = cycleStep(step);
+        const op = { op: 'set_pattern', path: site.path, value: joinSteps(next) };
+        if (site.let_name) op.let_name = site.let_name;
+        else Object.assign(op, { track: site.track, play: site.play });
+        applyEdit(op);
+      };
+      cells.appendChild(b);
+    });
+    row.appendChild(cells);
+    el.appendChild(row);
+  }
+}
+
 // ---- wiring -------------------------------------------------------------------
 function showDiags(diags) {
   const el = $('diags');
@@ -648,6 +758,7 @@ function recompile(delay = 300) {
   debounce = setTimeout(() => {
     const { ok, diags } = mainCompile(getText());
     showDiags(diags);
+    refreshGrid();
     document.body.dataset.compiled = ok ? 'ok' : 'error';
     if (ok && node) node.port.postMessage(encodeSrc()); // hot reload
   }, delay);
