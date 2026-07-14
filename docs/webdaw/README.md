@@ -14,6 +14,7 @@ Adopts the process discipline of IEC 62304 (traceability from requirements → a
 | 06 | [roadmap](06-roadmap.md) | Development roadmap (Phase 0–5) + risk register |
 | 07 | [determinism-spike](07-determinism-spike.md) | Phase 0.4 spike results: native/wasm bit-identical rendering achieved |
 | 08 | [daw-functional-requirements](08-daw-functional-requirements.md) | The full DAW operation surface (survey of 6 major DAWs), every operation dispositioned: CODE / CODE-GAP / GUI / TOOL / NO — the requirements base for Forte Studio (#135) |
+| 09 | [forte-studio-fork](09-forte-studio-fork.md) | **Forte Studio = a VS Code fork (Cursor model, ADR D-14)**: the plugin ceiling, thin-patch fork strategy, the Composer/transport/audio-service design, milestones F0-F4 |
 | spec | [forte-lang-v1](spec/forte-lang-v1.md) | **Language specification v1 (implementation-conformant): grammar EBNF, semantics, diagnostics catalog, determinism contract** |
 | spec | [forte-lang-v0](spec/forte-lang-v0.md) | Language specification v0 draft (design intent, future concepts) |
 
@@ -27,8 +28,11 @@ Adopts the process discipline of IEC 62304 (traceability from requirements → a
   `night-parade`: prog/section/send-return, `handmade`: **instruments defined in code
   via the `device` syntax and `import`-ed from the `songs/devices/warm.forte` library** —
   the minimal proof that synths are forkable code and can circulate as modules).
-- **`editor/vscode-forte`** — **Forte Studio (ADR D-13: VS Code IS the Studio
-  shell)**: syntax highlighting, real-time diagnostics via `forte lsp`, Play
+- **`editor/vscode-forte`** — the Studio's bundled core extension (ADR D-14:
+  Forte Studio is a **VS Code fork**, Cursor-style; this extension carries
+  everything the extension API can express and ships inside the fork —
+  see 09-forte-studio-fork.md and `studio/` for the fork bootstrap):
+  syntax highlighting, real-time diagnostics via `forte lsp`, Play
   (hot reload) / Build / Stop, REPL, History (VCS) and Blocks sidebars with
   one-click audition, a **drag-editable arrangement view** (drop = bar-snapped
   `move_at_line` through the lossless edit layer, on the editor's undo stack)

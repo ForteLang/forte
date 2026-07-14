@@ -1,0 +1,22 @@
+{
+  "nameShort": "Forte Studio",
+  "nameLong": "Forte Studio — compose music as code",
+  "applicationName": "forte-studio",
+  "dataFolderName": ".forte-studio",
+  "win32MutexName": "fortestudio",
+  "win32DirName": "Forte Studio",
+  "win32NameVersion": "Forte Studio",
+  "win32RegValueName": "ForteStudio",
+  "win32AppUserModelId": "Forte.Studio",
+  "win32ShellNameShort": "Forte Studio",
+  "darwinBundleIdentifier": "com.forte.studio",
+  "linuxIconName": "forte-studio",
+  "urlProtocol": "forte-studio",
+  "quality": "stable",
+  "extensionsGallery": {
+    "serviceUrl": "https://open-vsx.org/vscode/gallery",
+    "itemUrl": "https://open-vsx.org/vscode/item"
+  },
+  "extensionEnabledApiProposals": {},
+  "builtInExtensions": []
+}
