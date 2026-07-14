@@ -31,7 +31,12 @@ python3 - "$DEST/product.json" "$HERE/product.json" <<'EOF'
 import json, sys
 dest, overlay = sys.argv[1], sys.argv[2]
 base = json.load(open(dest))
-base.update(json.load(open(overlay)))
+overlay_data = json.load(open(overlay))
+for k, v in overlay_data.items():
+    if v is None:
+        base.pop(k, None)  # null in the overlay DELETES the upstream key
+    else:
+        base[k] = v
 json.dump(base, open(dest, "w"), indent="\t", ensure_ascii=False)
 print(f"   {dest}: nameShort = {base['nameShort']}")
 EOF

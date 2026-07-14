@@ -18,5 +18,6 @@
     "itemUrl": "https://open-vsx.org/vscode/item"
   },
   "extensionEnabledApiProposals": {},
-  "builtInExtensions": []
+  "builtInExtensions": [],
+  "webviewContentExternalBaseUrlTemplate": null
 }
