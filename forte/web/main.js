@@ -11,7 +11,45 @@ const $ = (id) => document.getElementById(id);
 const status = (t) => ($('status').textContent = t);
 const viz = new Viz($('viz'));
 window.__forteViz = viz;
+// Click = code-jump / piano-roll toggle. Drag on a clip = move the play it
+// came from: the drop snaps to bars and writes back through the edit layer
+// (move_at_line), so the arrange view is a real editing surface (#135).
+let vizDrag = null; // {hit, x0, moved}
+$('viz').addEventListener('mousedown', (ev) => {
+  const rect = $('viz').getBoundingClientRect();
+  const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
+  if (hit?.kind === 'clip') vizDrag = { hit, x0: ev.clientX, moved: false };
+});
+window.addEventListener('mousemove', (ev) => {
+  if (!vizDrag) return;
+  const dx = ev.clientX - vizDrag.x0;
+  if (!vizDrag.moved && Math.abs(dx) < 4) return; // still a click
+  vizDrag.moved = true;
+  const { pxPerBeat } = viz.geom();
+  const bpb = viz.data.beatsPerBar;
+  const snapped =
+    Math.max(0, Math.round((vizDrag.hit.start + dx / pxPerBeat) / bpb)) * bpb;
+  vizDrag.snapped = snapped;
+  viz.setGhost({ track: vizDrag.hit.track, start: snapped, duration: vizDrag.hit.duration });
+});
+let vizDragJustEnded = false; // mouseup precedes click: remember one tick
+window.addEventListener('mouseup', () => {
+  if (!vizDrag) return;
+  const { hit, moved, snapped } = vizDrag;
+  vizDrag = null;
+  vizDragJustEnded = moved;
+  viz.setGhost(null);
+  if (!moved || snapped === undefined || snapped === hit.start) return;
+  const bpb = viz.data.beatsPerBar;
+  const a = Math.round(snapped / bpb) + 1; // beats → 1-based bar
+  const durBars = Math.max(1, Math.round(hit.duration / bpb));
+  applyEdit({ op: 'move_at_line', line: hit.line, bars: [a, a + durBars - 1] });
+});
 $('viz').addEventListener('click', (ev) => {
+  if (vizDragJustEnded) {
+    vizDragJustEnded = false; // a drag just ended, not a click
+    return;
+  }
   const rect = $('viz').getBoundingClientRect();
   const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
   if (!hit) return;

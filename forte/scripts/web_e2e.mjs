@@ -175,6 +175,47 @@ try {
   const gridRestored = await page.evaluate(() => window.__forteGetText());
   check('grid cycle returns to the original pattern', gridRestored === gridBefore);
 
+  // 4.8) arrange drag (Studio P0, #135): dragging a clip on the canvas
+  // re-places the play statement it came from, snapped to bars, through
+  // the same edit layer — the arrange view is a real editing surface
+  const snareDragPoint = () =>
+    page.evaluate(() => {
+      const viz = window.__forteViz;
+      const d = viz.data;
+      const r = document.getElementById('viz').getBoundingClientRect();
+      const { headerW, pxPerBeat } = viz.geom();
+      const ti = d.tracks.findIndex((t) => t.name === 'Snare');
+      const clip = d.tracks[ti].clips[0];
+      const laneH = (r.height - 16) / d.tracks.length;
+      return {
+        x: r.left + headerW + (clip.start + clip.duration / 2) * pxPerBeat,
+        y: r.top + 16 + laneH * (ti + 0.5),
+        barPx: pxPerBeat * d.beatsPerBar,
+      };
+    });
+  const d1 = await snareDragPoint();
+  await page.mouse.move(d1.x, d1.y);
+  await page.mouse.down();
+  await page.mouse.move(d1.x - d1.barPx, d1.y, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForFunction(
+    () => window.__forteGetText().includes('play snare at bars(8..15)'),
+    null,
+    { timeout: 15000 }
+  );
+  check('clip drag re-places the play through the edit layer', true);
+  const d2 = await snareDragPoint(); // recompiled: re-measure before undoing
+  await page.mouse.move(d2.x, d2.y);
+  await page.mouse.down();
+  await page.mouse.move(d2.x + d2.barPx, d2.y, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForFunction(
+    () => window.__forteGetText().includes('play snare at bars(9..16)'),
+    null,
+    { timeout: 15000 }
+  );
+  check('drag back restores the original placement', true);
+
   // 5) local-first: edits autosave to OPFS and survive a reload
   await page.evaluate(async () => {
     const marker = '\n// persisted-marker\n';

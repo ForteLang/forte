@@ -119,6 +119,10 @@ pub enum EditOp {
         name: String,
         bars: (u32, u32),
     },
+    /// Re-place whatever `play` (placement or track play) or `audio`
+    /// statement sits on a 1-based source line. The op the arrange view
+    /// speaks: its clips know source lines, not body paths.
+    MoveAtLine { line: u32, bars: (u32, u32) },
 }
 
 /// Parse an op payload: a single JSON object or an array of them.
@@ -323,6 +327,10 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
                     }
                 }
             }
+        }
+        EditOp::MoveAtLine { line, bars } => {
+            let at = find_at_on_line(&ctx, &file, *line)?;
+            ctx.splice_at(src, at, *bars)
         }
         EditOp::SetSection { path, name, bars } => {
             let (body, _) = resolve_body(&file, path)?;
@@ -588,6 +596,72 @@ fn select_place<'b>(body: &'b SongAst, index: usize, guard: Option<&str>) -> Res
         }
     }
     Ok(pl)
+}
+
+/// Find the at-ref of the play/place/audio statement anchored on `line`,
+/// searching every body (song + top-level blocks, nested included).
+fn find_at_on_line(ctx: &Ctx, file: &FileAst, line: u32) -> Result<AtSpan, Diag> {
+    fn walk(ctx: &Ctx, body: &SongAst, line: u32) -> Option<Result<AtSpan, Diag>> {
+        for pl in &body.places {
+            if pl.pos.line == line {
+                let anchor = match ctx.tok_at(pl.pos) {
+                    Ok(a) => a,
+                    Err(e) => return Some(Err(e)),
+                };
+                return Some(ctx.place_at_span(anchor));
+            }
+        }
+        for t in &body.tracks {
+            for pl in &t.plays {
+                if pl.pos.line == line {
+                    let anchor = match ctx.tok_at(pl.pos) {
+                        Ok(a) => a,
+                        Err(e) => return Some(Err(e)),
+                    };
+                    let j = match ctx.pattern_end(anchor) {
+                        Ok(j) => j,
+                        Err(e) => return Some(Err(e)),
+                    };
+                    return Some(ctx.at_span_after_kw(j));
+                }
+            }
+            for a in &t.audios {
+                if a.pos.line == line {
+                    // `audio <name> at …` — the anchor is the asset name
+                    let anchor = match ctx.tok_at(a.pos) {
+                        Ok(x) => x,
+                        Err(e) => return Some(Err(e)),
+                    };
+                    return Some(ctx.at_span_after_kw(anchor + 1));
+                }
+            }
+        }
+        for b in &body.blocks {
+            if let Some(r) = walk(ctx, &b.body, line) {
+                return Some(r);
+            }
+        }
+        None
+    }
+    let mut found = None;
+    if let Some(s) = &file.song {
+        found = walk(ctx, s, line);
+    }
+    if found.is_none() {
+        for b in &file.blocks {
+            found = walk(ctx, &b.body, line);
+            if found.is_some() {
+                break;
+            }
+        }
+    }
+    found.unwrap_or_else(|| {
+        Err(Diag::new(
+            "E-EDIT-003",
+            Pos { line, col: 1 },
+            format!("{line} 行目に play / audio 文がありません(import した block の clip はこのファイルからは動かせません)"),
+        ))
+    })
 }
 
 /// Resolve a body path. Returns the body and, when the body is a `block`,

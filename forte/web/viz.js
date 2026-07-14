@@ -45,10 +45,18 @@ export class Viz {
     this.draw();
   }
 
+  // Horizontal geometry of the arrange view (for drag math in the host).
+  geom() {
+    const { data } = this;
+    const w = this.canvas.clientWidth;
+    const span = Math.max(data?.lengthBeats ?? 0, data?.beatsPerBar ?? 4);
+    return { headerW: 92, w, span, pxPerBeat: (w - 92) / span };
+  }
+
   // What is under (x, y) in CSS pixels?
   //   {kind: 'roll'}                — piano roll is showing (click = back)
   //   {kind: 'header', track}       — lane header (piano-roll toggle)
-  //   {kind: 'clip', track, line}   — a clip (code-jump target)
+  //   {kind: 'clip', track, line, start, duration} — a clip (jump / drag)
   //   {kind: 'lane', track, line}   — empty lane space (the track's line)
   hitTest(x, y) {
     const { data } = this;
@@ -61,15 +69,25 @@ export class Viz {
     const t = data.tracks[i];
     if (!t) return null;
     if (x < 92) return { kind: 'header', track: i };
+    const { span } = this.geom();
     const w = this.canvas.clientWidth;
-    const span = Math.max(data.lengthBeats, data.beatsPerBar);
     const beats = ((x - 92) / (w - 92)) * span;
     for (const c of t.clips) {
       if (beats >= c.start && beats <= c.start + c.duration) {
-        return { kind: 'clip', track: i, line: c.line || t.line || 0 };
+        return {
+          kind: 'clip', track: i, line: c.line || t.line || 0,
+          start: c.start, duration: c.duration,
+        };
       }
     }
     return { kind: 'lane', track: i, line: t.line || 0 };
+  }
+
+  // A drag ghost: the clip's outline shown at its candidate position while
+  // the pointer is down (the write happens on drop, through the edit layer).
+  setGhost(ghost) {
+    this.ghost = ghost; // {track, start, duration} | null
+    this.draw();
   }
 
   draw() {
@@ -143,6 +161,17 @@ export class Viz {
         }
       }
     });
+
+    // drag ghost: dashed outline at the candidate bar position
+    if (this.ghost) {
+      const { track, start, duration } = this.ghost;
+      const y = rulerH + track * laneH;
+      g.save();
+      g.setLineDash([4, 3]);
+      g.strokeStyle = '#e8b34c';
+      g.strokeRect(bx(start) + 0.5, y + 2.5, bx(start + duration) - bx(start) - 1, laneH - 6);
+      g.restore();
+    }
 
     this.drawPlayhead(bx, h, span);
   }

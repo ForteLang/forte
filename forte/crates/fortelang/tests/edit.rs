@@ -272,3 +272,27 @@ fn lexer_byte_spans_are_exact_and_monotonic() {
         }
     }
 }
+
+#[test]
+fn move_at_line_finds_a_placement_by_source_line() {
+    // fixture line 38 = `  play Inner as Twin at bars(5..8)   // エイリアス配置`
+    let out = apply(SRC, r#"{"op":"move_at_line","line":38,"bars":[9,12]}"#);
+    assert_only_lines_changed(
+        SRC,
+        &out,
+        &[(38, "  play Inner as Twin at bars(9..12)   // エイリアス配置")],
+    );
+}
+
+#[test]
+fn move_at_line_finds_a_track_play_inside_a_block() {
+    // fixture line 17 = `    play K at bars(1..8)` (block Groove / track Drums)
+    let out = apply(SRC, r#"{"op":"move_at_line","line":17,"bars":[5,12]}"#);
+    assert_only_lines_changed(SRC, &out, &[(17, "    play K at bars(5..12)")]);
+}
+
+#[test]
+fn move_at_line_rejects_a_line_without_a_play() {
+    let ops = parse_ops(r#"{"op":"move_at_line","line":1,"bars":[1,4]}"#).unwrap();
+    assert_eq!(apply_ops(SRC, &ops).unwrap_err().code, "E-EDIT-003");
+}

@@ -311,3 +311,7 @@ analyze panels (MTR-01..05) that no other DAW can honestly offer.
   literals render as clickable step rows (fw_pattern_sites) and every
   click writes back through fw_edit — verified end-to-end in Chromium
   (grid renders, one-line write-back, cycle returns byte-identical).
+  The arrange view is writable too (ARR-01/02): dragging a clip snaps
+  to bars and re-places its play statement via `move_at_line` (clips
+  already know their source lines), with a dashed drop ghost while
+  dragging — drag + drag-back verified in the same E2E run.
