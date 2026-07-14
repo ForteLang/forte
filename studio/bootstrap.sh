@@ -56,15 +56,15 @@ if [ "${WEB_ONLY:-0}" = "1" ]; then
 import sys
 p = sys.argv[1]
 s = open(p).read()
-old = "	if (process.platform === 'linux') {
-		const homedir = os.homedir();"
-new = "	if (process.platform === 'linux' && local !== undefined) {
-		const homedir = os.homedir();"
-if old in s:
-    s = s.replace(old, s and new)
+old = "if (process.platform === 'linux') {"
+new = "if (process.platform === 'linux' && local !== undefined) {"
+if old in s and new not in s:
+    s = s.replace(old, new, 1)
     s = s.replace("local!.target", "local.target")
     open(p, "w").write(s)
     print("   preinstall.ts guarded")
+else:
+    print("   preinstall.ts already guarded")
 PYEOF
   if command -v rg > /dev/null; then
     RG_CACHE="/tmp/vscode-ripgrep-cache-1.17.1"
