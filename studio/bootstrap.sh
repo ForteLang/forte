@@ -14,7 +14,7 @@
 # inside the fork — one folder, one rebase junction (ADR D-14).
 set -euo pipefail
 
-UPSTREAM_TAG="${UPSTREAM_TAG:-1.102.0}"
+UPSTREAM_TAG="${UPSTREAM_TAG:-1.117.0}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/.." && pwd)"
 DEST="${1:-"$REPO_ROOT/../forte-studio"}"
@@ -39,6 +39,45 @@ EOF
 echo "== vendoring the bundled vscode-forte extension"
 mkdir -p "$DEST/extensions/forte"
 cp -r "$REPO_ROOT/forte/editor/vscode-forte/." "$DEST/extensions/forte/"
+
+# --- container/web-target build support (learned bootstrapping F0) ----------
+# Networks that block electronjs.org / GitHub release assets can still build
+# the WEB target: native modules build against the local node instead of
+# electron, the electron binary download is skipped, and @vscode/ripgrep is
+# satisfied by seeding its download cache from the system ripgrep.
+if [ "${WEB_ONLY:-0}" = "1" ]; then
+  echo "== WEB_ONLY: node-runtime .npmrc (electron keys kept for gulp only)"
+  # keep target/ms_build_id (build/lib/util.ts getElectronVersion reads them)
+  # but drop runtime/disturl so node-gyp builds against the local node.
+  sed -i '/^disturl=/d; /^runtime=/d' "$DEST/.npmrc"
+  # upstream preinstall dereferences the electron target unconditionally on
+  # Linux; guard it (fork patch #1). Idempotent.
+  python3 - "$DEST/build/npm/preinstall.ts" <<'PYEOF'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = "	if (process.platform === 'linux') {
+		const homedir = os.homedir();"
+new = "	if (process.platform === 'linux' && local !== undefined) {
+		const homedir = os.homedir();"
+if old in s:
+    s = s.replace(old, s and new)
+    s = s.replace("local!.target", "local.target")
+    open(p, "w").write(s)
+    print("   preinstall.ts guarded")
+PYEOF
+  if command -v rg > /dev/null; then
+    RG_CACHE="/tmp/vscode-ripgrep-cache-1.17.1"
+    mkdir -p "$RG_CACHE" /tmp/forte-rgpack
+    cp "$(command -v rg)" /tmp/forte-rgpack/rg
+    tar czf "$RG_CACHE/ripgrep-v15.0.1-x86_64-unknown-linux-musl.tar.gz" -C /tmp/forte-rgpack rg
+    echo "   ripgrep cache seeded from system rg"
+  fi
+  export ELECTRON_SKIP_BINARY_DOWNLOAD=1 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+  echo "   npm ci must run with: ELECTRON_SKIP_BINARY_DOWNLOAD=1 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1"
+  echo "   note: with runtime/disturl stripped, do NOT re-run npm ci after"
+  echo "   restoring them; the target= key then mispoints node-gyp."
+fi
 
 cat <<EOF
 
