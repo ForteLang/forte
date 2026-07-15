@@ -682,7 +682,7 @@ pub fn prog_arp(events: &[ChordEvent], rate: f64, style: &str, pos: Pos) -> Resu
     Ok(notes)
 }
 
-fn parse_duration(s: &str, pos: Pos) -> Result<f64, Diag> {
+pub(crate) fn parse_duration(s: &str, pos: Pos) -> Result<f64, Diag> {
     if let Some((a, b)) = s.split_once('/') {
         let a: f64 = a
             .parse()

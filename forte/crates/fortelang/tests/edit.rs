@@ -420,6 +420,45 @@ fn arg_sites_lists_instrument_and_inserts_with_set_arg_coordinates() {
 }
 
 #[test]
+fn notes_round_trip_is_lossless_for_real_material() {
+    // a real melody line (arcade-dawn), a chord, ties, accents, rests
+    for raw in [
+        "C5:0.5 Eb5:0.5 G5:0.5 C5:0.5 Ab4:0.5 C5:0.5 Eb5:1 Eb5:0.5 G5:0.5 Bb5:0.5 G5:0.5 D5:0.5 F5:0.5 G5:1",
+        "[D4 F4 A4]:2 _:1 D4:1",
+        "A1!:0.25 A1:0.25 C2~:0.25 D2!:0.25 _:0.5",
+        "_:1 E4:0.5 Gb4:0.5 Ab4:1.5 _:0.5",
+    ] {
+        let doc = fortelang::edit::note_events(raw).unwrap();
+        let out = fortelang::edit::serialize_notes(&doc).unwrap();
+        let doc2 = fortelang::edit::note_events(&out).unwrap();
+        assert_eq!(doc.len, doc2.len, "{raw} → {out}");
+        assert_eq!(doc.notes.len(), doc2.notes.len(), "{raw} → {out}");
+        for (a, b) in doc.notes.iter().zip(doc2.notes.iter()) {
+            assert_eq!(a.pitch, b.pitch, "{raw} → {out}");
+            assert!((a.start - b.start).abs() < 1e-6 && (a.dur - b.dur).abs() < 1e-6);
+            assert_eq!((a.tie, a.accent), (b.tie, b.accent));
+        }
+    }
+}
+
+#[test]
+fn notes_serializer_keeps_trailing_rests_and_makes_chords() {
+    let raw = "C4:1 _:1 [E4 G4]:0.5 _:1.5";
+    let doc = fortelang::edit::note_events(raw).unwrap();
+    assert_eq!(doc.len, 4.0);
+    assert_eq!(doc.notes.len(), 3);
+    let out = fortelang::edit::serialize_notes(&doc).unwrap();
+    assert_eq!(out, "C4:1 _:1 [E4 G4]:0.5 _:1.5");
+}
+
+#[test]
+fn notes_serializer_refuses_a_partial_overlap() {
+    let mut doc = fortelang::edit::note_events("C4:1 D4:1").unwrap();
+    doc.notes[1].start = 0.5; // overlaps C4 but is not a chord
+    assert_eq!(fortelang::edit::serialize_notes(&doc).unwrap_err().code, "E-EDIT-007");
+}
+
+#[test]
 fn set_track_is_idempotent() {
     let op = r#"{"op":"set_track","track":"Bass","field":"volume","value":0.5}"#;
     let once = apply(MIX, op);

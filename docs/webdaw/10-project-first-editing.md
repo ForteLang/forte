@@ -121,3 +121,17 @@ track's device and effect arguments as editable fields, routed the
 same way. Alias placements fall back to track-name matching; two
 imported blocks sharing both block and track names would still
 need disambiguation by file.
+
+Fifth slice — the piano roll writes back (DAW-NOTE-01, the projection
+called "THE hardest" above): `note_events` / `serialize_notes` in the
+edit layer round-trip the notes grammar structurally (chords, ties,
+accents, fractional durations, rests — trailing rests preserved via
+the doc's `len`), and the serializer emits idiomatic text (`C4:1 _:1
+[E4 G4]:0.5`), never exploded garbage; overlaps that the sequential
+grammar cannot express are refused (E-EDIT-007), which the GUI
+surfaces before committing. In the DAW, every `notes` literal renders
+as an editable roll under the beat grid (fw_notes_parse /
+fw_notes_write): drag draws a note (quantum 0.25), click deletes,
+exact-match overlaps become chords, and the write path is plain
+set_pattern. Also: clip drag/resize/whole-span landed for placed
+blocks (placement-line anchoring in compile).

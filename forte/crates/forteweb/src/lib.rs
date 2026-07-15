@@ -446,6 +446,57 @@ pub unsafe extern "C" fn fw_arg_sites(ptr: *mut Ctx) -> i32 {
     }
 }
 
+/// Parse the STAGED bytes as a `notes` literal → `{"len":…, "notes":[…]}`
+/// JSON in the edit buffer (the piano roll's read side). Returns the note
+/// count, or -1 with the error message in the same buffer.
+#[no_mangle]
+pub unsafe extern "C" fn fw_notes_parse(ptr: *mut Ctx) -> i32 {
+    let c = ctx(ptr);
+    let raw = match std::str::from_utf8(&c.stage) {
+        Ok(s) => s,
+        Err(_) => {
+            c.edit_out = b"invalid utf-8".to_vec();
+            return -1;
+        }
+    };
+    match fortelang::edit::note_events(raw) {
+        Ok(doc) => {
+            let n = doc.notes.len() as i32;
+            c.edit_out = serde_json::to_vec(&doc).unwrap_or_else(|_| b"{}".to_vec());
+            n
+        }
+        Err(d) => {
+            c.edit_out = d.to_string().into_bytes();
+            -1
+        }
+    }
+}
+
+/// Serialize STAGED `{"len":…, "notes":[…]}` JSON back to idiomatic
+/// `notes` text in the edit buffer (the piano roll's write side, fed to
+/// `set_pattern`). Returns 0, or -1 with the error message in the buffer.
+#[no_mangle]
+pub unsafe extern "C" fn fw_notes_write(ptr: *mut Ctx) -> i32 {
+    let c = ctx(ptr);
+    let doc: fortelang::edit::NotesDoc = match serde_json::from_slice(&c.stage) {
+        Ok(d) => d,
+        Err(e) => {
+            c.edit_out = format!("bad notes json: {e}").into_bytes();
+            return -1;
+        }
+    };
+    match fortelang::edit::serialize_notes(&doc) {
+        Ok(s) => {
+            c.edit_out = s.into_bytes();
+            0
+        }
+        Err(d) => {
+            c.edit_out = d.to_string().into_bytes();
+            -1
+        }
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn fw_edit_ptr(ptr: *mut Ctx) -> *const u8 {
     ctx(ptr).edit_out.as_ptr()

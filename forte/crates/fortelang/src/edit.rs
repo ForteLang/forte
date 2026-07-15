@@ -990,6 +990,154 @@ fn walk_arg_sites(body: &SongAst, path: &mut Vec<String>, out: &mut Vec<ArgSite>
     }
 }
 
+// ------------------------------------------------ piano-roll round trip
+
+/// One roll note in beats — the JSON a piano-roll GUI speaks. Chords are
+/// several events sharing a start (and duration/flags).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NoteEvent {
+    pub start: f64,
+    pub dur: f64,
+    pub pitch: u8,
+    #[serde(default)]
+    pub tie: bool,
+    #[serde(default)]
+    pub accent: bool,
+}
+
+/// A parsed `notes` literal: its events plus the total length in beats
+/// (trailing rests live in `len`, not in any event).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NotesDoc {
+    pub len: f64,
+    pub notes: Vec<NoteEvent>,
+}
+
+/// Structurally parse a `notes` literal (same grammar as the compiler:
+/// `C2:1`, `[D4 F4 A4]:2`, `_:1`, `~` tie, `!` accent, `1/2` durations).
+pub fn note_events(raw: &str) -> Result<NotesDoc, Diag> {
+    let p0 = Pos { line: 1, col: 1 };
+    let mut out = Vec::new();
+    let mut cursor = 0.0f64;
+    let mut toks = raw.split_whitespace().peekable();
+    let mut events: Vec<String> = Vec::new();
+    while let Some(t) = toks.next() {
+        if t.starts_with('[') && !t.contains(']') {
+            let mut acc = t.to_string();
+            for u in toks.by_ref() {
+                acc.push(' ');
+                acc.push_str(u);
+                if u.contains(']') {
+                    break;
+                }
+            }
+            events.push(acc);
+        } else {
+            events.push(t.to_string());
+        }
+    }
+    for ev in events {
+        let (head, durs) = ev.rsplit_once(':').ok_or_else(|| {
+            Diag::new("E-NOTE-005", p0, format!("イベントは `ピッチ:長さ` の形です: {ev}"))
+        })?;
+        let dur = crate::music::parse_duration(durs, p0)?;
+        if head == "_" {
+            cursor += dur;
+            continue;
+        }
+        let (head, tie) = match head.strip_suffix('~') {
+            Some(h) => (h, true),
+            None => (head, false),
+        };
+        let (head, accent) = match head.strip_suffix('!') {
+            Some(h) => (h, true),
+            None => (head, false),
+        };
+        let pitches: Vec<&str> = if head.starts_with('[') && head.ends_with(']') {
+            head[1..head.len() - 1].split_whitespace().collect()
+        } else {
+            vec![head]
+        };
+        for ps in pitches {
+            let pitch = crate::music::parse_pitch(ps, p0)?;
+            out.push(NoteEvent { start: cursor, dur, pitch, tie, accent });
+        }
+        cursor += dur;
+    }
+    Ok(NotesDoc { len: cursor, notes: out })
+}
+
+/// MIDI pitch → written name (sharps).
+fn pitch_name(p: u8) -> String {
+    const N: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    format!("{}{}", N[(p % 12) as usize], (p / 12) as i32 - 1)
+}
+
+/// Shortest clean duration text (mirrors what composers write by hand).
+fn fmt_dur(v: f64) -> String {
+    let r = (v * 1e6).round() / 1e6;
+    if r.fract() == 0.0 {
+        format!("{}", r as i64)
+    } else {
+        format!("{r}")
+    }
+}
+
+/// Serialize a roll document back to idiomatic `notes` text: simultaneous
+/// equal-length events become chords, gaps become `_:n` rests, trailing
+/// space is padded from `len`. Overlaps that are not exact chords cannot
+/// be written in the sequential notes grammar and are refused.
+pub fn serialize_notes(doc: &NotesDoc) -> Result<String, Diag> {
+    let p0 = Pos { line: 1, col: 1 };
+    let mut evs = doc.notes.clone();
+    evs.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap().then(a.pitch.cmp(&b.pitch)));
+    let mut toks: Vec<String> = Vec::new();
+    let mut cursor = 0.0f64;
+    let eps = 1e-6;
+    let mut i = 0;
+    while i < evs.len() {
+        let e = evs[i].clone();
+        let mut pitches = vec![e.pitch];
+        let mut j = i + 1;
+        while j < evs.len()
+            && (evs[j].start - e.start).abs() < eps
+            && (evs[j].dur - e.dur).abs() < eps
+            && evs[j].tie == e.tie
+            && evs[j].accent == e.accent
+        {
+            pitches.push(evs[j].pitch);
+            j += 1;
+        }
+        if e.start < cursor - eps {
+            return Err(Diag::new(
+                "E-EDIT-007",
+                p0,
+                "音が重なっています(同時に鳴らすには開始と長さを揃えて和音にしてください)",
+            ));
+        }
+        if e.start - cursor > eps {
+            toks.push(format!("_:{}", fmt_dur(e.start - cursor)));
+        }
+        let name = if pitches.len() == 1 {
+            pitch_name(pitches[0])
+        } else {
+            format!("[{}]", pitches.iter().map(|p| pitch_name(*p)).collect::<Vec<_>>().join(" "))
+        };
+        let accent = if e.accent { "!" } else { "" };
+        let tie = if e.tie { "~" } else { "" };
+        toks.push(format!("{name}{accent}{tie}:{}", fmt_dur(e.dur)));
+        cursor = e.start + e.dur;
+        i = j;
+    }
+    if doc.len - cursor > eps {
+        toks.push(format!("_:{}", fmt_dur(doc.len - cursor)));
+    }
+    if toks.is_empty() {
+        return Err(Diag::new("E-NOTE-006", p0, "notes リテラルが空になります"));
+    }
+    Ok(toks.join(" "))
+}
+
 fn splice(src: &str, from: usize, to: usize, text: &str) -> String {
     let mut out = String::with_capacity(src.len() + text.len());
     out.push_str(&src[..from]);

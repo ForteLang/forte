@@ -1315,6 +1315,156 @@ function joinSteps(steps) {
   return groups.join(' ');
 }
 
+// ---- piano roll (NOTE-01): notes literals become editable rolls ----------
+function stageBytes(bytes) {
+  const ptr = main.e.fw_modules_prepare(main.ctx, bytes.length);
+  new Uint8Array(main.e.memory.buffer, ptr, bytes.length).set(bytes);
+}
+function notesParse(raw) {
+  stageBytes(new TextEncoder().encode(raw));
+  const n = main.e.fw_notes_parse(main.ctx);
+  const out = wasmText(main.e.fw_edit_ptr(main.ctx), main.e.fw_edit_len(main.ctx));
+  return n < 0 ? null : JSON.parse(out);
+}
+function notesWrite(doc) {
+  stageBytes(new TextEncoder().encode(JSON.stringify(doc)));
+  const r = main.e.fw_notes_write(main.ctx);
+  const out = wasmText(main.e.fw_edit_ptr(main.ctx), main.e.fw_edit_len(main.ctx));
+  if (r !== 0) {
+    status(`roll: ${out}`);
+    return null;
+  }
+  return out;
+}
+const ROLL_Q = 0.25; // grid quantum in beats
+function renderRoll(el, site) {
+  const doc = notesParse(site.raw);
+  if (!doc) return;
+  const row = document.createElement('div');
+  row.className = 'grid-row roll-row';
+  const label = document.createElement('span');
+  label.className = 'grid-label';
+  const where = site.path.length ? `${site.path.join('/')} · ` : '';
+  label.textContent = site.let_name
+    ? `${where}let ${site.let_name}`
+    : `${where}${site.track}${site.at ? ` @${site.at}` : ''}`;
+  label.title = `${label.textContent}(クリックで ${site.line} 行目へ / ドラッグで音を置く・クリックで消す)`;
+  label.onclick = () => jumpToLine(site.line);
+  row.appendChild(label);
+
+  const pitches = doc.notes.map((n) => n.pitch);
+  const lo = Math.min(...(pitches.length ? pitches : [60])) - 4;
+  const hi = Math.max(...(pitches.length ? pitches : [60])) + 4;
+  const cols = Math.max(1, Math.round(doc.len / ROLL_Q));
+  const CW = 14, RH = 8;
+  const cv = document.createElement('canvas');
+  const W = cols * CW + 1, H = (hi - lo + 1) * RH + 1;
+  cv.width = W * devicePixelRatio;
+  cv.height = H * devicePixelRatio;
+  cv.style.width = `${W}px`;
+  cv.style.height = `${H}px`;
+  cv.className = 'roll';
+  const g = cv.getContext('2d');
+  g.scale(devicePixelRatio, devicePixelRatio);
+  const bpb = viz.data?.beatsPerBar || 4;
+  const draw = (ghost) => {
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = '#14171c';
+    g.fillRect(0, 0, W, H);
+    for (let p = lo; p <= hi; p++) {
+      if (p % 12 === 0) {
+        g.fillStyle = '#1b1f26';
+        g.fillRect(0, (hi - p) * RH, W, RH);
+      }
+    }
+    for (let c = 0; c <= cols; c++) {
+      const beats = c * ROLL_Q;
+      g.strokeStyle = beats % bpb === 0 ? '#333a45' : beats % 1 === 0 ? '#232830' : '#1b1f26';
+      g.beginPath();
+      g.moveTo(c * CW + 0.5, 0);
+      g.lineTo(c * CW + 0.5, H);
+      g.stroke();
+    }
+    for (const n of doc.notes) {
+      g.fillStyle = n.accent ? '#ffd479' : '#58a6ff';
+      g.fillRect((n.start / ROLL_Q) * CW + 1, (hi - n.pitch) * RH + 1, (n.dur / ROLL_Q) * CW - 2, RH - 2);
+    }
+    if (ghost) {
+      g.fillStyle = 'rgba(88,196,112,0.5)';
+      g.fillRect((ghost.start / ROLL_Q) * CW + 1, (hi - ghost.pitch) * RH + 1, (ghost.dur / ROLL_Q) * CW - 2, RH - 2);
+    }
+  };
+  draw();
+
+  const cellAt = (ev) => {
+    const r = cv.getBoundingClientRect();
+    const col = Math.max(0, Math.min(cols - 1, Math.floor((ev.clientX - r.left) / CW)));
+    const pitch = hi - Math.max(0, Math.min(hi - lo, Math.floor((ev.clientY - r.top) / RH)));
+    return { t: col * ROLL_Q, pitch };
+  };
+  const noteAt = (t, pitch) =>
+    doc.notes.find((n) => n.pitch === pitch && t >= n.start - 1e-6 && t < n.start + n.dur - 1e-6);
+  const commit = () => {
+    const value = notesWrite(doc);
+    if (value === null) return false;
+    const op = { op: 'set_pattern', path: site.path, value };
+    if (site.let_name) op.let_name = site.let_name;
+    else Object.assign(op, { track: site.track, play: site.play });
+    return applyEdit(op);
+  };
+  let drag = null; // {t0, pitch, moved}
+  cv.onmousedown = (ev) => {
+    const { t, pitch } = cellAt(ev);
+    drag = { t0: t, pitch, moved: false };
+    ev.preventDefault();
+  };
+  cv.onmousemove = (ev) => {
+    if (!drag) return;
+    const { t } = cellAt(ev);
+    if (t !== drag.t0) drag.moved = true;
+    const start = Math.min(drag.t0, t);
+    const dur = Math.abs(t - drag.t0) + ROLL_Q;
+    draw({ start, dur, pitch: drag.pitch });
+  };
+  const finish = (ev) => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    const { t } = cellAt(ev);
+    const hitNote = noteAt(d.t0, d.pitch);
+    if (!d.moved && hitNote) {
+      // click on a note = delete it
+      doc.notes = doc.notes.filter((n) => n !== hitNote);
+      commit();
+      return;
+    }
+    const start = Math.min(d.t0, t);
+    const dur = Math.abs(t - d.t0) + ROLL_Q;
+    // refuse overlaps the sequential notes grammar cannot express
+    const clash = doc.notes.some(
+      (n) => start < n.start + n.dur - 1e-6 && n.start < start + dur - 1e-6 &&
+        !(Math.abs(n.start - start) < 1e-6 && Math.abs(n.dur - dur) < 1e-6)
+    );
+    if (clash) {
+      status('roll: そこは既存の音と重なります(同じ開始・長さなら和音になります)');
+      draw();
+      return;
+    }
+    doc.notes.push({ start, dur, pitch: d.pitch, tie: false, accent: false });
+    if (!commit()) draw();
+  };
+  cv.onmouseup = finish;
+  cv.onmouseleave = (ev) => {
+    if (drag?.moved) finish(ev);
+    else if (drag) {
+      drag = null;
+      draw();
+    }
+  };
+  row.appendChild(cv);
+  el.appendChild(row);
+}
+
 function refreshGrid() {
   const el = $('grid');
   stageSrc(getText());
@@ -1322,10 +1472,11 @@ function refreshGrid() {
   if (n < 0) return; // unparsable source: keep the last grid
   const sites = JSON.parse(wasmText(main.e.fw_edit_ptr(main.ctx), main.e.fw_edit_len(main.ctx)));
   const rows = sites.filter((s) => s.kind === 'beat' && !s.raw.trim().startsWith('euclid('));
+  const rolls = sites.filter((s) => s.kind === 'notes');
   el.innerHTML = '';
-  document.body.dataset.gridRows = String(rows.length);
-  if (!rows.length) {
-    el.innerHTML = '<div class="hint">beat リテラルがありません</div>';
+  document.body.dataset.gridRows = String(rows.length + rolls.length);
+  if (!rows.length && !rolls.length) {
+    el.innerHTML = '<div class="hint">beat / notes リテラルがありません</div>';
     return;
   }
   for (const site of rows) {
@@ -1361,6 +1512,7 @@ function refreshGrid() {
     row.appendChild(cells);
     el.appendChild(row);
   }
+  for (const site of rolls) renderRoll(el, site);
 }
 
 // ---- wiring -------------------------------------------------------------------
