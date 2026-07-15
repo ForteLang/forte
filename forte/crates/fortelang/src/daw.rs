@@ -202,6 +202,30 @@ fn api(
                 Err(e) => respond(stream, "500 Internal Server Error", text, e.to_string().as_bytes()),
             }
         }
+        ("POST", "edit") => {
+            // apply edit ops to a file ON DISK (not the open buffer) — the
+            // mixer's route for tracks that live in an imported block
+            let Some(rel) = q("path").filter(|p| safe_rel(p)) else {
+                return respond(stream, "400 Bad Request", text, "path が必要です".as_bytes());
+            };
+            let dst = project.join(&rel);
+            let src = match std::fs::read_to_string(&dst) {
+                Ok(s) => s,
+                Err(_) => return respond(stream, "404 Not Found", text, b"not found"),
+            };
+            let ops_json = String::from_utf8_lossy(body);
+            let out = crate::edit::parse_ops(&ops_json)
+                .and_then(|ops| crate::edit::apply_ops(&src, &ops));
+            match out {
+                Ok(new_src) => {
+                    if let Err(e) = std::fs::write(&dst, &new_src) {
+                        return respond(stream, "500 Internal Server Error", text, e.to_string().as_bytes());
+                    }
+                    respond(stream, "200 OK", text, new_src.as_bytes())
+                }
+                Err(d) => respond(stream, "400 Bad Request", text, d.to_string().as_bytes()),
+            }
+        }
         ("POST", "new") => {
             let (kind, name) = (q("kind").unwrap_or_default(), q("name").unwrap_or_default());
             match new_element(project, &kind, &name) {

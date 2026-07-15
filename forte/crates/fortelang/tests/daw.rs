@@ -111,6 +111,28 @@ fn new_scaffolds_blocks_and_songs_inside_the_package() {
 }
 
 #[test]
+fn edit_applies_ops_to_a_file_on_disk() {
+    let (port, project) = boot("edit");
+    write(
+        &project,
+        "blocks/g.forte",
+        "block G {\n  track Drums {\n    instrument mono()\n    play notes`A1 .` at bars(1..2)\n  }\n}\n",
+    );
+    let op = r#"{"op":"set_track","track":"Drums","field":"volume","value":0.4}"#;
+    let (head, body) = post(port, "/api/edit?path=blocks/g.forte", op.as_bytes());
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    let on_disk = std::fs::read_to_string(project.join("blocks/g.forte")).unwrap();
+    assert!(on_disk.contains("volume 0.4"), "{on_disk}");
+    assert_eq!(String::from_utf8_lossy(&body), on_disk);
+
+    // a bad op is refused and the file is untouched
+    let bad = r#"{"op":"set_track","track":"Nope","field":"volume","value":0.4}"#;
+    let (head, _) = post(port, "/api/edit?path=blocks/g.forte", bad.as_bytes());
+    assert!(head.starts_with("HTTP/1.1 400"), "{head}");
+    assert_eq!(std::fs::read_to_string(project.join("blocks/g.forte")).unwrap(), on_disk);
+}
+
+#[test]
 fn traversal_never_escapes_the_project() {
     let (port, project) = boot("guard");
     let (head, _) = get(port, "/api/src?path=../secret.txt");

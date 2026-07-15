@@ -213,15 +213,22 @@ fn main() -> ExitCode {
         // stdout unless --write rewrites the file in place.
         // `forte edit song.forte --sites` — list editable pattern literals as
         // JSON (the read side GUIs bind grids/rolls to).
-        Some("edit") if args.len() >= 3 && args[2] == "--sites" => {
+        Some("edit") if args.len() >= 3 && (args[2] == "--sites" || args[2] == "--args") => {
             let path = &args[1];
             let src = match load(path) {
                 Ok(s) => s,
                 Err(c) => return c,
             };
-            match fortelang::edit::pattern_sites(&src) {
-                Ok(sites) => {
-                    println!("{}", serde_json::to_string(&sites).unwrap_or_else(|_| "[]".into()));
+            let json = if args[2] == "--sites" {
+                fortelang::edit::pattern_sites(&src)
+                    .map(|s| serde_json::to_string(&s).unwrap_or_else(|_| "[]".into()))
+            } else {
+                fortelang::edit::arg_sites(&src)
+                    .map(|s| serde_json::to_string(&s).unwrap_or_else(|_| "[]".into()))
+            };
+            match json {
+                Ok(s) => {
+                    println!("{s}");
                     ExitCode::SUCCESS
                 }
                 Err(d) => {
@@ -585,6 +592,7 @@ fn main() -> ExitCode {
             eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte edit  <song.forte> <JSON|-> [--write]  (構造編集: コメント/レイアウト保存のままトークンだけ置換)");
             eprintln!("       forte edit  <song.forte> --sites   (編集可能なパターンリテラル一覧を JSON で)");
+            eprintln!("       forte edit  <song.forte> --args    (instrument/insert の引数一覧を JSON で — インスペクタの読み取り側)");
             eprintln!("       forte project [DIR]                (パッケージの編集インベントリを JSON で: songs/ blocks/ instruments/ …)");
             eprintln!("       forte daw [DIR] [--port N]         (DAW を開く: init したパッケージ全体を GUI で編集 — 曲も block も package 追加も)");
             eprintln!("       forte test  [PATH…] [--update]  (digest 固定の回帰テスト: forte-test.lock と照合)");

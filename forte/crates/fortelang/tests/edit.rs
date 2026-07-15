@@ -398,6 +398,28 @@ fn add_import_then_add_place_is_the_library_gesture() {
 }
 
 #[test]
+fn arg_sites_lists_instrument_and_inserts_with_set_arg_coordinates() {
+    let sites = fortelang::edit::arg_sites(SRC).unwrap();
+    let drums: Vec<_> = sites.iter().filter(|s| s.track == "Drums").collect();
+    assert_eq!(drums.len(), 2);
+    assert_eq!(drums[0].target, "instrument");
+    assert_eq!(drums[0].name, "sampler");
+    assert_eq!(drums[0].args[0].arg, "slices");
+    assert_eq!(drums[0].args[0].num, Some(16.0));
+    assert_eq!(drums[0].args[1].str.as_deref(), Some("on"));
+    assert_eq!(drums[1].target, "insert:0");
+    assert_eq!(drums[1].name, "filter");
+    assert_eq!(drums[1].path, vec!["Groove"]);
+    // the coordinates round-trip into set_arg
+    let op = format!(
+        r#"{{"op":"set_arg","path":["Groove"],"track":"{}","target":"{}","arg":"cutoff","value":0.3}}"#,
+        drums[1].track, drums[1].target
+    );
+    let out = apply(SRC, &op);
+    assert!(out.contains("cutoff: 0.3"));
+}
+
+#[test]
 fn set_track_is_idempotent() {
     let op = r#"{"op":"set_track","track":"Bass","field":"volume","value":0.5}"#;
     let once = apply(MIX, op);

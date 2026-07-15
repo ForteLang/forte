@@ -72,6 +72,13 @@
   #mixer .strip .ms button { flex: 1; padding: 0; font-size: 9px; }
   #mixer .strip .ms button.on { background: #b98a2e; color: #14171c; }
   #mixer .strip .lbl { display: flex; justify-content: space-between; color: #565d69; }
+  #insp { padding: 2px 8px 6px; font-size: 11px; color: #a9b0bb; }
+  #insp:empty { display: none; }
+  #insp .ihead { color: #8a919e; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; margin: 2px 0 4px; }
+  #insp .irow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 3px; }
+  #insp .inm { color: #d7dae0; min-width: 90px; }
+  #insp label { display: inline-flex; gap: 3px; align-items: center; color: #565d69; }
+  #insp input { width: 64px; font-size: 11px; padding: 1px 4px; }
   #tree .f {
     padding: 0 12px; color: #a9b0bb; cursor: pointer;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -183,6 +190,7 @@
   <canvas id="viz"></canvas>
   <span id="viz-hint">drag a clip to re-place it — the code is the source of truth</span>
   <div id="mixer" title="fader / pan は set_track としてコードに書き戻ります。M/S はこのセッションだけのモニタ操作"></div>
+  <div id="insp"></div>
 </div>
 <script type="module" src="main.js"></script>
 </body>

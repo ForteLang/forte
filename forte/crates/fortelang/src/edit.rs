@@ -916,6 +916,80 @@ fn walk_sites(body: &SongAst, path: &mut Vec<String>, out: &mut Vec<PatternSite>
     }
 }
 
+/// One `instrument` / `insert` call in the source — what an inspector GUI
+/// binds knobs to. `path`/`track`/`target` are exactly the coordinates the
+/// corresponding `set_arg` op takes.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ArgSite {
+    pub path: Vec<String>,
+    pub track: String,
+    /// "instrument" or "insert:<index>"
+    pub target: String,
+    /// The call's name (device or effect).
+    pub name: String,
+    /// 1-based source line of the call (for editor code-jumps).
+    pub line: u32,
+    /// Present arguments in written order.
+    pub args: Vec<ArgSiteArg>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ArgSiteArg {
+    pub arg: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub num: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub str: Option<String>,
+}
+
+/// List every instrument/insert call with the coordinates `set_arg`
+/// expects. The inspector's read side of the GUI round-trip.
+pub fn arg_sites(src: &str) -> Result<Vec<ArgSite>, Diag> {
+    let file = parse(src).map_err(|mut ds| ds.remove(0))?;
+    let mut out = Vec::new();
+    if let Some(s) = &file.song {
+        walk_arg_sites(s, &mut Vec::new(), &mut out);
+    }
+    for b in &file.blocks {
+        let mut path = vec![b.name.clone()];
+        walk_arg_sites(&b.body, &mut path, &mut out);
+    }
+    Ok(out)
+}
+
+fn walk_arg_sites(body: &SongAst, path: &mut Vec<String>, out: &mut Vec<ArgSite>) {
+    let site = |track: &str, target: String, call: &Call, path: &[String]| ArgSite {
+        path: path.to_vec(),
+        track: track.to_string(),
+        target,
+        name: call.name.clone(),
+        line: call.pos.line,
+        args: call
+            .args
+            .iter()
+            .map(|(k, a)| match a {
+                Arg::Num(v, _) => ArgSiteArg { arg: k.clone(), num: Some(*v), str: None },
+                Arg::Str(s, _) | Arg::Ident(s, _) => {
+                    ArgSiteArg { arg: k.clone(), num: None, str: Some(s.clone()) }
+                }
+            })
+            .collect(),
+    };
+    for t in &body.tracks {
+        if let Some(c) = &t.instrument {
+            out.push(site(&t.name, "instrument".into(), c, path));
+        }
+        for (i, c) in t.inserts.iter().enumerate() {
+            out.push(site(&t.name, format!("insert:{i}"), c, path));
+        }
+    }
+    for b in &body.blocks {
+        path.push(b.name.clone());
+        walk_arg_sites(&b.body, path, out);
+        path.pop();
+    }
+}
+
 fn splice(src: &str, from: usize, to: usize, text: &str) -> String {
     let mut out = String::with_capacity(src.len() + text.len());
     out.push_str(&src[..from]);

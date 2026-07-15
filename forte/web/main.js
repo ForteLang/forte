@@ -119,6 +119,134 @@ function setModules(inst) {
 // fader / pan write back as set_track; M/S are engine-side monitor state
 // for THIS session only (never written to code).
 const monitor = { mute: new Set(), solo: new Set() };
+
+// apply an edit op to the OPEN buffer silently; false = op didn't apply
+function tryBufferEdit(op) {
+  stageSrc(getText());
+  stageJson(JSON.stringify(op));
+  if (main.e.fw_edit(main.ctx) !== 0) return false;
+  const out = wasmText(main.e.fw_edit_ptr(main.ctx), main.e.fw_edit_len(main.ctx));
+  replaceText(out);
+  autosave();
+  recompile(0);
+  return true;
+}
+
+// which block file defines this track? (for tracks that arrive via
+// `play <ImportedBlock>` — the mixer routes their edits to the block's home)
+function trackHomeFile(name) {
+  // placed blocks compile their tracks as "<Block>.<Track>"
+  const dot = name.indexOf('.');
+  const blockName = dot > 0 ? name.slice(0, dot) : null;
+  const trackName = dot > 0 ? name.slice(dot + 1) : name;
+  const text = getText();
+  const scan = (matchBlock) => {
+    for (const f of PROJECT?.blocks ?? []) {
+      for (const b of f.blocks ?? []) {
+        if (matchBlock && b.name !== blockName) continue;
+        if (!(b.tracks ?? []).some((t) => t.name === trackName)) continue;
+        if (text.includes(b.name)) return { file: f.file, block: b.name, track: trackName };
+      }
+    }
+    return null;
+  };
+  // exact block first; aliases (play X as Y) fall back to the track name
+  return (blockName && scan(true)) || scan(false);
+}
+
+// a track-scoped edit: try the open buffer first, else write to the block's
+// own file on disk through the project API
+async function routeTrackOp(trackName, op) {
+  if (tryBufferEdit(op)) return true;
+  const home = PROJECT && trackHomeFile(trackName);
+  if (!home) {
+    status(`edit: track '${trackName}' の定義がこのファイル/プロジェクトに見つかりません`);
+    return false;
+  }
+  const r = await fetch(`api/edit?path=${encodeURIComponent(home.file)}`, {
+    method: 'POST',
+    body: JSON.stringify({ ...op, track: home.track, path: [home.block] }),
+  });
+  const t = await r.text();
+  if (!r.ok) {
+    status(`edit: ${t}`);
+    return false;
+  }
+  status(`→ ${home.file} (${home.block}) に書き戻しました`);
+  await refreshModules();
+  recompile(0);
+  return true;
+}
+
+// ---- inspector (set_arg knobs): instrument/insert args of one track ----
+function argSitesOf(text) {
+  stageSrc(text);
+  const n = main.e.fw_arg_sites(main.ctx);
+  const out = wasmText(main.e.fw_edit_ptr(main.ctx), main.e.fw_edit_len(main.ctx));
+  stageSrc(getText());
+  return n < 0 ? [] : JSON.parse(out);
+}
+
+let inspTrack = null;
+async function renderInspector() {
+  const el = $('insp');
+  if (!el) return;
+  if (el.contains(document.activeElement)) return; // don't rebuild mid-typing
+  el.textContent = '';
+  if (!inspTrack) return;
+  let sites = argSitesOf(getText()).filter((x) => x.track === inspTrack);
+  let home = null;
+  if (!sites.length && PROJECT) {
+    home = trackHomeFile(inspTrack);
+    if (home) {
+      const text = await store.read(home.file);
+      sites = argSitesOf(text).filter(
+        (x) => x.track === home.track && x.path.includes(home.block)
+      );
+    }
+  }
+  const head = document.createElement('div');
+  head.className = 'ihead';
+  head.textContent = `inspector: ${inspTrack}${home ? ` — ${home.file}` : ''}`;
+  el.appendChild(head);
+  for (const site of sites) {
+    const row = document.createElement('div');
+    row.className = 'irow';
+    const nm = document.createElement('span');
+    nm.className = 'inm';
+    nm.textContent = `${site.target === 'instrument' ? '♪' : 'fx'} ${site.name}`;
+    nm.title = `${site.target}(行 ${site.line})`;
+    row.appendChild(nm);
+    for (const a of site.args) {
+      const lab = document.createElement('label');
+      lab.textContent = a.arg;
+      const inp = document.createElement('input');
+      if (a.num !== undefined && a.num !== null) {
+        inp.type = 'number';
+        inp.step = '0.01';
+        inp.value = a.num;
+      } else {
+        inp.type = 'text';
+        inp.value = a.str ?? '';
+        inp.size = 6;
+      }
+      inp.onchange = () => {
+        inp.blur(); // allow the rebuild after recompile
+        routeTrackOp(inspTrack, {
+          op: 'set_arg',
+          path: site.path,
+          track: site.track,
+          target: site.target,
+          arg: a.arg,
+          value: inp.type === 'number' ? Number(inp.value) : inp.value,
+        });
+      };
+      lab.appendChild(inp);
+      row.appendChild(lab);
+    }
+    el.appendChild(row);
+  }
+}
 function sendMonitor(tracks) {
   if (!node) return;
   const anySolo = monitor.solo.size > 0;
@@ -140,7 +268,12 @@ function renderMixer() {
     const nm = document.createElement('div');
     nm.className = 'nm';
     nm.textContent = t.name;
-    nm.title = `${t.name} — ${t.instrument}`;
+    nm.title = `${t.name} — ${t.instrument}(クリックでインスペクタ)`;
+    nm.style.cursor = 'pointer';
+    nm.onclick = () => {
+      inspTrack = inspTrack === t.name ? null : t.name;
+      renderInspector().catch(() => {});
+    };
     strip.appendChild(nm);
     const meter = document.createElement('div');
     meter.className = 'meter';
@@ -164,7 +297,7 @@ function renderMixer() {
       r.oninput = () => (val.textContent = Number(r.value).toFixed(2));
       // write on release: one clean splice per gesture, not per pixel
       r.onchange = () =>
-        applyEdit({ op: 'set_track', track: t.name, field, value: Number(r.value) });
+        routeTrackOp(t.name, { op: 'set_track', track: t.name, field, value: Number(r.value) });
       strip.appendChild(r);
     };
     slider('volume', 0, 1, 0.01, t.volume ?? 0.8);
@@ -206,6 +339,7 @@ function mainCompile(text) {
     viz.setData(JSON.parse(new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, vp, vl))));
     window.__vizTracks = viz.data?.tracks?.length ?? 0;
     renderMixer();
+    renderInspector().catch(() => {});
     const bpm = $('bpm');
     if (bpm && document.activeElement !== bpm) bpm.value = viz.data?.tempo ?? '';
   }

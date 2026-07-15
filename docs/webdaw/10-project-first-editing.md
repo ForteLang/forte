@@ -106,3 +106,18 @@ OPEN file, so mixer writes work in block files and inline-track songs;
 strips for tracks that arrive via `play <ImportedBlock>` report the
 edit error instead (routing those to the block's own file is the next
 step).
+
+Fourth slice — cross-file routing and the inspector (DAW-MIX-03/04,
+the known limit above, CLOSED): compiled tracks of placed blocks are
+namespaced `<Block>.<Track>`; a track-scoped edit now tries the open
+buffer first and otherwise routes to the block's home file through
+`POST /api/edit` (edit ops applied server-side to the file on disk,
+same re-parse guard). So the mixer works for every strip of a
+block-composed song — the fader on `Bassline.Bass` edits
+`blocks/Bassline.forte`. Clicking a strip's name opens the INSPECTOR:
+`forte edit --args` / `fw_arg_sites` (a new read side listing every
+instrument/insert call with its `set_arg` coordinates) renders the
+track's device and effect arguments as editable fields, routed the
+same way. Alias placements fall back to track-name matching; two
+imported blocks sharing both block and track names would still
+need disambiguation by file.
