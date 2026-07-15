@@ -115,6 +115,82 @@ function setModules(inst) {
   stage(inst, currentBase(), inst.e.fw_base_commit);
 }
 
+// ---- mixer (DAW-MIX-08): strips are a projection of the compiled tracks —
+// fader / pan write back as set_track; M/S are engine-side monitor state
+// for THIS session only (never written to code).
+const monitor = { mute: new Set(), solo: new Set() };
+function sendMonitor(tracks) {
+  if (!node) return;
+  const anySolo = monitor.solo.size > 0;
+  tracks.forEach((t, i) => {
+    const off = anySolo ? !monitor.solo.has(t.name) : monitor.mute.has(t.name);
+    node.port.postMessage({ cmd: 'mute', track: i, on: off });
+  });
+}
+function renderMixer() {
+  const el = $('mixer');
+  if (!el) return;
+  const tracks = viz.data?.tracks ?? [];
+  el.textContent = '';
+  for (const t of tracks) {
+    if (t.fx) continue; // return tracks have no fader statement (v1)
+    const strip = document.createElement('div');
+    strip.className = 'strip';
+    strip.dataset.track = t.name;
+    const nm = document.createElement('div');
+    nm.className = 'nm';
+    nm.textContent = t.name;
+    nm.title = `${t.name} — ${t.instrument}`;
+    strip.appendChild(nm);
+    const meter = document.createElement('div');
+    meter.className = 'meter';
+    meter.appendChild(document.createElement('i'));
+    strip.appendChild(meter);
+    const slider = (field, min, max, step, value) => {
+      const lbl = document.createElement('div');
+      lbl.className = 'lbl';
+      const name = document.createElement('span');
+      name.textContent = field;
+      const val = document.createElement('span');
+      val.textContent = Number(value).toFixed(2);
+      lbl.append(name, val);
+      strip.appendChild(lbl);
+      const r = document.createElement('input');
+      r.type = 'range';
+      r.min = min;
+      r.max = max;
+      r.step = step;
+      r.value = value;
+      r.oninput = () => (val.textContent = Number(r.value).toFixed(2));
+      // write on release: one clean splice per gesture, not per pixel
+      r.onchange = () =>
+        applyEdit({ op: 'set_track', track: t.name, field, value: Number(r.value) });
+      strip.appendChild(r);
+    };
+    slider('volume', 0, 1, 0.01, t.volume ?? 0.8);
+    slider('pan', -1, 1, 0.01, t.pan ?? 0);
+    const ms = document.createElement('div');
+    ms.className = 'ms';
+    const mbtn = (label, set, title) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.title = title;
+      b.className = set.has(t.name) ? 'on' : '';
+      b.onclick = () => {
+        set.has(t.name) ? set.delete(t.name) : set.add(t.name);
+        b.className = set.has(t.name) ? 'on' : '';
+        sendMonitor(tracks);
+      };
+      ms.appendChild(b);
+    };
+    mbtn('M', monitor.mute, 'ミュート(モニタのみ・コードには書かれません)');
+    mbtn('S', monitor.solo, 'ソロ(モニタのみ)');
+    strip.appendChild(ms);
+    el.appendChild(strip);
+  }
+  sendMonitor(tracks);
+}
+
 function mainCompile(text) {
   setModules(main);
   const bytes = new TextEncoder().encode(text);
@@ -129,6 +205,7 @@ function mainCompile(text) {
     const vl = main.e.fw_viz_len(main.ctx);
     viz.setData(JSON.parse(new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, vp, vl))));
     window.__vizTracks = viz.data?.tracks?.length ?? 0;
+    renderMixer();
   }
   return { ok: n === 0, diags };
 }
@@ -260,8 +337,18 @@ async function ensureAudio() {
       return;
     }
     if (m.kind === 'pos') {
-      status(`bar ${Math.floor(m.beats / 4) + 1}.${Math.floor(m.beats % 4) + 1} | peak ${m.peak.toFixed(2)}`);
-      if (m.peaks) viz.setPeaks(m.peaks);
+      const bpb = viz.data?.beatsPerBar || 4;
+      status(`bar ${Math.floor(m.beats / bpb) + 1}.${Math.floor(m.beats % bpb) + 1} | peak ${m.peak.toFixed(2)}`);
+      if (m.peaks) {
+        viz.setPeaks(m.peaks);
+        const strips = $('mixer')?.children ?? [];
+        const tracks = viz.data?.tracks ?? [];
+        for (const strip of strips) {
+          const i = tracks.findIndex((t) => t.name === strip.dataset.track);
+          const bar = strip.querySelector('.meter i');
+          if (bar && i >= 0) bar.style.width = `${Math.min(1, m.peaks[i] ?? 0) * 100}%`;
+        }
+      }
       viz.setPlayhead(m.beats);
     }
   };
@@ -1206,12 +1293,40 @@ async function boot() {
     await refreshFileList();
     loadSong(BUILTINS.includes(currentName) ? currentName : BUILTINS[0]);
   };
-  $('play').onclick = async () => {
+  let playing = false;
+  const doPlay = async () => {
     await ensureAudio();
     await ac.resume();
     node.port.postMessage({ cmd: 'play' });
+    playing = true;
   };
-  $('stop').onclick = () => node?.port.postMessage({ cmd: 'stop' });
+  const doStop = () => {
+    node?.port.postMessage({ cmd: 'stop' });
+    playing = false;
+  };
+  $('play').onclick = doPlay;
+  $('stop').onclick = doStop;
+  // space = play/stop, the DAW way — unless typing (editor, inputs) or performing
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space' || e.repeat) return;
+    if (perf) return; // perform mode owns the keyboard
+    const t = document.activeElement;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return;
+    e.preventDefault();
+    (playing ? doStop : doPlay)();
+  });
+  // double-click in the arrange = seek the playhead to that beat
+  $('viz').addEventListener('dblclick', async (ev) => {
+    const rect = $('viz').getBoundingClientRect();
+    const { headerW, pxPerBeat } = viz.geom();
+    const x = ev.clientX - rect.left;
+    if (x <= headerW || !viz.data) return;
+    const bpb = viz.data.beatsPerBar || 4;
+    const beats = Math.max(0, Math.round((x - headerW) / pxPerBeat / bpb) * bpb);
+    await ensureAudio();
+    node.port.postMessage({ cmd: 'seek', beats });
+    viz.setPlayhead(beats);
+  });
   $('rec').onclick = () => (rec ? recStop() : recStart()).catch((e) => status(`rec: ${e.message}`));
   $('calib').onclick = () =>
     calibrate().catch((e) => {

@@ -93,3 +93,16 @@ library gesture — `add_import` (a new edit op: merges into an existing
 import of the same path, no-ops when present, else inserts below the
 last import) followed by `add_place` after the open song's last used
 bar. `forte hub fork` (PRJ-03) still needs its CLI before its GUI.
+
+Third slice — the transport and the mixer (DAW-MIX-01/02/08):
+`viz_json` carries each track's volume/pan; a mixer panel under the
+arrange renders one strip per track (live peak meter, volume fader,
+pan) whose release-writes go through `set_track` — the fader IS the
+code. M/S are engine-side monitor state for the session only (the
+worklet's `mute` command), never written to source. Space = play/stop
+(except while typing or performing), double-click in the arrange seeks
+the playhead. Known limit: `set_track` targets tracks defined in the
+OPEN file, so mixer writes work in block files and inline-track songs;
+strips for tracks that arrive via `play <ImportedBlock>` report the
+edit error instead (routing those to the block's own file is the next
+step).

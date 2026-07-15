@@ -58,6 +58,20 @@
   #tree .blk { display: flex; gap: 4px; align-items: center; padding: 0 12px; }
   #tree .blk span { flex: 1; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
   #tree .blk button { padding: 0 6px; font-size: 10px; }
+  #mixer { display: flex; gap: 6px; padding: 6px 8px; overflow-x: auto; }
+  #mixer:empty { display: none; }
+  #mixer .strip {
+    width: 88px; flex: none; border: 1px solid #262b33; border-radius: 6px;
+    padding: 4px 6px; font-size: 10px; color: #a9b0bb;
+  }
+  #mixer .strip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 2px; }
+  #mixer .strip .meter { height: 4px; background: #14171c; border-radius: 2px; margin: 2px 0 4px; overflow: hidden; }
+  #mixer .strip .meter i { display: block; height: 100%; width: 0; background: #58c470; }
+  #mixer .strip input[type='range'] { width: 100%; margin: 0; height: 14px; }
+  #mixer .strip .ms { display: flex; gap: 4px; margin-top: 3px; }
+  #mixer .strip .ms button { flex: 1; padding: 0; font-size: 9px; }
+  #mixer .strip .ms button.on { background: #b98a2e; color: #14171c; }
+  #mixer .strip .lbl { display: flex; justify-content: space-between; color: #565d69; }
   #tree .f {
     padding: 0 12px; color: #a9b0bb; cursor: pointer;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -166,6 +180,7 @@
 <div id="viz-wrap">
   <canvas id="viz"></canvas>
   <span id="viz-hint">drag a clip to re-place it — the code is the source of truth</span>
+  <div id="mixer" title="fader / pan は set_track としてコードに書き戻ります。M/S はこのセッションだけのモニタ操作"></div>
 </div>
 <script type="module" src="main.js"></script>
 </body>

@@ -38,6 +38,9 @@ pub fn viz_json(p: &Project) -> serde_json::Value {
                 // what plays and what shapes it — the composer view reads these
                 "instrument": t.devices.first().map(|d| d.kind.label()).unwrap_or(""),
                 "inserts": t.devices.iter().skip(1).map(|d| d.kind.label()).collect::<Vec<_>>(),
+                // the mixer strip's read side (writes go through set_track)
+                "volume": t.volume,
+                "pan": t.pan,
                 "clips": clips,
             })
         })
