@@ -787,6 +787,24 @@ async function refreshTree(locals) {
         el.appendChild(d);
       }
     }
+    section('instruments');
+    for (const inst of paletteInstruments()) {
+      const d = document.createElement('div');
+      d.className = 'f blk';
+      const label = document.createElement('span');
+      label.textContent = `♪ ${inst.label}`;
+      label.title = `${inst.call}${inst.where ? `(${inst.where})` : ''}`;
+      d.appendChild(label);
+      const b = document.createElement('button');
+      b.textContent = '+tr';
+      b.title = '開いている曲 / block にこの音源のトラックを足す';
+      b.onclick = (e) => {
+        e.stopPropagation();
+        addTrackFromPalette(inst);
+      };
+      d.appendChild(b);
+      el.appendChild(d);
+    }
   }
   if (locals.length || assets.length) {
     section(PROJECT ? 'project' : 'local');
@@ -901,6 +919,63 @@ function placeBlock(b) {
   }
   ops.push({ op: 'add_place', block: b.name, bars: [start, start + len - 1] });
   if (applyEdit(ops)) status(`placed: ${b.name} at bars(${start}..${start + len - 1})`);
+}
+
+// ---- instrument palette: built-ins + every device in the package ----------
+const BUILTIN_INSTRUMENTS = [
+  { label: 'Kick', call: 'sampler(sample: "Kick")', kind: 'beat', pat: 'x... x... x... x...' },
+  { label: 'Snare', call: 'sampler(sample: "Snare")', kind: 'beat', pat: '.... x... .... x...' },
+  { label: 'Hat', call: 'sampler(sample: "Hat")', kind: 'beat', pat: '..x. ..x. ..x. ..x.' },
+  {
+    label: 'Prisma',
+    call: 'prisma(wave: "saw", cutoff: 0.4, sub: 0.5)',
+    kind: 'notes',
+    pat: 'C3:0.5 _:0.5 Eb3:0.5 _:0.5 G3:0.5 _:0.5 Eb3:0.5 _:0.5',
+  },
+  { label: 'Mesh', call: 'mesh()', kind: 'notes', pat: '[C3 Eb3 G3]:2 [Ab2 C3 Eb3]:2' },
+];
+const DEFAULT_NOTES_PAT = 'C3:0.5 _:0.5 Eb3:0.5 _:0.5 G3:0.5 _:0.5 Eb3:0.5 _:0.5';
+
+function paletteInstruments() {
+  const out = BUILTIN_INSTRUMENTS.map((b) => ({ ...b, where: 'built-in' }));
+  const push = (file, d, where) => {
+    if (d.kind !== 'Instrument') return;
+    out.push({
+      label: d.name,
+      name: d.name,
+      from: file,
+      call: `${d.name}()`,
+      kind: 'notes',
+      pat: DEFAULT_NOTES_PAT,
+      where,
+    });
+  };
+  for (const f of PROJECT?.instruments ?? []) for (const d of f.devices ?? []) push(f.file, d, f.file);
+  for (const pkg of PROJECT?.packages ?? [])
+    for (const f of pkg.instruments ?? []) for (const d of f.devices ?? []) push(f.file, d, pkg.name);
+  return out;
+}
+
+// the palette gesture: a new track with this instrument + a starter pattern
+function addTrackFromPalette(inst) {
+  if (PROJECT && !currentName.startsWith('songs/') && !currentName.startsWith('blocks/')) {
+    status('先に曲か block を開いてください(左のツリー、または +曲 / +block)');
+    return;
+  }
+  const text = getText();
+  const base = (inst.label || 'Track').replace(/[^A-Za-z0-9_]/g, '') || 'Track';
+  let n = 1;
+  while (new RegExp('track\\s+' + base + (n > 1 ? n : '') + '\\b').test(text)) n++;
+  const name = base + (n > 1 ? n : '');
+  const ops = [];
+  if (inst.from) ops.push({ op: 'add_import', names: [inst.name], from: relPath(currentName, inst.from) });
+  ops.push({
+    op: 'add_track',
+    name,
+    instrument: inst.call,
+    play: inst.kind + '`' + inst.pat + '` at bars(1..4)',
+  });
+  if (applyEdit(ops)) status(`+ track ${name}(${inst.label})— グリッド / ロールで打ち込めます`);
 }
 
 // ---- history: the .forte repository lives in the browser too -----------------
@@ -1650,6 +1725,18 @@ async function boot() {
   $('helpbtn').onclick = () => $('help').classList.toggle('show');
   const hideWelcome = () => $('welcome').classList.remove('show');
   $('welcome-close').onclick = hideWelcome;
+  $('welcome-demo').onclick = async () => {
+    hideWelcome();
+    const r = await fetch('api/new?kind=demo&name=demo', { method: 'POST' });
+    if (r.ok) {
+      await refreshModules();
+      await refreshFileList();
+      await loadSong(JSON.parse(await r.text()).file);
+    } else {
+      await loadSong('songs/demo.forte').catch(() => {});
+    }
+    status('space で再生! グリッド / ロール / ミキサーを触るとコードが書き換わります');
+  };
   $('welcome-block').onclick = () => {
     hideWelcome();
     newElement('block');

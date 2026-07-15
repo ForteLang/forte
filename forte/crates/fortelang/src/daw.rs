@@ -354,10 +354,26 @@ pub(crate) fn new_element(project: &Path, kind: &str, name: &str) -> Result<Stri
         "song" => (
             format!("songs/{name}.forte"),
             format!(
-                "song \"{name}\" {{\n  tempo 120bpm\n\n  track Drums {{\n    instrument sampler(sample: \"Kick\")\n    play beat`x... x... x... x...` at bars(1..4)\n  }}\n}}\n"
+                "song \"{name}\" {{\n  tempo 120bpm\n\n  track Drums {{\n    instrument sampler(sample: \"Kick\")\n    play beat`x... x... x... x...` at bars(1..4)\n  }}\n\n  track Bass {{\n    instrument prisma(wave: \"saw\", cutoff: 0.4, sub: 0.6)\n    volume 0.75\n    play notes`C2:1 _:1 Eb2:0.5 _:0.5 G1:1` at bars(1..4)\n  }}\n}}\n"
             ),
         ),
-        other => return Err(format!("kind は block か song です(見つかったのは \"{other}\")")),
+        // a one-click STARTER: built-ins only, grooves immediately, and
+        // shows off grid + roll + sections + mixer statements to learn from
+        "demo" => (
+            format!("songs/{name}.forte"),
+            format!(
+                "// {name} — a starter groove made from the built-ins.\n\
+                 // space で再生。グリッド / ロール / ミキサーを触ると、この\n\
+                 // コードがそのまま書き換わります。\n\
+                 song \"{name}\" {{\n  tempo 122bpm\n\n  section groove = bars(1..8)\n  section lift   = bars(9..16)\n\n\
+                 \x20 track Kick {{\n    instrument sampler(sample: \"Kick\")\n    volume 0.9\n    play beat`x... x... x... x...` at bars(1..16)\n  }}\n\n\
+                 \x20 track Hats {{\n    instrument sampler(sample: \"Hat\")\n    volume 0.5\n    pan 0.15\n    play beat`..x. ..x. ..x. ..x.` at groove\n    play beat`..x. ..x. ..x. ..xx` at lift\n  }}\n\n\
+                 \x20 track Snare {{\n    instrument sampler(sample: \"Snare\")\n    volume 0.7\n    play beat`.... x... .... x...` at bars(1..16)\n  }}\n\n\
+                 \x20 track Bass {{\n    instrument prisma(wave: \"saw\", cutoff: 0.35, reso: 0.3, sub: 0.6)\n    volume 0.75\n    play notes`C2:0.5 _:0.5 C2:0.5 _:0.5 Eb2:0.5 _:0.5 G1:0.5 _:0.5` at bars(1..16)\n  }}\n\n\
+                 \x20 track Pad {{\n    instrument prisma(wave: \"saw\", cutoff: 0.45, attack: 0.4, release: 0.6, unison: 5, spread: 0.7)\n    volume 0.5\n    play notes`[C3 Eb3 G3]:4 [Ab2 C3 Eb3]:4` at lift\n  }}\n}}\n"
+            ),
+        ),
+        other => return Err(format!("kind は block / song / demo です(見つかったのは \"{other}\")")),
     };
     let dst = project.join(&rel);
     if dst.exists() {

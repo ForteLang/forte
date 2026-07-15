@@ -8,7 +8,7 @@
 //! `{file, error}` entries instead of aborting the scan — a project
 //! explorer must show broken files, not hide the project behind them.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::ast::{FileAst, SongAst};
 use crate::parser::parse;
@@ -203,16 +203,20 @@ fn albums(root: &Path) -> Vec<Value> {
         .collect()
 }
 
-/// Vendored dependencies: `packages/<name>_<version>/` directory names.
-fn vendored(root: &Path) -> Vec<String> {
-    let mut dirs: Vec<String> = std::fs::read_dir(root.join("packages"))
-        .map(|rd| {
-            rd.flatten()
-                .filter(|e| e.path().is_dir())
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .collect()
-        })
+/// Vendored dependencies: each `packages/<name>_<version>/` with its
+/// instruments (project-relative files, `set_arg`-able params) so the
+/// palette can offer them without a second scan.
+fn vendored(root: &Path) -> Vec<Value> {
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root.join("packages"))
+        .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect())
         .unwrap_or_default();
     dirs.sort();
-    dirs
+    dirs.iter()
+        .map(|d| {
+            let name = d.file_name().unwrap_or_default().to_string_lossy().into_owned();
+            let sub = format!("packages/{name}");
+            let instruments: Vec<Value> = scan(root, &format!("{sub}/instruments"), device_entry);
+            json!({ "dir": sub, "name": name, "instruments": instruments })
+        })
+        .collect()
 }

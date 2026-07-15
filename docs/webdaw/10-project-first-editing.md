@@ -135,3 +135,18 @@ fw_notes_write): drag draws a note (quantum 0.25), click deletes,
 exact-match overlaps become chords, and the write path is plain
 set_pattern. Also: clip drag/resize/whole-span landed for placed
 blocks (placement-line anchoring in compile).
+
+Sixth slice — sound in sixty seconds (the "opened it and had no idea
+what to do" answer): `add_track` joins the edit layer (append
+`track N { instrument …; play … }` to a body, brace-smuggling
+refused); the project inventory now lists each vendored package's
+instruments; the tree gains an INSTRUMENTS palette — built-ins
+(Kick / Snare / Hat / Prisma / Mesh) plus every device in the package
+and its vendored deps — whose `+tr` button drops a ready-to-edit
+track (starter beat or notes pattern, auto-imported when the device
+lives in another file). `forte daw` opens as a local `--app` window
+when a Chromium-family browser exists. The welcome card's primary
+action is now 「🎵 デモ曲から始める」: `/api/new?kind=demo` scaffolds a
+5-track, 16-bar groove from built-ins only (sections, mixer
+statements, grid + roll material) that plays on space and teaches by
+being edited.

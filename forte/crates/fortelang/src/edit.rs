@@ -146,6 +146,19 @@ pub enum EditOp {
     /// statement sits on a 1-based source line. The op the arrange view
     /// speaks: its clips know source lines, not body paths.
     MoveAtLine { line: u32, bars: (u32, u32) },
+    /// Append `track <name> { instrument …; play … }` to a body — the
+    /// palette's "+トラック" gesture. `instrument` is the call text
+    /// (e.g. `sampler(sample: "Kick")`), `play` an optional first play
+    /// statement body (e.g. ``beat`x...` at bars(1..4)``); both are
+    /// validated by the re-parse guard like everything else.
+    AddTrack {
+        #[serde(default)]
+        path: Vec<String>,
+        name: String,
+        instrument: String,
+        #[serde(default)]
+        play: Option<String>,
+    },
     /// Ensure `import { names… } from "from"` exists — missing names merge
     /// into an existing import of the same path; otherwise a new import
     /// line lands above the first statement (leading comments stay on
@@ -406,6 +419,58 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
         EditOp::MoveAtLine { line, bars } => {
             let at = find_at_on_line(&ctx, &file, *line)?;
             ctx.splice_at(src, at, *bars)
+        }
+        EditOp::AddTrack { path, name, instrument, play } => {
+            let ok_name = !name.is_empty()
+                && name.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+                && name.chars().all(|c| c.is_alphanumeric() || c == '_');
+            if !ok_name {
+                return Err(Diag::new("E-EDIT-001", p0, format!("track 名が不正です: \"{name}\"")));
+            }
+            for (what, text) in
+                [("instrument", instrument.as_str()), ("play", play.as_deref().unwrap_or(""))]
+            {
+                if text.contains('{') || text.contains('}') || text.contains('\n') {
+                    return Err(Diag::new(
+                        "E-EDIT-005",
+                        p0,
+                        format!("add_track の {what} に {{ }} や改行は書けません"),
+                    ));
+                }
+            }
+            let (body, _) = resolve_body(&file, path)?;
+            if body.tracks.iter().any(|t| &t.name == name) {
+                return Err(Diag::new("E-EDIT-003", p0, format!("track '{name}' は既にあります")));
+            }
+            let close = ctx.body_close_brace(&file, path)?;
+            let close_off = ctx.toks[close].off;
+            let line_start = src[..close_off].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            // match the last track's indentation, else brace indent + 2
+            let indent = match body.tracks.last().and_then(|t| ctx.tok_at(t.pos).ok()) {
+                Some(anchor) => {
+                    let off = ctx.toks[anchor].off;
+                    let ls = src[..off].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                    if src[ls..off].trim().is_empty() {
+                        src[ls..off].to_string()
+                    } else {
+                        "  ".into()
+                    }
+                }
+                None => format!("{}  ", &src[line_start..close_off]),
+            };
+            let play_line = match play {
+                Some(pl) => format!("{indent}  play {pl}\n"),
+                None => String::new(),
+            };
+            let stmt = format!(
+                "{indent}track {name} {{\n{indent}  instrument {instrument}\n{play_line}{indent}}}\n"
+            );
+            if src[line_start..close_off].trim().is_empty() {
+                splice(src, line_start, line_start, &stmt)
+            } else {
+                // one-line body: break the line before the closing brace
+                splice(src, close_off, close_off, &format!("\n{stmt}"))
+            }
         }
         EditOp::AddImport { names, from } => {
             if names.is_empty() {

@@ -356,6 +356,21 @@ fn set_send_adds_a_missing_send() {
 }
 
 #[test]
+fn add_track_appends_with_instrument_and_starter_play() {
+    let src = "song \"s\" {\n  tempo 100bpm\n\n  track A {\n    instrument sampler(sample: \"Kick\")\n    play beat`x...` at bars(1..1)\n  }\n}\n";
+    let out = apply(
+        src,
+        r#"{"op":"add_track","name":"Bass","instrument":"prisma(wave: \"saw\")","play":"notes`C2:1` at bars(1..1)"}"#,
+    );
+    assert!(out.contains("  track Bass {\n    instrument prisma(wave: \"saw\")\n    play notes`C2:1` at bars(1..1)\n  }\n"), "{out}");
+    // duplicates and brace smuggling are refused
+    let dup = parse_ops(r#"{"op":"add_track","name":"A","instrument":"mono()"}"#).unwrap();
+    assert_eq!(apply_ops(src, &dup).unwrap_err().code, "E-EDIT-003");
+    let bad = parse_ops(r#"{"op":"add_track","name":"B","instrument":"mono() } track X {"}"#).unwrap();
+    assert_eq!(apply_ops(src, &bad).unwrap_err().code, "E-EDIT-005");
+}
+
+#[test]
 fn add_import_inserts_below_the_last_import() {
     let src = "// header comment\nimport { A } from \"./a.forte\"\n\nsong \"s\" {\n  tempo 100bpm\n}\n";
     let out = apply(src, r#"{"op":"add_import","names":["Groove"],"from":"../blocks/groove.forte"}"#);
