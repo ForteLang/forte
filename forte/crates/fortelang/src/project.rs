@@ -143,6 +143,7 @@ fn block_entry(rel: &str, ast: &FileAst) -> Value {
                 "parent": b.parent.as_ref().map(|(p, _)| p.clone()),
                 "tempo": b.body.tempo.map(|(v, _)| v),
                 "bars": body_bars(&b.body),
+                "sections": b.body.sections.iter().map(|x| json!({"name": x.name, "bars": [x.bars.0, x.bars.1]})).collect::<Vec<_>>(),
                 "tracks": tracks_json(&b.body),
                 "patterns": b.body.lets.len(),
                 "nested": b.body.blocks.iter().map(|n| n.name.clone()).collect::<Vec<_>>(),

@@ -40,6 +40,9 @@ class ForteProcessor extends AudioWorkletProcessor {
         const ptr = this.e.fw_src_prepare(this.ctx, msg.text.length);
         new Uint8Array(this.e.memory.buffer, ptr, msg.text.length).set(msg.text);
         const n = this.e.fw_compile(this.ctx);
+        // fw_compile resets the loop to the full arrangement — re-apply the
+        // user's section loop so hot reloads keep looping the same span
+        if (n === 0 && msg.loop) this.e.fw_loop(this.ctx, msg.loop.start, msg.loop.end);
         this.port.postMessage({ kind: 'compiled', diagCount: n });
         break;
       }
@@ -51,6 +54,9 @@ class ForteProcessor extends AudioWorkletProcessor {
         break;
       case 'stop':
         if (this.ready) this.e.fw_stop(this.ctx);
+        break;
+      case 'loop':
+        if (this.ready) this.e.fw_loop(this.ctx, msg.start, msg.end);
         break;
       case 'seek':
         if (this.ready) this.e.fw_seek(this.ctx, msg.beats);

@@ -84,6 +84,15 @@
   #insp .inm { color: #d7dae0; min-width: 90px; }
   #insp label { display: inline-flex; gap: 3px; align-items: center; color: #565d69; }
   #insp input { width: 64px; font-size: 11px; padding: 1px 4px; }
+  #sectbar { position: absolute; top: 0; left: 0; right: 0; height: 15px; z-index: 5; pointer-events: none; }
+  #sectbar .sect {
+    position: absolute; top: 1px; height: 13px; pointer-events: auto; cursor: pointer;
+    background: rgba(88, 166, 255, 0.16); border: 1px solid rgba(88, 166, 255, 0.45);
+    border-radius: 3px; color: #9fc7ff; font: 9px ui-monospace, monospace;
+    padding: 0 4px; overflow: hidden; white-space: nowrap; line-height: 12px;
+  }
+  #sectbar .sect.on { background: rgba(232, 179, 76, 0.3); border-color: #e8b34c; color: #ffd479; }
+  #sectbar .sect:hover { background: rgba(88, 166, 255, 0.3); }
   #grid .roll { display: block; border: 1px solid #262b33; border-radius: 3px; cursor: crosshair; }
   #grid .roll-row { align-items: flex-start; }
   #welcome {
@@ -249,6 +258,7 @@
   すべての GUI 操作は最小のコード編集として書き戻され、<b>Ctrl+Z</b> で戻せます
 </div>
 <div id="viz-wrap">
+  <div id="sectbar"></div>
   <canvas id="viz"></canvas>
   <span id="viz-hint">drag a clip to re-place it — the code is the source of truth</span>
   <div id="mixer" title="fader / pan は set_track としてコードに書き戻ります。M/S はこのセッションだけのモニタ操作"></div>

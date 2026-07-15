@@ -446,6 +446,15 @@ pub unsafe extern "C" fn fw_arg_sites(ptr: *mut Ctx) -> i32 {
     }
 }
 
+/// Loop a beat range (the section-loop control). `end <= start` is ignored.
+#[no_mangle]
+pub unsafe extern "C" fn fw_loop(ptr: *mut Ctx, start: f64, end: f64) {
+    let c = ctx(ptr);
+    if end > start {
+        c.handle.send(Command::SetLoop { enabled: true, start, end });
+    }
+}
+
 /// Parse the STAGED bytes as a `notes` literal → `{"len":…, "notes":[…]}`
 /// JSON in the edit buffer (the piano roll's read side). Returns the note
 /// count, or -1 with the error message in the same buffer.

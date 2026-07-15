@@ -377,6 +377,86 @@ function renderMixer() {
   sendMonitor(tracks);
 }
 
+// ---- section bar (arrange ruler): loop a section, drag its end -----------
+function currentSections() {
+  if (!PROJECT) return [];
+  const song = (PROJECT.songs ?? []).find((f) => f.file === currentName);
+  if (song?.song) return (song.song.sections ?? []).map((x) => ({ ...x, path: [] }));
+  const bf = (PROJECT.blocks ?? []).find((f) => f.file === currentName);
+  const b = bf?.blocks?.[bf.blocks.length - 1];
+  if (b) return (b.sections ?? []).map((x) => ({ ...x, path: [b.name] }));
+  return [];
+}
+
+function setSectionLoop(sec) {
+  const bpb = viz.data?.beatsPerBar || 4;
+  if (!sec || loopRange?.name === sec.name) {
+    loopRange = null;
+    node?.port.postMessage({ cmd: 'loop', start: 0, end: viz.data?.lengthBeats ?? 0 });
+    status('loop: 全体');
+  } else {
+    loopRange = { name: sec.name, start: (sec.bars[0] - 1) * bpb, end: sec.bars[1] * bpb };
+    node?.port.postMessage({ cmd: 'loop', start: loopRange.start, end: loopRange.end });
+    status(`loop: ${sec.name} bars(${sec.bars[0]}..${sec.bars[1]})— もう一度クリックで解除`);
+  }
+  renderSections();
+}
+
+let sectDrag = null; // {sec, x0, span, barsPerPx}
+function renderSections() {
+  const el = $('sectbar');
+  if (!el) return;
+  const secs = currentSections();
+  el.textContent = '';
+  el.style.display = secs.length ? '' : 'none';
+  if (!secs.length) return;
+  const { headerW, pxPerBeat } = viz.geom();
+  const bpb = viz.data?.beatsPerBar || 4;
+  for (const sec of secs) {
+    const d = document.createElement('div');
+    d.className = 'sect' + (loopRange?.name === sec.name ? ' on' : '');
+    d.textContent = sec.name;
+    d.title = `${sec.name} = bars(${sec.bars[0]}..${sec.bars[1]})— クリックでループ / 右端ドラッグで長さ`;
+    const left = headerW + (sec.bars[0] - 1) * bpb * pxPerBeat;
+    const width = (sec.bars[1] - sec.bars[0] + 1) * bpb * pxPerBeat;
+    d.style.left = `${left}px`;
+    d.style.width = `${Math.max(12, width)}px`;
+    d.onmousedown = (ev) => {
+      const r = d.getBoundingClientRect();
+      if (r.right - ev.clientX < 7) {
+        sectDrag = { sec, x0: ev.clientX, el: d, w0: r.width, pxPerBar: bpb * pxPerBeat };
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+    };
+    d.onclick = (ev) => {
+      if (sectDrag) return;
+      ev.stopPropagation();
+      setSectionLoop(sec);
+    };
+    el.appendChild(d);
+  }
+}
+window.addEventListener('mousemove', (ev) => {
+  if (!sectDrag) return;
+  const w = Math.max(sectDrag.pxPerBar, sectDrag.w0 + (ev.clientX - sectDrag.x0));
+  sectDrag.el.style.width = `${w}px`;
+});
+window.addEventListener('mouseup', (ev) => {
+  if (!sectDrag) return;
+  const d = sectDrag;
+  sectDrag = null;
+  const dx = ev.clientX - d.x0;
+  if (Math.abs(dx) < 4) return;
+  const addBars = Math.round(dx / d.pxPerBar);
+  const newEnd = Math.max(d.sec.bars[0], d.sec.bars[1] + addBars);
+  if (newEnd === d.sec.bars[1]) {
+    renderSections();
+    return;
+  }
+  applyEdit({ op: 'set_section', path: d.sec.path, name: d.sec.name, bars: [d.sec.bars[0], newEnd] });
+});
+
 function mainCompile(text) {
   setModules(main);
   const bytes = new TextEncoder().encode(text);
@@ -392,6 +472,7 @@ function mainCompile(text) {
     viz.setData(JSON.parse(new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, vp, vl))));
     window.__vizTracks = viz.data?.tracks?.length ?? 0;
     renderMixer();
+    renderSections();
     renderInspector().catch(() => {});
     const bpm = $('bpm');
     if (bpm && document.activeElement !== bpm) bpm.value = viz.data?.tempo ?? '';
@@ -499,6 +580,7 @@ async function tryMonaco(initial) {
 
 // ---- audio ------------------------------------------------------------------
 // The worklet scope has no TextEncoder, so all text crosses the port as bytes.
+let loopRange = null; // {name, start, end} in beats — engine-side, not code
 function encodeSrc() {
   const enc = new TextEncoder();
   return {
@@ -507,6 +589,7 @@ function encodeSrc() {
     modules: enc.encode(modulesJson),
     assets: enc.encode(assetsJson),
     base: enc.encode(currentBase()),
+    loop: loopRange ? { start: loopRange.start, end: loopRange.end } : null,
   };
 }
 let ac, node;
