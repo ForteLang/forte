@@ -795,12 +795,39 @@ async function refreshTree(locals) {
       label.textContent = `♪ ${inst.label}`;
       label.title = `${inst.call}${inst.where ? `(${inst.where})` : ''}`;
       d.appendChild(label);
+      const bb = (t, title, fn) => {
+        const b = document.createElement('button');
+        b.textContent = t;
+        b.title = title;
+        b.onclick = (e) => {
+          e.stopPropagation();
+          fn();
+        };
+        d.appendChild(b);
+      };
+      bb('▶', '1小節ぶん試聴', () => previewInstrument(inst).catch((e) => status(`preview: ${e.message}`)));
+      bb('+tr', '開いている曲 / block にこの音源のトラックを足す', () => addTrackFromPalette(inst));
+      el.appendChild(d);
+    }
+    if (!(PROJECT.packages ?? []).length) {
+      const d = document.createElement('div');
+      d.className = 'f blk';
+      const label = document.createElement('span');
+      label.textContent = '📦 音源を増やす';
+      label.title = 'forte 付属の starter package(essentials: 303 / juno / 909 など)を取り込みます';
+      d.appendChild(label);
       const b = document.createElement('button');
-      b.textContent = '+tr';
-      b.title = '開いている曲 / block にこの音源のトラックを足す';
-      b.onclick = (e) => {
+      b.textContent = '+';
+      b.onclick = async (e) => {
         e.stopPropagation();
-        addTrackFromPalette(inst);
+        const starters = await (await fetch('api/starters')).json().catch(() => []);
+        if (!starters.length) return status('starter package が見つかりません');
+        status(`package add: ${starters[0].name}…`);
+        const r = await fetch(`api/pkg?spec=${encodeURIComponent(starters[0].spec)}`, { method: 'POST' });
+        status(r.ok ? `${starters[0].name} を取り込みました — パレットに音源が増えています` : `pkg: ${(await r.text()).slice(0, 160)}`);
+        await store.refresh?.();
+        await refreshModules();
+        await refreshFileList();
       };
       d.appendChild(b);
       el.appendChild(d);
@@ -954,6 +981,49 @@ function paletteInstruments() {
   for (const pkg of PROJECT?.packages ?? [])
     for (const f of pkg.instruments ?? []) for (const d of f.devices ?? []) push(f.file, d, pkg.name);
   return out;
+}
+
+// preview: offline-render one bar of the instrument in the MAIN wasm
+// instance (it has its own engine), then restore the user's project
+let previewAc = null;
+async function previewInstrument(inst) {
+  const imp = inst.from ? `import { ${inst.name} } from "${inst.from}"\n` : '';
+  const src = `${imp}song "prev" {\n  tempo 120bpm\n  track P {\n    instrument ${inst.call}\n    play ${inst.kind}\`${inst.pat}\` at bars(1..1)\n  }\n}`;
+  // compile the preview with the project's module map, from the project root
+  stage(main, modulesJson, main.e.fw_modules_commit);
+  stage(main, assetsJson, main.e.fw_assets_commit);
+  stage(main, '', main.e.fw_base_commit);
+  const bytes = new TextEncoder().encode(src);
+  const ptr = main.e.fw_src_prepare(main.ctx, bytes.length);
+  new Uint8Array(main.e.memory.buffer, ptr, bytes.length).set(bytes);
+  if (main.e.fw_compile(main.ctx) !== 0) {
+    mainCompile(getText());
+    status(`preview: ${inst.label} がコンパイルできません`);
+    return;
+  }
+  const rate = 48000;
+  const frames = rate * 2; // one bar at 120bpm
+  const L = new Float32Array(frames);
+  const R = new Float32Array(frames);
+  main.e.fw_play(main.ctx);
+  for (let i = 0; i < frames; i += 128) {
+    const n = Math.min(128, frames - i);
+    main.e.fw_process(main.ctx, n);
+    L.set(new Float32Array(main.e.memory.buffer, main.e.fw_out_l(main.ctx), n), i);
+    R.set(new Float32Array(main.e.memory.buffer, main.e.fw_out_r(main.ctx), n), i);
+  }
+  main.e.fw_stop(main.ctx);
+  mainCompile(getText()); // the user's project comes back
+  previewAc ??= new AudioContext({ sampleRate: rate });
+  await previewAc.resume();
+  const buf = previewAc.createBuffer(2, frames, rate);
+  buf.copyToChannel(L, 0);
+  buf.copyToChannel(R, 1);
+  const srcNode = previewAc.createBufferSource();
+  srcNode.buffer = buf;
+  srcNode.connect(previewAc.destination);
+  srcNode.start();
+  status(`preview: ${inst.label}`);
 }
 
 // the palette gesture: a new track with this instrument + a starter pattern
@@ -1508,7 +1578,17 @@ function renderRoll(el, site) {
     const { t } = cellAt(ev);
     const hitNote = noteAt(d.t0, d.pitch);
     if (!d.moved && hitNote) {
-      // click on a note = delete it
+      if (ev.shiftKey) {
+        hitNote.accent = !hitNote.accent; // shift-click = accent (!)
+        commit();
+        return;
+      }
+      if (ev.altKey) {
+        hitNote.tie = !hitNote.tie; // alt-click = tie (~, glide into the next)
+        commit();
+        return;
+      }
+      // plain click on a note = delete it
       doc.notes = doc.notes.filter((n) => n !== hitNote);
       commit();
       return;

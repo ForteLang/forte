@@ -156,6 +156,29 @@ fn handle(web_root: &Path, project: &Path, mut stream: TcpStream) -> std::io::Re
     // "/forte/web/api/…" are the same call)
     if let Some(i) = path.find("/api/") {
         let ep = &path[i + "/api/".len()..];
+        // starter packages ship with the forte repo itself: offer them for
+        // one-click vendoring (the specs are local paths package add takes)
+        if method == "GET" && ep == "starters" {
+            let mut dirs: Vec<PathBuf> = std::fs::read_dir(web_root.join("packages"))
+                .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.join("package.forte").is_file()).collect())
+                .unwrap_or_default();
+            dirs.sort();
+            let list: Vec<serde_json::Value> = dirs
+                .iter()
+                .map(|d| {
+                    serde_json::json!({
+                        "name": d.file_name().unwrap_or_default().to_string_lossy(),
+                        "spec": d.to_string_lossy(),
+                    })
+                })
+                .collect();
+            return respond(
+                &mut stream,
+                "200 OK",
+                "application/json; charset=utf-8",
+                serde_json::to_string(&list).unwrap_or_default().as_bytes(),
+            );
+        }
         return api(project, &method, ep, query, &body, &mut stream);
     }
 
