@@ -1647,6 +1647,22 @@ async function boot() {
   };
   $('play').onclick = doPlay;
   $('stop').onclick = doStop;
+  $('helpbtn').onclick = () => $('help').classList.toggle('show');
+  const hideWelcome = () => $('welcome').classList.remove('show');
+  $('welcome-close').onclick = hideWelcome;
+  $('welcome-block').onclick = () => {
+    hideWelcome();
+    newElement('block');
+  };
+  $('welcome-song').onclick = () => {
+    hideWelcome();
+    newElement('song');
+  };
+  // an empty package is a blank page problem: show the guided start
+  if (PROJECT && !(PROJECT.songs ?? []).length && !(PROJECT.blocks ?? []).length) {
+    $('welcome-title').textContent = `Forte DAW — ${PROJECT.name}`;
+    $('welcome').classList.add('show');
+  }
   const bpmBox = $('bpm');
   if (bpmBox) {
     bpmBox.onchange = () => {

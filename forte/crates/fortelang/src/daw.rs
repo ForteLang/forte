@@ -49,10 +49,54 @@ pub fn run(project: &Path, port: u16, open: bool) -> Result<(), String> {
     let url = format!("http://localhost:{port}/forte/web/");
     println!("Forte DAW: {url}(project: {}、Ctrl+C で終了)", project.display());
     if open {
-        open_url(&url);
+        open_app(&url);
     }
     serve(listener, web_root, project);
     Ok(())
+}
+
+/// Open the DAW as a LOCAL APP window (chromeless `--app=` mode) when a
+/// Chromium-family browser is installed; fall back to the default browser
+/// tab otherwise. `FORTE_DAW_BROWSER` overrides the binary; the Studio
+/// fork (ADR D-14, F4) is the real desktop shell — this is the interim.
+fn open_app(url: &str) {
+    let mut candidates: Vec<String> = Vec::new();
+    if let Some(over) = std::env::var_os("FORTE_DAW_BROWSER") {
+        candidates.push(over.to_string_lossy().into_owned());
+    }
+    #[cfg(target_os = "macos")]
+    candidates.extend(
+        [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        ]
+        .iter()
+        .map(|s| s.to_string()),
+    );
+    #[cfg(not(target_os = "macos"))]
+    candidates.extend(
+        ["google-chrome", "chromium", "chromium-browser", "brave", "microsoft-edge"]
+            .iter()
+            .map(|s| s.to_string()),
+    );
+    for bin in candidates {
+        let found = std::path::Path::new(&bin).is_file()
+            || std::process::Command::new("which")
+                .arg(&bin)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+        if !found {
+            continue;
+        }
+        if std::process::Command::new(&bin).arg(format!("--app={url}")).spawn().is_ok() {
+            println!("app window: {bin}(--app モード)");
+            return;
+        }
+    }
+    open_url(url); // no Chromium family found: a normal browser tab
 }
 
 /// The accept loop, separated so tests can drive it on an ephemeral port.

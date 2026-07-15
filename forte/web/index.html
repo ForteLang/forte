@@ -81,6 +81,31 @@
   #insp input { width: 64px; font-size: 11px; padding: 1px 4px; }
   #grid .roll { display: block; border: 1px solid #262b33; border-radius: 3px; cursor: crosshair; }
   #grid .roll-row { align-items: flex-start; }
+  #welcome {
+    position: fixed; inset: 0; z-index: 30; display: none;
+    background: rgba(13, 15, 18, 0.92); backdrop-filter: blur(2px);
+    align-items: center; justify-content: center;
+  }
+  #welcome.show { display: flex; }
+  #welcome .card {
+    max-width: 520px; padding: 28px 32px; border: 1px solid #333a45;
+    border-radius: 12px; background: #14171c; color: #d7dae0; font-size: 14px;
+  }
+  #welcome h2 { margin: 0 0 6px; font-size: 18px; }
+  #welcome .sub { color: #8a919e; font-size: 12px; margin-bottom: 16px; }
+  #welcome ol { margin: 0 0 16px; padding-left: 22px; line-height: 2.1; }
+  #welcome ol b { color: #ffd479; }
+  #welcome .row { display: flex; gap: 8px; }
+  #welcome button { padding: 8px 14px; font-size: 13px; }
+  #welcome button.primary { background: #58a6ff; color: #0d0f12; }
+  #help {
+    position: fixed; right: 12px; bottom: 12px; z-index: 29; display: none;
+    padding: 12px 16px; border: 1px solid #333a45; border-radius: 8px;
+    background: #14171c; color: #a9b0bb; font-size: 12px; line-height: 1.9;
+    max-width: 380px;
+  }
+  #help.show { display: block; }
+  #help b { color: #ffd479; }
   #tree .f {
     padding: 0 12px; color: #a9b0bb; cursor: pointer;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -153,6 +178,7 @@
   <button id="perform" title="演奏モード: MIDI鍵盤 or PCキー(A〜K=白鍵/W,E,T,Y,U=黒鍵)で弾くと、停止時に notes コードに書き起こされます">🎹 Perform</button>
   <button id="digest">Build digest</button>
   <button id="packages" title="導入済み package のカタログ(instruments / blocks / songs を閲覧)">📦 Packages</button>
+  <button id="helpbtn" title="操作ガイド">?</button>
   <span id="status">loading…</span>
 </header>
 <div id="wrap">
@@ -187,6 +213,33 @@
     <div id="proof">build digest: <b id="digest-out">—</b><br>
       native/wasip1/browser が同じ値なら、この曲はどこでもビット同一にビルドされる。</div>
   </div>
+</div>
+<div id="welcome">
+  <div class="card">
+    <h2 id="welcome-title">Forte DAW へようこそ</h2>
+    <div class="sub">このパッケージはまだ空です。曲は block(再利用できる数小節のかたまり)を並べて作ります。</div>
+    <ol>
+      <li><b>+block</b> でグルーヴを作る(ビートグリッド / ピアノロールで打ち込み)</li>
+      <li>ライブラリの <b>▶</b> で block を単体試聴して育てる</li>
+      <li><b>+曲</b> で曲を作り、block の <b>+曲</b> ボタンで配置していく</li>
+      <li>ミキサーとインスペクタで音を整える — 操作は全部コードに書き戻ります</li>
+    </ol>
+    <div class="row">
+      <button class="primary" id="welcome-block">+ 最初の block を作る</button>
+      <button id="welcome-song">+ 曲を作る</button>
+      <button id="welcome-close">閉じる</button>
+    </div>
+  </div>
+</div>
+<div id="help">
+  <b>操作ガイド</b><br />
+  <b>space</b> 再生 / 停止 · <b>アレンジをダブルクリック</b> そこへシーク<br />
+  <b>クリップをドラッグ</b> 配置を移動 · <b>右端ドラッグ</b> 長さ変更<br />
+  <b>ビートグリッド</b> クリックで打ち込み · <b>ロール</b> ドラッグで音を描く / クリックで消す<br />
+  <b>ミキサーのトラック名</b> インスペクタ(音源 / エフェクトのつまみ)<br />
+  <b>M / S</b> このセッションだけのミュート / ソロ<br />
+  左のツリー: <b>+曲 / +block / +package</b> · block の <b>▶</b> 試聴 / <b>+曲</b> 配置<br />
+  すべての GUI 操作は最小のコード編集として書き戻され、<b>Ctrl+Z</b> で戻せます
 </div>
 <div id="viz-wrap">
   <canvas id="viz"></canvas>
