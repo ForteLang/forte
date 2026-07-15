@@ -49,7 +49,7 @@ them treat as table stakes is in.
 
 | ID | A DAW lets you… | Disposition | Forte mapping / rationale |
 | --- | --- | --- | --- |
-| DAW-PRJ-01 | create/open/save a project | CODE | A project is a directory of `.forte` files (+ `forte.toml`). Save = file save. Studio opens a folder, like an IDE. |
+| DAW-PRJ-01 | create/open/save a project | CODE | A project is the `forte init` package directory. Save = file save. **The project is the ONLY opening unit** — Studio opens the package and shows its map (songs / blocks / instruments); single-file entry is not a mode (ADR D-15). `forte project` is the read side GUIs bind the explorer to. |
 | DAW-PRJ-02 | autosave & crash recovery | TOOL | Editor buffer journal. Durable history is git; no shadow project format. |
 | DAW-PRJ-03 | project templates | CODE | A template is a package you fork (`forte hub fork`). No binary template format. |
 | DAW-PRJ-04 | "collect all & save" / media consolidation | CODE | `forte.lock` + content-hashed deps already pin everything; `bounce`/`dig` renders are cache, not media. Nothing to collect. |

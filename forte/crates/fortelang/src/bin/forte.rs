@@ -276,6 +276,23 @@ fn main() -> ExitCode {
                 }
             }
         }
+        // `forte project [DIR]` — the project-first read side (ADR D-15):
+        // inventory the forte-init package as the JSON a GUI explorer binds
+        // to. Writes stay per-file via `forte edit`.
+        #[cfg(not(target_family = "wasm"))]
+        Some("project") => {
+            let dir = args.get(1).map(String::as_str).unwrap_or(".");
+            match fortelang::project::project_json(std::path::Path::new(dir)) {
+                Ok(v) => {
+                    println!("{}", serde_json::to_string_pretty(&v).unwrap_or_else(|_| "{}".into()));
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("project: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("lsp") => ExitCode::from(fortelang::lsp::run() as u8),
         #[cfg(not(target_family = "wasm"))]
         Some("repl") => ExitCode::from(fortelang::repl::run() as u8),
@@ -540,6 +557,7 @@ fn main() -> ExitCode {
             eprintln!("       forte fmt   <song.forte> [--check]");
             eprintln!("       forte edit  <song.forte> <JSON|-> [--write]  (構造編集: コメント/レイアウト保存のままトークンだけ置換)");
             eprintln!("       forte edit  <song.forte> --sites   (編集可能なパターンリテラル一覧を JSON で)");
+            eprintln!("       forte project [DIR]                (パッケージの編集インベントリを JSON で: songs/ blocks/ instruments/ …)");
             eprintln!("       forte test  [PATH…] [--update]  (digest 固定の回帰テスト: forte-test.lock と照合)");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
             eprintln!("       forte analyze <song.forte> [--json] [--no-stems] [--against X.profile]  (聴取レポート + ジャンル目標との照合)");

@@ -96,8 +96,8 @@ One contrib folder, so rebases touch us at exactly one junction:
 | # | Deliverable | Acceptance |
 | --- | --- | --- |
 | **F0** | Fork bootstrapped: branding, Open VSX, bundled vscode-forte, web target builds | Open a folder in the browser build, `.forte` diagnostics live, song plays from the bundled extension |
-| **F1** | The Composer v1 + transport part | Opening a `.forte` file shows arrange-over-code in ONE tab; drag a clip → code changes under the same undo stack; space plays; bar counter runs |
-| **F2** | Grid / piano roll / mixer / inspector tabs; Blocks library drag-to-place | The full-length workflow (build/drop arrangement) is doable without touching another app |
+| **F1** | The Composer v1 + transport part + project map (D-15) | Opening the PROJECT (the forte-init package) lands on its map — songs, blocks, instruments; opening a song from it shows arrange-over-code in ONE tab; drag a clip → code changes under the same undo stack; space plays; bar counter runs |
+| **F2** | Grid / piano roll / mixer / inspector tabs; block-as-block editing; Blocks library drag-to-place | The full-length workflow starting at `forte init` — new block, edit it AS a block, audition it, import-and-place into a song, mix — is doable without leaving Studio (D-15) |
 | **F3** | In-process engine (N-API forte-core), 60 fps meters, recording UI | Latency & meters feel like a DAW, not a viewer; `.frec` capture with provenance |
 | **F4** | Desktop ship: signed/notarized DMG, auto-update, first dogfood album composed in Studio | The maintainer composes and commits a full track start-to-finish in Forte Studio |
 
