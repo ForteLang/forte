@@ -135,8 +135,10 @@
   <button id="new">New</button>
   <button id="delete" title="ローカルコピーを削除">Del</button>
   <span id="saved" title="OPFS に自動保存されます"></span>
-  <button id="play" class="primary">▶ Play</button>
+  <button id="play" class="primary" title="space でも再生/停止">▶ Play</button>
   <button id="stop">■ Stop</button>
+  <input id="bpm" type="number" min="20" max="300" step="1" title="テンポ(set_tempo としてコードに書き戻ります)" style="width:58px" />
+  <span style="color:#565d69;font-size:11px">bpm</span>
   <button id="rec" title="マイク録音 → 来歴付き .frec として保存">● Rec</button>
   <button id="calib" title="ループバック較正: チャープを再生してマイクで捕まえ、往復レイテンシを実測">⏱ Calib</button>
   <button id="perform" title="演奏モード: MIDI鍵盤 or PCキー(A〜K=白鍵/W,E,T,Y,U=黒鍵)で弾くと、停止時に notes コードに書き起こされます">🎹 Perform</button>

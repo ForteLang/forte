@@ -206,6 +206,8 @@ function mainCompile(text) {
     viz.setData(JSON.parse(new TextDecoder().decode(new Uint8Array(main.e.memory.buffer, vp, vl))));
     window.__vizTracks = viz.data?.tracks?.length ?? 0;
     renderMixer();
+    const bpm = $('bpm');
+    if (bpm && document.activeElement !== bpm) bpm.value = viz.data?.tempo ?? '';
   }
   return { ok: n === 0, diags };
 }
@@ -214,6 +216,10 @@ function mainCompile(text) {
 const fallback = $('fallback');
 let getText = () => fallback.value;
 let setText = (t) => (fallback.value = t);
+// GUI edits go through replaceText so Ctrl+Z undoes a fader move / clip drag
+// like any typed edit (one stack — DAW-HIS-01); the plain textarea has no
+// undo API, so there it falls back to a plain set.
+let replaceText = (t) => setText(t);
 let onChange = () => {};
 // code-jump: the visualization hands us 1-based source lines
 let jumpToLine = (line) => {
@@ -274,6 +280,12 @@ async function tryMonaco(initial) {
     });
     getText = () => ed.getValue();
     setText = (t) => ed.setValue(t);
+    replaceText = (t) => {
+      const model = ed.getModel();
+      ed.pushUndoStop();
+      model.pushEditOperations([], [{ range: model.getFullModelRange(), text: t }], () => null);
+      ed.pushUndoStop();
+    };
     jumpToLine = (line) => {
       ed.revealLineInCenter(line);
       ed.setPosition({ lineNumber: line, column: 1 });
@@ -1091,7 +1103,7 @@ function applyEdit(op) {
     status(`edit: ${out}`);
     return false;
   }
-  setText(out); // Monaco fires onChange → autosave + recompile
+  replaceText(out); // one undoable step; Monaco fires onChange → autosave + recompile
   autosave(); // the plain-textarea fallback does not
   recompile(0);
   return true;
@@ -1306,6 +1318,17 @@ async function boot() {
   };
   $('play').onclick = doPlay;
   $('stop').onclick = doStop;
+  const bpmBox = $('bpm');
+  if (bpmBox) {
+    bpmBox.onchange = () => {
+      const v = Number(bpmBox.value);
+      if (Number.isFinite(v) && v >= 20 && v <= 300) {
+        applyEdit({ op: 'set_tempo', bpm: v });
+      } else {
+        bpmBox.value = viz.data?.tempo ?? '';
+      }
+    };
+  }
   // space = play/stop, the DAW way — unless typing (editor, inputs) or performing
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'Space' || e.repeat) return;
