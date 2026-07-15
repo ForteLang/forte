@@ -361,6 +361,16 @@ function renderMixer() {
     };
     mbtn('M', monitor.mute, 'ミュート(モニタのみ・コードには書かれません)');
     mbtn('S', monitor.solo, 'ソロ(モニタのみ)');
+    {
+      const b = document.createElement('button');
+      b.textContent = '✕';
+      b.title = 'このトラックを削除(コードから track ごと消えます)';
+      b.onclick = () => {
+        if (!confirm(`track ${t.name} を削除しますか?`)) return;
+        routeTrackOp(t.name, { op: 'remove_track', track: t.name });
+      };
+      ms.appendChild(b);
+    }
     strip.appendChild(ms);
     el.appendChild(strip);
   }
@@ -788,6 +798,17 @@ async function refreshTree(locals) {
       }
     }
     section('instruments');
+    const instRows = [];
+    const filt = document.createElement('input');
+    filt.className = 'palfilt';
+    filt.placeholder = '検索 (例: bass)';
+    filt.value = window.__paletteFilter ?? '';
+    filt.oninput = () => {
+      window.__paletteFilter = filt.value;
+      const q = filt.value.trim().toLowerCase();
+      for (const { row, key } of instRows) row.style.display = !q || key.includes(q) ? '' : 'none';
+    };
+    el.appendChild(filt);
     for (const inst of paletteInstruments()) {
       const d = document.createElement('div');
       d.className = 'f blk';
@@ -807,7 +828,12 @@ async function refreshTree(locals) {
       };
       bb('▶', '1小節ぶん試聴', () => previewInstrument(inst).catch((e) => status(`preview: ${e.message}`)));
       bb('+tr', '開いている曲 / block にこの音源のトラックを足す', () => addTrackFromPalette(inst));
+      instRows.push({ row: d, key: `${inst.label} ${inst.where ?? ''}`.toLowerCase() });
       el.appendChild(d);
+    }
+    {
+      const q = (window.__paletteFilter ?? '').trim().toLowerCase();
+      if (q) for (const { row, key } of instRows) row.style.display = key.includes(q) ? '' : 'none';
     }
     if (!(PROJECT.packages ?? []).length) {
       const d = document.createElement('div');
@@ -1557,16 +1583,23 @@ function renderRoll(el, site) {
     else Object.assign(op, { track: site.track, play: site.play });
     return applyEdit(op);
   };
-  let drag = null; // {t0, pitch, moved}
+  let drag = null; // {t0, pitch, note, moved}
   cv.onmousedown = (ev) => {
     const { t, pitch } = cellAt(ev);
-    drag = { t0: t, pitch, moved: false };
+    drag = { t0: t, pitch, note: noteAt(t, pitch) ?? null, moved: false };
     ev.preventDefault();
   };
   cv.onmousemove = (ev) => {
     if (!drag) return;
-    const { t } = cellAt(ev);
-    if (t !== drag.t0) drag.moved = true;
+    const { t, pitch } = cellAt(ev);
+    if (t !== drag.t0 || pitch !== drag.pitch) drag.moved = true;
+    if (drag.note) {
+      // dragging a note carries it (start + pitch), duration preserved
+      const start = Math.max(0, drag.note.start + (t - drag.t0));
+      drag.carry = { start, pitch, dur: drag.note.dur };
+      draw(drag.carry);
+      return;
+    }
     const start = Math.min(drag.t0, t);
     const dur = Math.abs(t - drag.t0) + ROLL_Q;
     draw({ start, dur, pitch: drag.pitch });
@@ -1576,7 +1609,26 @@ function renderRoll(el, site) {
     const d = drag;
     drag = null;
     const { t } = cellAt(ev);
-    const hitNote = noteAt(d.t0, d.pitch);
+    const hitNote = d.note;
+    if (d.moved && hitNote && d.carry) {
+      // move gesture: drop the note at the carried position
+      const clash = doc.notes.some(
+        (n) =>
+          n !== hitNote &&
+          d.carry.start < n.start + n.dur - 1e-6 &&
+          n.start < d.carry.start + d.carry.dur - 1e-6 &&
+          !(Math.abs(n.start - d.carry.start) < 1e-6 && Math.abs(n.dur - d.carry.dur) < 1e-6)
+      );
+      if (clash) {
+        status('roll: 移動先が既存の音と重なります');
+        draw();
+        return;
+      }
+      hitNote.start = d.carry.start;
+      hitNote.pitch = d.carry.pitch;
+      if (!commit()) draw();
+      return;
+    }
     if (!d.moved && hitNote) {
       if (ev.shiftKey) {
         hitNote.accent = !hitNote.accent; // shift-click = accent (!)
@@ -1592,6 +1644,10 @@ function renderRoll(el, site) {
       doc.notes = doc.notes.filter((n) => n !== hitNote);
       commit();
       return;
+    }
+    if (hitNote) {
+      draw();
+      return; // a note was grabbed but not moved meaningfully: no-op
     }
     const start = Math.min(d.t0, t);
     const dur = Math.abs(t - d.t0) + ROLL_Q;

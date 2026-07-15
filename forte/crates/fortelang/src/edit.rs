@@ -159,6 +159,12 @@ pub enum EditOp {
         #[serde(default)]
         play: Option<String>,
     },
+    /// Delete a whole `track <name> { … }` (its lines when it owns them).
+    RemoveTrack {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+    },
     /// Ensure `import { names… } from "from"` exists — missing names merge
     /// into an existing import of the same path; otherwise a new import
     /// line lands above the first statement (leading comments stay on
@@ -470,6 +476,45 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
             } else {
                 // one-line body: break the line before the closing brace
                 splice(src, close_off, close_off, &format!("\n{stmt}"))
+            }
+        }
+        EditOp::RemoveTrack { path, track } => {
+            let (body, _) = resolve_body(&file, path)?;
+            let tr = find_track(body, track)?;
+            let kw = ctx.tok_at(tr.pos)?;
+            let open = (kw..ctx.toks.len())
+                .find(|&j| matches!(ctx.toks[j].tok, Tok::LBrace))
+                .ok_or_else(|| Diag::new("E-EDIT-006", tr.pos, "track の `{` が見つかりません"))?;
+            let mut depth = 0usize;
+            let mut close = open;
+            for j in open..ctx.toks.len() {
+                match ctx.toks[j].tok {
+                    Tok::LBrace => depth += 1,
+                    Tok::RBrace => {
+                        depth -= 1;
+                        if depth == 0 {
+                            close = j;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if close == open {
+                return Err(Diag::new("E-EDIT-006", tr.pos, "track が閉じていません"));
+            }
+            let start_off = ctx.toks[kw].off;
+            let line_start = src[..start_off].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let prefix_blank = src[line_start..start_off].trim().is_empty();
+            let close_end = ctx.toks[close].end;
+            let rest = &src[close_end..];
+            let line_len = rest.find('\n').unwrap_or(rest.len());
+            let tail = rest[..line_len].trim_start();
+            if prefix_blank && (tail.is_empty() || tail.starts_with("//")) {
+                let del_end = (close_end + line_len + 1).min(src.len());
+                splice(src, line_start, del_end, "")
+            } else {
+                splice(src, start_off, close_end, "")
             }
         }
         EditOp::AddImport { names, from } => {

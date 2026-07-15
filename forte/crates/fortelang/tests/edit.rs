@@ -371,6 +371,17 @@ fn add_track_appends_with_instrument_and_starter_play() {
 }
 
 #[test]
+fn remove_track_deletes_its_whole_span() {
+    let src = "song \"s\" {\n  tempo 100bpm\n\n  track A {\n    instrument sampler(sample: \"Kick\")\n    play beat`x...` at bars(1..1)\n  }\n\n  track B {\n    instrument sampler(sample: \"Hat\")\n    play beat`..x.` at bars(1..1)\n  }\n}\n";
+    let out = apply(src, r#"{"op":"remove_track","track":"A"}"#);
+    assert!(!out.contains("track A"), "{out}");
+    assert!(out.contains("track B"), "{out}");
+    assert!(fortelang::parser::parse(&out).is_ok());
+    let missing = parse_ops(r#"{"op":"remove_track","track":"Zed"}"#).unwrap();
+    assert_eq!(apply_ops(src, &missing).unwrap_err().code, "E-EDIT-003");
+}
+
+#[test]
 fn add_import_inserts_below_the_last_import() {
     let src = "// header comment\nimport { A } from \"./a.forte\"\n\nsong \"s\" {\n  tempo 100bpm\n}\n";
     let out = apply(src, r#"{"op":"add_import","names":["Groove"],"from":"../blocks/groove.forte"}"#);
