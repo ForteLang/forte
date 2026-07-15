@@ -1217,7 +1217,10 @@ fn lower_body(
                 eff_root: eff_child,
                 overrides: &place.params,
                 swing: child_swing,
-                import_line: penv.import_line.or(bdef.import_line),
+                // clips of a placed instance anchor to the PLACEMENT line
+                // (outermost when nested): the arrange view drags/resizes
+                // the placement itself via move_at_line, local or imported
+                import_line: penv.import_line.or(Some(place.pos.line)),
             },
             &child_registry,
             stack,

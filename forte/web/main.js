@@ -18,15 +18,41 @@ let vizDrag = null; // {hit, x0, moved}
 $('viz').addEventListener('mousedown', (ev) => {
   const rect = $('viz').getBoundingClientRect();
   const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
-  if (hit?.kind === 'clip') vizDrag = { hit, x0: ev.clientX, moved: false };
+  if (hit?.kind === 'clip') {
+    // grabbing the clip's right edge resizes it; anywhere else moves it
+    const { headerW, pxPerBeat } = viz.geom();
+    const rightX = headerW + (hit.start + hit.duration) * pxPerBeat;
+    const resize = Math.abs(ev.clientX - rect.left - rightX) < 6;
+    vizDrag = { hit, x0: ev.clientX, moved: false, resize };
+  }
 });
 window.addEventListener('mousemove', (ev) => {
-  if (!vizDrag) return;
+  if (!vizDrag) {
+    // hover feedback: the right edge of a clip is a resize handle
+    const rect = $('viz').getBoundingClientRect();
+    if (ev.target === $('viz') && viz.data) {
+      const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
+      let cur = '';
+      if (hit?.kind === 'clip') {
+        const { headerW, pxPerBeat } = viz.geom();
+        const rightX = headerW + (hit.start + hit.duration) * pxPerBeat;
+        cur = Math.abs(ev.clientX - rect.left - rightX) < 6 ? 'ew-resize' : '';
+      }
+      $('viz').style.cursor = cur;
+    }
+    return;
+  }
   const dx = ev.clientX - vizDrag.x0;
   if (!vizDrag.moved && Math.abs(dx) < 4) return; // still a click
   vizDrag.moved = true;
   const { pxPerBeat } = viz.geom();
   const bpb = viz.data.beatsPerBar;
+  if (vizDrag.resize) {
+    const dur = Math.max(bpb, Math.round((vizDrag.hit.duration + dx / pxPerBeat) / bpb) * bpb);
+    vizDrag.snappedDur = dur;
+    viz.setGhost({ track: vizDrag.hit.track, start: vizDrag.hit.start, duration: dur });
+    return;
+  }
   const snapped =
     Math.max(0, Math.round((vizDrag.hit.start + dx / pxPerBeat) / bpb)) * bpb;
   vizDrag.snapped = snapped;
@@ -35,14 +61,31 @@ window.addEventListener('mousemove', (ev) => {
 let vizDragJustEnded = false; // mouseup precedes click: remember one tick
 window.addEventListener('mouseup', () => {
   if (!vizDrag) return;
-  const { hit, moved, snapped } = vizDrag;
+  const { hit, moved, snapped, resize, snappedDur } = vizDrag;
   vizDrag = null;
   vizDragJustEnded = moved;
   viz.setGhost(null);
-  if (!moved || snapped === undefined || snapped === hit.start) return;
+  if (!moved) return;
   const bpb = viz.data.beatsPerBar;
-  const a = Math.round(snapped / bpb) + 1; // beats → 1-based bar
-  const durBars = Math.max(1, Math.round(hit.duration / bpb));
+  // a placement longer than its block renders as several segments (loops),
+  // all sharing one source line — the gesture applies to the WHOLE span
+  const siblings = (viz.data?.tracks ?? [])
+    .flatMap((t) => t.clips ?? [])
+    .filter((c) => c.line === hit.line);
+  const spanStart = Math.min(hit.start, ...siblings.map((c) => c.start));
+  const spanEnd = Math.max(hit.start + hit.duration, ...siblings.map((c) => c.start + c.duration));
+  if (resize) {
+    if (snappedDur === undefined || snappedDur === hit.duration) return;
+    const a = Math.round(spanStart / bpb) + 1;
+    const newEnd = hit.start + snappedDur; // the grabbed segment's new end
+    const durBars = Math.max(1, Math.round((newEnd - spanStart) / bpb));
+    applyEdit({ op: 'move_at_line', line: hit.line, bars: [a, a + durBars - 1] });
+    return;
+  }
+  if (snapped === undefined || snapped === hit.start) return;
+  const newStart = spanStart + (snapped - hit.start); // move the span by the drag delta
+  const a = Math.max(1, Math.round(newStart / bpb) + 1);
+  const durBars = Math.max(1, Math.round((spanEnd - spanStart) / bpb));
   applyEdit({ op: 'move_at_line', line: hit.line, bars: [a, a + durBars - 1] });
 });
 $('viz').addEventListener('click', (ev) => {

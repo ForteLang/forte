@@ -24,8 +24,9 @@ pub fn viz_json(p: &Project) -> serde_json::Value {
                     serde_json::json!({
                         "start": a.start, "duration": a.duration,
                         "length": a.clip.length, "notes": notes,
-                        // 1-based source line of the play (or, for imported
-                        // blocks, the import statement) — the code-jump target
+                        // 1-based source line of the play (for placed block
+                        // instances: the placement line) — the code-jump and
+                        // drag/resize target (move_at_line)
                         "line": a.src_line,
                     })
                 })
