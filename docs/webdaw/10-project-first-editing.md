@@ -84,3 +84,12 @@ controls), files load from and autosave to DISK, and imports resolve
 from the open file's own directory (`fw_base_commit` carries the base
 dir into the wasm compiler). OPFS demo mode is untouched when no API is
 present.
+
+Second slice (same branch): the block library is a working surface. The
+tree's `blocks` section lists every block in the package (with its bar
+length from the inventory); `▶` auditions a block standalone (a block
+library compiles with its last block as root), and `+曲` runs the
+library gesture — `add_import` (a new edit op: merges into an existing
+import of the same path, no-ops when present, else inserts below the
+last import) followed by `add_place` after the open song's last used
+bar. `forte hub fork` (PRJ-03) still needs its CLI before its GUI.

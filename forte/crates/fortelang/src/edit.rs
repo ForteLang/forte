@@ -25,6 +25,7 @@
 //! {"op":"set_track","track":"Bass","field":"volume","value":0.7}
 //! {"op":"set_send","track":"Bass","dest":"Space","level":0.3}
 //! {"op":"set_section","name":"drop","bars":[33,48]}
+//! {"op":"add_import","names":["Groove"],"from":"../blocks/groove.forte"}
 //! ```
 //!
 //! `path` names the body the edit applies to: `[]` (default) is the file's
@@ -145,6 +146,12 @@ pub enum EditOp {
     /// statement sits on a 1-based source line. The op the arrange view
     /// speaks: its clips know source lines, not body paths.
     MoveAtLine { line: u32, bars: (u32, u32) },
+    /// Ensure `import { names… } from "from"` exists — missing names merge
+    /// into an existing import of the same path; otherwise a new import
+    /// line lands above the first statement (leading comments stay on
+    /// top). The "place a block from the library" gesture's first half
+    /// (`add_place` is the second).
+    AddImport { names: Vec<String>, from: String },
 }
 
 /// Parse an op payload: a single JSON object or an array of them.
@@ -399,6 +406,48 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
         EditOp::MoveAtLine { line, bars } => {
             let at = find_at_on_line(&ctx, &file, *line)?;
             ctx.splice_at(src, at, *bars)
+        }
+        EditOp::AddImport { names, from } => {
+            if names.is_empty() {
+                return Err(Diag::new("E-EDIT-001", p0, "add_import には names が最低 1 つ必要です"));
+            }
+            match file.imports.iter().find(|i| &i.path == from) {
+                Some(im) => {
+                    let missing: Vec<&String> =
+                        names.iter().filter(|n| !im.names.contains(n)).collect();
+                    if missing.is_empty() {
+                        src.to_string() // already imported: a no-op, not an error
+                    } else {
+                        // splice ", A, B" after the last name inside the braces
+                        let kw = ctx.tok_at(im.pos)?;
+                        let rbrace = (kw..ctx.toks.len())
+                            .find(|&j| matches!(ctx.toks[j].tok, Tok::RBrace))
+                            .ok_or_else(|| Diag::new("E-EDIT-006", im.pos, "import の `}` が見つかりません"))?;
+                        let last = rbrace - 1;
+                        let add = missing.iter().map(|n| format!(", {n}")).collect::<String>();
+                        splice(src, ctx.toks[last].end, ctx.toks[last].end, &add)
+                    }
+                }
+                None => {
+                    // a new import line: below the last import, else above the
+                    // first statement (file-leading comments stay on top)
+                    let stmt = format!("import {{ {} }} from \"{from}\"\n", names.join(", "));
+                    let at = match file.imports.last() {
+                        Some(last) => {
+                            let kw = ctx.tok_at(last.pos)?;
+                            ctx.after_token_line(kw)
+                        }
+                        None => {
+                            let first = ctx.toks.first().filter(|t| !matches!(t.tok, Tok::Eof));
+                            match first {
+                                Some(t) => src[..t.off].rfind('\n').map(|i| i + 1).unwrap_or(0),
+                                None => 0,
+                            }
+                        }
+                    };
+                    splice(src, at, at, &stmt)
+                }
+            }
         }
         EditOp::SetSection { path, name, bars } => {
             let (body, _) = resolve_body(&file, path)?;

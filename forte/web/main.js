@@ -481,6 +481,36 @@ async function refreshTree(locals) {
     btn('+block', '新しい block を blocks/ に作る', () => newElement('block'));
     btn('+package', '他の package を取り込む (forte package add)', addPackage);
     el.appendChild(row);
+    await store.refresh?.();
+    if (store.project) PROJECT = store.project;
+    const libBlocks = (PROJECT.blocks || []).flatMap((f) =>
+      (f.blocks || []).map((b) => ({ ...b, file: f.file }))
+    );
+    if (libBlocks.length) {
+      section('blocks');
+      for (const b of libBlocks) {
+        const d = document.createElement('div');
+        d.className = 'f blk';
+        const label = document.createElement('span');
+        label.textContent = `❐ ${b.name}`;
+        label.title = `${b.file}:${b.line}(${b.bars ?? '?'} 小節)— クリックで開く`;
+        label.onclick = () => loadSong(b.file);
+        d.appendChild(label);
+        const bbtn = (t, title, fn) => {
+          const x = document.createElement('button');
+          x.textContent = t;
+          x.title = title;
+          x.onclick = (e) => {
+            e.stopPropagation();
+            fn();
+          };
+          d.appendChild(x);
+        };
+        bbtn('▶', 'この block を単体試聴', () => auditionBlock(b));
+        bbtn('+曲', '開いている曲に import して配置', () => placeBlock(b));
+        el.appendChild(d);
+      }
+    }
   }
   if (locals.length || assets.length) {
     section(PROJECT ? 'project' : 'local');
@@ -556,6 +586,45 @@ async function addPackage() {
   await store.refresh?.();
   await refreshModules();
   await refreshFileList();
+}
+
+// relative path from the open file's directory to another project file
+function relPath(fromFile, toFile) {
+  const a = fromFile.split('/').slice(0, -1);
+  const b = toFile.split('/');
+  while (a.length && b.length > 1 && a[0] === b[0]) {
+    a.shift();
+    b.shift();
+  }
+  return [...a.map(() => '..'), ...b].join('/');
+}
+
+// audition a block standalone: open its file (a block library compiles with
+// its last block as the root) and start playback
+async function auditionBlock(b) {
+  await loadSong(b.file);
+  await ensureAudio();
+  await ac.resume();
+  setTimeout(() => node?.port.postMessage({ cmd: 'play' }), 200);
+}
+
+// the library gesture: import the block into the OPEN SONG and place it
+// after the last used bar (add_import merges/no-ops when already imported)
+function placeBlock(b) {
+  if (!currentName.startsWith('songs/')) {
+    status('配置先は songs/ の曲です(曲を開いてから +曲)');
+    return;
+  }
+  const beatsPerBar = viz.data?.beatsPerBar || 4;
+  const usedBars = Math.round((viz.data?.lengthBeats || 0) / beatsPerBar);
+  const start = usedBars + 1;
+  const len = Math.max(1, b.bars || 4);
+  const ops = [];
+  if (b.file !== currentName) {
+    ops.push({ op: 'add_import', names: [b.name], from: relPath(currentName, b.file) });
+  }
+  ops.push({ op: 'add_place', block: b.name, bars: [start, start + len - 1] });
+  if (applyEdit(ops)) status(`placed: ${b.name} at bars(${start}..${start + len - 1})`);
 }
 
 // ---- history: the .forte repository lives in the browser too -----------------

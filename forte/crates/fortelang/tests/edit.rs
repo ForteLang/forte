@@ -356,6 +356,48 @@ fn set_send_adds_a_missing_send() {
 }
 
 #[test]
+fn add_import_inserts_below_the_last_import() {
+    let src = "// header comment\nimport { A } from \"./a.forte\"\n\nsong \"s\" {\n  tempo 100bpm\n}\n";
+    let out = apply(src, r#"{"op":"add_import","names":["Groove"],"from":"../blocks/groove.forte"}"#);
+    assert_eq!(
+        out,
+        "// header comment\nimport { A } from \"./a.forte\"\nimport { Groove } from \"../blocks/groove.forte\"\n\nsong \"s\" {\n  tempo 100bpm\n}\n"
+    );
+}
+
+#[test]
+fn add_import_keeps_leading_comments_on_top_when_first() {
+    let src = "// header comment\n\nsong \"s\" {\n  tempo 100bpm\n}\n";
+    let out = apply(src, r#"{"op":"add_import","names":["Groove"],"from":"../blocks/groove.forte"}"#);
+    assert_eq!(
+        out,
+        "// header comment\n\nimport { Groove } from \"../blocks/groove.forte\"\nsong \"s\" {\n  tempo 100bpm\n}\n"
+    );
+}
+
+#[test]
+fn add_import_merges_missing_names_into_the_same_path() {
+    let src = "import { A } from \"./lib.forte\"\n\nsong \"s\" {\n  tempo 100bpm\n}\n";
+    let out = apply(src, r#"{"op":"add_import","names":["A","B"],"from":"./lib.forte"}"#);
+    assert_eq!(out, "import { A, B } from \"./lib.forte\"\n\nsong \"s\" {\n  tempo 100bpm\n}\n");
+    // fully present: byte-identical no-op
+    let again = apply(&out, r#"{"op":"add_import","names":["A","B"],"from":"./lib.forte"}"#);
+    assert_eq!(again, out);
+}
+
+#[test]
+fn add_import_then_add_place_is_the_library_gesture() {
+    let src = "song \"s\" {\n  tempo 100bpm\n}\n";
+    let out = apply(
+        src,
+        r#"[{"op":"add_import","names":["Groove"],"from":"../blocks/groove.forte"},
+           {"op":"add_place","block":"Groove","bars":[1,4]}]"#,
+    );
+    assert!(out.starts_with("import { Groove } from \"../blocks/groove.forte\"\n"));
+    assert!(out.contains("  play Groove at bars(1..4)"));
+}
+
+#[test]
 fn set_track_is_idempotent() {
     let op = r#"{"op":"set_track","track":"Bass","field":"volume","value":0.5}"#;
     let once = apply(MIX, op);

@@ -78,6 +78,36 @@ fn tracks_json(body: &SongAst) -> Vec<Value> {
     body.tracks.iter().map(|t| json!({"name": t.name, "line": t.pos.line})).collect()
 }
 
+/// A body's span in bars (max end bar over sections, placements and every
+/// track's plays/audio) — what a GUI needs to place the block on a timeline.
+fn body_bars(body: &SongAst) -> u32 {
+    let at_end = |at: &crate::ast::AtRef| match at {
+        crate::ast::AtRef::Bars(_, b) => *b,
+        crate::ast::AtRef::Section(name, _) => body
+            .sections
+            .iter()
+            .find(|s| &s.name == name)
+            .map(|s| s.bars.1)
+            .unwrap_or(0),
+    };
+    let mut end = 0u32;
+    for s in &body.sections {
+        end = end.max(s.bars.1);
+    }
+    for p in &body.places {
+        end = end.max(at_end(&p.at));
+    }
+    for t in &body.tracks {
+        for p in &t.plays {
+            end = end.max(at_end(&p.at));
+        }
+        for a in &t.audios {
+            end = end.max(at_end(&a.at));
+        }
+    }
+    end.max(1)
+}
+
 /// A `songs/*.forte` entry: the song body a Composer opens as a song.
 fn song_entry(rel: &str, ast: &FileAst) -> Value {
     let song = ast.song.as_ref().map(|s| {
@@ -112,6 +142,7 @@ fn block_entry(rel: &str, ast: &FileAst) -> Value {
                 "desc": b.body.desc.clone().unwrap_or_default(),
                 "parent": b.parent.as_ref().map(|(p, _)| p.clone()),
                 "tempo": b.body.tempo.map(|(v, _)| v),
+                "bars": body_bars(&b.body),
                 "tracks": tracks_json(&b.body),
                 "patterns": b.body.lets.len(),
                 "nested": b.body.blocks.iter().map(|n| n.name.clone()).collect::<Vec<_>>(),
