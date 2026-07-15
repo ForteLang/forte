@@ -138,7 +138,7 @@ them treat as table stakes is in.
 | ID | A DAW lets you… | Disposition | Forte mapping / rationale |
 | --- | --- | --- | --- |
 | DAW-MIX-01 | fader per track, master fader | CODE | `level` (track solo-render LUFS target; song-level 3-pass master target). Declarative — states the goal, not the knob. |
-| DAW-MIX-02 | pan per track | CODE-GAP | `pan` node exists inside instruments; a first-class per-track pan statement is missing. |
+| DAW-MIX-02 | pan per track | CODE | Track-level `pan` statement (wired through compile → engine), plus the `pan` node inside instruments for per-voice fields. |
 | DAW-MIX-03 | insert chain per track, reorderable | CODE + GUI | `insert` lines in order; GUI drag reorders lines. |
 | DAW-MIX-04 | full effect palette (EQ, comp, reverb, delay…) | CODE | eq, parcomp, glue, limiter, space/reverb, drive, saturate, crush, exciter, vinyl, filter, chorus-class (uni), etc. Gaps become core-library issues as found (that pipeline works — see #123–#134). |
 | DAW-MIX-05 | visual EQ curve editing | GUI | Curve is a projection of eq params; drag writes params back. |
@@ -304,7 +304,9 @@ analyze panels (MTR-01..05) that no other DAW can honestly offer.
   `fortelang::edit` / `forte edit` — span-anchored token splices with a
   re-parse guard, covering set_tempo, set_pattern (drum grid / piano
   roll write-back), move_place / move_play / add_place / remove_place
-  (arrangement), set_arg (inspector knobs) and set_section. Contract
+  (arrangement), set_arg (inspector knobs), set_track / set_send (the
+  mixer's volume / level / pan / send write path, MIX-01/02) and
+  set_section. Contract
   tests assert byte-identity outside the splice, comment survival and
   idempotence (`crates/fortelang/tests/edit.rs`). The first live GUI
   projection is the web editor's **beat grid** (NOTE-02): `beat`

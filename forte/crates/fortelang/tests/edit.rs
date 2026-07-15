@@ -273,6 +273,96 @@ fn lexer_byte_spans_are_exact_and_monotonic() {
     }
 }
 
+/// Mixer-side fixture: volume / level / pan / send statements to rewrite,
+/// and a track that has none of them (the insertion path).
+const MIX: &str = r#"song "mix" {
+  tempo 120bpm
+
+  track Drums {
+    instrument sampler()
+    volume 0.8
+    pan  0.35   // ちょい左
+    send Space 0.2
+    play beat`x...` at bars(1..2)
+  }
+
+  track Bass {
+    instrument mono()
+    level -14
+    play notes`A1 .` at bars(1..2)
+  }
+}
+"#;
+
+#[test]
+fn set_track_rewrites_volume_in_place() {
+    let out = apply(MIX, r#"{"op":"set_track","track":"Drums","field":"volume","value":0.62}"#);
+    assert_only_lines_changed(MIX, &out, &[(6, "    volume 0.62")]);
+}
+
+#[test]
+fn set_track_keeps_odd_spacing_and_the_comment() {
+    let out = apply(MIX, r#"{"op":"set_track","track":"Drums","field":"pan","value":0.7}"#);
+    assert_only_lines_changed(MIX, &out, &[(7, "    pan  0.7   // ちょい左")]);
+}
+
+#[test]
+fn set_track_rewrites_a_negative_level() {
+    let out = apply(MIX, r#"{"op":"set_track","track":"Bass","field":"level","value":-12}"#);
+    assert_only_lines_changed(MIX, &out, &[(14, "    level -12")]);
+}
+
+#[test]
+fn set_track_inserts_a_missing_statement() {
+    let out = apply(MIX, r#"{"op":"set_track","track":"Bass","field":"volume","value":0.5}"#);
+    let b: Vec<&str> = MIX.lines().collect();
+    let a: Vec<&str> = out.lines().collect();
+    assert_eq!(a.len(), b.len() + 1);
+    // the statement lands as the track's first line, matching its indent
+    assert_eq!(a[12], "    volume 0.5");
+    assert_eq!(&a[..12], &b[..12]);
+    assert_eq!(&a[13..], &b[12..]);
+}
+
+#[test]
+fn set_track_rejects_an_unknown_field() {
+    let ops = parse_ops(r#"{"op":"set_track","track":"Drums","field":"reverb","value":0.5}"#).unwrap();
+    assert_eq!(apply_ops(MIX, &ops).unwrap_err().code, "E-EDIT-001");
+}
+
+#[test]
+fn set_track_stays_inside_a_one_line_body() {
+    let src = "song \"s\" {\n  track T { instrument mono() }\n}\n";
+    let ops = parse_ops(r#"{"op":"set_track","track":"T","field":"volume","value":0.5}"#).unwrap();
+    let out = apply_ops(src, &ops).unwrap();
+    assert_eq!(out, "song \"s\" {\n  track T { volume 0.5 instrument mono() }\n}\n");
+}
+
+#[test]
+fn set_send_rewrites_the_level() {
+    let out = apply(MIX, r#"{"op":"set_send","track":"Drums","dest":"Space","level":0.35}"#);
+    assert_only_lines_changed(MIX, &out, &[(8, "    send Space 0.35")]);
+}
+
+#[test]
+fn set_send_adds_a_missing_send() {
+    let out = apply(MIX, r#"{"op":"set_send","track":"Bass","dest":"Space","level":0.3}"#);
+    let b: Vec<&str> = MIX.lines().collect();
+    let a: Vec<&str> = out.lines().collect();
+    assert_eq!(a.len(), b.len() + 1);
+    assert_eq!(a[12], "    send Space 0.3");
+    assert_eq!(&a[..12], &b[..12]);
+    assert_eq!(&a[13..], &b[12..]);
+}
+
+#[test]
+fn set_track_is_idempotent() {
+    let op = r#"{"op":"set_track","track":"Bass","field":"volume","value":0.5}"#;
+    let once = apply(MIX, op);
+    let twice = apply(&once, op);
+    assert_eq!(once, twice);
+}
+
 #[test]
 fn move_at_line_finds_a_placement_by_source_line() {
     // fixture line 38 = `  play Inner as Twin at bars(5..8)   // エイリアス配置`

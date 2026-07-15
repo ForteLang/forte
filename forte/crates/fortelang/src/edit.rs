@@ -22,6 +22,8 @@
 //! {"op":"remove_place","place":2}
 //! {"op":"set_arg","track":"Bass","target":"instrument","arg":"cutoff","value":0.62}
 //! {"op":"set_arg","track":"Mix","target":"insert:1","arg":"type","value":"hp"}
+//! {"op":"set_track","track":"Bass","field":"volume","value":0.7}
+//! {"op":"set_send","track":"Bass","dest":"Space","level":0.3}
 //! {"op":"set_section","name":"drop","bars":[33,48]}
 //! ```
 //!
@@ -112,6 +114,26 @@ pub enum EditOp {
         arg: String,
         value: ArgValue,
     },
+    /// Set a track-level mix statement — `field` is `"volume"`, `"level"`
+    /// (LUFS target) or `"pan"`. A present statement has its number
+    /// rewritten in place (unit suffix kept); a missing one is inserted as
+    /// the track's first statement. The mixer fader's write path.
+    SetTrack {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        field: String,
+        value: f64,
+    },
+    /// Set a track's `send <dest> <level>`. An existing send to `dest` has
+    /// its level rewritten; otherwise the send is added to the track.
+    SetSend {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        dest: String,
+        level: f64,
+    },
     /// Rewrite a named section's bar range.
     SetSection {
         #[serde(default)]
@@ -167,11 +189,9 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
                     splice(src, a, b, &text)
                 }
                 None => {
-                    // no tempo statement yet: write one as the body's first line
+                    // no tempo statement yet: write one as the body's first statement
                     let open = ctx.body_open_brace(&file, path)?;
-                    let indent = ctx.first_stmt_indent(open);
-                    let insert_at = ctx.after_token_line(open);
-                    splice(src, insert_at, insert_at, &format!("{indent}tempo {}bpm\n", fmt_num(*bpm)))
+                    ctx.insert_after_open(src, open, &format!("tempo {}bpm", fmt_num(*bpm)))
                 }
             }
         }
@@ -325,6 +345,54 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
                         let e = ctx.toks[name_idx].end;
                         splice(src, e, e, &format!("({arg}: {text})"))
                     }
+                }
+            }
+        }
+        EditOp::SetTrack { path, track, field, value } => {
+            let (body, _) = resolve_body(&file, path)?;
+            let tr = find_track(body, track)?;
+            let slot = match field.as_str() {
+                "volume" => &tr.volume,
+                "level" => &tr.level,
+                "pan" => &tr.pan,
+                _ => {
+                    return Err(Diag::new(
+                        "E-EDIT-001",
+                        p0,
+                        format!("set_track の field は volume / level / pan です(見つかったのは {field})"),
+                    ))
+                }
+            };
+            match slot {
+                Some((_, pos)) => {
+                    let idx = ctx.tok_at(*pos)?;
+                    let (a, b) = ctx.value_span(idx);
+                    let num = if matches!(ctx.toks[idx].tok, Tok::Minus) { idx + 1 } else { idx };
+                    let text = match &ctx.toks[num].tok {
+                        Tok::Num(_, Some(unit)) => format!("{}{}", fmt_num(*value), unit),
+                        _ => fmt_num(*value),
+                    };
+                    splice(src, a, b, &text)
+                }
+                None => {
+                    let open = ctx.track_open_brace(tr)?;
+                    ctx.insert_after_open(src, open, &format!("{field} {}", fmt_num(*value)))
+                }
+            }
+        }
+        EditOp::SetSend { path, track, dest, level } => {
+            let (body, _) = resolve_body(&file, path)?;
+            let tr = find_track(body, track)?;
+            match tr.sends.iter().find(|(d, _, _)| d == dest) {
+                Some((_, _, pos)) => {
+                    // tokens: `send` <dest> <level> — pos anchors the dest name
+                    let idx = ctx.tok_at(*pos)?;
+                    let (a, b) = ctx.value_span(idx + 1);
+                    splice(src, a, b, &fmt_num(*level))
+                }
+                None => {
+                    let open = ctx.track_open_brace(tr)?;
+                    ctx.insert_after_open(src, open, &format!("send {dest} {}", fmt_num(*level)))
                 }
             }
         }
@@ -523,6 +591,31 @@ impl<'a> Ctx<'a> {
             }
         }
         Err(Diag::new("E-EDIT-006", self.toks[open].pos, "body が閉じていません"))
+    }
+
+    /// Token index of the `{` opening a track's body.
+    fn track_open_brace(&self, tr: &TrackAst) -> Result<usize, Diag> {
+        let kw = self.tok_at(tr.pos)?;
+        (kw..self.toks.len())
+            .find(|&j| matches!(self.toks[j].tok, Tok::LBrace))
+            .ok_or_else(|| Diag::new("E-EDIT-006", tr.pos, "track の `{` が見つかりません"))
+    }
+
+    /// Insert `stmt` as the first statement after an opening brace. When
+    /// the `{` ends its line the statement gets its own line below it; a
+    /// one-line body (`track T { … }`) gets it spliced inline after the
+    /// brace instead — never outside the braces.
+    fn insert_after_open(&self, src: &str, open: usize, stmt: &str) -> String {
+        let e = self.toks[open].end;
+        let rest = &self.src[e..];
+        let line_rest = rest[..rest.find('\n').unwrap_or(rest.len())].trim_start();
+        if line_rest.is_empty() || line_rest.starts_with("//") {
+            let indent = self.first_stmt_indent(open);
+            let at = self.after_token_line(open);
+            splice(src, at, at, &format!("{indent}{stmt}\n"))
+        } else {
+            splice(src, e, e, &format!(" {stmt}"))
+        }
     }
 
     /// Byte offset just after the newline that ends `tok`'s line (for
