@@ -22,6 +22,9 @@ pub struct Ctx {
     handle: EngineHandle,
     src: Vec<u8>,
     stage: Vec<u8>,
+    /// Directory of the open file, project-relative ("" = project root) —
+    /// imports in the buffer resolve against the module map from here.
+    base: String,
     modules: HashMap<String, String>,
     assets: HashMap<String, Vec<u8>>,
     calib_probe: Vec<f32>,
@@ -102,6 +105,7 @@ pub extern "C" fn fw_new(sample_rate: f32) -> *mut Ctx {
         handle,
         src: Vec::new(),
         stage: Vec::new(),
+        base: String::new(),
         modules: HashMap::new(),
         assets: HashMap::new(),
         calib_probe: Vec::new(),
@@ -141,7 +145,7 @@ pub unsafe extern "C" fn fw_compile(ptr: *mut Ctx) -> i32 {
         }
     };
     let loader = MapLoader { text: &c.modules, bin: &c.assets };
-    match fortelang::compile_with_loader(src, &loader, "") {
+    match fortelang::compile_with_loader(src, &loader, &c.base) {
         Ok(p) => {
             full_sync(&mut c.handle, &p);
             for slot in p.tracks.len()..c.prev_tracks {
@@ -189,6 +193,21 @@ pub unsafe extern "C" fn fw_modules_commit(ptr: *mut Ctx) -> i32 {
         Ok(m) => {
             c.modules = m;
             c.modules.len() as i32
+        }
+        Err(_) => -1,
+    }
+}
+
+/// Set the open file's project-relative directory from the staged bytes
+/// (UTF-8; "" = project root). Imports resolve against the module map from
+/// here — the project-mode (`forte daw`) counterpart of a real cwd.
+#[no_mangle]
+pub unsafe extern "C" fn fw_base_commit(ptr: *mut Ctx) -> i32 {
+    let c = ctx(ptr);
+    match std::str::from_utf8(&c.stage) {
+        Ok(s) => {
+            c.base = s.to_string();
+            0
         }
         Err(_) => -1,
     }

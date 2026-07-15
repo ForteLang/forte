@@ -425,6 +425,34 @@ fn main() -> ExitCode {
                 play(&args[1], for_secs, from_bar, block.as_deref())
             }
         }
+        // `forte daw [PROJECT] [--port N] [--no-open]` — THE DAW, opened on a
+        // forte-init package: songs, blocks, instruments, vendored packages,
+        // all editable in one place (ADR D-15).
+        #[cfg(not(target_family = "wasm"))]
+        Some("daw") => {
+            let dir = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .map(String::as_str)
+                .unwrap_or(".");
+            let port = args
+                .iter()
+                .position(|a| a == "--port")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(8001);
+            match fortelang::daw::run(
+                std::path::Path::new(dir),
+                port,
+                !args.iter().any(|a| a == "--no-open"),
+            ) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("daw: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         #[cfg(not(target_family = "wasm"))]
         Some("browser") => {
             let port = args
@@ -558,6 +586,7 @@ fn main() -> ExitCode {
             eprintln!("       forte edit  <song.forte> <JSON|-> [--write]  (構造編集: コメント/レイアウト保存のままトークンだけ置換)");
             eprintln!("       forte edit  <song.forte> --sites   (編集可能なパターンリテラル一覧を JSON で)");
             eprintln!("       forte project [DIR]                (パッケージの編集インベントリを JSON で: songs/ blocks/ instruments/ …)");
+            eprintln!("       forte daw [DIR] [--port N]         (DAW を開く: init したパッケージ全体を GUI で編集 — 曲も block も package 追加も)");
             eprintln!("       forte test  [PATH…] [--update]  (digest 固定の回帰テスト: forte-test.lock と照合)");
             eprintln!("       forte viz   <song.forte>   (可視化 JSON を出力)");
             eprintln!("       forte analyze <song.forte> [--json] [--no-stems] [--against X.profile]  (聴取レポート + ジャンル目標との照合)");

@@ -1,6 +1,6 @@
 // Service worker: precache the whole editor so it works fully offline
 // (SYS-NFR-001 — sharing is packages on GitHub, never a dependency for composing).
-const CACHE = 'forte-v15';
+const CACHE = 'forte-v16';
 const ASSETS = [
   './',
   './index.html',
@@ -40,6 +40,8 @@ self.addEventListener('activate', (e) => {
 // cache-first with network refresh: instant + offline, updates in background
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // the project API (forte daw) is live state — never serve it from cache
+  if (new URL(e.request.url).pathname.includes('/api/')) return;
   e.respondWith(
     caches.match(e.request).then((hit) => {
       const refresh = fetch(e.request)

@@ -56,3 +56,31 @@ F1/F2 acceptance in 09-forte-studio-fork.md are re-phrased project-first:
 opening the project is the entry point (F1); the full-length workflow
 starting at `forte init` — new block, audition it, import-and-place into
 a song, mix it — is completable without leaving Studio (F2).
+
+## 5. One DAW (maintainer directive, same day)
+
+> Unify all of this into Forte's DAW. For a package that already exists
+> or one just made with forte init, `forte daw [project path]` opens the
+> GUI editor, and there you create multiple songs and blocks. A basic
+> DAW works per song; Forte works per PACKAGE: define lots of blocks,
+> fork other people's packages, combine them, grow the blocks — into an
+> album.
+
+Clearing up the naming confusion this directive answered:
+
+| Name | What it is | Fate under this directive |
+| --- | --- | --- |
+| `forte edit` | The CLI write path (JSON ops → minimal text splice). Not a GUI. | Stays — it is the write substrate every GUI uses |
+| Web editor (`forte browser`) | The browser app in web/ — wasm compiler, OPFS local files, demo songs, catalog | Becomes the DAW's demo/hosted mode; same app |
+| **`forte daw [DIR]`** | **THE DAW**: the same browser app opened on a real package via the project API — real files, project tree, new block/song, package add | **The one entry point for composing** |
+| Forte Studio (D-14 fork) | The VS Code fork | The desktop shell that will embed the SAME surfaces and the same two commands (`forte project` read, `forte edit` write); F1's project map = the `forte daw` project view |
+
+Implementation (landed with this ADR): `forte daw [DIR]` serves web/
+with a project API (`/api/project`, `/api/list`, `/api/modules`,
+`/api/assets`, `/api/src` GET/POST, `/api/new` block/song scaffolds,
+`/api/pkg` = forte package add). The web app detects the API and flips
+to project mode: the tree is the package (with +曲 / +block / +package
+controls), files load from and autosave to DISK, and imports resolve
+from the open file's own directory (`fw_base_commit` carries the base
+dir into the wasm compiler). OPFS demo mode is untouched when no API is
+present.

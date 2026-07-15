@@ -3,7 +3,7 @@
 // Songs autosave to OPFS (local-first): close the tab, come back, keep working.
 
 import { Viz } from './viz.js';
-import { Store } from './storage.js';
+import { Store, ServerStore } from './storage.js';
 import { encodeFrec, toBase64 } from './frec.js';
 import { Vcs } from './vcs.js';
 
@@ -83,9 +83,12 @@ async function initWasm() {
 let modulesJson = '{}';
 let assetsJson = '{}';
 async function refreshModules() {
-  const map = { ...bundledModules };
+  const map = PROJECT ? {} : { ...bundledModules };
   const assets = {};
-  if (store) {
+  if (store?.readAllText) {
+    Object.assign(map, await store.readAllText());
+    Object.assign(assets, await store.readAllAssets());
+  } else if (store) {
     for (const name of await store.list()) {
       map[name] = await store.read(name);
     }
@@ -102,9 +105,14 @@ function stage(inst, json, commit) {
   new Uint8Array(inst.e.memory.buffer, ptr, bytes.length).set(bytes);
   commit(inst.ctx);
 }
+// imports in the open buffer resolve from its own directory (project mode)
+function currentBase() {
+  return PROJECT ? currentName.split('/').slice(0, -1).join('/') : '';
+}
 function setModules(inst) {
   stage(inst, modulesJson, inst.e.fw_modules_commit);
   stage(inst, assetsJson, inst.e.fw_assets_commit);
+  stage(inst, currentBase(), inst.e.fw_base_commit);
 }
 
 function mainCompile(text) {
@@ -222,6 +230,7 @@ function encodeSrc() {
     text: enc.encode(getText()),
     modules: enc.encode(modulesJson),
     assets: enc.encode(assetsJson),
+    base: enc.encode(currentBase()),
   };
 }
 let ac, node;
@@ -387,6 +396,9 @@ async function recoverCrashedTake() {
 
 // ---- files (OPFS, local-first) ----------------------------------------------
 let store = null;
+// project mode (forte daw): the inventory of the opened package, or null
+// when running local-first on OPFS (forte browser / hosted).
+let PROJECT = null;
 let currentName = BUILTINS[0];
 
 async function localNames() {
@@ -404,7 +416,7 @@ async function refreshFileList() {
     sel.appendChild(o);
   };
   for (const n of locals) add(n, `● ${n}`);
-  for (const n of BUILTINS) if (!locals.includes(n)) add(n, `demo: ${n}`);
+  if (!PROJECT) for (const n of BUILTINS) if (!locals.includes(n)) add(n, `demo: ${n}`);
   sel.value = currentName;
   await refreshTree(locals);
 }
@@ -454,8 +466,24 @@ async function refreshTree(locals) {
       fileRow(p, opts);
     }
   };
+  if (PROJECT) {
+    section(`package: ${PROJECT.name}${PROJECT.version ? ' ' + PROJECT.version : ''}`);
+    const row = document.createElement('div');
+    row.className = 'projbtns';
+    const btn = (label, title, fn) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.title = title;
+      b.onclick = fn;
+      row.appendChild(b);
+    };
+    btn('+曲', '新しい曲を songs/ に作る', () => newElement('song'));
+    btn('+block', '新しい block を blocks/ に作る', () => newElement('block'));
+    btn('+package', '他の package を取り込む (forte package add)', addPackage);
+    el.appendChild(row);
+  }
   if (locals.length || assets.length) {
-    section('local');
+    section(PROJECT ? 'project' : 'local');
     renderPaths([...locals, ...assets].sort(), {});
     // assets got the local marker: restyle them
     for (const a of assets) {
@@ -467,7 +495,7 @@ async function refreshTree(locals) {
       }
     }
   }
-  const demos = BUILTINS.filter((n) => !locals.includes(n));
+  const demos = PROJECT ? [] : BUILTINS.filter((n) => !locals.includes(n));
   if (demos.length) {
     section('demo');
     renderPaths(demos, { demo: true });
@@ -480,7 +508,7 @@ async function loadSong(name) {
   localStorage.setItem('forte.last', name);
   const locals = await localNames();
   let text;
-  if (locals.includes(name)) {
+  if (locals.includes(name) || PROJECT) {
     text = await store.read(name);
   } else {
     text = await (await fetch(`../../packages/essentials_0.6.0/songs/${name}`)).text();
@@ -501,6 +529,33 @@ function autosave() {
     refreshFileList();
     refreshModules(); // local files are importable modules
   }, 500);
+}
+
+// ---- project gestures (forte daw): scaffold and vendor into the package ------
+async function newElement(kind) {
+  const name = prompt(kind === 'block' ? '新しい block 名 (例: Groove)' : '新しい曲名 (例: my-song)');
+  if (!name) return;
+  const r = await fetch(`api/new?kind=${kind}&name=${encodeURIComponent(name.trim())}`, { method: 'POST' });
+  const t = await r.text();
+  if (!r.ok) {
+    status(`new: ${t}`);
+    return;
+  }
+  await refreshModules();
+  await refreshFileList();
+  loadSong(JSON.parse(t).file);
+}
+
+async function addPackage() {
+  const spec = prompt('追加する package (例: github:owner/repo または ローカルパス)');
+  if (!spec) return;
+  status('package add…(clone 中)');
+  const r = await fetch(`api/pkg?spec=${encodeURIComponent(spec.trim())}`, { method: 'POST' });
+  const t = await r.text();
+  status(r.ok ? 'package added' : `pkg: ${t.slice(0, 200)}`);
+  await store.refresh?.();
+  await refreshModules();
+  await refreshFileList();
 }
 
 // ---- history: the .forte repository lives in the browser too -----------------
@@ -1007,11 +1062,24 @@ async function boot() {
   navigator.serviceWorker?.register('sw.js').catch(() => {});
   await initWasm();
   try {
-    store = await new Store().init();
+    // forte daw serves the package as the project API — the store becomes
+    // the real directory on disk (ADR D-15: the package IS the project)
+    const srv = await new ServerStore().init();
+    store = srv;
+    PROJECT = srv.project;
+    document.title = `forte daw — ${PROJECT.name}`;
+    document.body.dataset.project = PROJECT.name;
   } catch {
-    store = null; // OPFS unavailable: still fully usable, just no persistence
+    PROJECT = null;
   }
-  for (const lib of MODULE_LIBS) {
+  if (!store) {
+    try {
+      store = await new Store().init();
+    } catch {
+      store = null; // OPFS unavailable: still fully usable, just no persistence
+    }
+  }
+  if (!PROJECT) for (const lib of MODULE_LIBS) {
     try {
       bundledModules[lib] = await (await fetch(`../../packages/essentials_0.6.0/songs/${lib}`)).text();
     } catch { /* offline without cache: song imports will diagnose */ }
@@ -1019,12 +1087,23 @@ async function boot() {
   await refreshModules();
   const last = localStorage.getItem('forte.last');
   const locals = await localNames();
-  currentName =
-    last && (locals.includes(last) || BUILTINS.includes(last)) ? last : BUILTINS[0];
+  if (PROJECT) {
+    currentName =
+      last && locals.includes(last)
+        ? last
+        : locals.find((f) => f.startsWith('songs/')) ??
+          locals.find((f) => f.startsWith('blocks/')) ??
+          locals[0] ??
+          'package.forte';
+  } else {
+    currentName =
+      last && (locals.includes(last) || BUILTINS.includes(last)) ? last : BUILTINS[0];
+  }
 
-  const initialText = locals.includes(currentName)
-    ? await store.read(currentName)
-    : await (await fetch(`../../packages/essentials_0.6.0/songs/${currentName}`)).text();
+  const initialText =
+    locals.includes(currentName) || PROJECT
+      ? await store.read(currentName)
+      : await (await fetch(`../../packages/essentials_0.6.0/songs/${currentName}`)).text();
   setText(initialText);
   await tryMonaco(initialText);
   onChange = () => {
@@ -1040,6 +1119,7 @@ async function boot() {
 
   $('file').onchange = (e) => loadSong(e.target.value);
   $('new').onclick = async () => {
+    if (PROJECT) return newElement('song'); // the project's songs live in songs/
     const name = prompt('曲名 (例: my-song)');
     if (!name || !store) return;
     const file = `${name.replace(/[^\w-]/g, '-')}.forte`;
@@ -1048,6 +1128,7 @@ async function boot() {
     loadSong(file);
   };
   $('delete').onclick = async () => {
+    if (PROJECT) return status('プロジェクトのファイル削除はシェル / git でどうぞ');
     if (!store) return;
     const locals = await localNames();
     if (!locals.includes(currentName)) return;

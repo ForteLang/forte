@@ -36,6 +36,7 @@ class ForteProcessor extends AudioWorkletProcessor {
         };
         if (msg.modules) stage(msg.modules, this.e.fw_modules_commit);
         if (msg.assets) stage(msg.assets, this.e.fw_assets_commit);
+        if (msg.base !== undefined) stage(msg.base, this.e.fw_base_commit);
         const ptr = this.e.fw_src_prepare(this.ctx, msg.text.length);
         new Uint8Array(this.e.memory.buffer, ptr, msg.text.length).set(msg.text);
         const n = this.e.fw_compile(this.ctx);

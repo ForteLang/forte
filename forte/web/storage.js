@@ -71,3 +71,59 @@ export class Store {
     await dir.removeEntry(base);
   }
 }
+
+// Project mode (forte daw): the store IS the real package directory on
+// disk, served by the local project API. Same interface as Store, so the
+// whole editor (tree, autosave, modules, history snapshots) follows the
+// project without knowing which backend it is on.
+export class ServerStore {
+  async init() {
+    const r = await fetch('api/project');
+    if (!r.ok) throw new Error('no project api');
+    this.project = await r.json();
+    return this;
+  }
+
+  async refresh() {
+    try { this.project = await (await fetch('api/project')).json(); } catch { /* keep last */ }
+  }
+
+  async list(ext = '.forte') {
+    const r = await fetch(`api/list?ext=${encodeURIComponent(ext)}`);
+    return r.ok ? r.json() : [];
+  }
+
+  async read(path) {
+    const r = await fetch(`api/src?path=${encodeURIComponent(path)}`);
+    if (!r.ok) throw new Error(`read ${path}: ${r.status}`);
+    return r.text();
+  }
+
+  async write(path, text) {
+    await fetch(`api/src?path=${encodeURIComponent(path)}`, { method: 'POST', body: text });
+  }
+
+  async readBytes(path) {
+    const r = await fetch(`api/src?path=${encodeURIComponent(path)}`);
+    if (!r.ok) throw new Error(`read ${path}: ${r.status}`);
+    return new Uint8Array(await r.arrayBuffer());
+  }
+
+  async writeBytes(path, bytes) {
+    await fetch(`api/src?path=${encodeURIComponent(path)}`, { method: 'POST', body: bytes });
+  }
+
+  // project files are deleted in the shell / git, not from the DAW (v1)
+  async remove() {}
+
+  // one round-trip for the whole import map (instead of a request per file)
+  async readAllText() {
+    const r = await fetch('api/modules');
+    return r.ok ? r.json() : {};
+  }
+
+  async readAllAssets() {
+    const r = await fetch('api/assets');
+    return r.ok ? r.json() : {};
+  }
+}

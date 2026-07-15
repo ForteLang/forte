@@ -10,6 +10,8 @@ pub mod audio;
 pub mod browser;
 pub mod calib;
 pub mod compile;
+#[cfg(not(target_family = "wasm"))]
+pub mod daw;
 pub mod diag;
 pub mod edit;
 #[cfg(not(target_family = "wasm"))]

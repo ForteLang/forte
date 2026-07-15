@@ -18,7 +18,7 @@ pub fn find_web_root(start: &Path) -> Option<PathBuf> {
     None
 }
 
-fn content_type(path: &Path) -> &'static str {
+pub(crate) fn content_type(path: &Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()).unwrap_or("") {
         "html" => "text/html; charset=utf-8",
         "js" => "text/javascript; charset=utf-8",
@@ -32,7 +32,7 @@ fn content_type(path: &Path) -> &'static str {
     }
 }
 
-fn respond(stream: &mut TcpStream, status: &str, ctype: &str, body: &[u8]) -> std::io::Result<()> {
+pub(crate) fn respond(stream: &mut TcpStream, status: &str, ctype: &str, body: &[u8]) -> std::io::Result<()> {
     let head = format!(
         "HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\n\
          Cache-Control: no-cache\r\nConnection: close\r\n\r\n",
@@ -154,7 +154,7 @@ pub fn packages_json(root: &Path) -> String {
 }
 
 /// Try the platform opener; failure is fine (the URL is printed anyway).
-fn open_url(url: &str) {
+pub(crate) fn open_url(url: &str) {
     #[cfg(target_os = "macos")]
     let cmd = "open";
     #[cfg(not(target_os = "macos"))]
