@@ -1250,6 +1250,7 @@ async function refreshTree(locals) {
         d.appendChild(b);
       };
       bb('▶', 'Preview one bar', () => previewInstrument(inst).catch((e) => status(`preview: ${e.message}`)));
+      bb('🎹', 'Play this instrument from the PC keyboard (A–K, Esc exits)', () => toggleKeys(inst).catch((e) => status(`keys: ${e.message}`)));
       bb('+tr', 'Add a track with this instrument to the open song / block', () => addTrackFromPalette(inst));
       const entry = { row: d, key: `${inst.label} ${inst.where ?? ''}`.toLowerCase() };
       instRows.push(entry);
@@ -1308,6 +1309,7 @@ async function refreshTree(locals) {
 
 let lastSynced = ''; // buffer text as of the last load/save (disk agreement)
 async function loadSong(name) {
+  if (typeof exitKeys === 'function' && keysMode) exitKeys();
   currentName = name;
   localStorage.setItem('forte.last', name);
   const locals = await localNames();
@@ -1533,6 +1535,74 @@ async function previewInstrument(inst) {
   srcNode.start();
   status(`preview: ${inst.label}`);
 }
+
+// keys mode: pick an instrument, play it from the PC keyboard. The worklet
+// gets a one-track monitor song (track 0 = the live-note target); Esc (or
+// toggling off) sends the real song back.
+let keysMode = null; // {inst, octave, held: Map(key → pitch)}
+const KEYMAP = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11, k: 12 };
+async function toggleKeys(inst) {
+  if (!inst || keysMode?.inst?.label === inst.label) return exitKeys();
+  await ensureAudio();
+  await ac.resume();
+  const imp = inst.from ? `import { ${inst.name} } from "${inst.from}"\n` : '';
+  const src = `${imp}song "monitor" {\n  track P {\n    instrument ${inst.call}\n    play notes\`C3:0.25\` at bars(1..1)\n  }\n}`;
+  const enc = new TextEncoder();
+  node.port.postMessage({
+    cmd: 'src',
+    text: enc.encode(src),
+    modules: enc.encode(modulesJson),
+    assets: enc.encode(assetsJson),
+    base: enc.encode(''),
+    loop: null,
+  });
+  keysMode = { inst, octave: 0, held: new Map() };
+  document.body.dataset.keys = inst.label;
+  toast(`🎹 ${inst.label} — A–K plays (W/E/T/Y/U black), Z/X octave, Esc exits`, 'ok');
+}
+function exitKeys() {
+  if (!keysMode) return;
+  for (const pitch of keysMode.held.values()) node?.port.postMessage({ cmd: 'note', on: false, pitch });
+  keysMode = null;
+  delete document.body.dataset.keys;
+  if (node) node.port.postMessage(encodeSrc()); // the real song comes back
+  toast('keys off — song restored', 'ok');
+}
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (!keysMode || perf) return;
+    const t = document.activeElement;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return;
+    if (e.key === 'Escape') {
+      exitKeys();
+      return;
+    }
+    const k = e.key.toLowerCase();
+    if (k === 'z') { keysMode.octave = Math.max(-3, keysMode.octave - 1); return; }
+    if (k === 'x') { keysMode.octave = Math.min(4, keysMode.octave + 1); return; }
+    const off = KEYMAP[k];
+    if (off === undefined || e.repeat || keysMode.held.has(k)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const pitch = 60 + keysMode.octave * 12 + off;
+    keysMode.held.set(k, pitch);
+    node?.port.postMessage({ cmd: 'note', on: true, pitch, vel: 0.85 });
+  },
+  true
+);
+window.addEventListener(
+  'keyup',
+  (e) => {
+    if (!keysMode) return;
+    const k = e.key.toLowerCase();
+    const pitch = keysMode.held.get(k);
+    if (pitch === undefined) return;
+    keysMode.held.delete(k);
+    node?.port.postMessage({ cmd: 'note', on: false, pitch });
+  },
+  true
+);
 
 // the palette gesture: a new track with this instrument + a starter pattern
 function addTrackFromPalette(inst) {
@@ -2543,6 +2613,7 @@ async function boot() {
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'Space' || e.repeat) return;
     if (perf) return; // perform mode owns the keyboard
+    if (keysMode) return; // keys mode owns the keyboard too
     const t = document.activeElement;
     if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return;
     e.preventDefault();
