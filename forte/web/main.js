@@ -254,6 +254,47 @@ function argSitesOf(text) {
   return n < 0 ? [] : JSON.parse(out);
 }
 
+// curated effect defaults for the "+ fx" picker (full list = the compiler's)
+const FX_PRESETS = [
+  ['filter', 'filter(type: "lp", cutoff: 0.6)'],
+  ['eq', 'eq(low: 0, mid: 0, high: 0)'],
+  ['drive', 'drive(amount: 0.3)'],
+  ['delay', 'delay(time: 0.25, fdbk: 0.3, mix: 0.2)'],
+  ['space', 'space(mix: 0.25)'],
+  ['reverb', 'reverb(mix: 0.25)'],
+  ['comp', 'comp()'],
+  ['glue', 'glue()'],
+  ['chorus', 'chorus()'],
+  ['crush', 'crush(amount: 0.4)'],
+  ['saturate', 'saturate(amount: 0.4)'],
+  ['vinyl', 'vinyl()'],
+  ['pump', 'pump()'],
+  ['width', 'width()'],
+  ['stutter', 'stutter()'],
+  ['gate', 'gate()'],
+  ['transient', 'transient()'],
+  ['parcomp', 'parcomp()'],
+  ['exciter', 'exciter()'],
+  ['ringmod', 'ringmod()'],
+  ['tapestop', 'tapestop()'],
+  ['limiter', 'limiter()'],
+];
+
+// route an insert-chain op to the buffer or the track's home file
+async function routeChainOps(home, siteTrack, ops) {
+  if (home) {
+    const r = await fetch(`api/edit?path=${encodeURIComponent(home.file)}`, {
+      method: 'POST',
+      body: JSON.stringify(ops),
+    });
+    if (!r.ok) return toast(await r.text(), 'err');
+    await refreshModules();
+    recompile(0);
+  } else {
+    applyEdit(ops.length === 1 ? ops[0] : ops);
+  }
+}
+
 let inspTrack = null;
 async function renderInspector() {
   const el = $('insp');
@@ -284,6 +325,27 @@ async function renderInspector() {
     nm.textContent = `${site.target === 'instrument' ? '♪' : 'fx'} ${site.name}`;
     nm.title = `${site.target} (line ${site.line})`;
     row.appendChild(nm);
+    if (site.target.startsWith('insert:')) {
+      const idx = Number(site.target.split(':')[1]);
+      const chainLen = sites.filter((x) => x.target.startsWith('insert:')).length;
+      const cb = (label, title, fn) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.title = title;
+        b.style.padding = '0 6px';
+        b.onclick = fn;
+        row.appendChild(b);
+      };
+      const base = { path: site.path, track: site.track };
+      if (idx > 0)
+        cb('▲', 'Move this effect earlier in the chain', () =>
+          routeChainOps(home, site.track, [{ op: 'move_insert', ...base, from: idx, to: idx - 1 }]));
+      if (idx < chainLen - 1)
+        cb('▼', 'Move this effect later in the chain', () =>
+          routeChainOps(home, site.track, [{ op: 'move_insert', ...base, from: idx, to: idx + 1 }]));
+      cb('✕', 'Remove this effect (undoable in-buffer)', () =>
+        routeChainOps(home, site.track, [{ op: 'remove_insert', ...base, index: idx }]));
+    }
     if (site.target === 'instrument') {
       // swap the instrument itself: pick any palette entry by name
       const sel = document.createElement('select');
@@ -351,6 +413,34 @@ async function renderInspector() {
       lab.appendChild(inp);
       row.appendChild(lab);
     }
+    el.appendChild(row);
+  }
+  if (sites.length) {
+    // "+ fx" picker: append an effect to this track's chain
+    const row = document.createElement('div');
+    row.className = 'irow';
+    const sel = document.createElement('select');
+    sel.title = 'Add an effect to the end of the chain';
+    const first = document.createElement('option');
+    first.value = '';
+    first.textContent = '+ fx…';
+    sel.appendChild(first);
+    for (const [name, call] of FX_PRESETS) {
+      const o = document.createElement('option');
+      o.value = call;
+      o.textContent = name;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => {
+      if (!sel.value) return;
+      const call = sel.value;
+      sel.blur();
+      const s0 = sites[0];
+      routeChainOps(home, s0.track, [
+        { op: 'add_insert', path: s0.path, track: s0.track, call },
+      ]).then(() => toast(`+ insert ${call.split('(')[0]}`, 'ok'));
+    };
+    row.appendChild(sel);
     el.appendChild(row);
   }
 }

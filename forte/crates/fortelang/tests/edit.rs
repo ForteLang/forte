@@ -393,6 +393,28 @@ fn remove_at_line_deletes_the_placement_line() {
 }
 
 #[test]
+fn insert_chain_edits_add_remove_and_reorder() {
+    let src = "song \"s\" {\n  track A {\n    instrument sampler(sample: \"Kick\")\n    insert filter(type: \"lp\", cutoff: 0.8)\n    insert drive(amount: 0.3)\n    play beat`x...` at bars(1..1)\n  }\n}\n";
+    // add appends after the last insert
+    let out = apply(src, r#"{"op":"add_insert","track":"A","call":"delay(time: 0.25, mix: 0.2)"}"#);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[5], "    insert delay(time: 0.25, mix: 0.2)");
+    // reorder swaps only the call texts
+    let out2 = apply(&out, r#"{"op":"move_insert","track":"A","from":2,"to":1}"#);
+    let l2: Vec<&str> = out2.lines().collect();
+    assert_eq!(l2[4], "    insert delay(time: 0.25, mix: 0.2)");
+    assert_eq!(l2[5], "    insert drive(amount: 0.3)");
+    // remove deletes the whole line
+    let out3 = apply(&out2, r#"{"op":"remove_insert","track":"A","index":0}"#);
+    assert!(!out3.contains("filter("), "{out3}");
+    assert_eq!(out3.lines().count(), out2.lines().count() - 1);
+    // a track with no inserts anchors the add after the instrument
+    let bare = apply(src, r#"[{"op":"remove_insert","track":"A","index":1},{"op":"remove_insert","track":"A","index":0},{"op":"add_insert","track":"A","call":"space(mix: 0.2)"}]"#);
+    let lb: Vec<&str> = bare.lines().collect();
+    assert_eq!(lb[3], "    insert space(mix: 0.2)");
+}
+
+#[test]
 fn set_instrument_swaps_the_whole_call() {
     let out = apply(
         SRC,

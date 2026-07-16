@@ -168,6 +168,29 @@ pub enum EditOp {
         track: String,
         call: String,
     },
+    /// Append `insert <call>` to a track's effect chain (after the last
+    /// insert, else after the instrument).
+    AddInsert {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        call: String,
+    },
+    /// Delete insert #index from a track's chain (whole line when owned).
+    RemoveInsert {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        index: usize,
+    },
+    /// Swap two adjacent inserts (reorder the chain one step).
+    MoveInsert {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        from: usize,
+        to: usize,
+    },
     /// Delete a whole `track <name> { … }` (its lines when it owns them).
     RemoveTrack {
         #[serde(default)]
@@ -515,6 +538,104 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
                 ctx.toks[name_idx].end
             };
             splice(src, ctx.toks[name_idx].off, end, call)
+        }
+        EditOp::AddInsert { path, track, call } => {
+            if call.contains('{') || call.contains('}') || call.contains('\n') || call.contains('`') {
+                return Err(Diag::new(
+                    "E-EDIT-005",
+                    p0,
+                    "add_insert の call に {} や改行、バッククォートは書けません",
+                ));
+            }
+            let (body, _) = resolve_body(&file, path)?;
+            let tr = find_track(body, track)?;
+            // anchor: after the last insert, else after the instrument
+            let anchor_call = tr.inserts.last().or(tr.instrument.as_ref()).ok_or_else(|| {
+                Diag::new("E-EDIT-003", tr.pos, format!("Track '{track}' に instrument がありません"))
+            })?;
+            let idx = ctx.tok_at(anchor_call.pos)?;
+            let end = if matches!(ctx.toks[idx + 1].tok, Tok::LParen) {
+                let after = ctx.skip_parens(idx + 1)?;
+                ctx.toks[after - 1].end
+            } else {
+                ctx.toks[idx].end
+            };
+            // its own line below the anchor, matching the anchor's indent
+            let anchor_kw_off = ctx.toks[ctx.tok_at(anchor_call.pos)? - 1].off;
+            let ls = src[..anchor_kw_off].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let indent = if src[ls..anchor_kw_off].trim().is_empty() {
+                src[ls..anchor_kw_off].to_string()
+            } else {
+                "    ".into()
+            };
+            let line_end = src[end..].find('\n').map(|i| end + i + 1).unwrap_or(src.len());
+            splice(src, line_end, line_end, &format!("{indent}insert {call}\n"))
+        }
+        EditOp::RemoveInsert { path, track, index } => {
+            let (body, _) = resolve_body(&file, path)?;
+            let tr = find_track(body, track)?;
+            let call = tr.inserts.get(*index).ok_or_else(|| {
+                Diag::new(
+                    "E-EDIT-003",
+                    tr.pos,
+                    format!("Track '{track}' に insert #{index} がありません(insert は {} 個)", tr.inserts.len()),
+                )
+            })?;
+            let name_idx = ctx.tok_at(call.pos)?;
+            if name_idx == 0 || !matches!(&ctx.toks[name_idx - 1].tok, Tok::Ident(s) if s == "insert") {
+                return Err(Diag::new("E-EDIT-006", call.pos, "insert 文の先頭が見つかりません"));
+            }
+            let kw = name_idx - 1;
+            let end = if matches!(ctx.toks[name_idx + 1].tok, Tok::LParen) {
+                let after = ctx.skip_parens(name_idx + 1)?;
+                ctx.toks[after - 1].end
+            } else {
+                ctx.toks[name_idx].end
+            };
+            let start_off = ctx.toks[kw].off;
+            let line_start = src[..start_off].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let prefix_blank = src[line_start..start_off].trim().is_empty();
+            let rest = &src[end..];
+            let line_len = rest.find('\n').unwrap_or(rest.len());
+            let tail = rest[..line_len].trim_start();
+            if prefix_blank && (tail.is_empty() || tail.starts_with("//")) {
+                let del_end = (end + line_len + 1).min(src.len());
+                splice(src, line_start, del_end, "")
+            } else {
+                splice(src, start_off, end, "")
+            }
+        }
+        EditOp::MoveInsert { path, track, from, to } => {
+            let (body, _) = resolve_body(&file, path)?;
+            let tr = find_track(body, track)?;
+            let n = tr.inserts.len();
+            if *from >= n || *to >= n {
+                return Err(Diag::new(
+                    "E-EDIT-003",
+                    tr.pos,
+                    format!("insert の位置が範囲外です(insert は {n} 個)"),
+                ));
+            }
+            if from == to {
+                return Ok(src.to_string());
+            }
+            // swap the two CALL texts; the surrounding `insert` keywords stay
+            let span = |i: usize| -> Result<(usize, usize), Diag> {
+                let idx = ctx.tok_at(tr.inserts[i].pos)?;
+                let end = if matches!(ctx.toks[idx + 1].tok, Tok::LParen) {
+                    let after = ctx.skip_parens(idx + 1)?;
+                    ctx.toks[after - 1].end
+                } else {
+                    ctx.toks[idx].end
+                };
+                Ok((ctx.toks[idx].off, end))
+            };
+            let (a0, a1) = span(*from.min(to))?;
+            let (b0, b1) = span(*from.max(to))?;
+            let a_text = src[a0..a1].to_string();
+            let b_text = src[b0..b1].to_string();
+            let step1 = splice(src, b0, b1, &a_text);
+            step1[..a0].to_string() + &b_text + &step1[a1..]
         }
         EditOp::RemoveTrack { path, track } => {
             let (body, _) = resolve_body(&file, path)?;
