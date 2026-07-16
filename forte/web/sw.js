@@ -1,6 +1,6 @@
 // Service worker: precache the whole editor so it works fully offline
 // (SYS-NFR-001 — sharing is packages on GitHub, never a dependency for composing).
-const CACHE = 'forte-v16';
+const CACHE = 'forte-v17';
 const ASSETS = [
   './',
   './index.html',
@@ -37,23 +37,22 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// cache-first with network refresh: instant + offline, updates in background
+// NETWORK-FIRST with cache fallback: the app's own files change with every
+// build, and serving a stale main.js against a fresh forte.wasm (or vice
+// versa) breaks boot. Fresh when online, cached when offline.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   // the project API (forte daw) is live state — never serve it from cache
   if (new URL(e.request.url).pathname.includes('/api/')) return;
   e.respondWith(
-    caches.match(e.request).then((hit) => {
-      const refresh = fetch(e.request)
-        .then((res) => {
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, copy));
-          }
-          return res;
-        })
-        .catch(() => hit);
-      return hit || refresh;
-    })
+    fetch(e.request)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
 });

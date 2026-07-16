@@ -120,6 +120,20 @@
   }
   #help.show { display: block; }
   #help b { color: #ffd479; }
+  #toasts {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    z-index: 40; display: flex; flex-direction: column; gap: 6px; align-items: center;
+    pointer-events: none;
+  }
+  .toast {
+    padding: 8px 16px; border-radius: 8px; font-size: 13px;
+    background: #262b33; color: #d7dae0; border: 1px solid #3a3f4b;
+    opacity: 0; transform: translateY(8px); transition: all 0.25s ease;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); max-width: 70vw;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.ok { border-color: #3f6f4c; background: #1d2b22; color: #9fdcae; }
+  .toast.err { border-color: #7a3a3f; background: #2b1d1f; color: #f0a3a8; }
   #tree .f {
     padding: 0 12px; color: #a9b0bb; cursor: pointer;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -201,6 +215,7 @@
   <button id="perform" title="Perform mode: play a MIDI keyboard or PC keys (A-K white, W/E/T/Y/U black); stopping transcribes it to notes code">🎹 Perform</button>
   <button id="digest">Build digest</button>
   <button id="packages" title="Catalog of vendored packages (browse instruments / blocks / songs)">📦 Packages</button>
+  <button id="undo" title="Undo the last edit — GUI gestures included (Ctrl+Z)">↶</button>
   <button id="helpbtn" title="Gesture guide">?</button>
   <span id="status">loading…</span>
 </header>
@@ -264,8 +279,10 @@
   <b>a mixer strip's name</b> opens the inspector (instrument / effect knobs, swap the instrument)<br />
   <b>M / S</b> session-only mute / solo<br />
   the tree: <b>+song / +block / +package</b> · a block's <b>play button</b> auditions, <b>+song</b> places it<br />
-  every GUI gesture is written back as a minimal code edit; <b>Ctrl+Z</b> undoes it
+  every GUI gesture is written back as a minimal code edit; <b>Ctrl+Z</b> (or ↶) undoes it<br />
+  <a id="help-welcome" style="color:#58a6ff;cursor:pointer">show the welcome guide again</a>
 </div>
+<div id="toasts"></div>
 <div id="viz-wrap">
   <div id="sectbar"></div>
   <canvas id="viz"></canvas>

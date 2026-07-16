@@ -9,6 +9,20 @@ import { Vcs } from './vcs.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t) => ($('status').textContent = t);
+// transient feedback that doesn't require watching the status corner
+function toast(msg, kind = '') {
+  const host = $('toasts');
+  if (!host) return;
+  const t = document.createElement('div');
+  t.className = `toast ${kind}`;
+  t.textContent = msg;
+  host.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 300);
+  }, 3200);
+}
 const viz = new Viz($('viz'));
 window.__forteViz = viz;
 // Click = code-jump / piano-roll toggle. Drag on a clip = move the play it
@@ -583,6 +597,7 @@ window.__forteCompileCheck = (src) => {
   return r.ok;
 };
 
+let monacoAbandoned = false;
 async function tryMonaco(initial) {
   try {
     const base = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min';
@@ -595,7 +610,12 @@ async function tryMonaco(initial) {
       document.head.appendChild(s);
     });
     require.config({ paths: { vs: `${base}/vs` } });
-    await new Promise((res, rej) => require(['vs/editor/editor.main'], res, rej));
+    // this fetch had NO timeout — a slow CDN kept the app on "loading…"
+    await new Promise((res, rej) => {
+      require(['vs/editor/editor.main'], res, rej);
+      setTimeout(() => rej(new Error('monaco timeout')), 8000);
+    });
+    if (monacoAbandoned) return false; // boot moved on without us
     monaco.languages.register({ id: 'forte' });
     monaco.languages.setMonarchTokensProvider('forte', {
       tokenizer: {
@@ -620,6 +640,10 @@ async function tryMonaco(initial) {
     });
     getText = () => ed.getValue();
     setText = (t) => ed.setValue(t);
+    window.__forteUndo = () => {
+      ed.focus();
+      ed.trigger('toolbar', 'undo', null);
+    };
     replaceText = (t) => {
       const model = ed.getModel();
       ed.pushUndoStop();
@@ -1022,7 +1046,8 @@ async function refreshTree(locals) {
         if (!starters.length) return status('no starter packages found');
         status(`package add: ${starters[0].name}…`);
         const r = await fetch(`api/pkg?spec=${encodeURIComponent(starters[0].spec)}`, { method: 'POST' });
-        status(r.ok ? `vendored ${starters[0].name} — the palette just grew` : `pkg: ${(await r.text()).slice(0, 160)}`);
+        if (r.ok) toast(`vendored ${starters[0].name} — the palette just grew`, 'ok');
+        else toast(`pkg: ${(await r.text()).slice(0, 160)}`, 'err');
         await store.refresh?.();
         await refreshModules();
         await refreshFileList();
@@ -1081,8 +1106,15 @@ function autosave() {
 }
 
 // ---- project gestures (forte daw): scaffold and vendor into the package ------
+function uniqueName(base, taken) {
+  let n = 1;
+  while (taken.includes(n > 1 ? `${base}${n}` : base)) n++;
+  return n > 1 ? `${base}${n}` : base;
+}
 async function newElement(kind) {
-  const name = prompt(kind === 'block' ? 'New block name (e.g. Groove)' : 'New song name (e.g. my-song)');
+  const files = (await localNames()).map((f) => f.split('/').pop().replace('.forte', ''));
+  const def = uniqueName(kind === 'block' ? 'Groove' : 'song', files);
+  const name = prompt(kind === 'block' ? 'New block name:' : 'New song name:', def);
   if (!name) return;
   const r = await fetch(`api/new?kind=${kind}&name=${encodeURIComponent(name.trim())}`, { method: 'POST' });
   const t = await r.text();
@@ -1144,6 +1176,7 @@ function placeBlock(b, startBar) {
   }
   ops.push({ op: 'add_place', block: b.name, bars: [start, start + len - 1] });
   if (applyEdit(ops)) {
+    toast(`placed ${b.name} at bars(${start}..${start + len - 1})`, 'ok');
     status(`placed: ${b.name} at bars(${start}..${start + len - 1})`);
     // the code opens on the new placement (D-15: drop lands you in the code)
     const line = getText().split('\n').findIndex((l) => l.includes(`play ${b.name} `) || l.trim().startsWith(`play ${b.name}`));
@@ -1169,6 +1202,7 @@ $('viz').addEventListener('drop', (ev) => {
       ops.push({ op: 'add_import', names: [b.name], from: relPath(currentName, b.file) });
     }
     if (applyEdit(ops)) {
+      toast(`this placement now plays ${b.name}`, 'ok');
       status(`swap: this placement now plays ${b.name}`);
       jumpToLine(hit.line);
     }
@@ -1185,8 +1219,9 @@ $('viz').addEventListener('contextmenu', (ev) => {
   const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
   if (hit?.kind !== 'clip' || !(hit.line > 0)) return;
   ev.preventDefault();
-  if (!confirm('Delete this placement (clip)?')) return;
-  applyEdit({ op: 'remove_at_line', line: hit.line });
+  if (applyEdit({ op: 'remove_at_line', line: hit.line })) {
+    toast('clip deleted — Ctrl+Z to undo', 'ok');
+  }
 });
 
 // ---- instrument palette: built-ins + every device in the package ----------
@@ -1286,7 +1321,7 @@ function addTrackFromPalette(inst) {
     instrument: inst.call,
     play: inst.kind + '`' + inst.pat + '` at bars(1..4)',
   });
-  if (applyEdit(ops)) status(`+ track ${name} (${inst.label}) — the grid / roll is ready`);
+  if (applyEdit(ops)) toast(`+ track ${name} (${inst.label}) — the grid / roll is ready`, 'ok');
 }
 
 // ---- history: the .forte repository lives in the browser too -----------------
@@ -1664,6 +1699,7 @@ function applyEdit(op) {
   const out = wasmText(main.e.fw_edit_ptr(main.ctx), main.e.fw_edit_len(main.ctx));
   if (r !== 0) {
     status(`edit: ${out}`);
+    toast(out, 'err');
     return false;
   }
   replaceText(out); // one undoable step; Monaco fires onChange → autosave + recompile
@@ -1983,6 +2019,7 @@ const NEW_TEMPLATE = `song "Untitled" {
 
 async function boot() {
   navigator.serviceWorker?.register('sw.js').catch(() => {});
+  status('loading engine…');
   await initWasm();
   try {
     // forte daw serves the package as the project API — the store becomes
@@ -2028,7 +2065,13 @@ async function boot() {
       ? await store.read(currentName)
       : await (await fetch(`../../packages/essentials_0.6.0/songs/${currentName}`)).text();
   setText(initialText);
-  await tryMonaco(initialText);
+  status('loading editor…');
+  // the editor is a nice-to-have: never let its CDN stall the DAW
+  await Promise.race([
+    tryMonaco(initialText),
+    new Promise((res) => setTimeout(() => { monacoAbandoned = true; res(false); }, 9000)),
+  ]);
+  status('reading project…');
   onChange = () => {
     autosave();
     recompile();
@@ -2082,6 +2125,17 @@ async function boot() {
     applyZoom(vizZoom * (ev.deltaY < 0 ? 1.25 : 0.8), ev.clientX);
   }, { passive: false });
   $('helpbtn').onclick = () => $('help').classList.toggle('show');
+  $('help-welcome').onclick = () => {
+    $('help').classList.remove('show');
+    $('welcome').classList.add('show');
+  };
+  $('undo').onclick = () => {
+    if (window.__forteUndo) window.__forteUndo();
+    else {
+      $('fallback')?.focus();
+      document.execCommand('undo');
+    }
+  };
   const hideWelcome = () => $('welcome').classList.remove('show');
   $('welcome-close').onclick = hideWelcome;
   $('welcome-demo').onclick = async () => {
@@ -2159,4 +2213,8 @@ async function boot() {
     }, 30);
   };
 }
-boot();
+boot().catch((e) => {
+  status(`boot failed: ${e.message}`);
+  toast(`boot failed: ${e.message} — reload to retry`, 'err');
+  console.error(e);
+});
