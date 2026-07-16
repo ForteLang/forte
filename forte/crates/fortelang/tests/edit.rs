@@ -393,6 +393,26 @@ fn remove_at_line_deletes_the_placement_line() {
 }
 
 #[test]
+fn rename_and_reorder_tracks() {
+    let src = "song \"s\" {\n  track A {\n    instrument sampler(sample: \"Kick\")\n    play beat`x...` at bars(1..1)\n  }\n\n  track B {\n    instrument sampler(sample: \"Hat\")\n    play beat`..x.` at bars(1..1)\n  }\n}\n";
+    let out = apply(src, r#"{"op":"rename_track","track":"A","to":"Drums"}"#);
+    assert!(out.contains("track Drums {"), "{out}");
+    assert!(!out.contains("track A {"));
+    // duplicate name refused
+    let dup = parse_ops(r#"{"op":"rename_track","track":"B","to":"Drums"}"#).unwrap();
+    assert_eq!(apply_ops(&out, &dup).unwrap_err().code, "E-EDIT-003");
+    // reorder: B moves earlier; the blank separator stays where it was
+    let out2 = apply(src, r#"{"op":"move_track","track":"B","dir":-1}"#);
+    let a_pos = out2.find("track A").unwrap();
+    let b_pos = out2.find("track B").unwrap();
+    assert!(b_pos < a_pos, "{out2}");
+    assert!(fortelang::parser::parse(&out2).is_ok());
+    // at the edge: byte-identical no-op
+    let out3 = apply(src, r#"{"op":"move_track","track":"A","dir":-1}"#);
+    assert_eq!(out3, src);
+}
+
+#[test]
 fn automation_round_trip_set_add_remove() {
     let src = "song \"s\" {\n  track A {\n    instrument prisma()\n    insert filter(type: \"lp\", cutoff: 0.5)\n    automate cutoff from 0.2 to 0.9 over bars(1..8)\n    automate filter.cutoff from 0.1 to 0.7 over intro\n    play notes`C3:1` at bars(1..1)\n  }\n  section intro = bars(1..4)\n}\n";
     let sites = fortelang::edit::automation_sites(src).unwrap();

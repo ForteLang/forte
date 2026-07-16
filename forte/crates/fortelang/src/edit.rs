@@ -218,6 +218,23 @@ pub enum EditOp {
         to: f64,
         bars: (u32, u32),
     },
+    /// Rename a track (the definition's name token only — string
+    /// references like `duck(from: "…")` are the author's to update).
+    RenameTrack {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        to: String,
+    },
+    /// Swap a track with its neighbour (`dir` = -1 earlier / 1 later) —
+    /// the mixer's reorder. The two whole `track { … }` spans exchange
+    /// text; everything between them stays put.
+    MoveTrack {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        dir: i32,
+    },
     /// Delete a whole `track <name> { … }` (its lines when it owns them).
     RemoveTrack {
         #[serde(default)]
@@ -764,6 +781,65 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
                 bars.1
             );
             splice(src, line_end, line_end, &stmt)
+        }
+        EditOp::RenameTrack { path, track, to } => {
+            let ok_name = !to.is_empty()
+                && to.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+                && to.chars().all(|c| c.is_alphanumeric() || c == '_');
+            if !ok_name {
+                return Err(Diag::new("E-EDIT-001", p0, format!("track 名が不正です: \"{to}\"")));
+            }
+            let (body, _) = resolve_body(&file, path)?;
+            if body.tracks.iter().any(|t| &t.name == to) {
+                return Err(Diag::new("E-EDIT-003", p0, format!("track '{to}' は既にあります")));
+            }
+            let tr = find_track(body, track)?;
+            let kw = ctx.tok_at(tr.pos)?;
+            let name_tok = kw + 1;
+            if !matches!(&ctx.toks[name_tok].tok, Tok::Ident(s) if s == track) {
+                return Err(Diag::new("E-EDIT-006", tr.pos, "track 名トークンが見つかりません"));
+            }
+            splice(src, ctx.toks[name_tok].off, ctx.toks[name_tok].end, to)
+        }
+        EditOp::MoveTrack { path, track, dir } => {
+            let (body, _) = resolve_body(&file, path)?;
+            let i = body
+                .tracks
+                .iter()
+                .position(|t| &t.name == track)
+                .ok_or_else(|| Diag::new("E-EDIT-003", p0, format!("Track '{track}' が見つかりません")))?;
+            let j = i as i64 + *dir as i64;
+            if !(0..body.tracks.len() as i64).contains(&j) {
+                return Ok(src.to_string()); // already at the edge: no-op
+            }
+            let j = j as usize;
+            let span = |t: &TrackAst| -> Result<(usize, usize), Diag> {
+                let kw = ctx.tok_at(t.pos)?;
+                let open = (kw..ctx.toks.len())
+                    .find(|&k| matches!(ctx.toks[k].tok, Tok::LBrace))
+                    .ok_or_else(|| Diag::new("E-EDIT-006", t.pos, "track の `{` が見つかりません"))?;
+                let mut depth = 0usize;
+                for k in open..ctx.toks.len() {
+                    match ctx.toks[k].tok {
+                        Tok::LBrace => depth += 1,
+                        Tok::RBrace => {
+                            depth -= 1;
+                            if depth == 0 {
+                                return Ok((ctx.toks[kw].off, ctx.toks[k].end));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Err(Diag::new("E-EDIT-006", t.pos, "track が閉じていません"))
+            };
+            let (lo, hi) = (i.min(j), i.max(j));
+            let (a0, a1) = span(&body.tracks[lo])?;
+            let (b0, b1) = span(&body.tracks[hi])?;
+            let a_text = src[a0..a1].to_string();
+            let b_text = src[b0..b1].to_string();
+            let step = splice(src, b0, b1, &a_text);
+            step[..a0].to_string() + &b_text + &step[a1..]
         }
         EditOp::RemoveTrack { path, track } => {
             let (body, _) = resolve_body(&file, path)?;

@@ -566,6 +566,16 @@ function renderMixer() {
       inspTrack = inspTrack === t.name ? null : t.name;
       renderInspector().catch(() => {});
     };
+    nm.ondblclick = () => {
+      // double-click = rename (single click keeps opening the inspector)
+      const bare = t.name.includes('.') ? t.name.split('.').pop() : t.name;
+      const to = prompt('Rename track:', bare);
+      if (!to || to === bare) return;
+      inspTrack = null;
+      routeTrackOp(t.name, { op: 'rename_track', track: t.name, to }).then((ok) => {
+        if (ok) toast(`renamed to ${to}`, 'ok');
+      });
+    };
     strip.appendChild(nm);
     const meter = document.createElement('div');
     meter.className = 'meter';
@@ -608,6 +618,18 @@ function renderMixer() {
       };
       ms.appendChild(b);
     };
+    {
+      const mv = (label, dir, title) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.title = title;
+        b.onclick = () =>
+          routeTrackOp(t.name, { op: 'move_track', track: t.name, dir });
+        ms.appendChild(b);
+      };
+      mv('◀', -1, 'Move this track earlier');
+      mv('▶', 1, 'Move this track later');
+    }
     mbtn('M', monitor.mute, 'Mute (monitor only — never written to code)');
     mbtn('S', monitor.solo, 'Solo (monitor only)');
     {
