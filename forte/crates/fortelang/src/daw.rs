@@ -44,6 +44,37 @@ pub fn run(project: &Path, port: u16, open: bool) -> Result<(), String> {
         .ok_or_else(|| {
             "forte/web/index.html が見つかりません(Forte リポジトリの中で実行してください)".to_string()
         })?;
+    // official starter material comes INSTALLED: a project with an empty
+    // packages/ gets essentials vendored before the first window opens
+    let no_packages = std::fs::read_dir(project.join("packages"))
+        .map(|rd| rd.flatten().filter(|e| e.path().is_dir()).count() == 0)
+        .unwrap_or(true);
+    if no_packages {
+        if let Ok(rd) = std::fs::read_dir(web_root.join("packages")) {
+            let mut starters: Vec<_> = rd
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.join("package.forte").is_file()
+                        && p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("essentials"))
+                })
+                .collect();
+            starters.sort();
+            if let (Some(spec), Ok(exe)) = (starters.first(), std::env::current_exe()) {
+                println!("essentials を同梱中…(初回のみ)");
+                let ok = std::process::Command::new(exe)
+                    .args(["package", "add", &spec.to_string_lossy()])
+                    .current_dir(&project)
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+                println!(
+                    "{}",
+                    if ok { "essentials 導入済み — パレットとライブラリに素材が入っています" } else { "essentials の自動導入に失敗(📦 ボタンから手動で追加できます)" }
+                );
+            }
+        }
+    }
     let listener =
         TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
     let url = format!("http://localhost:{port}/forte/web/");

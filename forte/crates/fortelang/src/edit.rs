@@ -159,6 +159,15 @@ pub enum EditOp {
         #[serde(default)]
         play: Option<String>,
     },
+    /// Replace a track's WHOLE instrument call (name and arguments) —
+    /// the "swap the instrument" gesture. `call` is the new call text
+    /// (e.g. `AcidBass(cutoff: 0.3)`); the re-parse guard validates it.
+    SetInstrument {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        call: String,
+    },
     /// Delete a whole `track <name> { … }` (its lines when it owns them).
     RemoveTrack {
         #[serde(default)]
@@ -477,6 +486,28 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
                 // one-line body: break the line before the closing brace
                 splice(src, close_off, close_off, &format!("\n{stmt}"))
             }
+        }
+        EditOp::SetInstrument { path, track, call } => {
+            if call.contains('{') || call.contains('}') || call.contains('\n') || call.contains('`') {
+                return Err(Diag::new(
+                    "E-EDIT-005",
+                    p0,
+                    "set_instrument の call に {} や改行、バッククォートは書けません",
+                ));
+            }
+            let (body, _) = resolve_body(&file, path)?;
+            let tr = find_track(body, track)?;
+            let cur = tr.instrument.as_ref().ok_or_else(|| {
+                Diag::new("E-EDIT-003", tr.pos, format!("Track '{track}' に instrument がありません"))
+            })?;
+            let name_idx = ctx.tok_at(cur.pos)?;
+            let end = if matches!(ctx.toks[name_idx + 1].tok, Tok::LParen) {
+                let after = ctx.skip_parens(name_idx + 1)?;
+                ctx.toks[after - 1].end
+            } else {
+                ctx.toks[name_idx].end
+            };
+            splice(src, ctx.toks[name_idx].off, end, call)
         }
         EditOp::RemoveTrack { path, track } => {
             let (body, _) = resolve_body(&file, path)?;

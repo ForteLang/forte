@@ -217,7 +217,8 @@ fn vendored(root: &Path) -> Vec<Value> {
             let name = d.file_name().unwrap_or_default().to_string_lossy().into_owned();
             let sub = format!("packages/{name}");
             let instruments: Vec<Value> = scan(root, &format!("{sub}/instruments"), device_entry);
-            json!({ "dir": sub, "name": name, "instruments": instruments })
+            let blocks: Vec<Value> = scan(root, &format!("{sub}/blocks"), block_entry);
+            json!({ "dir": sub, "name": name, "instruments": instruments, "blocks": blocks })
         })
         .collect()
 }

@@ -371,6 +371,18 @@ fn add_track_appends_with_instrument_and_starter_play() {
 }
 
 #[test]
+fn set_instrument_swaps_the_whole_call() {
+    let out = apply(
+        SRC,
+        r#"{"op":"set_instrument","path":["Groove"],"track":"Bass","call":"AcidBass(cutoff: 0.3)"}"#,
+    );
+    assert_only_lines_changed(SRC, &out, &[(22, "    instrument AcidBass(cutoff: 0.3)   // ベースの音色")]);
+    // a bare call gets replaced too (Inner/T has `instrument mono()`… bare is mono() with parens; use it anyway)
+    let bad = parse_ops(r#"{"op":"set_instrument","track":"T","call":"x() } track Y {"}"#).unwrap();
+    assert_eq!(apply_ops(SRC, &bad).unwrap_err().code, "E-EDIT-005");
+}
+
+#[test]
 fn remove_track_deletes_its_whole_span() {
     let src = "song \"s\" {\n  tempo 100bpm\n\n  track A {\n    instrument sampler(sample: \"Kick\")\n    play beat`x...` at bars(1..1)\n  }\n\n  track B {\n    instrument sampler(sample: \"Hat\")\n    play beat`..x.` at bars(1..1)\n  }\n}\n";
     let out = apply(src, r#"{"op":"remove_track","track":"A"}"#);

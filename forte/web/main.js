@@ -260,6 +260,46 @@ async function renderInspector() {
     nm.textContent = `${site.target === 'instrument' ? '♪' : 'fx'} ${site.name}`;
     nm.title = `${site.target}(行 ${site.line})`;
     row.appendChild(nm);
+    if (site.target === 'instrument') {
+      // swap the instrument itself: pick any palette entry by name
+      const sel = document.createElement('select');
+      sel.title = '楽器を差し替える(set_instrument)';
+      const cur = document.createElement('option');
+      cur.textContent = '差し替え…';
+      cur.value = '';
+      sel.appendChild(cur);
+      for (const inst of paletteInstruments()) {
+        const o = document.createElement('option');
+        o.value = JSON.stringify({ call: inst.call, name: inst.name, from: inst.from ?? null });
+        o.textContent = inst.label + (inst.where && inst.where !== 'built-in' ? ` (${inst.where.split('_')[0]})` : '');
+        sel.appendChild(o);
+      }
+      sel.onchange = async () => {
+        if (!sel.value) return;
+        const pick = JSON.parse(sel.value);
+        sel.blur(); // let the panel re-render after the recompile
+        const ops = [];
+        // the import belongs in the FILE that holds the track (home-aware)
+        const homeFile = home ? home.file : currentName;
+        if (pick.from && pick.from !== homeFile) {
+          ops.push({ op: 'add_import', names: [pick.name], from: relPath(homeFile, pick.from) });
+        }
+        ops.push({ op: 'set_instrument', path: site.path, track: site.track, call: pick.call });
+        if (home) {
+          const r = await fetch(`api/edit?path=${encodeURIComponent(home.file)}`, {
+            method: 'POST',
+            body: JSON.stringify(ops),
+          });
+          if (!r.ok) return status(`edit: ${await r.text()}`);
+          status(`→ ${home.file} の instrument を差し替えました`);
+          await refreshModules();
+          recompile(0);
+        } else {
+          applyEdit(ops);
+        }
+      };
+      row.appendChild(sel);
+    }
     for (const a of site.args) {
       const lab = document.createElement('label');
       lab.textContent = a.arg;
@@ -855,14 +895,22 @@ async function refreshTree(locals) {
     const libBlocks = (PROJECT.blocks || []).flatMap((f) =>
       (f.blocks || []).map((b) => ({ ...b, file: f.file }))
     );
+    for (const pkg of PROJECT.packages ?? [])
+      for (const f of pkg.blocks ?? [])
+        for (const b of f.blocks ?? []) libBlocks.push({ ...b, file: f.file, pkg: pkg.name });
     if (libBlocks.length) {
       section('blocks');
       for (const b of libBlocks) {
         const d = document.createElement('div');
         d.className = 'f blk';
+        d.draggable = true;
+        d.ondragstart = (ev) => {
+          ev.dataTransfer.setData('text/forte-block', JSON.stringify(b));
+          ev.dataTransfer.effectAllowed = 'copy';
+        };
         const label = document.createElement('span');
-        label.textContent = `❐ ${b.name}`;
-        label.title = `${b.file}:${b.line}(${b.bars ?? '?'} 小節)— クリックで開く`;
+        label.textContent = `❐ ${b.name}${b.pkg ? ' ·' + b.pkg.split('_')[0] : ''}`;
+        label.title = `${b.file}:${b.line}(${b.bars ?? '?'} 小節)— クリックで開く / アレンジへドラッグで配置`;
         label.onclick = () => loadSong(b.file);
         d.appendChild(label);
         const bbtn = (t, title, fn) => {
@@ -1038,24 +1086,43 @@ async function auditionBlock(b) {
   setTimeout(() => node?.port.postMessage({ cmd: 'play' }), 200);
 }
 
-// the library gesture: import the block into the OPEN SONG and place it
-// after the last used bar (add_import merges/no-ops when already imported)
-function placeBlock(b) {
+// the library gesture: import the block into the OPEN SONG and place it —
+// at `startBar` when given (drag & drop), else after the last used bar
+function placeBlock(b, startBar) {
   if (!currentName.startsWith('songs/')) {
-    status('配置先は songs/ の曲です(曲を開いてから +曲)');
+    status('配置先は songs/ の曲です(曲を開いてから)');
     return;
   }
   const beatsPerBar = viz.data?.beatsPerBar || 4;
   const usedBars = Math.round((viz.data?.lengthBeats || 0) / beatsPerBar);
-  const start = usedBars + 1;
+  const start = startBar ?? usedBars + 1;
   const len = Math.max(1, b.bars || 4);
   const ops = [];
   if (b.file !== currentName) {
     ops.push({ op: 'add_import', names: [b.name], from: relPath(currentName, b.file) });
   }
   ops.push({ op: 'add_place', block: b.name, bars: [start, start + len - 1] });
-  if (applyEdit(ops)) status(`placed: ${b.name} at bars(${start}..${start + len - 1})`);
+  if (applyEdit(ops)) {
+    status(`placed: ${b.name} at bars(${start}..${start + len - 1})`);
+    // the code opens on the new placement (D-15: drop lands you in the code)
+    const line = getText().split('\n').findIndex((l) => l.includes(`play ${b.name} `) || l.trim().startsWith(`play ${b.name}`));
+    if (line >= 0) jumpToLine(line + 1);
+  }
 }
+$('viz').addEventListener('dragover', (ev) => {
+  if ([...ev.dataTransfer.types].includes('text/forte-block')) ev.preventDefault();
+});
+$('viz').addEventListener('drop', (ev) => {
+  const data = ev.dataTransfer.getData('text/forte-block');
+  if (!data) return;
+  ev.preventDefault();
+  const b = JSON.parse(data);
+  const rect = $('viz').getBoundingClientRect();
+  const { headerW, pxPerBeat } = viz.geom();
+  const bpb = viz.data?.beatsPerBar || 4;
+  const bar = Math.max(1, Math.round((ev.clientX - rect.left - headerW) / pxPerBeat / bpb) + 1);
+  placeBlock(b, bar);
+});
 
 // ---- instrument palette: built-ins + every device in the package ----------
 const BUILTIN_INSTRUMENTS = [
