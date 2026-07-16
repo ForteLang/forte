@@ -1305,6 +1305,7 @@ async function refreshTree(locals) {
   document.body.dataset.treeFiles = String(el.querySelectorAll('.f').length);
 }
 
+let lastSynced = ''; // buffer text as of the last load/save (disk agreement)
 async function loadSong(name) {
   currentName = name;
   localStorage.setItem('forte.last', name);
@@ -1316,6 +1317,7 @@ async function loadSong(name) {
     text = await (await fetch(`../../packages/essentials_0.6.0/songs/${name}`)).text();
   }
   setText(text);
+  lastSynced = text;
   recompile(0);
   refreshFileList(); // dropdown value + tree highlight follow the open file
 }
@@ -1326,7 +1328,8 @@ function autosave() {
   clearTimeout(saveTimer);
   $('saved').textContent = '● …';
   saveTimer = setTimeout(async () => {
-    await store.write(currentName, getText());
+    lastSynced = getText();
+    await store.write(currentName, lastSynced);
     $('saved').textContent = '✓ saved';
     refreshFileList();
     refreshModules(); // local files are importable modules
@@ -2501,6 +2504,39 @@ async function boot() {
     }, 30);
   };
 }
+let diskStamp = null;
+let conflictToasted = false;
+async function watchDisk() {
+  if (!PROJECT) return;
+  try {
+    const { stamp } = await (await fetch('api/stamp')).json();
+    if (diskStamp === null) {
+      diskStamp = stamp;
+      return;
+    }
+    if (stamp === diskStamp) return;
+    diskStamp = stamp;
+    const diskText = await store.read(currentName).catch(() => null);
+    if (diskText !== null && diskText !== getText()) {
+      if (getText() === lastSynced) {
+        // no local divergence: pull the external edit in (agent at work)
+        replaceText(diskText);
+        lastSynced = diskText;
+        recompile(0);
+        toast('reloaded — this file changed on disk (the agent?)', 'ok');
+        conflictToasted = false;
+      } else if (!conflictToasted) {
+        conflictToasted = true;
+        toast('this file changed on disk AND in the editor — your buffer wins on next autosave', 'err');
+      }
+    }
+    // new/changed files elsewhere: refresh the import map + tree + library
+    await refreshModules();
+    await refreshFileList();
+  } catch { /* server briefly busy: next tick */ }
+}
+setInterval(() => { watchDisk(); }, 1200);
+
 boot().catch((e) => {
   status(`boot failed: ${e.message}`);
   toast(`boot failed: ${e.message} — reload to retry`, 'err');

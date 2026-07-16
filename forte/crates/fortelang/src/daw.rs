@@ -75,6 +75,13 @@ pub fn run(project: &Path, port: u16, open: bool) -> Result<(), String> {
             }
         }
     }
+    // the agent's briefing: a CLAUDE.md in the project teaches Claude Code
+    // (running in the embedded terminal) how music is made here
+    let agent_md = project.join("CLAUDE.md");
+    if !agent_md.exists() {
+        let _ = std::fs::write(&agent_md, AGENT_BRIEFING);
+        println!("CLAUDE.md を作成(ターミナルの `claude` が最初から作曲手順を知っています)");
+    }
     let listener =
         TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
     let url = format!("http://localhost:{port}/forte/web/");
@@ -261,6 +268,30 @@ fn api(
         },
         ("GET", "packages") => {
             respond(stream, "200 OK", json, packages_json(project).as_bytes())
+        }
+        ("GET", "stamp") => {
+            let mut acc: u64 = 0;
+            for f in list_files(project, ".forte") {
+                if let Ok(md) = std::fs::metadata(project.join(&f)) {
+                    let mt = md
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0);
+                    acc = acc
+                        .wrapping_mul(1099511628211)
+                        .wrapping_add(mt)
+                        .wrapping_add(md.len())
+                        .wrapping_add(f.len() as u64);
+                }
+            }
+            respond(
+                stream,
+                "200 OK",
+                json,
+                serde_json::json!({ "stamp": format!("{acc:x}") }).to_string().as_bytes(),
+            )
         }
         ("GET", "list") => {
             let ext = q("ext").unwrap_or_else(|| ".forte".into());
@@ -521,6 +552,48 @@ fn base64(data: &[u8]) -> String {
     }
     out
 }
+
+/// What Claude Code (in the embedded terminal) needs to know to compose
+/// in this package — written into the project as CLAUDE.md on first open.
+const AGENT_BRIEFING: &str = r#"# CLAUDE.md — composing in this Forte package
+
+This directory is a Forte package: music as code. A human is likely
+watching it in `forte daw` (the GUI); every file you edit here
+hot-reloads there — and their GUI gestures write minimal diffs back
+into these same files. One medium, two hands: re-read a file before
+large edits.
+
+## Layout
+
+- `songs/` — full songs (`song "name" { … }`)
+- `blocks/` — reusable few-bar ideas (`block Name { … }`); build here first
+- `instruments/` — custom devices (`device Name : Instrument { … }`)
+- `packages/` — vendored material (essentials ships 150+ instruments,
+  50+ blocks — import them: `import { Bass303 } from
+  "packages/essentials_0.6.0/instruments/tb303.forte"` relative to the
+  importing file)
+
+## Commands
+
+- `forte check <file>` — parse + compile (do this after every edit)
+- `forte play <file>` — hear it in the terminal
+- `forte build <file> -o out.wav` — render
+- `forte analyze <file>` — measure the render: your ears
+- `forte project` — this package's inventory as JSON
+- `forte edit <file> '<json-op>' --write` — structured edits that
+  preserve comments/layout (ops: set_tempo, set_pattern, add_track,
+  add_place, set_track, set_arg, add_insert, add_automation, …)
+
+## Discipline
+
+- Blocks first: write a short block, listen, only then place it in a
+  song (`play Name at bars(a..b)`). Songs are arrangements of blocks.
+- Full-length tracks need sections and a build/drop arc
+  (`section drop = bars(33..48)`), never a flat loop.
+- Patterns: `beat`x... x...`` (x hit / X accent / . rest),
+  `notes`C4:1 _:0.5 [E4 G4]:2`` (pitch:beats, `_` rest, chords,
+  `~` tie, `!` accent).
+"#;
 
 /// The embedded terminal: a WebSocket ⇆ PTY pump. The DAW's revolution is
 /// composing WITH an agent — Claude Code runs in this shell, in the project
