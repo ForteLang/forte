@@ -143,7 +143,7 @@ pub fn serve(listener: TcpListener, web_root: PathBuf, project: PathBuf) {
 
 /// Read one HTTP request: request line, headers (only Content-Length is
 /// interesting), then exactly the announced body.
-fn read_request(stream: &mut TcpStream) -> std::io::Result<(String, String, Vec<u8>)> {
+fn read_request(stream: &mut TcpStream) -> std::io::Result<(String, String, String, Vec<u8>)> {
     let mut buf = Vec::new();
     let mut chunk = [0u8; 8192];
     let header_end = loop {
@@ -176,12 +176,19 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<(String, String, Vec<
         body.extend_from_slice(&chunk[..n]);
     }
     body.truncate(clen);
-    Ok((method, target, body))
+    Ok((method, target, head, body))
 }
 
 fn handle(web_root: &Path, project: &Path, mut stream: TcpStream) -> std::io::Result<()> {
-    let (method, target, body) = read_request(&mut stream)?;
+    let (method, target, head, body) = read_request(&mut stream)?;
     let (path, query) = target.split_once('?').unwrap_or((target.as_str(), ""));
+
+    // the embedded terminal: `GET /term` upgrades to a WebSocket that pumps
+    // a PTY running the user's shell in the PROJECT directory — Claude Code
+    // (or any agent) runs right inside the DAW. localhost-only by bind.
+    if method == "GET" && path.ends_with("/term") {
+        return term::serve_terminal(stream, &head, project);
+    }
 
     // the API mounts wherever the app is served from ("/api/…" and
     // "/forte/web/api/…" are the same call)
@@ -513,4 +520,196 @@ fn base64(data: &[u8]) -> String {
         out.push(if chunk.len() > 2 { A[n as usize & 63] as char } else { '=' });
     }
     out
+}
+
+/// The embedded terminal: a WebSocket ⇆ PTY pump. The DAW's revolution is
+/// composing WITH an agent — Claude Code runs in this shell, in the project
+/// directory, editing the same files the GUI projects. Server binds
+/// 127.0.0.1 only; the terminal is exactly as local as the DAW itself.
+mod term {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::os::fd::{FromRawFd, RawFd};
+    use std::os::unix::process::CommandExt;
+    use std::path::Path;
+
+    /// RFC 6455 handshake + frame pump.
+    pub fn serve_terminal(mut stream: TcpStream, head: &str, project: &Path) -> std::io::Result<()> {
+        let Some(key) = head.lines().find_map(|l| {
+            let (k, v) = l.split_once(':')?;
+            k.trim().eq_ignore_ascii_case("sec-websocket-key").then(|| v.trim().to_string())
+        }) else {
+            return crate::browser::respond(&mut stream, "400 Bad Request", "text/plain", b"not a websocket");
+        };
+        let accept = {
+            let digest = crate::sha::sha1(format!("{key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11").as_bytes());
+            b64(&digest)
+        };
+        stream.write_all(
+            format!(
+                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+            )
+            .as_bytes(),
+        )?;
+
+        // PTY + the user's shell, homed in the project
+        let (master, slave) = openpty()?;
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+        let mut cmd = std::process::Command::new(&shell);
+        let (si, so, se) = unsafe {
+            (
+                std::process::Stdio::from_raw_fd(dup(slave)?),
+                std::process::Stdio::from_raw_fd(dup(slave)?),
+                std::process::Stdio::from_raw_fd(slave),
+            )
+        };
+        cmd.current_dir(project)
+            .env("TERM", "xterm-256color")
+            .stdin(si)
+            .stdout(so)
+            .stderr(se);
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                libc::ioctl(0, libc::TIOCSCTTY as _, 0);
+                Ok(())
+            });
+        }
+        let mut child = cmd.spawn()?;
+
+        // reader thread: PTY output → binary ws frames
+        let mut ws_out = stream.try_clone()?;
+        let mut pty_out = unsafe { std::fs::File::from_raw_fd(dup(master)?) };
+        let pump = std::thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            loop {
+                match pty_out.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        if write_frame(&mut ws_out, 0x2, &buf[..n]).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+            let _ = write_frame(&mut ws_out, 0x8, &[]); // close
+        });
+
+        // main loop: ws frames → PTY input; text frames carry resize JSON
+        let mut pty_in = unsafe { std::fs::File::from_raw_fd(dup(master)?) };
+        while let Ok((op, payload)) = read_frame(&mut stream) {
+            match op {
+                0x1 => {
+                    // {"r":rows,"c":cols}
+                    if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&payload) {
+                        let (r, c) = (
+                            v["r"].as_u64().unwrap_or(24) as u16,
+                            v["c"].as_u64().unwrap_or(80) as u16,
+                        );
+                        let ws = libc::winsize { ws_row: r, ws_col: c, ws_xpixel: 0, ws_ypixel: 0 };
+                        unsafe { libc::ioctl(master, libc::TIOCSWINSZ as _, &ws) };
+                    }
+                }
+                0x2 => {
+                    if pty_in.write_all(&payload).is_err() {
+                        break;
+                    }
+                }
+                0x9 => {
+                    let _ = write_frame(&mut stream, 0xA, &payload); // ping → pong
+                }
+                0x8 => break,
+                _ => {}
+            }
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        unsafe { libc::close(master) };
+        let _ = pump.join();
+        Ok(())
+    }
+
+    fn openpty() -> std::io::Result<(RawFd, RawFd)> {
+        let (mut m, mut s) = (0 as RawFd, 0 as RawFd);
+        let rc = unsafe {
+            libc::openpty(&mut m, &mut s, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut())
+        };
+        if rc != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok((m, s))
+    }
+
+    fn dup(fd: RawFd) -> std::io::Result<RawFd> {
+        let d = unsafe { libc::dup(fd) };
+        if d < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(d)
+    }
+
+    /// One ws frame (server side: client frames are masked). Fragmentation
+    /// is not expected from xterm-sized messages and is treated as-is.
+    fn read_frame(stream: &mut TcpStream) -> std::io::Result<(u8, Vec<u8>)> {
+        let mut hdr = [0u8; 2];
+        stream.read_exact(&mut hdr)?;
+        let op = hdr[0] & 0x0f;
+        let masked = hdr[1] & 0x80 != 0;
+        let mut len = (hdr[1] & 0x7f) as u64;
+        if len == 126 {
+            let mut ext = [0u8; 2];
+            stream.read_exact(&mut ext)?;
+            len = u16::from_be_bytes(ext) as u64;
+        } else if len == 127 {
+            let mut ext = [0u8; 8];
+            stream.read_exact(&mut ext)?;
+            len = u64::from_be_bytes(ext);
+        }
+        if len > 1 << 20 {
+            return Err(std::io::Error::other("frame too large"));
+        }
+        let mut mask = [0u8; 4];
+        if masked {
+            stream.read_exact(&mut mask)?;
+        }
+        let mut payload = vec![0u8; len as usize];
+        stream.read_exact(&mut payload)?;
+        if masked {
+            for (i, b) in payload.iter_mut().enumerate() {
+                *b ^= mask[i % 4];
+            }
+        }
+        Ok((op, payload))
+    }
+
+    fn write_frame(stream: &mut TcpStream, op: u8, payload: &[u8]) -> std::io::Result<()> {
+        let mut out = Vec::with_capacity(payload.len() + 10);
+        out.push(0x80 | op);
+        if payload.len() < 126 {
+            out.push(payload.len() as u8);
+        } else if payload.len() < 1 << 16 {
+            out.push(126);
+            out.extend_from_slice(&(payload.len() as u16).to_be_bytes());
+        } else {
+            out.push(127);
+            out.extend_from_slice(&(payload.len() as u64).to_be_bytes());
+        }
+        out.extend_from_slice(payload);
+        stream.write_all(&out)
+    }
+
+    /// Standard base64 with padding (the ws accept digest).
+    fn b64(data: &[u8]) -> String {
+        const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+        for chunk in data.chunks(3) {
+            let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+            let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+            out.push(A[(n >> 18) as usize & 63] as char);
+            out.push(A[(n >> 12) as usize & 63] as char);
+            out.push(if chunk.len() > 1 { A[(n >> 6) as usize & 63] as char } else { '=' });
+            out.push(if chunk.len() > 2 { A[n as usize & 63] as char } else { '=' });
+        }
+        out
+    }
 }

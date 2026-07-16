@@ -84,6 +84,8 @@
   #insp .inm { color: #d7dae0; min-width: 90px; }
   #insp label { display: inline-flex; gap: 3px; align-items: center; color: #565d69; }
   #insp input { width: 64px; font-size: 11px; padding: 1px 4px; }
+  #termwrap { height: 280px; flex: none; border-top: 1px solid #2b2f38; background: #0d0f12; padding: 4px 6px; }
+  #term { width: 100%; height: 100%; }
   #sectbar { position: absolute; top: 0; left: 0; right: 0; height: 15px; z-index: 5; pointer-events: none; }
   #sectbar .sect {
     position: absolute; top: 1px; height: 13px; pointer-events: auto; cursor: pointer;
@@ -216,6 +218,7 @@
   <button id="digest">Build digest</button>
   <button id="packages" title="Catalog of vendored packages (browse instruments / blocks / songs)">📦 Packages</button>
   <button id="export" title="Render this file to renders/<name>.wav and download it">⬇ WAV</button>
+  <button id="termbtn" title="Terminal in the project directory — run Claude Code here and compose with the agent">🖥</button>
   <button id="undo" title="Undo the last edit — GUI gestures included (Ctrl+Z)">↶</button>
   <button id="helpbtn" title="Gesture guide">?</button>
   <span id="status">loading…</span>
@@ -290,7 +293,11 @@
   <span id="viz-hint">drag a clip to re-place it — the code is the source of truth</span>
   <div id="mixer" title="Faders / pan write back to the code as set_track. M/S are session-only monitor controls"></div>
   <div id="insp"></div>
+  <div id="termwrap" style="display:none"><div id="term"></div></div>
 </div>
+<link rel="stylesheet" href="vendor/xterm.css">
+<script src="vendor/xterm.js"></script>
+<script src="vendor/addon-fit.js"></script>
 <script type="module" src="main.js"></script>
 </body>
 </html>

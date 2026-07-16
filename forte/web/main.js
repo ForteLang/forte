@@ -2357,6 +2357,48 @@ async function boot() {
     $('help').classList.remove('show');
     $('welcome').classList.add('show');
   };
+  // the embedded terminal: a shell (run Claude Code!) homed in the project
+  let term = null;
+  let termWs = null;
+  let termFit = null;
+  $('termbtn').onclick = () => {
+    if (!PROJECT) return toast('the terminal runs under forte daw (project mode)', 'err');
+    const wrap = $('termwrap');
+    if (wrap.style.display !== 'none' && term) {
+      wrap.style.display = 'none';
+      return;
+    }
+    wrap.style.display = '';
+    if (!term) {
+      term = new window.Terminal({
+        fontSize: 13,
+        cursorBlink: true,
+        theme: { background: '#0d0f12' },
+      });
+      termFit = new window.FitAddon.FitAddon();
+      term.loadAddon(termFit);
+      term.open($('term'));
+      window.__forteTerm = term;
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      termWs = new WebSocket(`${proto}://${location.host}/term`);
+      termWs.binaryType = 'arraybuffer';
+      const enc = new TextEncoder();
+      const sendSize = () =>
+        termWs.readyState === 1 && termWs.send(JSON.stringify({ r: term.rows, c: term.cols }));
+      termWs.onopen = () => {
+        termFit.fit();
+        sendSize();
+        toast('terminal ready — try `claude` to compose with the agent', 'ok');
+      };
+      termWs.onmessage = (e) => term.write(new Uint8Array(e.data));
+      termWs.onclose = () => term.write('\r\n[terminal closed]\r\n');
+      term.onData((d) => termWs.readyState === 1 && termWs.send(enc.encode(d)));
+      term.onResize(sendSize);
+      new ResizeObserver(() => termFit && termFit.fit()).observe($('term'));
+    }
+    termFit.fit();
+    term.focus();
+  };
   $('export').onclick = async () => {
     if (!PROJECT) return status('export runs in project mode (forte daw)');
     status('rendering…');
