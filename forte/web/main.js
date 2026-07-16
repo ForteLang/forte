@@ -203,7 +203,7 @@ async function routeTrackOp(trackName, op) {
   if (tryBufferEdit(op)) return true;
   const home = PROJECT && trackHomeFile(trackName);
   if (!home) {
-    status(`edit: track '${trackName}' の定義がこのファイル/プロジェクトに見つかりません`);
+    status(`edit: track '${trackName}' is not defined in this file or project`);
     return false;
   }
   const r = await fetch(`api/edit?path=${encodeURIComponent(home.file)}`, {
@@ -215,7 +215,7 @@ async function routeTrackOp(trackName, op) {
     status(`edit: ${t}`);
     return false;
   }
-  status(`→ ${home.file} (${home.block}) に書き戻しました`);
+  status(`→ written back to ${home.file} (${home.block})`);
   await refreshModules();
   recompile(0);
   return true;
@@ -258,14 +258,14 @@ async function renderInspector() {
     const nm = document.createElement('span');
     nm.className = 'inm';
     nm.textContent = `${site.target === 'instrument' ? '♪' : 'fx'} ${site.name}`;
-    nm.title = `${site.target}(行 ${site.line})`;
+    nm.title = `${site.target} (line ${site.line})`;
     row.appendChild(nm);
     if (site.target === 'instrument') {
       // swap the instrument itself: pick any palette entry by name
       const sel = document.createElement('select');
-      sel.title = '楽器を差し替える(set_instrument)';
+      sel.title = 'Swap the instrument (set_instrument)';
       const cur = document.createElement('option');
-      cur.textContent = '差し替え…';
+      cur.textContent = 'swap…';
       cur.value = '';
       sel.appendChild(cur);
       for (const inst of paletteInstruments()) {
@@ -291,7 +291,7 @@ async function renderInspector() {
             body: JSON.stringify(ops),
           });
           if (!r.ok) return status(`edit: ${await r.text()}`);
-          status(`→ ${home.file} の instrument を差し替えました`);
+          status(`→ swapped the instrument in ${home.file}`);
           await refreshModules();
           recompile(0);
         } else {
@@ -351,7 +351,7 @@ function renderMixer() {
     const nm = document.createElement('div');
     nm.className = 'nm';
     nm.textContent = t.name;
-    nm.title = `${t.name} — ${t.instrument}(クリックでインスペクタ)`;
+    nm.title = `${t.name} — ${t.instrument} (click for the inspector)`;
     nm.style.cursor = 'pointer';
     nm.onclick = () => {
       inspTrack = inspTrack === t.name ? null : t.name;
@@ -399,14 +399,14 @@ function renderMixer() {
       };
       ms.appendChild(b);
     };
-    mbtn('M', monitor.mute, 'ミュート(モニタのみ・コードには書かれません)');
-    mbtn('S', monitor.solo, 'ソロ(モニタのみ)');
+    mbtn('M', monitor.mute, 'Mute (monitor only — never written to code)');
+    mbtn('S', monitor.solo, 'Solo (monitor only)');
     {
       const b = document.createElement('button');
       b.textContent = '✕';
-      b.title = 'このトラックを削除(コードから track ごと消えます)';
+      b.title = 'Delete this track (removes the whole track block from the code)';
       b.onclick = () => {
-        if (!confirm(`track ${t.name} を削除しますか?`)) return;
+        if (!confirm(`Delete track ${t.name}?`)) return;
         routeTrackOp(t.name, { op: 'remove_track', track: t.name });
       };
       ms.appendChild(b);
@@ -433,11 +433,11 @@ function setSectionLoop(sec) {
   if (!sec || loopRange?.name === sec.name) {
     loopRange = null;
     node?.port.postMessage({ cmd: 'loop', start: 0, end: viz.data?.lengthBeats ?? 0 });
-    status('loop: 全体');
+    status('loop: full song');
   } else {
     loopRange = { name: sec.name, start: (sec.bars[0] - 1) * bpb, end: sec.bars[1] * bpb };
     node?.port.postMessage({ cmd: 'loop', start: loopRange.start, end: loopRange.end });
-    status(`loop: ${sec.name} bars(${sec.bars[0]}..${sec.bars[1]})— もう一度クリックで解除`);
+    status(`loop: ${sec.name} bars(${sec.bars[0]}..${sec.bars[1]}) — click again to clear`);
   }
   renderSections();
 }
@@ -456,7 +456,7 @@ function renderSections() {
     const d = document.createElement('div');
     d.className = 'sect' + (loopRange?.name === sec.name ? ' on' : '');
     d.textContent = sec.name;
-    d.title = `${sec.name} = bars(${sec.bars[0]}..${sec.bars[1]})— クリックでループ / 右端ドラッグで長さ`;
+    d.title = `${sec.name} = bars(${sec.bars[0]}..${sec.bars[1]}) — click to loop / drag the right edge to resize`;
     const left = headerW + (sec.bars[0] - 1) * bpb * pxPerBeat;
     const width = (sec.bars[1] - sec.bars[0] + 1) * bpb * pxPerBeat;
     d.style.left = `${left}px`;
@@ -713,7 +713,7 @@ async function recStart() {
     worker.postMessage({ cmd: 'chunk', data: e.data.data }, [e.data.data.buffer]);
   ctx.createMediaStreamSource(stream).connect(node);
   rec = { ctx, stream, worker, rate: ctx.sampleRate, session, startedAt };
-  $('rec').textContent = '■ 録音停止';
+  $('rec').textContent = '■ Stop rec';
   document.body.dataset.rec = 'on';
   status('recording…');
 }
@@ -748,7 +748,7 @@ async function recStop() {
   await store.remove('assets/.recording.json').catch(() => {});
   status(`saved ${name} (${(pcm.length / rate).toFixed(1)}s)`);
   // performance fork, closed: one tap drops the take into the song
-  if (confirm(`録音 ${name} をこの曲に差し込みますか?(import + Voice トラックを追記)`)) {
+  if (confirm(`Insert take ${name} into this song? (adds an import + a Voice track)`)) {
     insertTake(name);
   }
 }
@@ -795,7 +795,7 @@ async function recoverCrashedTake() {
         recovered: true,
       });
       document.body.dataset.recovered = 'ok';
-      status(`前回のクラッシュから録音を復元しました: ${name}`);
+      status(`recovered a recording from the last crash: ${name}`);
     }
   } finally {
     await store.remove('assets/.recording.pcm').catch(() => {});
@@ -886,9 +886,9 @@ async function refreshTree(locals) {
       b.onclick = fn;
       row.appendChild(b);
     };
-    btn('+曲', '新しい曲を songs/ に作る', () => newElement('song'));
-    btn('+block', '新しい block を blocks/ に作る', () => newElement('block'));
-    btn('+package', '他の package を取り込む (forte package add)', addPackage);
+    btn('+song', 'Create a new song in songs/', () => newElement('song'));
+    btn('+block', 'Create a new block in blocks/', () => newElement('block'));
+    btn('+package', 'Vendor another package (forte package add)', addPackage);
     el.appendChild(row);
     await store.refresh?.();
     if (store.project) PROJECT = store.project;
@@ -910,7 +910,7 @@ async function refreshTree(locals) {
         };
         const label = document.createElement('span');
         label.textContent = `❐ ${b.name}${b.pkg ? ' ·' + b.pkg.split('_')[0] : ''}`;
-        label.title = `${b.file}:${b.line}(${b.bars ?? '?'} 小節)— クリックで開く / アレンジへドラッグで配置`;
+        label.title = `${b.file}:${b.line} (${b.bars ?? '?'} bars) — click to open / drag onto the arrange to place`;
         label.onclick = () => loadSong(b.file);
         d.appendChild(label);
         const bbtn = (t, title, fn) => {
@@ -923,8 +923,8 @@ async function refreshTree(locals) {
           };
           d.appendChild(x);
         };
-        bbtn('▶', 'この block を単体試聴', () => auditionBlock(b));
-        bbtn('+曲', '開いている曲に import して配置', () => placeBlock(b));
+        bbtn('▶', 'Audition this block standalone', () => auditionBlock(b));
+        bbtn('+song', 'Import into the open song and place it', () => placeBlock(b));
         el.appendChild(d);
       }
     }
@@ -932,7 +932,7 @@ async function refreshTree(locals) {
     const instRows = [];
     const filt = document.createElement('input');
     filt.className = 'palfilt';
-    filt.placeholder = '検索 (例: bass)';
+    filt.placeholder = 'search (e.g. bass)';
     filt.value = window.__paletteFilter ?? '';
     filt.oninput = () => {
       window.__paletteFilter = filt.value;
@@ -957,8 +957,8 @@ async function refreshTree(locals) {
         };
         d.appendChild(b);
       };
-      bb('▶', '1小節ぶん試聴', () => previewInstrument(inst).catch((e) => status(`preview: ${e.message}`)));
-      bb('+tr', '開いている曲 / block にこの音源のトラックを足す', () => addTrackFromPalette(inst));
+      bb('▶', 'Preview one bar', () => previewInstrument(inst).catch((e) => status(`preview: ${e.message}`)));
+      bb('+tr', 'Add a track with this instrument to the open song / block', () => addTrackFromPalette(inst));
       instRows.push({ row: d, key: `${inst.label} ${inst.where ?? ''}`.toLowerCase() });
       el.appendChild(d);
     }
@@ -970,18 +970,18 @@ async function refreshTree(locals) {
       const d = document.createElement('div');
       d.className = 'f blk';
       const label = document.createElement('span');
-      label.textContent = '📦 音源を増やす';
-      label.title = 'forte 付属の starter package(essentials: 303 / juno / 909 など)を取り込みます';
+      label.textContent = '📦 more instruments';
+      label.title = "Vendor forte's starter package (essentials: 303s, junos, 909s, …)";
       d.appendChild(label);
       const b = document.createElement('button');
       b.textContent = '+';
       b.onclick = async (e) => {
         e.stopPropagation();
         const starters = await (await fetch('api/starters')).json().catch(() => []);
-        if (!starters.length) return status('starter package が見つかりません');
+        if (!starters.length) return status('no starter packages found');
         status(`package add: ${starters[0].name}…`);
         const r = await fetch(`api/pkg?spec=${encodeURIComponent(starters[0].spec)}`, { method: 'POST' });
-        status(r.ok ? `${starters[0].name} を取り込みました — パレットに音源が増えています` : `pkg: ${(await r.text()).slice(0, 160)}`);
+        status(r.ok ? `vendored ${starters[0].name} — the palette just grew` : `pkg: ${(await r.text()).slice(0, 160)}`);
         await store.refresh?.();
         await refreshModules();
         await refreshFileList();
@@ -1041,7 +1041,7 @@ function autosave() {
 
 // ---- project gestures (forte daw): scaffold and vendor into the package ------
 async function newElement(kind) {
-  const name = prompt(kind === 'block' ? '新しい block 名 (例: Groove)' : '新しい曲名 (例: my-song)');
+  const name = prompt(kind === 'block' ? 'New block name (e.g. Groove)' : 'New song name (e.g. my-song)');
   if (!name) return;
   const r = await fetch(`api/new?kind=${kind}&name=${encodeURIComponent(name.trim())}`, { method: 'POST' });
   const t = await r.text();
@@ -1055,9 +1055,9 @@ async function newElement(kind) {
 }
 
 async function addPackage() {
-  const spec = prompt('追加する package (例: github:owner/repo または ローカルパス)');
+  const spec = prompt('Package to add (e.g. github:owner/repo or a local path)');
   if (!spec) return;
-  status('package add…(clone 中)');
+  status('package add… (cloning)');
   const r = await fetch(`api/pkg?spec=${encodeURIComponent(spec.trim())}`, { method: 'POST' });
   const t = await r.text();
   status(r.ok ? 'package added' : `pkg: ${t.slice(0, 200)}`);
@@ -1090,7 +1090,7 @@ async function auditionBlock(b) {
 // at `startBar` when given (drag & drop), else after the last used bar
 function placeBlock(b, startBar) {
   if (!currentName.startsWith('songs/')) {
-    status('配置先は songs/ の曲です(曲を開いてから)');
+    status('placements go into a song — open one under songs/ first');
     return;
   }
   const beatsPerBar = viz.data?.beatsPerBar || 4;
@@ -1128,7 +1128,7 @@ $('viz').addEventListener('drop', (ev) => {
       ops.push({ op: 'add_import', names: [b.name], from: relPath(currentName, b.file) });
     }
     if (applyEdit(ops)) {
-      status(`swap: この配置は ${b.name} になりました`);
+      status(`swap: this placement now plays ${b.name}`);
       jumpToLine(hit.line);
     }
     return;
@@ -1144,7 +1144,7 @@ $('viz').addEventListener('contextmenu', (ev) => {
   const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
   if (hit?.kind !== 'clip' || !(hit.line > 0)) return;
   ev.preventDefault();
-  if (!confirm('この配置(クリップ)を削除しますか?')) return;
+  if (!confirm('Delete this placement (clip)?')) return;
   applyEdit({ op: 'remove_at_line', line: hit.line });
 });
 
@@ -1198,7 +1198,7 @@ async function previewInstrument(inst) {
   new Uint8Array(main.e.memory.buffer, ptr, bytes.length).set(bytes);
   if (main.e.fw_compile(main.ctx) !== 0) {
     mainCompile(getText());
-    status(`preview: ${inst.label} がコンパイルできません`);
+    status(`preview: ${inst.label} does not compile`);
     return;
   }
   const rate = 48000;
@@ -1229,7 +1229,7 @@ async function previewInstrument(inst) {
 // the palette gesture: a new track with this instrument + a starter pattern
 function addTrackFromPalette(inst) {
   if (PROJECT && !currentName.startsWith('songs/') && !currentName.startsWith('blocks/')) {
-    status('先に曲か block を開いてください(左のツリー、または +曲 / +block)');
+    status('open a song or block first (the tree on the left, or +song / +block)');
     return;
   }
   const text = getText();
@@ -1245,7 +1245,7 @@ function addTrackFromPalette(inst) {
     instrument: inst.call,
     play: inst.kind + '`' + inst.pat + '` at bars(1..4)',
   });
-  if (applyEdit(ops)) status(`+ track ${name}(${inst.label})— グリッド / ロールで打ち込めます`);
+  if (applyEdit(ops)) status(`+ track ${name} (${inst.label}) — the grid / roll is ready`);
 }
 
 // ---- history: the .forte repository lives in the browser too -----------------
@@ -1282,25 +1282,25 @@ async function refreshVcsLog() {
     label.title = c.hash;
     const diff = document.createElement('a');
     diff.textContent = 'diff';
-    diff.title = 'このコミットと現在の作業内容の差分(音楽の言葉で)';
+    diff.title = 'Diff between this commit and the working copy — in music vocabulary';
     diff.onclick = async () => {
       const report = semdiff(await vcs.snapshotOf(c.hash), await workingSnapshot());
       const pre = $('vcs-diff');
       pre.hidden = false;
-      pre.textContent = `#${c.n} → 現在\n${report}`;
+      pre.textContent = `#${c.n} → now\n${report}`;
     };
     const restore = document.createElement('a');
-    restore.textContent = '戻す';
-    restore.title = 'このコミットのファイルを作業コピーへ復元';
+    restore.textContent = 'restore';
+    restore.title = 'Restore this commit\'s files into the working copy';
     restore.onclick = async () => {
-      if (!confirm(`#${c.n}「${c.message}」の状態に戻しますか?(未コミットの変更は失われます)`)) return;
+      if (!confirm(`Restore #${c.n} "${c.message}"? (uncommitted changes will be lost)`)) return;
       const snap = await vcs.snapshotOf(c.hash);
       for (const [path, text] of Object.entries(snap)) await store.write(path, text);
       await refreshModules();
       await refreshFileList();
       if (snap[currentName] !== undefined) setText(snap[currentName]);
       recompile(0);
-      status(`#${c.n} を復元しました`);
+      status(`restored #${c.n}`);
     };
     row.append(label, diff, restore);
     el.append(row);
@@ -1365,7 +1365,7 @@ async function refreshGitBar() {
   }
   msel.disabled = $('merge').disabled = msel.options.length === 0;
   $('git-state').textContent = (await vcs.mergeHead())
-    ? ' merging…(競合を直して Commit)'
+    ? ' merging… (fix conflicts, then Commit)'
     : '';
   document.body.dataset.branch = cur ?? '';
 }
@@ -1396,13 +1396,13 @@ async function initVcs() {
   };
   $('branch-new').onclick = async () => {
     if (!vcs) return;
-    const name = (prompt('新しいブランチ名') || '').trim();
+    const name = (prompt('New branch name') || '').trim();
     if (!name) return;
     try {
       await vcs.createBranch(name); // = checkout -b: same tree, new ref
       await refreshGitBar();
       await refreshVcsLog();
-      status(`ブランチ ${name} を作成して切り替えました`);
+      status(`created and switched to branch ${name}`);
     } catch (e) {
       status(e.message);
       await refreshGitBar();
@@ -1415,7 +1415,7 @@ async function initVcs() {
     try {
       await store.write(currentName, getText()); // the buffer is part of the tree
       if (!(await workingIsClean())) {
-        throw new Error('未コミットの変更があります(commit してから切り替え)');
+        throw new Error('uncommitted changes — commit before switching');
       }
       const snap = await vcs.checkout(target);
       await applySnapshotToWorkingTree(snap);
@@ -1434,18 +1434,18 @@ async function initVcs() {
     try {
       await store.write(currentName, getText());
       if (!(await workingIsClean())) {
-        throw new Error('未コミットの変更があります(commit してから merge)');
+        throw new Error('uncommitted changes — commit before merging');
       }
       const r = await vcs.merge(from);
       await applySnapshotToWorkingTree(r.snapshot);
       await refreshGitBar();
       await refreshVcsLog();
       if (r.kind === 'conflict') {
-        status(`競合があります — <<<<<<< マーカーを直して Commit してください: ${r.conflicts.join(' / ')}`);
+        status(`conflicts — fix the <<<<<<< markers, then Commit: ${r.conflicts.join(' / ')}`);
       } else if (r.kind === 'fast-forward') {
-        status(`fast-forward: ${from} を取り込みました`);
+        status(`fast-forward: merged ${from}`);
       } else {
-        status(`merge ${from} 完了`);
+        status(`merged ${from}`);
       }
     } catch (err) {
       status(err.message);
@@ -1495,7 +1495,7 @@ async function performToggle() {
     perf = null;
     $('perform').textContent = '🎹 Perform';
     if (!events.length) {
-      status('演奏なし');
+      status('nothing played');
       return;
     }
     const flat = new Float32Array(events.length * 3);
@@ -1513,7 +1513,7 @@ async function performToggle() {
     div.style.userSelect = 'all';
     div.textContent = `🎹 ${code}`;
     $('diags').prepend(div);
-    status('書き起こしました(下の診断欄からコピーして play に貼ってください)');
+    status('transcribed — copy it from the panel below into a play statement');
     return;
   }
   await ensureAudio();
@@ -1533,8 +1533,8 @@ async function performToggle() {
       };
     });
   } catch { /* no MIDI permission — keyboard still works */ }
-  $('perform').textContent = '■ 演奏終了';
-  status('演奏モード: A〜K が白鍵、W/E/T/Y/U が黒鍵(MIDI 鍵盤も可)');
+  $('perform').textContent = '■ End perform';
+  status('perform mode: A–K are white keys, W/E/T/Y/U black keys (MIDI keyboards work too)');
 }
 
 // ---- loopback calibration (SRS-REC-004) ---------------------------------------
@@ -1585,7 +1585,7 @@ async function calibrate() {
   const lag = main.e.fw_calib_run(main.ctx);
   document.body.dataset.calib = lag >= 0 ? 'ok' : 'nodetect';
   if (lag < 0) {
-    status('較正: プローブ音を検出できませんでした(スピーカー→マイクの経路を確認)');
+    status('calibration: could not detect the probe tone (check the speaker → mic path)');
     return;
   }
   const conf = main.e.fw_calib_confidence(main.ctx);
@@ -1595,7 +1595,7 @@ async function calibrate() {
     'forte.calibration',
     JSON.stringify({ rtl_samples: rtl, rate: 48000, confidence: conf, at: new Date().toISOString() })
   );
-  status(`較正完了: 往復 ${((rtl / 48000) * 1000).toFixed(1)}ms (信頼度 ${conf.toFixed(2)}) — 以後のテイクに記録されます`);
+  status(`calibrated: round trip ${((rtl / 48000) * 1000).toFixed(1)}ms (confidence ${conf.toFixed(2)}) — recorded on future takes`);
 }
 
 // ---- beat grid: the first GUI projection over the code (Studio P0, #135) -----
@@ -1693,7 +1693,7 @@ function renderRoll(el, site) {
   label.textContent = site.let_name
     ? `${where}let ${site.let_name}`
     : `${where}${site.track}${site.at ? ` @${site.at}` : ''}`;
-  label.title = `${label.textContent}(クリックで ${site.line} 行目へ / ドラッグで音を置く・クリックで消す)`;
+  label.title = `${label.textContent} (click → line ${site.line} / drag to draw a note, click a note to delete)`;
   label.onclick = () => jumpToLine(site.line);
   row.appendChild(label);
 
@@ -1794,7 +1794,7 @@ function renderRoll(el, site) {
           !(Math.abs(n.start - d.carry.start) < 1e-6 && Math.abs(n.dur - d.carry.dur) < 1e-6)
       );
       if (clash) {
-        status('roll: 移動先が既存の音と重なります');
+        status('roll: the drop overlaps an existing note');
         draw();
         return;
       }
@@ -1831,7 +1831,7 @@ function renderRoll(el, site) {
         !(Math.abs(n.start - start) < 1e-6 && Math.abs(n.dur - dur) < 1e-6)
     );
     if (clash) {
-      status('roll: そこは既存の音と重なります(同じ開始・長さなら和音になります)');
+      status('roll: overlaps an existing note (same start + length would merge into a chord)');
       draw();
       return;
     }
@@ -1861,7 +1861,7 @@ function refreshGrid() {
   el.innerHTML = '';
   document.body.dataset.gridRows = String(rows.length + rolls.length);
   if (!rows.length && !rolls.length) {
-    el.innerHTML = '<div class="hint">beat / notes リテラルがありません</div>';
+    el.innerHTML = '<div class="hint">no beat / notes literals</div>';
     return;
   }
   for (const site of rows) {
@@ -1873,7 +1873,7 @@ function refreshGrid() {
     label.textContent = site.let_name
       ? `${where}let ${site.let_name}`
       : `${where}${site.track}${site.at ? ` @${site.at}` : ''}`;
-    label.title = `${label.textContent}(${site.line} 行目へジャンプ)`;
+    label.title = `${label.textContent} (jump to line ${site.line})`;
     label.onclick = () => jumpToLine(site.line);
     row.appendChild(label);
     const cells = document.createElement('div');
@@ -1905,7 +1905,7 @@ function showDiags(diags) {
   const el = $('diags');
   el.innerHTML = '';
   if (!diags.length) {
-    el.innerHTML = '<div class="ok">✓ コンパイル OK</div>';
+    el.innerHTML = '<div class="ok">✓ compiled OK</div>';
   } else {
     for (const d of diags) {
       const div = document.createElement('div');
@@ -2002,7 +2002,7 @@ async function boot() {
   $('file').onchange = (e) => loadSong(e.target.value);
   $('new').onclick = async () => {
     if (PROJECT) return newElement('song'); // the project's songs live in songs/
-    const name = prompt('曲名 (例: my-song)');
+    const name = prompt('Song name (e.g. my-song)');
     if (!name || !store) return;
     const file = `${name.replace(/[^\w-]/g, '-')}.forte`;
     await store.write(file, NEW_TEMPLATE);
@@ -2010,11 +2010,11 @@ async function boot() {
     loadSong(file);
   };
   $('delete').onclick = async () => {
-    if (PROJECT) return status('プロジェクトのファイル削除はシェル / git でどうぞ');
+    if (PROJECT) return status('delete project files in your shell / git');
     if (!store) return;
     const locals = await localNames();
     if (!locals.includes(currentName)) return;
-    if (!confirm(`ローカルの ${currentName} を削除しますか?`)) return;
+    if (!confirm(`Delete local ${currentName}?`)) return;
     await store.remove(currentName);
     await refreshFileList();
     loadSong(BUILTINS.includes(currentName) ? currentName : BUILTINS[0]);
@@ -2045,7 +2045,7 @@ async function boot() {
     } else {
       await loadSong('songs/demo.forte').catch(() => {});
     }
-    status('space で再生! グリッド / ロール / ミキサーを触るとコードが書き換わります');
+    status('press space to play! touching the grid / roll / mixer rewrites the code');
   };
   $('welcome-block').onclick = () => {
     hideWelcome();

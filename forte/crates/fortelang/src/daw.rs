@@ -417,8 +417,8 @@ pub(crate) fn new_element(project: &Path, kind: &str, name: &str) -> Result<Stri
             format!("songs/{name}.forte"),
             format!(
                 "// {name} — a starter groove made from the built-ins.\n\
-                 // space で再生。グリッド / ロール / ミキサーを触ると、この\n\
-                 // コードがそのまま書き換わります。\n\
+                 // Press space to play. Touching the grid / roll / mixer\n\
+                 // rewrites this very code.\n\
                  song \"{name}\" {{\n  tempo 122bpm\n\n  section groove = bars(1..8)\n  section lift   = bars(9..16)\n\n\
                  \x20 track Kick {{\n    instrument sampler(sample: \"Kick\")\n    volume 0.9\n    play beat`x... x... x... x...` at bars(1..16)\n  }}\n\n\
                  \x20 track Hats {{\n    instrument sampler(sample: \"Hat\")\n    volume 0.5\n    pan 0.15\n    play beat`..x. ..x. ..x. ..x.` at groove\n    play beat`..x. ..x. ..x. ..xx` at lift\n  }}\n\n\

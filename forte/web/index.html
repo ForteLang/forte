@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <meta charset="utf-8">
@@ -186,37 +186,37 @@
   <img id="logo" src="logo.svg" alt=""><h1>FORTE</h1>
   <select id="file" title="song"></select>
   <button id="new">New</button>
-  <button id="delete" title="ローカルコピーを削除">Del</button>
-  <span id="saved" title="OPFS に自動保存されます"></span>
-  <button id="play" class="primary" title="space でも再生/停止">▶ Play</button>
+  <button id="delete" title="Delete the local copy">Del</button>
+  <span id="saved" title="Autosaved"></span>
+  <button id="play" class="primary" title="space also plays / stops">▶ Play</button>
   <button id="stop">■ Stop</button>
-  <input id="bpm" type="number" min="20" max="300" step="1" title="テンポ(set_tempo としてコードに書き戻ります)" style="width:58px" />
+  <input id="bpm" type="number" min="20" max="300" step="1" title="Tempo (written back to the code as set_tempo)" style="width:58px" />
   <span style="color:#565d69;font-size:11px">bpm</span>
-  <button id="rec" title="マイク録音 → 来歴付き .frec として保存">● Rec</button>
-  <button id="calib" title="ループバック較正: チャープを再生してマイクで捕まえ、往復レイテンシを実測">⏱ Calib</button>
-  <button id="perform" title="演奏モード: MIDI鍵盤 or PCキー(A〜K=白鍵/W,E,T,Y,U=黒鍵)で弾くと、停止時に notes コードに書き起こされます">🎹 Perform</button>
+  <button id="rec" title="Record the mic → saved as a provenance-stamped .frec">● Rec</button>
+  <button id="calib" title="Loopback calibration: play a chirp, catch it on the mic, measure the round-trip latency">⏱ Calib</button>
+  <button id="perform" title="Perform mode: play a MIDI keyboard or PC keys (A-K white, W/E/T/Y/U black); stopping transcribes it to notes code">🎹 Perform</button>
   <button id="digest">Build digest</button>
-  <button id="packages" title="導入済み package のカタログ(instruments / blocks / songs を閲覧)">📦 Packages</button>
-  <button id="helpbtn" title="操作ガイド">?</button>
+  <button id="packages" title="Catalog of vendored packages (browse instruments / blocks / songs)">📦 Packages</button>
+  <button id="helpbtn" title="Gesture guide">?</button>
   <span id="status">loading…</span>
 </header>
 <div id="wrap">
   <div id="left">
-    <div id="tree" title="プロジェクトのファイル。クリックで開きます(現在のファイルは黄色)"></div>
+    <div id="tree" title="Project files - click to open (the current file is amber)"></div>
     <div id="git">
       <h2>Git<span id="git-state" class="cnt"></span></h2>
       <div class="row">
-        <select id="branch" title="現在のブランチ。選ぶと checkout(未コミットの変更があると拒否)"></select>
-        <button id="branch-new" title="現在のコミットから新しいブランチを作って切り替え">＋</button>
+        <select id="branch" title="Current branch - picking one checks it out (refused with uncommitted changes)"></select>
+        <button id="branch-new" title="Create a branch at the current commit and switch to it">＋</button>
       </div>
       <div class="row">
-        <select id="merge-from" title="マージ元のブランチ"></select>
-        <button id="merge" title="選んだブランチを現在のブランチへマージ(重ならない編集は自動で合流、競合は <<<<<<< マーカー)">⇣</button>
+        <select id="merge-from" title="Branch to merge from"></select>
+        <button id="merge" title="Merge the picked branch into this one (non-overlapping edits merge; conflicts get <<<<<<< markers)">⇣</button>
       </div>
       <div id="vcs">
         <div id="vcs-bar">
-          <input id="commit-msg" placeholder="コミットメッセージ" spellcheck="false">
-          <button id="commit" title="全ローカルファイルをスナップショット">Commit</button>
+          <input id="commit-msg" placeholder="commit message" spellcheck="false">
+          <button id="commit" title="Snapshot every local file">Commit</button>
         </div>
         <div id="vcs-log"></div>
         <pre id="vcs-diff" hidden></pre>
@@ -227,46 +227,46 @@
   <div id="side">
     <h2>Diagnostics</h2>
     <div id="diags"><div class="ok">—</div></div>
-    <h2 title="beat リテラルをそのまま編集できるグリッド。クリックで - → x → X → . を巡回し、コードに最小diffで書き戻されます">Beat grid</h2>
+    <h2 title="Edit beat literals in place: clicking cycles - / x / X / . and writes back as a minimal diff">Beat grid</h2>
     <div id="grid"><div class="hint">—</div></div>
     <div id="proof">build digest: <b id="digest-out">—</b><br>
-      native/wasip1/browser が同じ値なら、この曲はどこでもビット同一にビルドされる。</div>
+      If native/wasip1/browser agree, this song builds bit-identically everywhere.</div>
   </div>
 </div>
 <div id="welcome">
   <div class="card">
-    <h2 id="welcome-title">Forte DAW へようこそ</h2>
-    <div class="sub">このパッケージはまだ空です。曲は block(再利用できる数小節のかたまり)を並べて作ります。</div>
+    <h2 id="welcome-title">Welcome to the Forte DAW</h2>
+    <div class="sub">This package is empty. Songs are made by arranging blocks: reusable few-bar ideas.</div>
     <ol>
-      <li><b>デモ曲</b>から始めるのが早い — 開いて space で鳴ります</li>
-      <li><b>+block</b> でグルーヴを作る(ビートグリッド / ピアノロールで打ち込み)</li>
-      <li>ライブラリの <b>▶</b> で block を単体試聴して育てる</li>
-      <li><b>+曲</b> で曲を作り、block の <b>+曲</b> ボタンで配置していく</li>
-      <li>ミキサーとインスペクタで音を整える — 操作は全部コードに書き戻ります</li>
+      <li>The fastest start is the <b>demo song</b>: it plays on space</li>
+      <li><b>+block</b> makes a groove (program it on the beat grid / piano roll)</li>
+      <li><b>▶</b> in the library auditions a block standalone while you grow it</li>
+      <li><b>+song</b> starts a song; place blocks with their <b>+song</b> button or by dragging onto the arrange</li>
+      <li>Shape the sound in the mixer and inspector: every gesture is written back to the code</li>
     </ol>
     <div class="row">
-      <button class="primary" id="welcome-demo">🎵 デモ曲から始める</button>
-      <button id="welcome-block">+ block を作る</button>
-      <button id="welcome-song">+ 曲を作る</button>
-      <button id="welcome-close">閉じる</button>
+      <button class="primary" id="welcome-demo">🎵 Start from the demo song</button>
+      <button id="welcome-block">+ new block</button>
+      <button id="welcome-song">+ new song</button>
+      <button id="welcome-close">Close</button>
     </div>
   </div>
 </div>
 <div id="help">
-  <b>操作ガイド</b><br />
-  <b>space</b> 再生 / 停止 · <b>アレンジをダブルクリック</b> そこへシーク<br />
-  <b>クリップをドラッグ</b> 配置を移動 · <b>右端ドラッグ</b> 長さ変更<br />
-  <b>ビートグリッド</b> クリックで打ち込み · <b>ロール</b> ドラッグで音を描く / クリックで消す<br />
-  <b>ミキサーのトラック名</b> インスペクタ(音源 / エフェクトのつまみ)<br />
-  <b>M / S</b> このセッションだけのミュート / ソロ<br />
-  左のツリー: <b>+曲 / +block / +package</b> · block の <b>▶</b> 試聴 / <b>+曲</b> 配置<br />
-  すべての GUI 操作は最小のコード編集として書き戻され、<b>Ctrl+Z</b> で戻せます
+  <b>Gesture guide</b><br />
+  <b>space</b> play / stop · <b>double-click the arrange</b> to seek<br />
+  <b>drag a clip</b> to move a placement · <b>drag its right edge</b> to resize · <b>right-click</b> deletes · <b>drop a block onto a clip</b> swaps it<br />
+  <b>beat grid</b> click to program · <b>roll</b> drag to draw, click to delete, shift-click accent, alt-click tie<br />
+  <b>a mixer strip's name</b> opens the inspector (instrument / effect knobs, swap the instrument)<br />
+  <b>M / S</b> session-only mute / solo<br />
+  the tree: <b>+song / +block / +package</b> · a block's <b>play button</b> auditions, <b>+song</b> places it<br />
+  every GUI gesture is written back as a minimal code edit; <b>Ctrl+Z</b> undoes it
 </div>
 <div id="viz-wrap">
   <div id="sectbar"></div>
   <canvas id="viz"></canvas>
   <span id="viz-hint">drag a clip to re-place it — the code is the source of truth</span>
-  <div id="mixer" title="fader / pan は set_track としてコードに書き戻ります。M/S はこのセッションだけのモニタ操作"></div>
+  <div id="mixer" title="Faders / pan write back to the code as set_track. M/S are session-only monitor controls"></div>
   <div id="insp"></div>
 </div>
 <script type="module" src="main.js"></script>
