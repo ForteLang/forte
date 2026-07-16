@@ -935,6 +935,7 @@ async function ensureAudio() {
         }
       }
       viz.setPlayhead(m.beats);
+      updateLive(m.beats);
       if (vizZoom > 1) {
         // keep the playhead visible while zoomed in
         const wrap = document.getElementById('viz-wrap');
@@ -1550,7 +1551,7 @@ function addTrackFromPalette(inst) {
     op: 'add_track',
     name,
     instrument: inst.call,
-    play: inst.kind + '`' + inst.pat + '` at bars(1..4)',
+    play: inst.kind + '`' + inst.pat + '` at bars(1..' + (inst.bars ?? 4) + ')',
   });
   if (applyEdit(ops)) toast(`+ track ${name} (${inst.label}) — the grid / roll is ready`, 'ok');
 }
@@ -1819,6 +1820,26 @@ async function performToggle() {
     div.className = 'ok';
     div.style.userSelect = 'all';
     div.textContent = `🎹 ${code}`;
+    {
+      // the take becomes a track in one click
+      const b = document.createElement('button');
+      b.textContent = '+ track';
+      b.title = 'Add this take as a new track';
+      b.style.marginLeft = '8px';
+      b.onclick = () => {
+        const doc = notesParse(body);
+        const bpb = viz.data?.beatsPerBar || 4;
+        const bars = Math.max(1, Math.ceil((doc?.len ?? 4) / bpb));
+        addTrackFromPalette({
+          label: 'Take',
+          call: 'prisma(wave: "saw", cutoff: 0.5)',
+          kind: 'notes',
+          pat: body,
+          bars,
+        });
+      };
+      div.appendChild(b);
+    }
     $('diags').prepend(div);
     status('transcribed — copy it from the panel below into a play statement');
     return;
@@ -1990,6 +2011,29 @@ function notesWrite(doc) {
   return out;
 }
 const ROLL_Q = 0.25; // grid quantum in beats
+// live position feedback: grid rows / rolls register here and the pos
+// stream lights the playing step / draws the roll playhead
+let liveRows = [];
+function atToBars(at) {
+  if (!at) return null;
+  const m = /^(\d+)\.\.(\d+)$/.exec(at);
+  if (m) return [Number(m[1]), Number(m[2])];
+  const sec = currentSections().find((x) => x.name === at);
+  return sec ? sec.bars : null;
+}
+function updateLive(beats) {
+  const bpb = viz.data?.beatsPerBar || 4;
+  for (const row of liveRows) {
+    const range = atToBars(row.at);
+    let local = null;
+    if (range) {
+      const start = (range[0] - 1) * bpb;
+      const end = range[1] * bpb;
+      if (beats >= start && beats < end) local = (beats - start) % row.len;
+    }
+    row.set(local);
+  }
+}
 function renderRoll(el, site) {
   const doc = notesParse(site.raw);
   if (!doc) return;
@@ -2020,6 +2064,7 @@ function renderRoll(el, site) {
   const g = cv.getContext('2d');
   g.scale(devicePixelRatio, devicePixelRatio);
   const bpb = viz.data?.beatsPerBar || 4;
+  let playBeat = null;
   const draw = (ghost) => {
     g.clearRect(0, 0, W, H);
     g.fillStyle = '#14171c';
@@ -2046,8 +2091,26 @@ function renderRoll(el, site) {
       g.fillStyle = 'rgba(88,196,112,0.5)';
       g.fillRect((ghost.start / ROLL_Q) * CW + 1, (hi - ghost.pitch) * RH + 1, (ghost.dur / ROLL_Q) * CW - 2, RH - 2);
     }
+    if (playBeat !== null) {
+      g.strokeStyle = '#58c470';
+      g.beginPath();
+      const x = (playBeat / ROLL_Q) * CW + 0.5;
+      g.moveTo(x, 0);
+      g.lineTo(x, H);
+      g.stroke();
+    }
   };
   draw();
+  liveRows.push({
+    at: site.at,
+    len: doc.len,
+    set: (local) => {
+      const next = local === null ? null : local;
+      if (next === playBeat) return;
+      playBeat = next;
+      draw();
+    },
+  });
 
   const cellAt = (ev) => {
     const r = cv.getBoundingClientRect();
@@ -2167,6 +2230,7 @@ function refreshGrid() {
   const rows = sites.filter((s) => s.kind === 'beat' && !s.raw.trim().startsWith('euclid('));
   const rolls = sites.filter((s) => s.kind === 'notes');
   el.innerHTML = '';
+  liveRows = []; // rebuilt below by grid rows and rolls
   document.body.dataset.gridRows = String(rows.length + rolls.length);
   if (!rows.length && !rolls.length) {
     el.innerHTML = '<div class="hint">no beat / notes literals</div>';
@@ -2204,6 +2268,16 @@ function refreshGrid() {
     });
     row.appendChild(cells);
     el.appendChild(row);
+    // one beat-literal step = a 16th (0.25 beats): light the playing one
+    liveRows.push({
+      at: site.at,
+      len: steps.length * 0.25,
+      set: (local) => {
+        const idx = local === null ? -1 : Math.floor(local / 0.25);
+        const kids = cells.children;
+        for (let i = 0; i < kids.length; i++) kids[i].classList.toggle('now', i === idx);
+      },
+    });
   }
   for (const site of rolls) renderRoll(el, site);
 }
