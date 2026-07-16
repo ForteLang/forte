@@ -393,6 +393,28 @@ fn remove_at_line_deletes_the_placement_line() {
 }
 
 #[test]
+fn automation_round_trip_set_add_remove() {
+    let src = "song \"s\" {\n  track A {\n    instrument prisma()\n    insert filter(type: \"lp\", cutoff: 0.5)\n    automate cutoff from 0.2 to 0.9 over bars(1..8)\n    automate filter.cutoff from 0.1 to 0.7 over intro\n    play notes`C3:1` at bars(1..1)\n  }\n  section intro = bars(1..4)\n}\n";
+    let sites = fortelang::edit::automation_sites(src).unwrap();
+    assert_eq!(sites.len(), 2);
+    assert_eq!(sites[0].target, "cutoff");
+    assert_eq!((sites[0].from, sites[0].to, sites[0].at.as_str()), (0.2, 0.9, "1..8"));
+    assert_eq!(sites[1].target, "filter.cutoff");
+    assert_eq!(sites[1].at, "intro");
+
+    let out = apply(src, r#"{"op":"set_automation","track":"A","index":1,"from":0.3,"to":0.6}"#);
+    assert!(out.contains("automate filter.cutoff from 0.3 to 0.6 over intro"), "{out}");
+
+    let out2 = apply(&out, r#"{"op":"add_automation","track":"A","target":"volume","from":0,"to":1,"bars":[1,8]}"#);
+    assert!(out2.contains("automate volume from 0 to 1 over bars(1..8)"), "{out2}");
+    assert_eq!(fortelang::edit::automation_sites(&out2).unwrap().len(), 3);
+
+    let out3 = apply(&out2, r#"{"op":"remove_automation","track":"A","index":0}"#);
+    assert!(!out3.contains("from 0.2"), "{out3}");
+    assert_eq!(fortelang::edit::automation_sites(&out3).unwrap().len(), 2);
+}
+
+#[test]
 fn insert_chain_edits_add_remove_and_reorder() {
     let src = "song \"s\" {\n  track A {\n    instrument sampler(sample: \"Kick\")\n    insert filter(type: \"lp\", cutoff: 0.8)\n    insert drive(amount: 0.3)\n    play beat`x...` at bars(1..1)\n  }\n}\n";
     // add appends after the last insert

@@ -446,6 +446,32 @@ pub unsafe extern "C" fn fw_arg_sites(ptr: *mut Ctx) -> i32 {
     }
 }
 
+/// Automation statements of the staged source as JSON sites (the
+/// inspector's automation read side). Same buffer protocol as
+/// [`fw_arg_sites`].
+#[no_mangle]
+pub unsafe extern "C" fn fw_auto_sites(ptr: *mut Ctx) -> i32 {
+    let c = ctx(ptr);
+    let src = match std::str::from_utf8(&c.src) {
+        Ok(s) => s,
+        Err(_) => {
+            c.edit_out = b"invalid utf-8".to_vec();
+            return -1;
+        }
+    };
+    match fortelang::edit::automation_sites(src) {
+        Ok(sites) => {
+            let n = sites.len() as i32;
+            c.edit_out = serde_json::to_vec(&sites).unwrap_or_else(|_| b"[]".to_vec());
+            n
+        }
+        Err(d) => {
+            c.edit_out = d.to_string().into_bytes();
+            -1
+        }
+    }
+}
+
 /// Loop a beat range (the section-loop control). `end <= start` is ignored.
 #[no_mangle]
 pub unsafe extern "C" fn fw_loop(ptr: *mut Ctx, start: f64, end: f64) {

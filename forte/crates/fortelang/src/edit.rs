@@ -191,6 +191,33 @@ pub enum EditOp {
         from: usize,
         to: usize,
     },
+    /// Rewrite an automation's from/to values (index = written order in
+    /// the track).
+    SetAutomation {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        index: usize,
+        from: f64,
+        to: f64,
+    },
+    /// Delete automation #index (whole line when it owns it).
+    RemoveAutomation {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        index: usize,
+    },
+    /// Append `automate <target> from A to B over bars(a..b)` to a track.
+    AddAutomation {
+        #[serde(default)]
+        path: Vec<String>,
+        track: String,
+        target: String,
+        from: f64,
+        to: f64,
+        bars: (u32, u32),
+    },
     /// Delete a whole `track <name> { … }` (its lines when it owns them).
     RemoveTrack {
         #[serde(default)]
@@ -637,6 +664,107 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
             let step1 = splice(src, b0, b1, &a_text);
             step1[..a0].to_string() + &b_text + &step1[a1..]
         }
+        EditOp::SetAutomation { path, track, index, from, to } => {
+            let (body, _) = resolve_body(&file, path)?;
+            let tr = find_track(body, track)?;
+            let a = tr.automations.get(*index).ok_or_else(|| {
+                Diag::new(
+                    "E-EDIT-003",
+                    tr.pos,
+                    format!("Track '{track}' に automate #{index} がありません({} 個)", tr.automations.len()),
+                )
+            })?;
+            let anchor = ctx.tok_at(a.pos)?;
+            let mut j = anchor + 1;
+            if matches!(ctx.toks[j].tok, Tok::Dot) {
+                j += 2; // insertName . param
+            }
+            if !matches!(&ctx.toks[j].tok, Tok::Ident(s) if s == "from") {
+                return Err(Diag::new("E-EDIT-006", a.pos, "automate の `from` が見つかりません"));
+            }
+            let (f0, f1) = ctx.value_span(j + 1);
+            let after_from = if matches!(ctx.toks[j + 1].tok, Tok::Minus) { j + 3 } else { j + 2 };
+            if !matches!(&ctx.toks[after_from].tok, Tok::Ident(s) if s == "to") {
+                return Err(Diag::new("E-EDIT-006", a.pos, "automate の `to` が見つかりません"));
+            }
+            let (t0, t1) = ctx.value_span(after_from + 1);
+            // rewrite the later span first so the earlier offsets hold
+            let step = splice(src, t0, t1, &fmt_num(*to));
+            splice(&step, f0, f1, &fmt_num(*from))
+        }
+        EditOp::RemoveAutomation { path, track, index } => {
+            let (body, _) = resolve_body(&file, path)?;
+            let tr = find_track(body, track)?;
+            let a = tr.automations.get(*index).ok_or_else(|| {
+                Diag::new(
+                    "E-EDIT-003",
+                    tr.pos,
+                    format!("Track '{track}' に automate #{index} がありません({} 個)", tr.automations.len()),
+                )
+            })?;
+            let anchor = ctx.tok_at(a.pos)?;
+            if anchor == 0 || !matches!(&ctx.toks[anchor - 1].tok, Tok::Ident(s) if s == "automate") {
+                return Err(Diag::new("E-EDIT-006", a.pos, "automate 文の先頭が見つかりません"));
+            }
+            let end = ctx.automate_end(anchor, a.pos)?;
+            let start_off = ctx.toks[anchor - 1].off;
+            let line_start = src[..start_off].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let prefix_blank = src[line_start..start_off].trim().is_empty();
+            let rest = &src[end..];
+            let line_len = rest.find('\n').unwrap_or(rest.len());
+            let tail = rest[..line_len].trim_start();
+            if prefix_blank && (tail.is_empty() || tail.starts_with("//")) {
+                let del_end = (end + line_len + 1).min(src.len());
+                splice(src, line_start, del_end, "")
+            } else {
+                splice(src, start_off, end, "")
+            }
+        }
+        EditOp::AddAutomation { path, track, target, from, to, bars } => {
+            let ok_target = !target.is_empty()
+                && target.split('.').count() <= 2
+                && target.split('.').all(|part| {
+                    !part.is_empty()
+                        && part.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+                        && part.chars().all(|c| c.is_alphanumeric() || c == '_')
+                });
+            if !ok_target {
+                return Err(Diag::new("E-EDIT-001", p0, format!("automate 対象が不正です: \"{target}\"")));
+            }
+            let (body, _) = resolve_body(&file, path)?;
+            let tr = find_track(body, track)?;
+            // anchor line: the last automation, else the last insert/instrument
+            let (anchor_off, anchor_end) = if let Some(last) = tr.automations.last() {
+                let anchor = ctx.tok_at(last.pos)?;
+                (ctx.toks[anchor - 1].off, ctx.automate_end(anchor, last.pos)?)
+            } else if let Some(call) = tr.inserts.last().or(tr.instrument.as_ref()) {
+                let idx = ctx.tok_at(call.pos)?;
+                let end = if matches!(ctx.toks[idx + 1].tok, Tok::LParen) {
+                    let after = ctx.skip_parens(idx + 1)?;
+                    ctx.toks[after - 1].end
+                } else {
+                    ctx.toks[idx].end
+                };
+                (ctx.toks[idx - 1].off, end)
+            } else {
+                return Err(Diag::new("E-EDIT-003", tr.pos, format!("Track '{track}' に instrument がありません")));
+            };
+            let ls = src[..anchor_off].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let indent = if src[ls..anchor_off].trim().is_empty() {
+                src[ls..anchor_off].to_string()
+            } else {
+                "    ".into()
+            };
+            let line_end = src[anchor_end..].find('\n').map(|i| anchor_end + i + 1).unwrap_or(src.len());
+            let stmt = format!(
+                "{indent}automate {target} from {} to {} over bars({}..{})\n",
+                fmt_num(*from),
+                fmt_num(*to),
+                bars.0,
+                bars.1
+            );
+            splice(src, line_end, line_end, &stmt)
+        }
         EditOp::RemoveTrack { path, track } => {
             let (body, _) = resolve_body(&file, path)?;
             let tr = find_track(body, track)?;
@@ -969,6 +1097,27 @@ impl<'a> Ctx<'a> {
             splice(src, at, at, &format!("{indent}{stmt}\n"))
         } else {
             splice(src, e, e, &format!(" {stmt}"))
+        }
+    }
+
+    /// Byte end of an `automate` statement whose target token is `anchor`
+    /// (the end of the `over` range — `bars(a..b)` or a section name).
+    fn automate_end(&self, anchor: usize, pos: Pos) -> Result<usize, Diag> {
+        let mut k = anchor;
+        loop {
+            match &self.toks[k].tok {
+                Tok::Ident(s) if s == "over" => break,
+                Tok::Eof => return Err(Diag::new("E-EDIT-006", pos, "automate の `over` が見つかりません")),
+                _ => k += 1,
+            }
+        }
+        match &self.toks[k + 1].tok {
+            Tok::Ident(s) if s == "bars" => {
+                let after = self.skip_parens(k + 2)?;
+                Ok(self.toks[after - 1].end)
+            }
+            Tok::Ident(_) => Ok(self.toks[k + 1].end),
+            _ => Err(Diag::new("E-EDIT-006", pos, "over の範囲が見つかりません")),
         }
     }
 
@@ -1322,6 +1471,59 @@ fn walk_arg_sites(body: &SongAst, path: &mut Vec<String>, out: &mut Vec<ArgSite>
         walk_arg_sites(&b.body, path, out);
         path.pop();
     }
+}
+
+/// One `automate` statement — what the inspector's automation rows bind
+/// to. Coordinates are exactly what set_automation / remove_automation take.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AutoSite {
+    pub path: Vec<String>,
+    pub track: String,
+    pub index: usize,
+    pub target: String,
+    pub from: f64,
+    pub to: f64,
+    /// "a..b" or a section name.
+    pub at: String,
+    pub line: u32,
+}
+
+/// List every automation with its edit coordinates (the read side).
+pub fn automation_sites(src: &str) -> Result<Vec<AutoSite>, Diag> {
+    let file = parse(src).map_err(|mut ds| ds.remove(0))?;
+    let mut out = Vec::new();
+    fn walk(body: &SongAst, path: &mut Vec<String>, out: &mut Vec<AutoSite>) {
+        for t in &body.tracks {
+            for (i, a) in t.automations.iter().enumerate() {
+                out.push(AutoSite {
+                    path: path.clone(),
+                    track: t.name.clone(),
+                    index: i,
+                    target: a.target.clone(),
+                    from: a.from,
+                    to: a.to,
+                    at: match &a.at {
+                        AtRef::Bars(x, y) => format!("{x}..{y}"),
+                        AtRef::Section(s, _) => s.clone(),
+                    },
+                    line: a.pos.line,
+                });
+            }
+        }
+        for b in &body.blocks {
+            path.push(b.name.clone());
+            walk(&b.body, path, out);
+            path.pop();
+        }
+    }
+    if let Some(s) = &file.song {
+        walk(s, &mut Vec::new(), &mut out);
+    }
+    for b in &file.blocks {
+        let mut path = vec![b.name.clone()];
+        walk(&b.body, &mut path, &mut out);
+    }
+    Ok(out)
 }
 
 // ------------------------------------------------ piano-roll round trip

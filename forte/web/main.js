@@ -246,6 +246,13 @@ async function routeTrackOp(trackName, op) {
 }
 
 // ---- inspector (set_arg knobs): instrument/insert args of one track ----
+function autoSitesOf(text) {
+  stageSrc(text);
+  const n = main.e.fw_auto_sites(main.ctx);
+  const out = wasmText(main.e.fw_edit_ptr(main.ctx), main.e.fw_edit_len(main.ctx));
+  stageSrc(getText());
+  return n < 0 ? [] : JSON.parse(out);
+}
 function argSitesOf(text) {
   stageSrc(text);
   const n = main.e.fw_arg_sites(main.ctx);
@@ -304,11 +311,12 @@ async function renderInspector() {
   if (!inspTrack) return;
   let sites = argSitesOf(getText()).filter((x) => x.track === inspTrack);
   let home = null;
+  let homeText = null;
   if (!sites.length && PROJECT) {
     home = trackHomeFile(inspTrack);
     if (home) {
-      const text = await store.read(home.file);
-      sites = argSitesOf(text).filter(
+      homeText = await store.read(home.file);
+      sites = argSitesOf(homeText).filter(
         (x) => x.track === home.track && x.path.includes(home.block)
       );
     }
@@ -439,6 +447,93 @@ async function renderInspector() {
       routeChainOps(home, s0.track, [
         { op: 'add_insert', path: s0.path, track: s0.track, call },
       ]).then(() => toast(`+ insert ${call.split('(')[0]}`, 'ok'));
+    };
+    row.appendChild(sel);
+    el.appendChild(row);
+  }
+  // ---- automation rows: automate <target> from A to B over <range> ----
+  const trackName = home ? home.track : inspTrack;
+  const autos = autoSitesOf(homeText ?? getText()).filter(
+    (x) => x.track === trackName && (!home || x.path.includes(home.block))
+  );
+  for (const a of autos) {
+    const row = document.createElement('div');
+    row.className = 'irow';
+    const nm = document.createElement('span');
+    nm.className = 'inm';
+    nm.textContent = `⟿ ${a.target} @${a.at}`;
+    nm.title = `automate (line ${a.line})`;
+    row.appendChild(nm);
+    const mkNum = (label, value) => {
+      const lab = document.createElement('label');
+      lab.textContent = label;
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.step = '0.01';
+      inp.value = value;
+      lab.appendChild(inp);
+      row.appendChild(lab);
+      return inp;
+    };
+    const fromI = mkNum('from', a.from);
+    const toI = mkNum('to', a.to);
+    const commitAuto = () =>
+      routeChainOps(home, trackName, [
+        {
+          op: 'set_automation',
+          path: a.path,
+          track: a.track,
+          index: a.index,
+          from: Number(fromI.value),
+          to: Number(toI.value),
+        },
+      ]);
+    fromI.onchange = () => { fromI.blur(); commitAuto(); };
+    toI.onchange = () => { toI.blur(); commitAuto(); };
+    const del = document.createElement('button');
+    del.textContent = '✕';
+    del.title = 'Remove this automation';
+    del.style.padding = '0 6px';
+    del.onclick = () =>
+      routeChainOps(home, trackName, [
+        { op: 'remove_automation', path: a.path, track: a.track, index: a.index },
+      ]);
+    row.appendChild(del);
+    el.appendChild(row);
+  }
+  if (sites.length) {
+    // "+ automate…" — targets come from the track's own knobs
+    const row = document.createElement('div');
+    row.className = 'irow';
+    const sel = document.createElement('select');
+    sel.title = 'Automate a parameter over a bar range (edit the range in code)';
+    const first = document.createElement('option');
+    first.value = '';
+    first.textContent = '+ automate…';
+    sel.appendChild(first);
+    const targets = ['volume'];
+    for (const site of sites) {
+      for (const arg of site.args) {
+        if (arg.num === undefined || arg.num === null) continue;
+        targets.push(site.target === 'instrument' ? arg.arg : `${site.name}.${arg.arg}`);
+      }
+    }
+    for (const t of [...new Set(targets)]) {
+      const o = document.createElement('option');
+      o.value = t;
+      o.textContent = t;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => {
+      if (!sel.value) return;
+      const target = sel.value;
+      sel.blur();
+      const bpb = viz.data?.beatsPerBar || 4;
+      const endBar = Math.max(1, Math.round((viz.data?.lengthBeats || 16) / bpb));
+      const s0 = sites[0];
+      routeChainOps(home, trackName, [
+        { op: 'add_automation', path: s0.path, track: s0.track, target, from: 0, to: 1, bars: [1, endBar] },
+      ]).then(() => toast(`+ automate ${target} from 0 to 1 over bars(1..${endBar})`, 'ok'));
     };
     row.appendChild(sel);
     el.appendChild(row);
