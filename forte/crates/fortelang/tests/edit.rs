@@ -371,6 +371,28 @@ fn add_track_appends_with_instrument_and_starter_play() {
 }
 
 #[test]
+fn set_place_block_swaps_only_the_name() {
+    // fixture line 38 = `  play Inner as Twin at bars(5..8)   // エイリアス配置`
+    let out = apply(SRC, r#"{"op":"set_place_block","line":38,"to":"Other"}"#);
+    assert_only_lines_changed(
+        SRC,
+        &out,
+        &[(38, "  play Other as Twin at bars(5..8)   // エイリアス配置")],
+    );
+    let miss = parse_ops(r#"{"op":"set_place_block","line":1,"to":"X"}"#).unwrap();
+    assert_eq!(apply_ops(SRC, &miss).unwrap_err().code, "E-EDIT-003");
+}
+
+#[test]
+fn remove_at_line_deletes_the_placement_line() {
+    let out = apply(SRC, r#"{"op":"remove_at_line","line":38}"#);
+    let b: Vec<&str> = SRC.lines().collect();
+    let a: Vec<&str> = out.lines().collect();
+    assert_eq!(a.len(), b.len() - 1);
+    assert!(!out.contains("as Twin"));
+}
+
+#[test]
 fn set_instrument_swaps_the_whole_call() {
     let out = apply(
         SRC,

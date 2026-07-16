@@ -174,6 +174,13 @@ pub enum EditOp {
         path: Vec<String>,
         track: String,
     },
+    /// Swap WHICH block a placement plays: the placement is addressed by
+    /// its 1-based source line (the arrange's coordinate), only the block
+    /// name token is rewritten — alias, args and the at-range survive.
+    SetPlaceBlock { line: u32, to: String },
+    /// Delete the placement sitting on a 1-based source line (whole line
+    /// when it owns it) — the arrange's "remove clip" gesture.
+    RemoveAtLine { line: u32 },
     /// Ensure `import { names… } from "from"` exists — missing names merge
     /// into an existing import of the same path; otherwise a new import
     /// line lands above the first statement (leading comments stay on
@@ -546,6 +553,42 @@ fn apply_one(src: &str, op: &EditOp) -> Result<String, Diag> {
                 splice(src, line_start, del_end, "")
             } else {
                 splice(src, start_off, close_end, "")
+            }
+        }
+        EditOp::SetPlaceBlock { line, to } => {
+            let ok_name = !to.is_empty()
+                && to.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+                && to.chars().all(|c| c.is_alphanumeric() || c == '_');
+            if !ok_name {
+                return Err(Diag::new("E-EDIT-001", p0, format!("block 名が不正です: \"{to}\"")));
+            }
+            let pl = find_place_on_line(&file, *line)?;
+            let anchor = ctx.tok_at(pl.pos)?;
+            splice(src, ctx.toks[anchor].off, ctx.toks[anchor].end, to)
+        }
+        EditOp::RemoveAtLine { line } => {
+            let pl = find_place_on_line(&file, *line)?;
+            let anchor = ctx.tok_at(pl.pos)?;
+            if anchor == 0 || !matches!(&ctx.toks[anchor - 1].tok, Tok::Ident(s) if s == "play") {
+                return Err(Diag::new("E-EDIT-006", pl.pos, "play 文の先頭が見つかりません"));
+            }
+            let kw = anchor - 1;
+            let at = ctx.place_at_span(anchor)?;
+            let last_end = match at {
+                AtSpan::Bars { whole, .. } => ctx.toks[whole.1].end,
+                AtSpan::Section(j) => ctx.toks[j].end,
+            };
+            let start_off = ctx.toks[kw].off;
+            let line_start = src[..start_off].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let prefix_blank = src[line_start..start_off].trim().is_empty();
+            let rest = &src[last_end..];
+            let line_len = rest.find('\n').unwrap_or(rest.len());
+            let tail = rest[..line_len].trim_start();
+            if prefix_blank && (tail.is_empty() || tail.starts_with("//")) {
+                let del_end = (last_end + line_len + 1).min(src.len());
+                splice(src, line_start, del_end, "")
+            } else {
+                splice(src, start_off, last_end, "")
             }
         }
         EditOp::AddImport { names, from } => {
@@ -945,6 +988,35 @@ fn find_at_on_line(ctx: &Ctx, file: &FileAst, line: u32) -> Result<AtSpan, Diag>
             format!("{line} 行目に play / audio 文がありません(import した block の clip はこのファイルからは動かせません)"),
         ))
     })
+}
+
+/// Find the block placement anchored on a 1-based source line, searching
+/// every body (song + top-level blocks, nested included).
+fn find_place_on_line(file: &FileAst, line: u32) -> Result<&PlaceAst, Diag> {
+    fn walk(body: &SongAst, line: u32) -> Option<&PlaceAst> {
+        for pl in &body.places {
+            if pl.pos.line == line {
+                return Some(pl);
+            }
+        }
+        for b in &body.blocks {
+            if let Some(p) = walk(&b.body, line) {
+                return Some(p);
+            }
+        }
+        None
+    }
+    file.song
+        .as_ref()
+        .and_then(|s| walk(s, line))
+        .or_else(|| file.blocks.iter().find_map(|b| walk(&b.body, line)))
+        .ok_or_else(|| {
+            Diag::new(
+                "E-EDIT-003",
+                Pos { line, col: 1 },
+                format!("{line} 行目に block の配置(play 文)がありません"),
+            )
+        })
 }
 
 /// Resolve a body path. Returns the body and, when the body is a `block`,

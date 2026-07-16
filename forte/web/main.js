@@ -1118,10 +1118,34 @@ $('viz').addEventListener('drop', (ev) => {
   ev.preventDefault();
   const b = JSON.parse(data);
   const rect = $('viz').getBoundingClientRect();
+  const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
+  if (hit?.kind === 'clip' && hit.line > 0) {
+    // dropping onto a clip swaps WHICH block that placement plays.
+    // the swap goes FIRST: add_import may insert a line, which would
+    // shift the line this op addresses (ops apply sequentially)
+    const ops = [{ op: 'set_place_block', line: hit.line, to: b.name }];
+    if (b.file !== currentName) {
+      ops.push({ op: 'add_import', names: [b.name], from: relPath(currentName, b.file) });
+    }
+    if (applyEdit(ops)) {
+      status(`swap: この配置は ${b.name} になりました`);
+      jumpToLine(hit.line);
+    }
+    return;
+  }
   const { headerW, pxPerBeat } = viz.geom();
   const bpb = viz.data?.beatsPerBar || 4;
   const bar = Math.max(1, Math.round((ev.clientX - rect.left - headerW) / pxPerBeat / bpb) + 1);
   placeBlock(b, bar);
+});
+// right-click a clip = delete its placement (the arrange's remove gesture)
+$('viz').addEventListener('contextmenu', (ev) => {
+  const rect = $('viz').getBoundingClientRect();
+  const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
+  if (hit?.kind !== 'clip' || !(hit.line > 0)) return;
+  ev.preventDefault();
+  if (!confirm('この配置(クリップ)を削除しますか?')) return;
+  applyEdit({ op: 'remove_at_line', line: hit.line });
 });
 
 // ---- instrument palette: built-ins + every device in the package ----------
