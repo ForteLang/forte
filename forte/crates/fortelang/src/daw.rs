@@ -336,6 +336,34 @@ fn api(
                 Err(e) => respond(stream, "400 Bad Request", text, e.as_bytes()),
             }
         }
+        ("POST", "export") => {
+            // render the file to renders/<name>.wav via `forte build`
+            let Some(rel) = q("path").filter(|p| safe_rel(p) && p.ends_with(".forte")) else {
+                return respond(stream, "400 Bad Request", text, "path が必要です".as_bytes());
+            };
+            let stem = std::path::Path::new(&rel)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "out".into());
+            let out_rel = format!("renders/{stem}.wav");
+            let _ = std::fs::create_dir_all(project.join("renders"));
+            let exe = std::env::current_exe().map_err(std::io::Error::other)?;
+            let out = std::process::Command::new(exe)
+                .args(["build", &rel, "-o", &out_rel])
+                .current_dir(project)
+                .output()?;
+            if out.status.success() && project.join(&out_rel).is_file() {
+                respond(
+                    stream,
+                    "200 OK",
+                    json,
+                    serde_json::json!({ "file": out_rel }).to_string().as_bytes(),
+                )
+            } else {
+                let msg = [out.stdout.as_slice(), out.stderr.as_slice()].concat();
+                respond(stream, "500 Internal Server Error", text, &msg)
+            }
+        }
         ("POST", "pkg") => {
             let Some(spec) = q("spec").filter(|s| !s.is_empty()) else {
                 return respond(stream, "400 Bad Request", text, "spec が必要です".as_bytes());

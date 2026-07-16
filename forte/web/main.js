@@ -1202,17 +1202,36 @@ async function refreshTree(locals) {
     }
     section('instruments');
     const instRows = [];
+    const groupHeads = [];
+    const applyFilter = (q) => {
+      for (const { row, key } of instRows) row.style.display = !q || key.includes(q) ? '' : 'none';
+      for (const { head, rows } of groupHeads)
+        head.style.display = rows.some((r) => r.row.style.display !== 'none') ? '' : 'none';
+    };
     const filt = document.createElement('input');
     filt.className = 'palfilt';
     filt.placeholder = 'search (e.g. bass)';
     filt.value = window.__paletteFilter ?? '';
     filt.oninput = () => {
       window.__paletteFilter = filt.value;
-      const q = filt.value.trim().toLowerCase();
-      for (const { row, key } of instRows) row.style.display = !q || key.includes(q) ? '' : 'none';
+      applyFilter(filt.value.trim().toLowerCase());
     };
     el.appendChild(filt);
+    let curGroup = null;
+    let curRows = null;
     for (const inst of paletteInstruments()) {
+      const group = inst.where === 'built-in'
+        ? 'built-in'
+        : (inst.from ?? inst.where).split('/').pop().replace('.forte', '');
+      if (group !== curGroup) {
+        curGroup = group;
+        const h = document.createElement('div');
+        h.className = 'dir';
+        h.textContent = `${group}/`;
+        el.appendChild(h);
+        curRows = [];
+        groupHeads.push({ head: h, rows: curRows });
+      }
       const d = document.createElement('div');
       d.className = 'f blk';
       const label = document.createElement('span');
@@ -1231,12 +1250,14 @@ async function refreshTree(locals) {
       };
       bb('▶', 'Preview one bar', () => previewInstrument(inst).catch((e) => status(`preview: ${e.message}`)));
       bb('+tr', 'Add a track with this instrument to the open song / block', () => addTrackFromPalette(inst));
-      instRows.push({ row: d, key: `${inst.label} ${inst.where ?? ''}`.toLowerCase() });
+      const entry = { row: d, key: `${inst.label} ${inst.where ?? ''}`.toLowerCase() };
+      instRows.push(entry);
+      curRows.push(entry);
       el.appendChild(d);
     }
     {
       const q = (window.__paletteFilter ?? '').trim().toLowerCase();
-      if (q) for (const { row, key } of instRows) row.style.display = key.includes(q) ? '' : 'none';
+      if (q) applyFilter(q);
     }
     if (!(PROJECT.packages ?? []).length) {
       const d = document.createElement('div');
@@ -2335,6 +2356,24 @@ async function boot() {
   $('help-welcome').onclick = () => {
     $('help').classList.remove('show');
     $('welcome').classList.add('show');
+  };
+  $('export').onclick = async () => {
+    if (!PROJECT) return status('export runs in project mode (forte daw)');
+    status('rendering…');
+    const r = await fetch(`api/export?path=${encodeURIComponent(currentName)}`, { method: 'POST' });
+    const t = await r.text();
+    if (!r.ok) {
+      status('ready');
+      return toast(`export: ${t.slice(0, 200)}`, 'err');
+    }
+    const { file } = JSON.parse(t);
+    toast(`rendered ${file}`, 'ok');
+    const blob = await (await fetch(`api/src?path=${encodeURIComponent(file)}`)).blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = file.split('/').pop();
+    a.click();
+    status('ready');
   };
   $('undo').onclick = () => {
     if (window.__forteUndo) window.__forteUndo();
