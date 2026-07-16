@@ -88,12 +88,22 @@ window.addEventListener('mouseup', () => {
   const durBars = Math.max(1, Math.round((spanEnd - spanStart) / bpb));
   applyEdit({ op: 'move_at_line', line: hit.line, bars: [a, a + durBars - 1] });
 });
-$('viz').addEventListener('click', (ev) => {
+$('viz').addEventListener('click', async (ev) => {
   if (vizDragJustEnded) {
     vizDragJustEnded = false; // a drag just ended, not a click
     return;
   }
   const rect = $('viz').getBoundingClientRect();
+  // the top 15px is the ruler: a single click there seeks the playhead
+  if (ev.clientY - rect.top <= 15 && viz.data) {
+    const { headerW, pxPerBeat } = viz.geom();
+    const bpb = viz.data.beatsPerBar || 4;
+    const beats = Math.max(0, Math.round((ev.clientX - rect.left - headerW) / pxPerBeat / bpb) * bpb);
+    await ensureAudio();
+    node.port.postMessage({ cmd: 'seek', beats });
+    viz.setPlayhead(beats);
+    return;
+  }
   const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
   if (!hit) return;
   if (hit.kind === 'header' || hit.kind === 'roll') {
@@ -417,6 +427,26 @@ function renderMixer() {
   sendMonitor(tracks);
 }
 
+// ---- arrange zoom: the canvas grows wider than its dock and scrolls -------
+let vizZoom = 1;
+function applyZoom(z, focusClientX) {
+  const wrap = document.getElementById('viz-wrap');
+  const cv = $('viz');
+  const wrapRect = wrap.getBoundingClientRect();
+  const fx = focusClientX ?? wrapRect.left + wrap.clientWidth / 2;
+  const before = viz.geom();
+  // which beat sits under the focus point right now?
+  const beat = (fx - cv.getBoundingClientRect().left - before.headerW) / before.pxPerBeat;
+  vizZoom = Math.min(16, Math.max(1, z));
+  cv.style.width = vizZoom === 1 ? '100%' : `${Math.round(wrap.clientWidth * vizZoom)}px`;
+  requestAnimationFrame(() => {
+    // keep that beat under the same viewport point
+    const after = viz.geom();
+    wrap.scrollLeft = Math.max(0, after.headerW + beat * after.pxPerBeat - (fx - wrapRect.left));
+    renderSections();
+  });
+}
+
 // ---- section bar (arrange ruler): loop a section, drag its end -----------
 function currentSections() {
   if (!PROJECT) return [];
@@ -449,6 +479,8 @@ function renderSections() {
   const secs = currentSections();
   el.textContent = '';
   el.style.display = secs.length ? '' : 'none';
+  el.style.width = `${$('viz').clientWidth}px`;
+  el.style.right = 'auto';
   if (!secs.length) return;
   const { headerW, pxPerBeat } = viz.geom();
   const bpb = viz.data?.beatsPerBar || 4;
@@ -672,6 +704,15 @@ async function ensureAudio() {
         }
       }
       viz.setPlayhead(m.beats);
+      if (vizZoom > 1) {
+        // keep the playhead visible while zoomed in
+        const wrap = document.getElementById('viz-wrap');
+        const { headerW, pxPerBeat } = viz.geom();
+        const x = headerW + m.beats * pxPerBeat;
+        if (x < wrap.scrollLeft + headerW || x > wrap.scrollLeft + wrap.clientWidth - 40) {
+          wrap.scrollLeft = Math.max(0, x - headerW - 20);
+        }
+      }
     }
   };
   node.port.postMessage(encodeSrc());
@@ -2032,6 +2073,14 @@ async function boot() {
   };
   $('play').onclick = doPlay;
   $('stop').onclick = doStop;
+  $('zoom-in').onclick = () => applyZoom(vizZoom * 1.5);
+  $('zoom-out').onclick = () => applyZoom(vizZoom / 1.5);
+  $('zoom-fit').onclick = () => applyZoom(1);
+  $('viz').addEventListener('wheel', (ev) => {
+    if (!ev.ctrlKey) return; // plain wheel keeps scrolling the dock
+    ev.preventDefault();
+    applyZoom(vizZoom * (ev.deltaY < 0 ? 1.25 : 0.8), ev.clientX);
+  }, { passive: false });
   $('helpbtn').onclick = () => $('help').classList.toggle('show');
   const hideWelcome = () => $('welcome').classList.remove('show');
   $('welcome-close').onclick = hideWelcome;

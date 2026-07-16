@@ -175,8 +175,9 @@
   #viz-wrap {
     flex: none; border-top: 1px solid #2b2f38; background: #14161b;
     position: relative; display: flex; flex-direction: column;
-    max-height: 46vh; overflow-y: auto;
+    max-height: 46vh; overflow: auto;
   }
+  #zoom-out, #zoom-in, #zoom-fit { padding: 6px 9px; }
   #viz { width: 100%; height: 190px; flex: none; display: block; }
   #viz-hint { position: absolute; top: 6px; right: 12px; font-size: 10px; color: #565d69; }
 </style>
@@ -192,6 +193,9 @@
   <button id="stop">■ Stop</button>
   <input id="bpm" type="number" min="20" max="300" step="1" title="Tempo (written back to the code as set_tempo)" style="width:58px" />
   <span style="color:#565d69;font-size:11px">bpm</span>
+  <button id="zoom-out" title="Zoom out (arrange)">−</button>
+  <button id="zoom-fit" title="Fit the whole song">fit</button>
+  <button id="zoom-in" title="Zoom in (arrange) — ctrl+wheel works too">＋</button>
   <button id="rec" title="Record the mic → saved as a provenance-stamped .frec">● Rec</button>
   <button id="calib" title="Loopback calibration: play a chirp, catch it on the mic, measure the round-trip latency">⏱ Calib</button>
   <button id="perform" title="Perform mode: play a MIDI keyboard or PC keys (A-K white, W/E/T/Y/U black); stopping transcribes it to notes code">🎹 Perform</button>
