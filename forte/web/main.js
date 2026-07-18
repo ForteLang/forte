@@ -2597,10 +2597,21 @@ async function boot() {
     hideWelcome();
     newElement('song');
   };
-  // an empty package is a blank page problem: show the guided start
-  if (PROJECT && !(PROJECT.songs ?? []).length && !(PROJECT.blocks ?? []).length) {
+  // first visit to a fresh package: the demo is already open and playable —
+  // the welcome card explains the flow ONCE, on top of it
+  if (
+    PROJECT &&
+    !(PROJECT.blocks ?? []).length &&
+    (PROJECT.songs ?? []).length <= 1 &&
+    !localStorage.getItem(`forte.welcomed.${PROJECT.name}`)
+  ) {
     $('welcome-title').textContent = `Forte DAW — ${PROJECT.name}`;
     $('welcome').classList.add('show');
+    for (const id of ['welcome-close', 'welcome-demo', 'welcome-block', 'welcome-song']) {
+      $(id).addEventListener('click', () =>
+        localStorage.setItem(`forte.welcomed.${PROJECT.name}`, '1')
+      );
+    }
   }
   const bpmBox = $('bpm');
   if (bpmBox) {

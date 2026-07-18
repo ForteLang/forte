@@ -759,11 +759,17 @@ pub fn init_project(name: &str) -> Result<String, String> {
     std::fs::create_dir_all(dir.join("blocks")).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(dir.join("songs")).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(dir.join("packages")).map_err(|e| e.to_string())?;
+    // the package is named after the directory, not the path given on the
+    // command line — `forte init /some/deep/path/my-album` is still "my-album"
+    let base = dir
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_else(|| name.to_string());
     // "my-album" → "MyAlbum": each non-alphanumeric boundary starts a word
     let block_name: String = {
         let mut out = String::new();
         let mut upper = true;
-        for ch in name.chars() {
+        for ch in base.chars() {
             if ch.is_alphanumeric() {
                 out.push(if upper { ch.to_ascii_uppercase() } else { ch });
                 upper = false;
@@ -776,9 +782,9 @@ pub fn init_project(name: &str) -> Result<String, String> {
     std::fs::write(
         dir.join("package.forte"),
         format!(
-            "// {name} — a Forte package. This folder is both your project and\n\
+            "// {base} — a Forte package. This folder is both your project and\n\
              // the unit of distribution: push it to GitHub and others can\n\
-             // `forte package add github:you/{name}`.\n\
+             // `forte package add github:you/{base}`.\n\
              block {block_name} {{\n  desc \"Describe this package in one line.\"\n  tags \"\"\n  license \"CC-BY-NC-SA-4.0\"\n  version \"0.1.0\"\n  // requires \"github:fortelang/forte@main\"\n}}\n"
         ),
     )

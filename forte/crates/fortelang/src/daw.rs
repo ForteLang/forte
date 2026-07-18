@@ -78,6 +78,23 @@ pub fn run(project: &Path, port: u16, open: bool) -> Result<(), String> {
     // the compiler the browser runs IS a build artifact: build it when it
     // is missing or older than the Rust sources (git pull safety)
     ensure_wasm(&web_root);
+    // a brand-new package opens PLAYING-READY: scaffold the demo song so
+    // the first screen is a full arrangement, never an empty editor
+    let count = |sub: &str| {
+        std::fs::read_dir(project.join(sub))
+            .map(|rd| {
+                rd.flatten()
+                    .filter(|e| e.file_name().to_string_lossy().ends_with(".forte"))
+                    .count()
+            })
+            .unwrap_or(0)
+    };
+    if count("songs") == 0
+        && count("blocks") == 0
+        && new_element(&project, "demo", "demo").is_ok()
+    {
+        println!("デモ曲を作成 (songs/demo.forte) — 開いたら space で鳴ります");
+    }
     // the agent's briefing: a CLAUDE.md in the project teaches Claude Code
     // (running in the embedded terminal) how music is made here
     let agent_md = project.join("CLAUDE.md");
