@@ -437,22 +437,39 @@ fn main() -> ExitCode {
         // all editable in one place (ADR D-15).
         #[cfg(not(target_family = "wasm"))]
         Some("daw") => {
-            let dir = args
-                .get(1)
-                .filter(|a| !a.starts_with("--"))
-                .map(String::as_str)
-                .unwrap_or(".");
-            let port = args
-                .iter()
-                .position(|a| a == "--port")
-                .and_then(|i| args.get(i + 1))
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(8001);
-            match fortelang::daw::run(
-                std::path::Path::new(dir),
-                port,
-                !args.iter().any(|a| a == "--no-open"),
-            ) {
+            // the project dir is the first non-flag argument WHEREVER it
+            // sits — `forte daw --app sample` must not silently fall back
+            // to the cwd because a flag came first
+            let mut dir = ".";
+            let mut port: u16 = 8001;
+            let mut open = true;
+            let mut unknown: Option<&str> = None;
+            let mut skip = false;
+            for (i, a) in args.iter().enumerate().skip(1) {
+                if skip {
+                    skip = false;
+                    continue;
+                }
+                match a.as_str() {
+                    "--port" => {
+                        if let Some(v) = args.get(i + 1).and_then(|s| s.parse().ok()) {
+                            port = v;
+                        }
+                        skip = true;
+                    }
+                    "--no-open" => open = false,
+                    // the app window is already the default; accepted so
+                    // `forte daw --app DIR` does what it says
+                    "--app" => open = true,
+                    f if f.starts_with("--") => unknown = Some(f),
+                    d => dir = d,
+                }
+            }
+            if let Some(f) = unknown {
+                eprintln!("daw: 不明なオプション {f}\n使い方: forte daw [DIR] [--port N] [--no-open]");
+                return ExitCode::FAILURE;
+            }
+            match fortelang::daw::run(std::path::Path::new(dir), port, open) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
                     eprintln!("daw: {e}");
@@ -705,6 +722,20 @@ fn web_build() -> ExitCode {
         eprintln!("web build: run inside the Forte repository");
         return ExitCode::FAILURE;
     };
+    // first run on a fresh machine: install the wasm target ourselves
+    // instead of failing with a hint the user has to copy-paste
+    let installed = std::process::Command::new("rustup")
+        .args(["target", "list", "--installed"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains("wasm32-unknown-unknown"))
+        .unwrap_or(true); // no rustup → let cargo report its own error
+    if !installed {
+        println!("wasm ターゲットを導入中…(初回のみ: rustup target add wasm32-unknown-unknown)");
+        let _ = std::process::Command::new("rustup")
+            .args(["target", "add", "wasm32-unknown-unknown"])
+            .status();
+    }
     let ok = run_step("wasm build (forteweb)", {
         let mut c = std::process::Command::new("cargo");
         c.args(["build", "--release", "-q", "-p", "forteweb", "--target", "wasm32-unknown-unknown"])
