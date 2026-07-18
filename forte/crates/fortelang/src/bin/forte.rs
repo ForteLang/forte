@@ -722,19 +722,36 @@ fn web_build() -> ExitCode {
         eprintln!("web build: run inside the Forte repository");
         return ExitCode::FAILURE;
     };
-    // first run on a fresh machine: install the wasm target ourselves
-    // instead of failing with a hint the user has to copy-paste
-    let installed = std::process::Command::new("rustup")
-        .args(["target", "list", "--installed"])
+    // first run on a fresh machine: install the wasm target ourselves.
+    // No pre-check — `rustup target add` is idempotent and near-instant
+    // when the target is already there, and a pre-check that guesses
+    // wrong (missing rustup, pinned toolchain) skips the install and
+    // leaves the user with cargo's raw E0463.
+    match std::process::Command::new("rustup")
+        .args(["target", "add", "wasm32-unknown-unknown"])
+        .current_dir(root.join("forte"))
         .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains("wasm32-unknown-unknown"))
-        .unwrap_or(true); // no rustup → let cargo report its own error
-    if !installed {
-        println!("wasm ターゲットを導入中…(初回のみ: rustup target add wasm32-unknown-unknown)");
-        let _ = std::process::Command::new("rustup")
-            .args(["target", "add", "wasm32-unknown-unknown"])
-            .status();
+    {
+        Ok(o) if !o.status.success() => {
+            eprintln!(
+                "rustup target add wasm32-unknown-unknown に失敗:\n{}",
+                String::from_utf8_lossy(&o.stderr).trim()
+            );
+            return ExitCode::FAILURE;
+        }
+        Ok(o) => {
+            let msg = String::from_utf8_lossy(&o.stderr);
+            if msg.contains("installing") || msg.contains("downloading") {
+                println!("wasm ターゲットを導入しました(初回のみ: wasm32-unknown-unknown)");
+            }
+        }
+        Err(_) => {
+            eprintln!(
+                "rustup が見つかりません — wasm ビルドには rustup が必要です。\n\
+                 導入: https://rustup.rs を参照(Homebrew などの Rust 単体では wasm ターゲットを追加できません)"
+            );
+            return ExitCode::FAILURE;
+        }
     }
     let ok = run_step("wasm build (forteweb)", {
         let mut c = std::process::Command::new("cargo");
