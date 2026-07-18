@@ -139,7 +139,11 @@ let bundledModules = {};
 // ---- main-thread compiler instance -----------------------------------------
 let wasmBytes, main;
 async function initWasm() {
-  wasmBytes = await (await fetch('forte.wasm')).arrayBuffer();
+  const res = await fetch('forte.wasm');
+  if (!res.ok) {
+    throw new Error('forte.wasm not found — run `forte web build` in the forte repo (forte daw now does this automatically on start)');
+  }
+  wasmBytes = await res.arrayBuffer();
   const { instance } = await WebAssembly.instantiate(wasmBytes.slice(0), {});
   main = { e: instance.exports };
   main.ctx = main.e.fw_new(48000);

@@ -75,6 +75,9 @@ pub fn run(project: &Path, port: u16, open: bool) -> Result<(), String> {
             }
         }
     }
+    // the compiler the browser runs IS a build artifact: build it when it
+    // is missing or older than the Rust sources (git pull safety)
+    ensure_wasm(&web_root);
     // the agent's briefing: a CLAUDE.md in the project teaches Claude Code
     // (running in the embedded terminal) how music is made here
     let agent_md = project.join("CLAUDE.md");
@@ -91,6 +94,57 @@ pub fn run(project: &Path, port: u16, open: bool) -> Result<(), String> {
     }
     serve(listener, web_root, project);
     Ok(())
+}
+
+/// Build web/forte.wasm when it is absent or stale relative to the Rust
+/// sources — `git pull` must never leave the DAW serving yesterday's
+/// compiler (or a 404 that boots as 'not found').
+fn ensure_wasm(web_root: &Path) {
+    let wasm = web_root.join("forte/web/forte.wasm");
+    let wasm_mtime = std::fs::metadata(&wasm).and_then(|m| m.modified()).ok();
+    let mut newest_src: Option<std::time::SystemTime> = None;
+    fn walk(dir: &Path, newest: &mut Option<std::time::SystemTime>) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                walk(&p, newest);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                if let Ok(t) = e.metadata().and_then(|m| m.modified()) {
+                    if newest.map(|n| t > n).unwrap_or(true) {
+                        *newest = Some(t);
+                    }
+                }
+            }
+        }
+    }
+    walk(&web_root.join("forte/crates"), &mut newest_src);
+    let stale = match (wasm_mtime, newest_src) {
+        (None, _) => true,
+        (Some(w), Some(srct)) => srct > w,
+        (Some(_), None) => false,
+    };
+    if !stale {
+        return;
+    }
+    println!("web/forte.wasm を{}ビルド中…(初回は数分)", if wasm_mtime.is_none() { "" } else { "更新" });
+    let ok = std::env::current_exe()
+        .ok()
+        .and_then(|exe| {
+            std::process::Command::new(exe)
+                .args(["web", "build"])
+                .current_dir(web_root)
+                .status()
+                .ok()
+        })
+        .map(|st| st.success())
+        .unwrap_or(false);
+    if !ok {
+        println!(
+            "web/forte.wasm のビルドに失敗しました。手動で: cd {} && forte web build\n(初回は rustup target add wasm32-unknown-unknown が必要です)",
+            web_root.display()
+        );
+    }
 }
 
 /// Open the DAW as a LOCAL APP window (chromeless `--app=` mode) when a
