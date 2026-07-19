@@ -78,12 +78,14 @@ pub fn run(project: &Path, port: u16, open: bool) -> Result<(), String> {
     // the compiler the browser runs IS a build artifact: build it when it
     // is missing or older than the Rust sources (git pull safety)
     ensure_wasm(&web_root);
-    // no wasm = the page cannot boot; a clear abort beats a broken window
+    // the wasm ships in the repo (deterministic artifact — bit-identical on
+    // every machine), so a failed local rebuild still leaves the committed
+    // one to serve. Abort only when there is truly nothing to boot from.
     if !web_root.join("forte/web/forte.wasm").exists() {
         return Err(format!(
             "web/forte.wasm がありません(wasm ビルド失敗)。\n\
-             修復: rustup target add wasm32-unknown-unknown && cd {} && forte web build\n\
-             その後もう一度 forte daw を実行してください",
+             修復: git -C {} checkout forte/web/forte.wasm(同梱版を復元)\n\
+             または rustup target add wasm32-unknown-unknown && forte web build",
             web_root.display()
         ));
     }
@@ -147,7 +149,10 @@ fn ensure_wasm(web_root: &Path) {
     walk(&web_root.join("forte/crates"), &mut newest_src);
     let stale = match (wasm_mtime, newest_src) {
         (None, _) => true,
-        (Some(w), Some(srct)) => srct > w,
+        // 2s slack: a fresh clone / pull writes the committed wasm and the
+        // .rs sources in the same instant, in arbitrary order — that must
+        // not read as "stale" and trigger a rebuild on consumer machines
+        (Some(w), Some(srct)) => srct.duration_since(w).map(|d| d.as_secs() >= 2).unwrap_or(false),
         (Some(_), None) => false,
     };
     if !stale {
@@ -166,10 +171,16 @@ fn ensure_wasm(web_root: &Path) {
         .map(|st| st.success())
         .unwrap_or(false);
     if !ok {
-        println!(
-            "web/forte.wasm のビルドに失敗しました。手動で: cd {} && forte web build\n(初回は rustup target add wasm32-unknown-unknown が必要です)",
-            web_root.display()
-        );
+        if wasm.exists() {
+            println!(
+                "web/forte.wasm の更新ビルドに失敗 — 同梱版で起動します(ローカルの Rust 変更は反映されません)"
+            );
+        } else {
+            println!(
+                "web/forte.wasm のビルドに失敗しました。手動で: cd {} && forte web build",
+                web_root.display()
+            );
+        }
     }
 }
 

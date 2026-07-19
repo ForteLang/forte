@@ -760,7 +760,9 @@ fn web_build() -> ExitCode {
         c
     });
     if !ok {
-        eprintln!("hint: rustup target add wasm32-unknown-unknown");
+        eprintln!(
+            "hint: ターゲット導入済みでも E0463 が出る場合、PATH の cargo が rustup 管理外(Homebrew 等)の可能性があります。`which -a cargo` で確認し、~/.cargo/bin の cargo を優先してください"
+        );
         return ExitCode::FAILURE;
     }
     let src = root.join("forte/target/wasm32-unknown-unknown/release/forteweb.wasm");

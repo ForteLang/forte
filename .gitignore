@@ -3,8 +3,6 @@
 **/*.rs.bk
 *.wav
 .DS_Store
-/web/forte.wasm
-/forte/web/forte.wasm
 *.manifest.json
 node_modules/
 package-lock.json
