@@ -1053,6 +1053,10 @@ function insertTake(path) {
 /// flushed into a real take instead of losing it.
 async function recoverCrashedTake() {
   if (!store) return;
+  // ask the file listing first: probing the missing file directly logs a
+  // 404 in the console on every clean boot (project mode fetches it)
+  const leftovers = await store.list('.recording.json').catch(() => []);
+  if (Array.isArray(leftovers) && !leftovers.length) return;
   let journal, bytes;
   try {
     journal = JSON.parse(await store.read('assets/.recording.json'));
@@ -1113,6 +1117,7 @@ async function refreshFileList() {
 async function refreshTree(locals) {
   const el = $('tree');
   if (!el) return;
+  const scrollBefore = el.scrollTop;
   locals = locals ?? (await localNames());
   const assets = store ? await store.list('.frec') : [];
   el.textContent = '';
@@ -1177,41 +1182,87 @@ async function refreshTree(locals) {
         for (const b of f.blocks ?? []) libBlocks.push({ ...b, file: f.file, pkg: pkg.name });
     if (libBlocks.length) {
       section('blocks');
+      window.__treeOpen ??= {};
+      // a flat list of 180+ blocks buried everything below it (the palette
+      // was unreachable) — group by source file, collapsed, with a search
+      const bfilt = document.createElement('input');
+      bfilt.className = 'palfilt';
+      bfilt.placeholder = `search ${libBlocks.length} blocks`;
+      bfilt.value = window.__blockFilter ?? '';
+      el.appendChild(bfilt);
+      const groups = new Map();
       for (const b of libBlocks) {
-        const d = document.createElement('div');
-        d.className = 'f blk';
-        d.draggable = true;
-        d.ondragstart = (ev) => {
-          ev.dataTransfer.setData('text/forte-block', JSON.stringify(b));
-          ev.dataTransfer.effectAllowed = 'copy';
-        };
-        const label = document.createElement('span');
-        label.textContent = `❐ ${b.name}${b.pkg ? ' ·' + b.pkg.split('_')[0] : ''}`;
-        label.title = `${b.file}:${b.line} (${b.bars ?? '?'} bars) — click to open / drag onto the arrange to place`;
-        label.onclick = () => loadSong(b.file);
-        d.appendChild(label);
-        const bbtn = (t, title, fn) => {
-          const x = document.createElement('button');
-          x.textContent = t;
-          x.title = title;
-          x.onclick = (e) => {
-            e.stopPropagation();
-            fn();
-          };
-          d.appendChild(x);
-        };
-        bbtn('▶', 'Audition this block standalone', () => auditionBlock(b));
-        bbtn('+song', 'Import into the open song and place it', () => placeBlock(b));
-        el.appendChild(d);
+        const g = b.file.split('/').pop().replace('.forte', '');
+        if (!groups.has(g)) groups.set(g, []);
+        groups.get(g).push(b);
       }
+      const blkRows = [];
+      const blkHeads = [];
+      for (const [g, blocks] of groups) {
+        const key = `blk:${g}`;
+        const open = window.__treeOpen[key] ?? !blocks[0].pkg; // your own blocks start open
+        const h = document.createElement('div');
+        h.className = 'dir tgl';
+        h.textContent = `${open ? '▾' : '▸'} ${g} (${blocks.length})`;
+        h.title = blocks[0].pkg ? `from ${blocks[0].pkg} — click to expand` : blocks[0].file;
+        h.onclick = () => {
+          window.__treeOpen[key] = !open;
+          refreshTree(locals);
+        };
+        el.appendChild(h);
+        const rows = [];
+        for (const b of blocks) {
+          const d = document.createElement('div');
+          d.className = 'f blk';
+          d.draggable = true;
+          d.ondragstart = (ev) => {
+            ev.dataTransfer.setData('text/forte-block', JSON.stringify(b));
+            ev.dataTransfer.effectAllowed = 'copy';
+          };
+          const label = document.createElement('span');
+          label.textContent = `❐ ${b.name}`;
+          label.title = `${b.file}:${b.line} (${b.bars ?? '?'} bars) — click to open / drag onto the arrange to place`;
+          label.onclick = () => loadSong(b.file);
+          d.appendChild(label);
+          const bbtn = (t, title, fn) => {
+            const x = document.createElement('button');
+            x.textContent = t;
+            x.title = title;
+            x.onclick = (e) => {
+              e.stopPropagation();
+              fn();
+            };
+            d.appendChild(x);
+          };
+          bbtn('▶', 'Audition this block standalone', () => auditionBlock(b));
+          bbtn('+song', 'Import into the open song and place it', () => placeBlock(b));
+          const entry = { row: d, key: `${b.name} ${g} ${b.pkg ?? ''}`.toLowerCase(), open };
+          blkRows.push(entry);
+          rows.push(entry);
+          el.appendChild(d);
+        }
+        blkHeads.push({ head: h, rows });
+      }
+      const applyBlockFilter = (q) => {
+        for (const e of blkRows)
+          e.row.style.display = q ? (e.key.includes(q) ? '' : 'none') : e.open ? '' : 'none';
+        for (const { head, rows } of blkHeads)
+          head.style.display = !q || rows.some((r) => r.row.style.display !== 'none') ? '' : 'none';
+      };
+      bfilt.oninput = () => {
+        window.__blockFilter = bfilt.value;
+        applyBlockFilter(bfilt.value.trim().toLowerCase());
+      };
+      applyBlockFilter((window.__blockFilter ?? '').trim().toLowerCase());
     }
     section('instruments');
     const instRows = [];
     const groupHeads = [];
     const applyFilter = (q) => {
-      for (const { row, key } of instRows) row.style.display = !q || key.includes(q) ? '' : 'none';
+      for (const { row, key, open } of instRows)
+        row.style.display = q ? (key.includes(q) ? '' : 'none') : open ? '' : 'none';
       for (const { head, rows } of groupHeads)
-        head.style.display = rows.some((r) => r.row.style.display !== 'none') ? '' : 'none';
+        head.style.display = !q || rows.some((r) => r.row.style.display !== 'none') ? '' : 'none';
     };
     const filt = document.createElement('input');
     filt.className = 'palfilt';
@@ -1224,15 +1275,24 @@ async function refreshTree(locals) {
     el.appendChild(filt);
     let curGroup = null;
     let curRows = null;
+    let curOpen = true;
     for (const inst of paletteInstruments()) {
       const group = inst.where === 'built-in'
         ? 'built-in'
         : (inst.from ?? inst.where).split('/').pop().replace('.forte', '');
       if (group !== curGroup) {
         curGroup = group;
+        const key = `inst:${group}`;
+        const open = (window.__treeOpen ??= {})[key] ?? group === 'built-in';
+        curOpen = open;
         const h = document.createElement('div');
-        h.className = 'dir';
-        h.textContent = `${group}/`;
+        h.className = 'dir tgl';
+        h.textContent = `${open ? '▾' : '▸'} ${group}/`;
+        h.title = 'click to expand / collapse';
+        h.onclick = () => {
+          window.__treeOpen[key] = !open;
+          refreshTree(locals);
+        };
         el.appendChild(h);
         curRows = [];
         groupHeads.push({ head: h, rows: curRows });
@@ -1256,15 +1316,12 @@ async function refreshTree(locals) {
       bb('▶', 'Preview one bar', () => previewInstrument(inst).catch((e) => status(`preview: ${e.message}`)));
       bb('🎹', 'Play this instrument from the PC keyboard (A–K, Esc exits)', () => toggleKeys(inst).catch((e) => status(`keys: ${e.message}`)));
       bb('+tr', 'Add a track with this instrument to the open song / block', () => addTrackFromPalette(inst));
-      const entry = { row: d, key: `${inst.label} ${inst.where ?? ''}`.toLowerCase() };
+      const entry = { row: d, key: `${inst.label} ${inst.where ?? ''}`.toLowerCase(), open: curOpen };
       instRows.push(entry);
       curRows.push(entry);
       el.appendChild(d);
     }
-    {
-      const q = (window.__paletteFilter ?? '').trim().toLowerCase();
-      if (q) applyFilter(q);
-    }
+    applyFilter((window.__paletteFilter ?? '').trim().toLowerCase());
     if (!(PROJECT.packages ?? []).length) {
       const d = document.createElement('div');
       d.className = 'f blk';
@@ -1309,6 +1366,7 @@ async function refreshTree(locals) {
     renderPaths(demos, { demo: true });
   }
   document.body.dataset.treeFiles = String(el.querySelectorAll('.f').length);
+  el.scrollTop = scrollBefore; // a group toggle re-render must not jump to the top
 }
 
 let lastSynced = ''; // buffer text as of the last load/save (disk agreement)
@@ -1431,7 +1489,11 @@ $('viz').addEventListener('drop', (ev) => {
   const b = JSON.parse(data);
   const rect = $('viz').getBoundingClientRect();
   const hit = viz.hitTest(ev.clientX - rect.left, ev.clientY - rect.top);
-  if (hit?.kind === 'clip' && hit.line > 0) {
+  // only a placed block's clip can be swapped — its lane is "Block.Track".
+  // a plain track's pattern clip is not a placement (set_place_block on it
+  // errors), so those drops fall through to place-at-this-bar
+  const onPlacement = (viz.data?.tracks?.[hit?.track]?.name ?? '').includes('.');
+  if (hit?.kind === 'clip' && hit.line > 0 && onPlacement) {
     // dropping onto a clip swaps WHICH block that placement plays.
     // the swap goes FIRST: add_import may insert a line, which would
     // shift the line this op addresses (ops apply sequentially)
@@ -2472,6 +2534,9 @@ async function boot() {
     await refreshFileList();
     loadSong(file);
   };
+  // project files are deleted in the shell / git — a dead button is worse
+  // than no button
+  if (PROJECT) $('delete').style.display = 'none';
   $('delete').onclick = async () => {
     if (PROJECT) return status('delete project files in your shell / git');
     if (!store) return;
