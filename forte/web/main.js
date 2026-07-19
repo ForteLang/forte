@@ -808,10 +808,171 @@ window.__forteCompileCheck = (src) => {
   return r.ok;
 };
 
+// ---- Forte language smarts (completion / hover / signature help) ------------
+// The static vocabulary is the language reference; instruments and effects
+// from the open package join it dynamically WITH their real parameters, so
+// "what can I write here?" is answered inside the code. This is the seed of
+// the Studio fork's language extension (ADR D-14).
+const FORTE_KEYWORDS = [
+  ['song', 'Song definition: `song "name" { tempo / meter / key / let / section / track / return }`'],
+  ['track', 'A track: `track Name { instrument … play … }`'],
+  ['return', 'Return track: `return Name { insert reverb(...) }` — feed it with `send Name 0.3`'],
+  ['section', 'Named span: `section verse = bars(1..8)` → `play x at verse`'],
+  ['block', 'Reusable idea: `block Name { track … }` — place it with `play Name at bars(..)`'],
+  ['device', 'Your own instrument/effect: `device Name : Instrument|Effect { param / node / out }`'],
+  ['tempo', 'Tempo: `tempo 120bpm`'],
+  ['meter', 'Time signature: `meter 4/4`'],
+  ['key', 'Key: `key D minor`'],
+  ['play', 'Placement: `play pattern at bars(1..8)` / `at sectionName`'],
+  ['audio', 'Place a recorded take: `audio take at bars(2..3)` (needs `import take from "./t.frec"`)'],
+  ['send', 'Post-fader send: `send Space 0.35`'],
+  ['automate', 'Automation: `automate volume from 0.2 to 0.8 over bars(1..8)` (a section name works too)'],
+  ['modulate', 'LFO modulation: `modulate cutoff with lfo(rate: 0.3, amount: 0.4, shape: "sine")`'],
+  ['instrument', 'What the track plays — pick one from the completion list (built-ins + every package device)'],
+  ['insert', 'Effect in the track chain: `insert delay(time: 0.25, fdbk: 0.3, mix: 0.2)`'],
+  ['volume', 'Track volume: `volume 0.8` (0..1)'],
+  ['pan', 'Track pan: `pan -0.3` (-1..1)'],
+  ['beat', 'Step pattern: ``beat`x--- X-x-`​`` (x=hit X=accent -=rest)'],
+  ['notes', 'Note pattern: ``notes`C4:1/2 [E4 G4]:1 _:1`​`` (chords in [], _=rest, ~=tie, !=accent)'],
+  ['prog', 'Chord progression: ``prog`Em | C G | D`​`` (| is a barline)'],
+  ['chords', 'Play a progression as block chords: `chords(prog)`'],
+  ['arp', 'Arpeggio: `arp(prog, rate: 0.25, style: "up|down|updown")`'],
+  ['bass', 'Root-note line: `bass(prog, rate: 0.5)`'],
+];
+// built-in devices: name → [param, hint][]
+const FORTE_BUILTINS = {
+  sampler: [['sample', '"Kick" | "Snare" | "Hat"'], ['take', 'imported .frec slot'], ['root', 'e.g. A3'], ['start', '0..1'], ['end', '0..1'], ['loop', 'true/false'], ['reverse', 'true/false']],
+  kit: [['C2', 'take per pad'], ['gain', '0..1']],
+  prisma: [['wave', '"sine|saw|square|tri"'], ['cutoff', '0..1'], ['reso', '0..1'], ['attack', 'sec'], ['decay', 'sec'], ['sustain', '0..1'], ['release', 'sec'], ['detune', '0..1'], ['sub', '0..1'], ['filtenv', '0..1']],
+  mesh: [],
+  filter: [['type', '"lp|hp|bp|notch"'], ['cutoff', '0..1'], ['reso', '0..1']],
+  eq: [['low', 'dB'], ['mid', 'dB'], ['high', 'dB']],
+  drive: [['amount', '0..1']],
+  delay: [['time', 'beats'], ['fdbk', '0..1'], ['mix', '0..1']],
+  reverb: [['size', '0..1'], ['decay', '0..1'], ['mix', '0..1']],
+  space: [['mix', '0..1']],
+  comp: [], glue: [], chorus: [], vinyl: [],
+  crush: [['amount', '0..1']],
+  saturate: [['amount', '0..1']],
+  duck: [['from', 'track name'], ['amount', '0..1'], ['attack', '0..1'], ['release', '0..1'], ['shape', '0..1'], ['mode', '"duck|gate"']],
+  lfo: [['rate', 'Hz-ish 0..1'], ['amount', '0..1'], ['shape', '"sine|saw|square|tri"']],
+};
+function forteParamsOf(callee) {
+  if (callee in FORTE_BUILTINS) return FORTE_BUILTINS[callee].map(([name, hint]) => ({ name, hint }));
+  const dev = paletteInstruments().find((i) => i.label === callee || i.name === callee);
+  return (dev?.params ?? []).map((p) => ({
+    name: p.name,
+    hint: `default ${p.default}${p.range ? ` (${p.range[0]}..${p.range[1]})` : ''}`,
+  }));
+}
+// the import a package instrument needs, as an extra edit — or null if
+// it is already imported (or lives in this file)
+function importEditFor(monaco, inst) {
+  if (!inst.from || inst.from === currentName) return null;
+  const lines = getText().split('\n');
+  if (lines.some((l) => l.includes('import') && l.includes(inst.name))) return null;
+  // after the leading comment block, before the first real statement
+  let at = 0;
+  while (at < lines.length && (lines[at].trim() === '' || lines[at].trim().startsWith('//') || lines[at].trim().startsWith('import'))) at++;
+  return {
+    range: new monaco.Range(at + 1, 1, at + 1, 1),
+    text: `import { ${inst.name} } from "${relPath(currentName, inst.from)}"\n`,
+  };
+}
+function registerForteSmarts(monaco) {
+  const K = monaco.languages.CompletionItemKind;
+  monaco.languages.registerCompletionItemProvider('forte', {
+    triggerCharacters: [' ', '(', ','],
+    provideCompletionItems(model, position) {
+      const line = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
+      const word = model.getWordUntilPosition(position);
+      const range = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn);
+      const out = [];
+      const call = line.match(/([A-Za-z_]\w*)\(([^()]*)$/); // inside an open call?
+      if (/\binstrument\s+\w*$/.test(line)) {
+        for (const i of paletteInstruments()) {
+          const extra = importEditFor(monaco, i);
+          out.push({
+            label: i.label,
+            kind: K.Value,
+            detail: i.where === 'built-in' ? 'built-in' : i.where,
+            documentation: {
+              value: (i.params?.length
+                ? i.params.map((p) => `- \`${p.name}\`: default ${p.default}${p.range ? ` (${p.range[0]}..${p.range[1]})` : ''}`).join('\n')
+                : i.call) + (extra ? '\n\n_adds the import for you_' : ''),
+            },
+            insertText: i.call,
+            additionalTextEdits: extra ? [extra] : [],
+            range,
+          });
+        }
+      } else if (/\binsert\s+\w*$/.test(line)) {
+        for (const [name, callText] of FX_PRESETS)
+          out.push({ label: name, kind: K.Function, detail: 'effect', insertText: callText, range });
+      } else if (call) {
+        for (const p of forteParamsOf(call[1]))
+          out.push({ label: p.name, kind: K.Field, detail: p.hint, insertText: `${p.name}: `, range });
+      } else {
+        for (const [w, doc] of FORTE_KEYWORDS)
+          out.push({ label: w, kind: K.Keyword, documentation: { value: doc }, insertText: w, range });
+        out.push({
+          label: 'track (skeleton)',
+          kind: K.Snippet,
+          insertText: 'track ${1:Name} {\n  instrument ${2:prisma(wave: "saw", cutoff: 0.4)}\n  volume 0.8\n  play ${3:beat`x... x... x... x...`} at bars(${4:1..8})\n}',
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          documentation: { value: 'A whole track: instrument + volume + pattern' },
+          range,
+        });
+      }
+      return { suggestions: out };
+    },
+  });
+  monaco.languages.registerHoverProvider('forte', {
+    provideHover(model, position) {
+      const w = model.getWordAtPosition(position);
+      if (!w) return null;
+      const kw = FORTE_KEYWORDS.find(([k]) => k === w.word);
+      const params = forteParamsOf(w.word);
+      const dev = paletteInstruments().find((i) => i.label === w.word || i.name === w.word);
+      const lines = [];
+      if (kw) lines.push(`**${kw[0]}** — ${kw[1]}`);
+      else if (dev || w.word in FORTE_BUILTINS) {
+        lines.push(`**${w.word}** — ${dev && dev.where !== 'built-in' ? `instrument from ${dev.where}` : 'built-in'}`);
+        if (params.length) lines.push(params.map((p) => `- \`${p.name}\` ${p.hint}`).join('\n'));
+        else lines.push('_no parameters_');
+      } else return null;
+      return { contents: lines.map((v) => ({ value: v })) };
+    },
+  });
+  monaco.languages.registerSignatureHelpProvider('forte', {
+    signatureHelpTriggerCharacters: ['(', ','],
+    provideSignatureHelp(model, position) {
+      const line = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
+      const call = line.match(/([A-Za-z_]\w*)\(([^()]*)$/);
+      if (!call) return null;
+      const params = forteParamsOf(call[1]);
+      if (!params.length) return null;
+      const active = Math.min((call[2].match(/,/g) ?? []).length, params.length - 1);
+      const sig = {
+        label: `${call[1]}(${params.map((p) => `${p.name}: ${p.hint}`).join(', ')})`,
+        parameters: params.map((p) => ({ label: `${p.name}: ${p.hint}` })),
+      };
+      return {
+        value: { signatures: [sig], activeSignature: 0, activeParameter: active },
+        dispose() {},
+      };
+    },
+  });
+}
+
 let monacoAbandoned = false;
 async function tryMonaco(initial) {
   try {
-    const base = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min';
+    // the vendored copy first — offline-first, and the editor workers are
+    // same-origin; the CDN remains a fallback for slim checkouts
+    let base = 'vendor/monaco';
+    const probe = await fetch(`${base}/vs/loader.js`, { method: 'HEAD' }).then((r) => r.ok).catch(() => false);
+    if (!probe) base = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min';
     await new Promise((res, rej) => {
       const s = document.createElement('script');
       s.src = `${base}/vs/loader.js`;
@@ -840,6 +1001,7 @@ async function tryMonaco(initial) {
         ],
       },
     });
+    registerForteSmarts(monaco);
     fallback.remove();
     const ed = monaco.editor.create($('editor-host'), {
       value: initial,
@@ -1551,6 +1713,7 @@ function paletteInstruments() {
       kind: 'notes',
       pat: DEFAULT_NOTES_PAT,
       where,
+      params: d.params ?? [], // the editor smarts show these on hover / completion
     });
   };
   for (const f of PROJECT?.instruments ?? []) for (const d of f.devices ?? []) push(f.file, d, f.file);

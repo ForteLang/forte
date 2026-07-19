@@ -1,6 +1,6 @@
 // Service worker: precache the whole editor so it works fully offline
 // (SYS-NFR-001 — sharing is packages on GitHub, never a dependency for composing).
-const CACHE = 'forte-v18';
+const CACHE = 'forte-v19';
 const ASSETS = [
   './',
   './index.html',
@@ -19,6 +19,11 @@ const ASSETS = [
   './vendor/xterm.js',
   './vendor/xterm.css',
   './vendor/addon-fit.js',
+  './vendor/monaco/vs/loader.js',
+  './vendor/monaco/vs/editor/editor.main.js',
+  './vendor/monaco/vs/editor/editor.main.css',
+  './vendor/monaco/vs/editor/editor.main.nls.js',
+  './vendor/monaco/vs/base/worker/workerMain.js',
   '../../packages/essentials_0.6.0/songs/first-light.forte',
   '../../packages/essentials_0.6.0/songs/slow-circles.forte',
   '../../packages/essentials_0.6.0/songs/night-parade.forte',
